@@ -6,6 +6,8 @@
   <title>Immuvi Command Center</title>
   <link href="https://api.fontshare.com/v2/css?f[]=satoshi@400,500,600,700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <!-- Supabase JS client (v2) -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <style>
 @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap');
 @import url('https://api.fontsource.org/v1/fonts/satoshi/latin-400-normal.css');
@@ -3338,6 +3340,286 @@ body::before {
   </div>
 
 <script>
+// ============================================================
+// SUPABASE CLIENT + DATA-ACCESS LAYER
+// ============================================================
+// Replaces the localStorage-for-shared-state and /tmp/*.json bridge.
+// - Anon key is safe to embed (public by design; protected by RLS).
+// - localStorage still used for per-user UI prefs: api_key, active_product, active_tab.
+const SB_URL = 'https://hdniumnkprkadlrrataz.supabase.co';
+const SB_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imhkbml1bW5rcHJrYWRscnJhdGF6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY1MTQ4NzUsImV4cCI6MjA5MjA5MDg3NX0.xnkNthP1SnnvaColrhukZqV1e5WrZz_VncCpyznlcWE';
+let SB = null;
+try {
+  SB = window.supabase.createClient(SB_URL, SB_ANON, {
+    realtime: { params: { eventsPerSecond: 4 } }
+  });
+  console.log('[SB] Supabase client ready →', SB_URL);
+} catch (e) {
+  console.error('[SB] Client init failed:', e);
+}
+
+// Debounce helper — used to coalesce many saveState() calls into one DB write
+function _debounce(fn, ms) {
+  let t = null;
+  return function () {
+    const args = arguments, self = this;
+    clearTimeout(t);
+    t = setTimeout(function () { fn.apply(self, args); }, ms);
+  };
+}
+
+// Shape helpers: translate between frontend camelCase and DB snake_case
+function _adToRow(a, productId) {
+  return {
+    id: a.id,
+    product_id: productId,
+    format_name: a.formatName || null,
+    ad_link: a.adLink || null,
+    drive_link: a.driveLink || null,
+    ad_type: a.adType || null,
+    funnel_stage: a.funnelStage || null,
+    status: a.status || 'Untested',
+    angle: a.angle || null,
+    persona: a.persona || null,
+    parent_ad_id: a.parentAdId || null,
+    variation_number: a.variationNumber || null,
+    ad_origin: a.adOrigin || null,
+    clickup_task_id: a.clickupTaskId || null
+  };
+}
+function _rowToAd(r) {
+  return {
+    id: r.id,
+    formatName: r.format_name,
+    adLink: r.ad_link,
+    driveLink: r.drive_link,
+    adType: r.ad_type,
+    funnelStage: r.funnel_stage,
+    status: r.status,
+    angle: r.angle,
+    persona: r.persona,
+    parentAdId: r.parent_ad_id,
+    variationNumber: r.variation_number,
+    adOrigin: r.ad_origin,
+    clickupTaskId: r.clickup_task_id
+  };
+}
+
+// DB object: all shared state I/O goes through here
+const DB = {
+  ready: !!SB,
+
+  async listProducts() {
+    if (!SB) return [];
+    const { data, error } = await SB.from('products').select('*').order('name');
+    if (error) { console.error('[SB] listProducts', error); return []; }
+    return (data || []).map(function (p) {
+      const c = p.config || {};
+      return {
+        id: p.id,
+        name: p.name,
+        clickupListId: c.clickup_list_id || '',
+        clickupListName: c.clickup_list_name || '',
+        color: c.color || '',
+        insPrefix: c.ins_prefix || '',
+        createdAt: c.created_at_ms || null,
+        lastSyncedAt: c.last_synced_at_ms || null,
+        lastSyncedCount: c.last_synced_count || 0
+      };
+    });
+  },
+
+  async upsertProduct(p) {
+    if (!SB || !p || !p.id) return;
+    const config = {
+      clickup_list_id: p.clickupListId || '',
+      clickup_list_name: p.clickupListName || '',
+      color: p.color || '',
+      ins_prefix: p.insPrefix || '',
+      created_at_ms: p.createdAt || null,
+      last_synced_at_ms: p.lastSyncedAt || null,
+      last_synced_count: p.lastSyncedCount || 0
+    };
+    const { error } = await SB.from('products').upsert({ id: p.id, name: p.name, config: config });
+    if (error) console.error('[SB] upsertProduct', error);
+  },
+
+  async deleteProduct(productId) {
+    if (!SB) return;
+    // Cascade will drop angles/personas/ads/cells/etc.
+    const { error } = await SB.from('products').delete().eq('id', productId);
+    if (error) console.error('[SB] deleteProduct', error);
+  },
+
+  async loadProductData(productId) {
+    if (!SB || !productId) return null;
+    const [angles, personas, ads, cells, actions] = await Promise.all([
+      SB.from('angles').select('*').eq('product_id', productId),
+      SB.from('personas').select('*').eq('product_id', productId),
+      SB.from('ads').select('*').eq('product_id', productId),
+      SB.from('matrix_cells').select('*').eq('product_id', productId),
+      SB.from('manual_actions').select('*').eq('product_id', productId)
+    ]);
+    const meta = {}, assigns = {};
+    (cells.data || []).forEach(function (c) {
+      const k = (c.meta && c.meta.cell_key) || (c.angle_id + '||' + c.persona_id);
+      meta[k] = (c.meta && c.meta.meta) || {};
+      assigns[k] = c.creative_assignments || [];
+    });
+    return {
+      ANGLES: (angles.data || []).map(function (a) { return { id: a.id, name: a.name, status: a.status, sourceLink: a.source_link || '', notes: a.notes || '' }; }),
+      PERSONAS: (personas.data || []).map(function (p) { return { id: p.id, name: p.name, status: p.status, sourceLink: p.source_link || '', notes: p.notes || '' }; }),
+      ADS: (ads.data || []).map(_rowToAd),
+      MATRIX_CELL_META: meta,
+      CELL_CREATIVE_ASSIGNMENTS: assigns,
+      MANUAL_ACTIONS: (actions.data || []).map(function (m) { return Object.assign({}, m.payload || {}, { _dbId: m.id, liveStatus: m.live_status }); }),
+      PROD: [], // derived from ads, no dedicated table
+      ANGLE_PERSONAS: [] // populated elsewhere
+    };
+  },
+
+  // Full-sync write of an entire product's state (used by saveState, debounced)
+  async saveProductData(productId, state) {
+    if (!SB || !productId) return;
+    const tasks = [];
+
+    // Upsert ANGLES
+    if (Array.isArray(state.ANGLES) && state.ANGLES.length) {
+      tasks.push(SB.from('angles').upsert(state.ANGLES.map(function (a) {
+        return { id: a.id, product_id: productId, name: a.name || '', status: a.status || 'Untested', source_link: a.sourceLink || null, notes: a.notes || null };
+      })));
+    }
+    // Upsert PERSONAS
+    if (Array.isArray(state.PERSONAS) && state.PERSONAS.length) {
+      tasks.push(SB.from('personas').upsert(state.PERSONAS.map(function (p) {
+        return { id: p.id, product_id: productId, name: p.name || '', status: p.status || 'Untested', source_link: p.sourceLink || null, notes: p.notes || null };
+      })));
+    }
+    // Upsert ADS
+    if (Array.isArray(state.ADS) && state.ADS.length) {
+      tasks.push(SB.from('ads').upsert(state.ADS.map(function (a) { return _adToRow(a, productId); })));
+    }
+    // Matrix cells — reconstruct from MATRIX_CELL_META + CELL_CREATIVE_ASSIGNMENTS
+    const meta = state.MATRIX_CELL_META || {}, assigns = state.CELL_CREATIVE_ASSIGNMENTS || {};
+    const cellKeys = Object.keys(Object.assign({}, meta, assigns));
+    const cellRows = cellKeys.filter(function (k) { return k.indexOf('||') >= 0; }).map(function (k) {
+      const parts = k.split('||'), angleName = parts[0], personaName = parts[1];
+      return {
+        product_id: productId,
+        angle_id: angleName,
+        persona_id: personaName,
+        meta: { cell_key: k, meta: meta[k] || {} },
+        creative_assignments: assigns[k] || [],
+        action_status: (meta[k] && meta[k].status) || null
+      };
+    });
+    if (cellRows.length) {
+      tasks.push(SB.from('matrix_cells').upsert(cellRows, { onConflict: 'product_id,angle_id,persona_id' }));
+    }
+    const results = await Promise.allSettled(tasks);
+    const errs = results.filter(function (r) { return r.status === 'rejected' || (r.value && r.value.error); });
+    if (errs.length) console.warn('[SB] saveProductData partial errors', errs);
+  },
+
+  async listInspirations(productId) {
+    if (!SB) return [];
+    const { data, error } = await SB.from('inspirations').select('*').eq('product_id', productId).order('created_at');
+    if (error) { console.error('[SB] listInspirations', error); return []; }
+    return (data || []).map(function (r) {
+      return { id: r.id, url: r.url, title: r.title || '', platform: r.platform || '', addedBy: r.added_by || '', status: r.status };
+    });
+  },
+
+  async saveInspirations(productId, inspirations) {
+    if (!SB) return;
+    // Upsert each inspiration
+    if (!Array.isArray(inspirations) || !inspirations.length) return;
+    const rows = inspirations.map(function (i) {
+      return { id: i.id, product_id: productId, url: i.url || '', title: i.title || null, platform: i.platform || null, added_by: i.addedBy || null, status: i.status || 'saved' };
+    });
+    const { error } = await SB.from('inspirations').upsert(rows);
+    if (error) console.error('[SB] saveInspirations', error);
+  },
+
+  // Replaces bridge POST /queue
+  async enqueueInspirations(productId, items) {
+    if (!SB || !items || !items.length) return { ok: false };
+    const rows = items.map(function (it) {
+      return {
+        ins_id: it.id || it.ins_id || ('INS-' + Date.now()),
+        product_id: productId,
+        url: it.url,
+        platform: it.platform || null,
+        status: 'pending'
+      };
+    });
+    const { error } = await SB.from('inspiration_queue').upsert(rows, { onConflict: 'ins_id,product_id' });
+    if (error) { console.error('[SB] enqueueInspirations', error); return { ok: false, error: error }; }
+    return { ok: true, count: rows.length };
+  },
+
+  // Replaces bridge GET /queue
+  async getQueue(productId) {
+    if (!SB) return [];
+    let q = SB.from('inspiration_queue').select('*');
+    if (productId) q = q.eq('product_id', productId);
+    const { data, error } = await q.order('queued_at', { ascending: true });
+    if (error) { console.error('[SB] getQueue', error); return []; }
+    return data || [];
+  },
+
+  // Replaces bridge GET /results
+  async getResults(productId) {
+    if (!SB) return [];
+    let q = SB.from('inspiration_results').select('*');
+    if (productId) q = q.eq('product_id', productId);
+    const { data, error } = await q.order('classified_at', { ascending: false });
+    if (error) { console.error('[SB] getResults', error); return []; }
+    return data || [];
+  },
+
+  // Replaces bridge DELETE /queue
+  async clearQueue(productId) {
+    if (!SB) return;
+    let q = SB.from('inspiration_queue').delete();
+    if (productId) q = q.eq('product_id', productId);
+    else q = q.neq('id', '00000000-0000-0000-0000-000000000000'); // match all
+    const { error } = await q;
+    if (error) console.error('[SB] clearQueue', error);
+  },
+
+  // Replaces bridge DELETE /results
+  async clearResults(productId) {
+    if (!SB) return;
+    let q = SB.from('inspiration_results').delete();
+    if (productId) q = q.eq('product_id', productId);
+    else q = q.neq('id', '00000000-0000-0000-0000-000000000000');
+    const { error } = await q;
+    if (error) console.error('[SB] clearResults', error);
+  },
+
+  // Realtime subscription helper
+  subscribeToProduct(productId, onChange) {
+    if (!SB || !productId) return null;
+    const ch = SB.channel('product:' + productId)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'ads', filter: 'product_id=eq.' + productId }, onChange)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'matrix_cells', filter: 'product_id=eq.' + productId }, onChange)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'angles', filter: 'product_id=eq.' + productId }, onChange)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'personas', filter: 'product_id=eq.' + productId }, onChange)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'inspirations', filter: 'product_id=eq.' + productId }, onChange)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'inspiration_queue', filter: 'product_id=eq.' + productId }, onChange)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'inspiration_results', filter: 'product_id=eq.' + productId }, onChange)
+      .subscribe();
+    return ch;
+  },
+
+  unsubscribe(ch) { if (SB && ch) SB.removeChannel(ch); }
+};
+
+// Expose for debugging in DevTools
+window.DB = DB;
+window.SB = SB;
+
 // === CONFIGURATION ===
 const CFG = {
   key: '',

@@ -8199,12 +8199,8 @@ function createClickUpTaskFromAction(actionId, onDone) {
           apiFetch('/task/' + newId + '/link/' + briefDocId, { method: 'POST', body: {} })
             .then(function(){ console.log('[S1] v2 link created ✓'); })
             .catch(function() {
-              // v2 link failed (expected for doc IDs) — try v3 relations API
-              var v3Url = 'https://api.clickup.com/api/v3/task/' + newId + '/relation';
-              var v3Proxied = needsProxy()
-                ? 'https://corsproxy.io/?' + encodeURIComponent(v3Url)
-                : v3Url;
-              fetch(v3Proxied, {
+              // v2 link failed (expected for doc IDs) — try v3 relations API via our proxy
+              fetch(apiUrlV3('/task/' + newId + '/relation'), {
                 method: 'POST',
                 headers: { 'Authorization': CFG.key, 'Content-Type': 'application/json' },
                 body: JSON.stringify({ relates_to_id: briefDocId, relates_to_type: 'doc' })
@@ -8437,13 +8433,23 @@ function needsProxy() {
   return window.location.protocol === 'file:' || (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1');
 }
 
+// Build a ClickUp API URL. When served from a non-localhost origin (i.e. Vercel),
+// route through our own serverless function at /api/clickup which forwards to
+// api.clickup.com with the user's Authorization header intact.
 function apiUrl(path) {
-  var base = 'https://api.clickup.com/api/v2';
-  var url = base + path;
   if (needsProxy()) {
-    return 'https://corsproxy.io/?' + encodeURIComponent(url);
+    // /api/clickup?path=/team  — our Vercel function handles v2 by default
+    return '/api/clickup?path=' + encodeURIComponent(path);
   }
-  return url;
+  return 'https://api.clickup.com/api/v2' + path;
+}
+
+// v3 variant — some calls (e.g. task relations) require ClickUp API v3
+function apiUrlV3(path) {
+  if (needsProxy()) {
+    return '/api/clickup?v=3&path=' + encodeURIComponent(path);
+  }
+  return 'https://api.clickup.com/api/v3' + path;
 }
 
 function apiFetch(path, opts) {

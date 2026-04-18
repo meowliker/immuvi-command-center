@@ -9373,9 +9373,12 @@ function startPolling()    { startAutoSync(); }
 //   - immuvi_field_options_v1 (per-user cache of dropdown options)
 
 // saveState() stays sync for API compatibility with dozens of call sites —
-// it kicks off a debounced async write to Supabase.
+// it kicks off a debounced async write to Supabase. The scheduled save
+// captures activeProductId at schedule time so a product-switch during
+// the debounce window can't write ads/cells to the wrong product.
 var _saveQueue = Promise.resolve();
 var _saveScheduled = null;
+var _pendingFlushProductId = null;
 function saveState() {
   // Per-user UI prefs — synchronous, fast
   try {
@@ -9384,16 +9387,23 @@ function saveState() {
   } catch(e) {}
   // Shared state — debounced async write to Supabase
   if (_saveScheduled) clearTimeout(_saveScheduled);
+  _pendingFlushProductId = activeProductId; // snapshot: which product this save is for
   _saveScheduled = setTimeout(function () {
     _saveScheduled = null;
-    _saveQueue = _saveQueue.then(_flushStateToSupabase).catch(function(e){ console.error('[SB] save error', e); });
+    var pid = _pendingFlushProductId;
+    _saveQueue = _saveQueue.then(function(){ return _flushStateToSupabase(pid); })
+      .catch(function(e){ console.error('[SB] save error', e); });
   }, 600);
 }
 
-async function _flushStateToSupabase() {
-  if (!DB.ready || !activeProductId) return;
-  // Save current product's data
-  await DB.saveProductData(activeProductId, {
+async function _flushStateToSupabase(productIdArg) {
+  // Use the productId passed in (captured at schedule time). Fallback to
+  // activeProductId only if called directly without an argument (e.g. switchProduct).
+  var pid = productIdArg || activeProductId;
+  if (!DB.ready || !pid) return;
+  // Extra safety: if the active product has changed away from pid, still write
+  // to the ORIGINAL product — the user's edits belong there, not the new one.
+  await DB.saveProductData(pid, {
     ANGLES: ANGLES,
     PERSONAS: PERSONAS,
     ADS: ADS,
@@ -9492,6 +9502,15 @@ async function switchProduct(productId) {
   // Flush pending saves for the current product before switching
   if (_saveScheduled) { clearTimeout(_saveScheduled); _saveScheduled = null; }
   await _flushStateToSupabase().catch(function(e){ console.error('[SB] flush on switch failed', e); });
+  // Also flush any pending inspirations write to the CURRENT product so they
+  // don't land on the destination product.
+  if (_insSaveTimer) {
+    clearTimeout(_insSaveTimer);
+    _insSaveTimer = null;
+    if (DB.ready) {
+      await DB.saveInspirations(activeProductId, INSPIRATIONS.slice()).catch(function(e){ console.error('[SB] ins flush', e); });
+    }
+  }
 
   activeProductId = productId;
   try { localStorage.setItem('immuvi_active_product', activeProductId); } catch(e) {}
@@ -11724,12 +11743,20 @@ function getProductInsPrefix() {
 }
 
 // Save: push the full INSPIRATIONS array for the active product to Supabase (debounced, fire-and-forget).
+// Captures productId AND a snapshot of INSPIRATIONS at schedule time so a product-switch
+// mid-debounce can't move rows to the wrong product.
 var _insSaveTimer = null;
 function saveInspirations() {
   if (!DB.ready || !activeProductId) return;
   if (_insSaveTimer) clearTimeout(_insSaveTimer);
+  var capturedProductId = activeProductId;
+  var capturedInspos = INSPIRATIONS.slice(); // shallow snapshot; items are upserted by id
   _insSaveTimer = setTimeout(function () {
-    DB.saveInspirations(activeProductId, INSPIRATIONS).catch(function (e) {
+    _insSaveTimer = null;
+    // Extra guard: if the user switched products during the debounce window,
+    // only write if we're still on the same product we scheduled for.
+    if (activeProductId !== capturedProductId) return;
+    DB.saveInspirations(capturedProductId, capturedInspos).catch(function (e) {
       console.error('[SB] saveInspirations', e);
     });
   }, 600);

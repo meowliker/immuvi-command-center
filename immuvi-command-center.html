@@ -9240,6 +9240,10 @@ function mapProdStatus(s) {
 var _SYNC_DIFF_FIELDS = ['status','angle','persona','formatName','adLink','driveLink',
   'adType','funnelStage','hookType','creativeStructure','productionStyle','creativeHypothesis'];
 
+// Live poll: now BOTH updates changed fields on existing ads AND imports newly-
+// created tasks (e.g. ones you just pushed from the Action Plan, or tasks your
+// teammate added directly in ClickUp). Silent by default — toasts only when
+// significant changes happen (new tasks or field updates).
 function pollFullSync() {
   var activeProd = getActiveProduct();
   if (!CFG.key || !activeProd || !activeProd.clickupListId) return;
@@ -9247,10 +9251,10 @@ function pollFullSync() {
   var dot = document.getElementById('statusDot');
   if (dot) dot.className = 'live-dot syncing';
 
-  apiFetch('/list/' + activeProd.clickupListId + '/task?include_closed=true&subtasks=true&page=0')
-    .then(function(resp) {
-      if (!resp || !resp.tasks) { _onSyncSuccess(dot, 0, false); return; }
-      var tasks = resp.tasks;
+  // Fetch ALL pages (up to 500 tasks) — same as manual Sync, so we don't miss new tasks beyond page 0
+  fetchAllTasks(activeProd.clickupListId)
+    .then(function(tasks) {
+      if (!tasks || !tasks.length) { _onSyncSuccess(dot, 0, false); return; }
 
       // Build lookup: _clickupId → freshly-parsed task
       var taskMap = {};
@@ -9259,26 +9263,48 @@ function pollFullSync() {
         if (parsed._clickupId) taskMap[parsed._clickupId] = parsed;
       }
 
-      // Diff ADS — update only changed fields
+      // ── Pass 1: update existing ads (diff check) ─────────────────────
       var changed = false;
-      var changedCount = 0;
+      var fieldUpdates = 0;
+      var existingClickupIds = {};
       for (var i = 0; i < ADS.length; i++) {
         var ad = ADS[i];
-        if (!ad._clickupId || !taskMap[ad._clickupId]) continue;
+        if (!ad._clickupId) continue;
+        existingClickupIds[ad._clickupId] = true;
         var fresh = taskMap[ad._clickupId];
+        if (!fresh) continue;
         for (var f = 0; f < _SYNC_DIFF_FIELDS.length; f++) {
           var field = _SYNC_DIFF_FIELDS[f];
           var freshVal = fresh[field];
-          // Only overwrite if ClickUp has a non-empty value that differs
           if (freshVal !== undefined && freshVal !== null && freshVal !== '' && freshVal !== ad[field]) {
             ADS[i][field] = freshVal;
             changed = true;
-            changedCount++;
+            fieldUpdates++;
           }
         }
       }
 
-      // Also sync MANUAL_ACTIONS liveStatus
+      // ── Pass 2: import NEW tasks (tasks in ClickUp not yet in local ADS) ─────────────
+      var newTaskCount = 0;
+      for (var cuid in taskMap) {
+        if (!existingClickupIds[cuid]) {
+          var freshAd = taskMap[cuid];
+          // Ensure the id is stable — use the ClickUp task id as the local id,
+          // matching the convention used in importTasksFromClickUp.
+          if (!freshAd.id) freshAd.id = cuid;
+          ADS.push(freshAd);
+          if (freshAd.angle && !ANGLES.some(function(a){ return a.name === freshAd.angle; })) {
+            ANGLES.push({ id: 'ang-' + Date.now() + '-' + Math.random().toString(36).slice(2,6), name: freshAd.angle, status: 'Untested', sourceLink: '', notes: '' });
+          }
+          if (freshAd.persona && !PERSONAS.some(function(p){ return p.name === freshAd.persona; })) {
+            PERSONAS.push({ id: 'per-' + Date.now() + '-' + Math.random().toString(36).slice(2,6), name: freshAd.persona, status: 'Untested', sourceLink: '', notes: '' });
+          }
+          newTaskCount++;
+          changed = true;
+        }
+      }
+
+      // ── Pass 3: sync MANUAL_ACTIONS liveStatus ───────────────────────
       for (var i = 0; i < MANUAL_ACTIONS.length; i++) {
         if (MANUAL_ACTIONS[i]._clickupId && taskMap[MANUAL_ACTIONS[i]._clickupId]) {
           var newLive = taskMap[MANUAL_ACTIONS[i]._clickupId].status;
@@ -9289,16 +9315,23 @@ function pollFullSync() {
         }
       }
 
-      _onSyncSuccess(dot, changedCount, changed);
+      _onSyncSuccess(dot, fieldUpdates, changed);
 
       if (changed) {
+        if (newTaskCount > 0) initAnglePersonas();   // rebuild matrix if new angles/personas appeared
         P = process(ADS);
         buildCreativeUsageIndex();
         deriveWinners();
         genActions();
+        populateFilterOptions();
         renderAll();
         saveState();
-        toast(changedCount + ' field' + (changedCount !== 1 ? 's' : '') + ' updated from ClickUp', 'ok');
+        // Lightweight toast so the user knows background sync did something
+        if (newTaskCount > 0) {
+          toast(newTaskCount + ' new task' + (newTaskCount !== 1 ? 's' : '') + ' imported from ClickUp' + (fieldUpdates > 0 ? ' · ' + fieldUpdates + ' field updates' : ''), 'ok');
+        } else if (fieldUpdates > 0) {
+          toast(fieldUpdates + ' field' + (fieldUpdates !== 1 ? 's' : '') + ' updated from ClickUp', 'ok');
+        }
       }
     })
     .catch(function() {
@@ -9512,6 +9545,10 @@ async function switchProduct(productId) {
     }
   }
 
+  // Stash current product's inspirations into the cross-product cache so when the
+  // user switches back, render is instant.
+  if (activeProductId) _inspoByProductCache[activeProductId] = (INSPIRATIONS || []).slice();
+
   activeProductId = productId;
   try { localStorage.setItem('immuvi_active_product', activeProductId); } catch(e) {}
 
@@ -9542,12 +9579,36 @@ async function switchProduct(productId) {
   if (typeof deriveWinners === 'function') deriveWinners();
   if (typeof genActions === 'function') genActions();
   if (typeof buildCreativeUsageIndex === 'function') buildCreativeUsageIndex();
-  loadInspirations(); // reload inspirations for this product
+
+  // Inspirations: show from cache INSTANTLY, then refresh from Supabase in the
+  // background. Avoids the 200-500ms round-trip blocking the product-switch render.
+  var _cached = _inspoByProductCache[productId];
+  if (_cached && _cached.length) {
+    INSPIRATIONS = _cached.slice();
+    INS_NEXT_ID = _cached.length + 1;
+    migrateInspirationDocUrls();
+    if (ADS && ADS.length > 0) refreshAllDupeChecks(false);
+  } else {
+    INSPIRATIONS = [];
+    INS_NEXT_ID = 1;
+  }
+
   refreshAllDupeChecks(false);
   populateFilterOptions();
   renderAll();
   renderProductProfile();
   updateHeaderProductName();
+
+  // Kick off the authoritative inspiration load in the background.
+  // When it returns, update the cache + re-render only the inspirations surfaces.
+  (function backgroundRefreshInspos(expectedProductId){
+    loadInspirations().then(function(){
+      if (activeProductId !== expectedProductId) return;  // user moved on
+      _inspoByProductCache[expectedProductId] = INSPIRATIONS.slice();
+      if (typeof renderInspirations === 'function') renderInspirations();
+    }).catch(function(e){ console.error('[SB] switchProduct inspo refresh', e); });
+  })(productId);
+
   // Re-wire realtime subscription for the new product
   _resubscribeRealtime();
   // Auto-fetch field map for new product if API key is set

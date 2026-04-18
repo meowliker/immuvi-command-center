@@ -3530,33 +3530,56 @@ const DB = {
     };
   },
 
-  // Full-sync write of an entire product's state (used by saveState, debounced)
+  // Full-sync write of an entire product's state (used by saveState, debounced).
+  // Semantics: SNAPSHOT — whatever's in `state` is the new truth. Rows that existed
+  // but aren't in the new state get deleted. This matches the old localStorage
+  // 'serialize the whole blob' behaviour so delete / clear / bulk-remove actually
+  // persist instead of coming back on refresh.
   async saveProductData(productId, state) {
-    if (!SB || !productId) return;
+    if (!SB || !productId) return { ok: false, error: 'no client or productId' };
+
+    // Fetch existing IDs once so we can compute orphan-deletes across all tables.
+    // Primary-key tables: ads, angles, personas (id text).
+    // Composite-key table: matrix_cells (product_id, angle_id, persona_id).
+    // uuid table with stable blob: manual_actions (we track via ma._dbId).
+    const [existingAds, existingAngles, existingPersonas, existingCells] = await Promise.all([
+      SB.from('ads').select('id').eq('product_id', productId),
+      SB.from('angles').select('id').eq('product_id', productId),
+      SB.from('personas').select('id').eq('product_id', productId),
+      SB.from('matrix_cells').select('id, angle_id, persona_id').eq('product_id', productId)
+    ]);
+
     const tasks = [];
 
-    // Upsert ANGLES
-    if (Array.isArray(state.ANGLES) && state.ANGLES.length) {
-      tasks.push(SB.from('angles').upsert(state.ANGLES.map(function (a) {
-        return { id: a.id, product_id: productId, name: a.name || '', status: a.status || 'Untested', source_link: a.sourceLink || null, notes: a.notes || null };
-      })));
-    }
-    // Upsert PERSONAS
-    if (Array.isArray(state.PERSONAS) && state.PERSONAS.length) {
-      tasks.push(SB.from('personas').upsert(state.PERSONAS.map(function (p) {
-        return { id: p.id, product_id: productId, name: p.name || '', status: p.status || 'Untested', source_link: p.sourceLink || null, notes: p.notes || null };
-      })));
-    }
-    // Upsert ADS
-    if (Array.isArray(state.ADS) && state.ADS.length) {
-      tasks.push(SB.from('ads').upsert(state.ADS.map(function (a) { return _adToRow(a, productId); })));
-    }
-    // Matrix cells — reconstruct ONLY from 2-part keys ("angle||persona"). Per-ad
-    // metadata entries use 3-part keys ("adId||angle||persona") which are folded
-    // into the 2-part cell row's meta jsonb so no phantom cells are created.
+    // ── ANGLES ───────────────────────────────────────────────────
+    const angleRows = (state.ANGLES || []).map(function (a) {
+      return { id: a.id, product_id: productId, name: a.name || '', status: a.status || 'Untested', source_link: a.sourceLink || null, notes: a.notes || null };
+    });
+    const angleIds = new Set(angleRows.map(function (r) { return r.id; }));
+    const angleOrphans = (existingAngles.data || []).filter(function (r) { return !angleIds.has(r.id); }).map(function (r) { return r.id; });
+    if (angleOrphans.length) tasks.push(SB.from('angles').delete().in('id', angleOrphans));
+    if (angleRows.length)    tasks.push(SB.from('angles').upsert(angleRows));
+
+    // ── PERSONAS ─────────────────────────────────────────────────
+    const personaRows = (state.PERSONAS || []).map(function (p) {
+      return { id: p.id, product_id: productId, name: p.name || '', status: p.status || 'Untested', source_link: p.sourceLink || null, notes: p.notes || null };
+    });
+    const personaIds = new Set(personaRows.map(function (r) { return r.id; }));
+    const personaOrphans = (existingPersonas.data || []).filter(function (r) { return !personaIds.has(r.id); }).map(function (r) { return r.id; });
+    if (personaOrphans.length) tasks.push(SB.from('personas').delete().in('id', personaOrphans));
+    if (personaRows.length)    tasks.push(SB.from('personas').upsert(personaRows));
+
+    // ── ADS ──────────────────────────────────────────────────────
+    const adRows = (state.ADS || []).map(function (a) { return _adToRow(a, productId); });
+    const adIds = new Set(adRows.map(function (r) { return r.id; }));
+    const adOrphans = (existingAds.data || []).filter(function (r) { return !adIds.has(r.id); }).map(function (r) { return r.id; });
+    if (adOrphans.length) tasks.push(SB.from('ads').delete().in('id', adOrphans));
+    if (adRows.length)    tasks.push(SB.from('ads').upsert(adRows));
+
+    // ── MATRIX CELLS (composite key, fold 3-part per-ad keys) ────
     const meta = state.MATRIX_CELL_META || {}, assigns = state.CELL_CREATIVE_ASSIGNMENTS || {};
     const cellKeys2 = new Set();
-    const perAdMeta = {}; // "angle||persona" → { adId: meta }
+    const perAdMeta = {};
     Object.keys(meta).forEach(function (k) {
       const parts = k.split('||');
       if (parts.length === 2) {
@@ -3572,53 +3595,51 @@ const DB = {
     });
 
     const cellRows = [];
+    const keepCellKeys = new Set();
     cellKeys2.forEach(function (k) {
       const parts = k.split('||');
+      keepCellKeys.add(parts[0] + '||' + parts[1]);
       cellRows.push({
         product_id: productId,
         angle_id: parts[0],
         persona_id: parts[1],
-        meta: {
-          cell_key: k,
-          meta: meta[k] || {},
-          per_ad: perAdMeta[k] || {}    // collapsed 3-part entries go here
-        },
+        meta: { cell_key: k, meta: meta[k] || {}, per_ad: perAdMeta[k] || {} },
         creative_assignments: assigns[k] || [],
         action_status: (meta[k] && meta[k].status) || null
       });
     });
-    if (cellRows.length) {
-      tasks.push(SB.from('matrix_cells').upsert(cellRows, { onConflict: 'product_id,angle_id,persona_id' }));
-    }
+    const cellOrphanIds = (existingCells.data || []).filter(function (r) {
+      return !keepCellKeys.has(r.angle_id + '||' + r.persona_id);
+    }).map(function (r) { return r.id; });
+    if (cellOrphanIds.length) tasks.push(SB.from('matrix_cells').delete().in('id', cellOrphanIds));
+    if (cellRows.length)      tasks.push(SB.from('matrix_cells').upsert(cellRows, { onConflict: 'product_id,angle_id,persona_id' }));
 
-    // MANUAL_ACTIONS — persist the action plan. Each entry is a full JSON blob
-    // (payload jsonb). We replace all for this product to match in-memory state.
-    // Using _dbId to upsert keeps existing rows stable; new entries get fresh uuids.
+    // ── MANUAL_ACTIONS ───────────────────────────────────────────
     const actRows = (state.MANUAL_ACTIONS || []).map(function (ma) {
-      var payload = {}; // every field except _dbId goes into payload
+      var payload = {};
       for (var k in ma) { if (k !== '_dbId') payload[k] = ma[k]; }
-      var row = {
-        product_id: productId,
-        payload: payload,
-        live_status: ma.liveStatus || null
-      };
+      var row = { product_id: productId, payload: payload, live_status: ma.liveStatus || null };
       if (ma._dbId) row.id = ma._dbId;
       return row;
     });
-    // Two-step: delete any rows for this product NOT in the new set, then upsert.
-    const keepIds = actRows.map(function (r) { return r.id; }).filter(Boolean);
-    if (keepIds.length === 0) {
-      tasks.push(SB.from('manual_actions').delete().eq('product_id', productId));
-    } else {
-      tasks.push(SB.from('manual_actions').delete().eq('product_id', productId).not('id', 'in', '(' + keepIds.map(function(i){return '"'+i+'"';}).join(',') + ')'));
-    }
+    // Simplest: delete all manual_actions for this product then insert new set.
+    // Small row count; idempotent. Avoids tricky PostgREST 'not in' quoting.
+    tasks.push(SB.from('manual_actions').delete().eq('product_id', productId));
     if (actRows.length) {
-      tasks.push(SB.from('manual_actions').upsert(actRows));
+      // Strip _dbId (uuid) from rows to let DB generate fresh ones, avoids PK conflicts
+      tasks.push(SB.from('manual_actions').insert(actRows.map(function (r) {
+        var { id, ...rest } = r;
+        return rest;
+      })));
     }
 
     const results = await Promise.allSettled(tasks);
     const errs = results.filter(function (r) { return r.status === 'rejected' || (r.value && r.value.error); });
-    if (errs.length) console.warn('[SB] saveProductData partial errors', errs);
+    if (errs.length) {
+      console.warn('[SB] saveProductData partial errors', errs);
+      return { ok: false, errors: errs };
+    }
+    return { ok: true };
   },
 
   async listInspirations(productId) {
@@ -9480,6 +9501,9 @@ function startPolling()    { startAutoSync(); }
 // it kicks off a debounced async write to Supabase. The scheduled save
 // captures activeProductId at schedule time so a product-switch during
 // the debounce window can't write ads/cells to the wrong product.
+// Shorter debounce (300ms) minimises the reload-race window; combined with
+// the beforeunload force-flush (below) this makes persistence feel
+// localStorage-instantaneous.
 var _saveQueue = Promise.resolve();
 var _saveScheduled = null;
 var _pendingFlushProductId = null;
@@ -9491,13 +9515,28 @@ function saveState() {
   } catch(e) {}
   // Shared state — debounced async write to Supabase
   if (_saveScheduled) clearTimeout(_saveScheduled);
-  _pendingFlushProductId = activeProductId; // snapshot: which product this save is for
+  _pendingFlushProductId = activeProductId;
   _saveScheduled = setTimeout(function () {
     _saveScheduled = null;
     var pid = _pendingFlushProductId;
     _saveQueue = _saveQueue.then(function(){ return _flushStateToSupabase(pid); })
-      .catch(function(e){ console.error('[SB] save error', e); });
-  }, 600);
+      .catch(function(e){
+        console.error('[SB] save error', e);
+        try { toast('Save failed — check connection', 'err'); } catch(_){}
+      });
+  }, 300);
+}
+
+// Force-flush any pending save immediately (bypasses the debounce). Called from
+// beforeunload to persist edits before the tab closes/reloads.
+function flushPendingSave() {
+  if (_saveScheduled) {
+    clearTimeout(_saveScheduled);
+    _saveScheduled = null;
+    var pid = _pendingFlushProductId;
+    _saveQueue = _saveQueue.then(function(){ return _flushStateToSupabase(pid); })
+      .catch(function(e){ console.error('[SB] flush error', e); });
+  }
 }
 
 async function _flushStateToSupabase(productIdArg) {
@@ -10249,6 +10288,18 @@ function hdrSwitchProduct(productId) {
 document.addEventListener('click', function(e) {
   var wrap = document.getElementById('hdrProdWrap');
   if (wrap && !wrap.contains(e.target)) closeHdrProdSwitcher();
+});
+
+// Force-flush pending saves before the tab reloads / closes. Uses both
+// beforeunload (synchronous callback) and pagehide (fires on mobile bfcache).
+// The fire-and-forget save still runs; fetch(..., { keepalive:true }) under
+// Supabase JS keeps the request alive past document unload.
+window.addEventListener('beforeunload', function () { try { flushPendingSave(); } catch(e){} });
+window.addEventListener('pagehide',     function () { try { flushPendingSave(); } catch(e){} });
+// Also flush when the tab becomes hidden (user switches tabs / app) — catches
+// the case where the OS kills the tab before beforeunload fires.
+document.addEventListener('visibilitychange', function () {
+  if (document.visibilityState === 'hidden') { try { flushPendingSave(); } catch(e){} }
 });
 
 window.addEventListener('load', async function () {

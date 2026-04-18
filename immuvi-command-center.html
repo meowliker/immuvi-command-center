@@ -3782,12 +3782,23 @@ function _resubscribeRealtime() {
     _rtMergeTimer = setTimeout(async function () {
       _rtMergeTimer = null;
       try {
+        // ──── SELF-ECHO GUARDS ────
+        // Realtime echoes our OWN writes back to us. During a local save (or
+        // just-after, while network catches up), re-fetching would observe a
+        // transient partial DB state — rows deleted but replacement upserts
+        // not yet applied → the screen would flash blank. Bail in these cases;
+        // our in-memory state already reflects the changes.
+        if (_saveScheduled) return;                    // a save is debounced
+        if (_saveInFlight) return;                     // a save is running right now
+        if (Date.now() - _lastSaveCompletedAt < 1500) return; // grace window for echoes
+
         // Only merge if we're still on the same product
         const pid = activeProductId;
         const st = await DB.loadProductData(pid);
         if (!st || pid !== activeProductId) return;
-        // Avoid clobbering in-flight local saves: if we have a scheduled save, skip merge this round
-        if (_saveScheduled) return;
+        // Re-check the save guards AFTER the network round-trip in case another
+        // save started while we were fetching.
+        if (_saveScheduled || _saveInFlight) return;
         // And don't clobber data that doesn't belong here (mid-switch guard)
         if (_adsProductId && _adsProductId !== activeProductId) return;
         ANGLES = st.ANGLES || ANGLES;
@@ -9539,6 +9550,13 @@ function flushPendingSave() {
   }
 }
 
+// When we're in the middle of our own save, we don't want realtime echoes of
+// our own changes to re-fetch and replace the in-memory state with a transient
+// partial-DB snapshot (causing the screen to flash blank). Gate the merge
+// handler with this flag + a short grace period after save completes.
+var _saveInFlight = false;
+var _lastSaveCompletedAt = 0;
+
 async function _flushStateToSupabase(productIdArg) {
   // Use the productId passed in (captured at schedule time). Fallback to
   // activeProductId only if called directly without an argument (e.g. switchProduct).
@@ -9551,17 +9569,23 @@ async function _flushStateToSupabase(productIdArg) {
     console.warn('[SB] abort save: in-memory data belongs to', _adsProductId, 'but tried to save as', pid);
     return;
   }
-  await DB.saveProductData(pid, {
-    ANGLES: ANGLES,
-    PERSONAS: PERSONAS,
-    ADS: ADS,
-    MATRIX_CELL_META: MATRIX_CELL_META,
-    CELL_CREATIVE_ASSIGNMENTS: CELL_CREATIVE_ASSIGNMENTS,
-    MANUAL_ACTIONS: MANUAL_ACTIONS
-  });
-  // Keep products list in sync (catches rename / color / clickup list changes)
-  for (var pi = 0; pi < PRODUCTS.length; pi++) {
-    await DB.upsertProduct(PRODUCTS[pi]);
+  _saveInFlight = true;
+  try {
+    await DB.saveProductData(pid, {
+      ANGLES: ANGLES,
+      PERSONAS: PERSONAS,
+      ADS: ADS,
+      MATRIX_CELL_META: MATRIX_CELL_META,
+      CELL_CREATIVE_ASSIGNMENTS: CELL_CREATIVE_ASSIGNMENTS,
+      MANUAL_ACTIONS: MANUAL_ACTIONS
+    });
+    // Keep products list in sync (catches rename / color / clickup list changes)
+    for (var pi = 0; pi < PRODUCTS.length; pi++) {
+      await DB.upsertProduct(PRODUCTS[pi]);
+    }
+  } finally {
+    _lastSaveCompletedAt = Date.now();
+    _saveInFlight = false;
   }
 }
 

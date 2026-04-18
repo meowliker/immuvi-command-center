@@ -1086,6 +1086,78 @@ body::before {
 ::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.18); border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,0.28); }
 
+/* ─── UI POLISH (CSS-only, no behavior changes) ─── */
+/* Boot loader: shown until JS adds .app-ready to <body>.
+   Prevents a jarring empty flash while Supabase data loads. */
+#bootLoader {
+  position: fixed; inset: 0;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 14px;
+  background: var(--bg);
+  z-index: 9999;
+  transition: opacity 260ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+#bootLoader .bl-spinner {
+  width: 30px; height: 30px;
+  border: 3px solid var(--el);
+  border-top-color: var(--test);
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+}
+#bootLoader .bl-text {
+  font-size: 0.78rem; color: var(--t2); letter-spacing: 0.02em;
+  font-family: 'JetBrains Mono', monospace;
+}
+body.app-ready #bootLoader { opacity: 0; pointer-events: none; }
+
+/* Tab panel crossfade: subtle 180ms fade+slide as .tab-content.on toggles */
+.tab-content { animation: tabFadeIn 220ms cubic-bezier(0.16, 1, 0.3, 1); }
+@keyframes tabFadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Button press microinteraction — small scale on :active */
+.btn-primary, .btn-ghost, .btn-sm,
+button.tab, .pp-btn, .ins-classify-btn, .cu-jump-link {
+  transition: transform 80ms cubic-bezier(0.16, 1, 0.3, 1),
+              background 160ms ease, border-color 160ms ease, color 160ms ease, box-shadow 160ms ease;
+}
+.btn-primary:active:not(:disabled),
+.btn-ghost:active:not(:disabled),
+.btn-sm:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+/* Row fade-out when being removed (opt-in: add .row-removing class) */
+.row-removing { animation: rowFadeOut 180ms cubic-bezier(0.4, 0, 0.2, 1) forwards; }
+@keyframes rowFadeOut {
+  to { opacity: 0; transform: translateX(-6px); }
+}
+
+/* Stagger helper — already referenced in renders with style="--i: N" */
+.stagger { animation: staggerIn 280ms cubic-bezier(0.16, 1, 0.3, 1) both;
+           animation-delay: calc(var(--i, 0) * 12ms); }
+@keyframes staggerIn {
+  from { opacity: 0; transform: translateY(3px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Product-switch flash: when activeProductId flips, briefly dim the content
+   so the swap doesn't feel like data disappearing + reappearing. */
+main.switching { animation: switchPulse 280ms cubic-bezier(0.16, 1, 0.3, 1); }
+@keyframes switchPulse {
+  0%   { opacity: 0.4; }
+  100% { opacity: 1; }
+}
+
+/* Consistent focus ring for keyboard users */
+button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, a:focus-visible {
+  outline: 2px solid var(--test);
+  outline-offset: 2px;
+  border-radius: var(--rs);
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.01ms !important;
@@ -2982,6 +3054,8 @@ body::before {
 </style>
 </head>
 <body>
+<!-- Boot loader overlay — hidden by JS once initial data is rendered (adds .app-ready to <body>) -->
+<div id="bootLoader"><div class="bl-spinner"></div><div class="bl-text">Loading from cloud…</div></div>
 
   <!-- ===== HEADER ===== -->
   <header class="hdr">
@@ -6587,14 +6661,27 @@ function deleteManualAction(id) {
 
   var cuId = act._clickupId;
 
-  // ── No source AD: just remove action + ClickUp task ──────────────────────────
+  // ── Fallback: if the action had no sourceAdId (e.g. AI recommendation pushed
+  // to ClickUp and later synced back as a fresh AD), look up the AD by its
+  // _clickupId. Without this, deleting such an action leaves an orphan AD in
+  // the Creative Tracker / Matrix after sync. ────────────────────────────────
+  if (!sourceAd && cuId) {
+    for (var jj = 0; jj < ADS.length; jj++) {
+      if (ADS[jj]._clickupId === cuId) { sourceAd = ADS[jj]; break; }
+    }
+  }
+
+  // ── No source AD anywhere: just remove action + ClickUp task ─────────────
   if (!sourceAd) {
     MANUAL_ACTIONS = MANUAL_ACTIONS.filter(function(a) { return a.id !== id; });
+    // Full re-derive + render so Creative Tracker / Matrix / counts all update
+    P = process(ADS);
+    deriveWinners();
     genActions();
+    buildCreativeUsageIndex();
     rebuildProdFromManual();
-    renderActionPlan();
-    renderProduction();
-    renderMatrix();
+    populateFilterOptions();
+    renderAll();
     saveState();
     if (cuId) {
       apiDeleteTask(cuId)
@@ -10374,6 +10461,13 @@ window.addEventListener('load', async function () {
   // Kick off cross-product caches so the product picker shows counts (non-blocking)
   refreshWinnersCache().catch(function(){});
   refreshInspoCache().catch(function(){});
+  // Fade the boot overlay out — paint is ready.
+  document.body.classList.add('app-ready');
+  // Clean up overlay DOM after the transition to free memory
+  setTimeout(function () {
+    var bl = document.getElementById('bootLoader');
+    if (bl && bl.parentNode) bl.parentNode.removeChild(bl);
+  }, 800);
 
   // Restore the last active tab (so refresh lands on the same page, not always Command HQ)
   (function() {

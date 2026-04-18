@@ -198,6 +198,29 @@ begin
   end loop;
 end $$;
 
+-- Note: angle/persona rename cascade is handled CLIENT-SIDE in the dashboard
+-- (updateAngleName / updatePersonaName + renameAngleInMatrixKeys). A server
+-- trigger was considered but removed — it fought the client's delete-orphans
+-- step, causing row-id churn. The client is the source of truth.
+
+-- ============================================================
+-- REALTIME PUBLICATION (so teammates see each other's changes live)
+-- ============================================================
+do $$
+declare t text;
+begin
+  for t in select unnest(array[
+    'ads','angles','personas','matrix_cells','inspirations',
+    'inspiration_queue','inspiration_results','manual_actions'
+  ]) loop
+    -- Try to add; ignore if already in the publication
+    begin
+      execute format('alter publication supabase_realtime add table public.%I', t);
+    exception when duplicate_object then null;
+    end;
+  end loop;
+end $$;
+
 -- ============================================================
 -- ROW LEVEL SECURITY (v1: open for anon, RLS on so we can tighten later)
 -- ============================================================

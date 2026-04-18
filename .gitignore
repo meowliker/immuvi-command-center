@@ -1,0 +1,58 @@
+# OS
+.DS_Store
+Thumbs.db
+*.swp
+*~
+
+# Editor / IDE
+.vscode/
+.idea/
+.claude/
+.superpowers/
+
+# Environment / secrets
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Dependencies
+node_modules/
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Local backups (kept out of repo — you can restore from git history)
+backups/
+*.backup-*.html
+immuvi-command-center-v1.html
+astro-rekha-analytics.html
+astro-rekha-v2-backup.html
+astro-rekha-v2.html
+astro-rekha-v3-assembled.html
+
+# Bridge / dev scratch
+/tmp/
+immuvi-grid-js.js
+immuvi-grid-patch.txt
+immuvi-css.css
+immuvi-html.html
+immuvi-js.js
+script.js
+v3-css.txt
+v3-html.txt
+
+# Vercel
+.vercel/
+
+# Temp data
+pending.json
+results.json

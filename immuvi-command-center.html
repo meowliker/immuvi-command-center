@@ -3369,7 +3369,20 @@ function _debounce(fn, ms) {
 }
 
 // Shape helpers: translate between frontend camelCase and DB snake_case
+// Heuristic: does this id look like a ClickUp task ID (vs a frontend-generated one)?
+// ClickUp task IDs: 9-char lowercase alphanumeric ("86d2pmv7b"). Frontend IDs use
+// prefixes: "AD-…", "ad-…", "ang-…", "per-…", "prod-…", "ins-…", "INS-…", "AR-…" etc.
+function _looksLikeClickUpTaskId(id) {
+  if (!id || typeof id !== 'string') return false;
+  if (/^[A-Z]{2,4}-/.test(id)) return false;   // AD-xxx, INS-xxx, PROD-xxx
+  if (/^(ang|per|prod|ins|ad)-/.test(id)) return false; // prefixed local
+  return /^[a-z0-9]{6,12}$/i.test(id);          // alnum, reasonable length
+}
+
 function _adToRow(a, productId) {
+  // Persist the ClickUp linkage so future syncs can dedupe.
+  // Priority: explicit a.clickupTaskId → a._clickupId → id (if it looks like a task id)
+  var clickupId = a.clickupTaskId || a._clickupId || (_looksLikeClickUpTaskId(a.id) ? a.id : null);
   return {
     id: a.id,
     product_id: productId,
@@ -3384,10 +3397,13 @@ function _adToRow(a, productId) {
     parent_ad_id: a.parentAdId || null,
     variation_number: a.variationNumber || null,
     ad_origin: a.adOrigin || null,
-    clickup_task_id: a.clickupTaskId || null
+    clickup_task_id: clickupId
   };
 }
 function _rowToAd(r) {
+  // Restore _clickupId so the sync logic can match existing ads to fetched ClickUp tasks.
+  // Priority: explicit clickup_task_id column → id (if it looks like a task id).
+  var clickupId = r.clickup_task_id || (_looksLikeClickUpTaskId(r.id) ? r.id : null);
   return {
     id: r.id,
     formatName: r.format_name,
@@ -3401,7 +3417,8 @@ function _rowToAd(r) {
     parentAdId: r.parent_ad_id,
     variationNumber: r.variation_number,
     adOrigin: r.ad_origin,
-    clickupTaskId: r.clickup_task_id
+    clickupTaskId: r.clickup_task_id || null,
+    _clickupId: clickupId
   };
 }
 

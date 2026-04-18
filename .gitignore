@@ -56,3 +56,6 @@ v3-html.txt
 # Temp data
 pending.json
 results.json
+.supabase-db-password.txt
+.vercel
+immuvi_localstorage_export.json

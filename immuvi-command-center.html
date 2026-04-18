@@ -4048,7 +4048,40 @@ let matrixExpandedCell = null; // 'angleName||personaName' or null
 let matrixExpandedAd = null;   // ad id or null
 let matrixDetailFunnel = 'All'; // funnel filter in detail panel
 let trackerSort = { col: 'id', dir: 1 };
-let trackerFilters = { angle: '', persona: '', format: '', adType: '', funnelStage: '', status: '', structure: '', hookType: '', productionStyle: '', taskType: '' };
+let trackerFilters = { angle: '', persona: '', format: '', adType: '', funnelStage: '', status: '', structure: '', hookType: '', productionStyle: '', taskType: '', dateRange: '' };
+
+// Filter persistence — scoped per product so filters don't leak across.
+function _trackerFiltersKey() { return 'immuvi_tracker_filters_' + (activeProductId || 'default'); }
+function _saveTrackerFilters() {
+  try { localStorage.setItem(_trackerFiltersKey(), JSON.stringify(trackerFilters)); } catch (e) {}
+}
+function _loadTrackerFilters() {
+  try {
+    var raw = localStorage.getItem(_trackerFiltersKey());
+    if (!raw) return;
+    var saved = JSON.parse(raw) || {};
+    Object.keys(saved).forEach(function (k) {
+      if (k in trackerFilters) trackerFilters[k] = saved[k];
+    });
+  } catch (e) {}
+}
+// Push current trackerFilters values onto the <select> elements if they exist in the DOM.
+function _syncTrackerFilterDom() {
+  var map = {
+    fAngle: 'angle', fPersona: 'persona', fFormat: 'format',
+    fAdType: 'adType', fFunnel: 'funnelStage', fStatus: 'status',
+    fStructure: 'structure', fHook: 'hookType', fProduction: 'productionStyle',
+    fDate: 'dateRange'
+  };
+  Object.keys(map).forEach(function (id) {
+    var el = document.getElementById(id);
+    if (el && trackerFilters[map[id]] != null) el.value = trackerFilters[map[id]];
+  });
+  var btns = document.querySelectorAll('#taskTypeToggle .tt-btn');
+  for (var i = 0; i < btns.length; i++) {
+    btns[i].classList.toggle('active', btns[i].getAttribute('data-type') === (trackerFilters.taskType || ''));
+  }
+}
 let selectedActions = new Set();
 let dragState = null;
 let builderSlots = { angle: null, persona: null, format: null };
@@ -7819,6 +7852,7 @@ function applyFilters() {
   if (fProduction) trackerFilters.productionStyle = fProduction.value;
   var fDate = document.getElementById('fDate');
   if (fDate) trackerFilters.dateRange = fDate.value;
+  _saveTrackerFilters();
   renderCreatives();
 }
 
@@ -7829,6 +7863,7 @@ function setTrackerTaskType(type) {
   for (var i = 0; i < btns.length; i++) {
     btns[i].classList.toggle('active', btns[i].getAttribute('data-type') === type);
   }
+  _saveTrackerFilters();
   renderCreatives();
 }
 
@@ -9817,6 +9852,10 @@ async function switchProduct(productId) {
   if (typeof deriveWinners === 'function') deriveWinners();
   if (typeof genActions === 'function') genActions();
   if (typeof buildCreativeUsageIndex === 'function') buildCreativeUsageIndex();
+  // Reset tracker filters to the new product's saved set (per-product key).
+  // Clear all first so stale filters from the old product don't carry over.
+  Object.keys(trackerFilters).forEach(function (k) { trackerFilters[k] = ''; });
+  _loadTrackerFilters();
 
   // Inspirations: show from cache INSTANTLY, then refresh from Supabase in the
   // background. Avoids the 200-500ms round-trip blocking the product-switch render.
@@ -9833,6 +9872,7 @@ async function switchProduct(productId) {
 
   refreshAllDupeChecks(false);
   populateFilterOptions();
+  _syncTrackerFilterDom();
   renderAll();
   renderProductProfile();
   updateHeaderProductName();
@@ -10452,7 +10492,11 @@ window.addEventListener('load', async function () {
   buildCreativeUsageIndex();
   deriveWinners();
   genActions();
+  // Restore saved tracker filters for this product (per-product key) BEFORE
+  // populateFilterOptions so the selects get the right initial state.
+  _loadTrackerFilters();
   populateFilterOptions();
+  _syncTrackerFilterDom();
   renderAll(); // includes renderInspirations()
   renderProductProfile();
   updateHeaderProductName();

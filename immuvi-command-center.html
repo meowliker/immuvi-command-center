@@ -3418,7 +3418,9 @@ function _rowToAd(r) {
     variationNumber: r.variation_number,
     adOrigin: r.ad_origin,
     clickupTaskId: r.clickup_task_id || null,
-    _clickupId: clickupId
+    _clickupId: clickupId,
+    // Deterministically derive the ClickUp task URL so tracker "↗ ClickUp" pills render
+    _clickupUrl: clickupId ? ('https://app.clickup.com/t/' + clickupId) : ''
   };
 }
 

@@ -3358,6 +3358,13 @@ try {
   console.error('[SB] Client init failed:', e);
 }
 
+// Guard: tracks which product the in-memory ADS/ANGLES/etc. currently belong to.
+// Set by loadState() and switchProduct() after they finish loading. Used to bail
+// out of saves/syncs that would otherwise persist the wrong product's data under
+// the currently-selected product's id (the class of race-condition bugs that
+// corrupted the DB when a 30s sync fired mid-switch).
+var _adsProductId = null;
+
 // Debounce helper — used to coalesce many saveState() calls into one DB write
 function _debounce(fn, ms) {
   let t = null;
@@ -3379,10 +3386,29 @@ function _looksLikeClickUpTaskId(id) {
   return /^[a-z0-9]{6,12}$/i.test(id);          // alnum, reasonable length
 }
 
+// Local-only ad fields that aren't syncable to ClickUp but must survive a Supabase
+// round-trip. Stored in the ads.meta jsonb column.
+var _META_FIELDS = [
+  'taskType', 'sourceFormatId', 'sourceFormatDriveLink', '_sourceFormatDriveLink',
+  '_fromInspoId', '_sourceAdId', '_sourceProductId', '_sourceClickupId',
+  '_sourceInsId', '_sourceInspoUrl', '_inspirationDriveLink',
+  '_sourceFormatName', '_sourceFormatAdLink', '_sourceFormatAdType',
+  '_fromAction', '_productionStatus', '_crossProductUses',
+  'hookType', 'creativeStructure', 'productionStyle', 'creativeHypothesis',
+  'uniqueName', 'description', 'dueDate',
+  'dateCreated', 'taskName'
+];
+
 function _adToRow(a, productId) {
   // Persist the ClickUp linkage so future syncs can dedupe.
   // Priority: explicit a.clickupTaskId → a._clickupId → id (if it looks like a task id)
   var clickupId = a.clickupTaskId || a._clickupId || (_looksLikeClickUpTaskId(a.id) ? a.id : null);
+  // Extract local-only fields into meta so they survive roundtrip.
+  var meta = {};
+  for (var fi = 0; fi < _META_FIELDS.length; fi++) {
+    var fk = _META_FIELDS[fi];
+    if (a[fk] !== undefined && a[fk] !== null && a[fk] !== '') meta[fk] = a[fk];
+  }
   return {
     id: a.id,
     product_id: productId,
@@ -3397,14 +3423,15 @@ function _adToRow(a, productId) {
     parent_ad_id: a.parentAdId || null,
     variation_number: a.variationNumber || null,
     ad_origin: a.adOrigin || null,
-    clickup_task_id: clickupId
+    clickup_task_id: clickupId,
+    meta: meta
   };
 }
 function _rowToAd(r) {
   // Restore _clickupId so the sync logic can match existing ads to fetched ClickUp tasks.
   // Priority: explicit clickup_task_id column → id (if it looks like a task id).
   var clickupId = r.clickup_task_id || (_looksLikeClickUpTaskId(r.id) ? r.id : null);
-  return {
+  var ad = {
     id: r.id,
     formatName: r.format_name,
     adLink: r.ad_link,
@@ -3422,6 +3449,12 @@ function _rowToAd(r) {
     // Deterministically derive the ClickUp task URL so tracker "↗ ClickUp" pills render
     _clickupUrl: clickupId ? ('https://app.clickup.com/t/' + clickupId) : ''
   };
+  // Spread the meta blob back onto the ad (taskType, sourceFormatId, _fromInspoId, etc.)
+  var meta = r.meta || {};
+  for (var k in meta) {
+    if (Object.prototype.hasOwnProperty.call(meta, k)) ad[k] = meta[k];
+  }
+  return ad;
 }
 
 // DB object: all shared state I/O goes through here
@@ -3557,6 +3590,32 @@ const DB = {
     if (cellRows.length) {
       tasks.push(SB.from('matrix_cells').upsert(cellRows, { onConflict: 'product_id,angle_id,persona_id' }));
     }
+
+    // MANUAL_ACTIONS — persist the action plan. Each entry is a full JSON blob
+    // (payload jsonb). We replace all for this product to match in-memory state.
+    // Using _dbId to upsert keeps existing rows stable; new entries get fresh uuids.
+    const actRows = (state.MANUAL_ACTIONS || []).map(function (ma) {
+      var payload = {}; // every field except _dbId goes into payload
+      for (var k in ma) { if (k !== '_dbId') payload[k] = ma[k]; }
+      var row = {
+        product_id: productId,
+        payload: payload,
+        live_status: ma.liveStatus || null
+      };
+      if (ma._dbId) row.id = ma._dbId;
+      return row;
+    });
+    // Two-step: delete any rows for this product NOT in the new set, then upsert.
+    const keepIds = actRows.map(function (r) { return r.id; }).filter(Boolean);
+    if (keepIds.length === 0) {
+      tasks.push(SB.from('manual_actions').delete().eq('product_id', productId));
+    } else {
+      tasks.push(SB.from('manual_actions').delete().eq('product_id', productId).not('id', 'in', '(' + keepIds.map(function(i){return '"'+i+'"';}).join(',') + ')'));
+    }
+    if (actRows.length) {
+      tasks.push(SB.from('manual_actions').upsert(actRows));
+    }
+
     const results = await Promise.allSettled(tasks);
     const errs = results.filter(function (r) { return r.status === 'rejected' || (r.value && r.value.error); });
     if (errs.length) console.warn('[SB] saveProductData partial errors', errs);
@@ -3708,6 +3767,8 @@ function _resubscribeRealtime() {
         if (!st || pid !== activeProductId) return;
         // Avoid clobbering in-flight local saves: if we have a scheduled save, skip merge this round
         if (_saveScheduled) return;
+        // And don't clobber data that doesn't belong here (mid-switch guard)
+        if (_adsProductId && _adsProductId !== activeProductId) return;
         ANGLES = st.ANGLES || ANGLES;
         PERSONAS = st.PERSONAS || PERSONAS;
         ADS = st.ADS || ADS;
@@ -8974,13 +9035,19 @@ function importTasksFromClickUp(tasks) {
   //   2. Local metadata (_fromInspoId, taskType, sourceFormatId, etc.) is not wiped
   //      after every sync (which caused Production badges / Inspiration links to vanish)
   //
-  // Fields ClickUp controls (overwrite local if non-empty):
+  // Fields ClickUp controls (overwrite local if non-empty). Note: adOrigin and
+  // taskType are deliberately excluded so production/inspiration provenance
+  // survives live sync.
   var CLICKUP_FIELDS = [
     'formatName', 'status', 'adLink', 'driveLink', 'adType', 'funnelStage',
     'angle', 'persona', 'parentAdId', 'variationNumber',
     'creativeStructure', 'hookType', 'productionStyle', 'creativeHypothesis',
     '_clickupUrl', '_clickupStatus'
   ];
+  // Local provenance fields that must NEVER be overwritten by a ClickUp sync:
+  var _PRESERVE_LOCAL = ['taskType', 'adOrigin', 'sourceFormatId', '_fromInspoId',
+    '_sourceAdId', '_sourceProductId', '_sourceClickupId', '_sourceFormatDriveLink',
+    '_sourceFormatName', '_sourceFormatAdLink', '_sourceFormatAdType'];
 
   // Index existing local ADS by _clickupId for O(1) lookup
   var localByClickupId = {};
@@ -9247,6 +9314,10 @@ var _SYNC_DIFF_FIELDS = ['status','angle','persona','formatName','adLink','drive
 function pollFullSync() {
   var activeProd = getActiveProduct();
   if (!CFG.key || !activeProd || !activeProd.clickupListId) return;
+  // Don't touch ADS if the in-memory data isn't aligned with the active product
+  // (we're mid-switch). A later tick will run when the switch completes.
+  if (_adsProductId && _adsProductId !== activeProductId) return;
+  if (!_adsProductId) return; // no load has completed yet
 
   var dot = document.getElementById('statusDot');
   if (dot) dot.className = 'live-dot syncing';
@@ -9434,8 +9505,13 @@ async function _flushStateToSupabase(productIdArg) {
   // activeProductId only if called directly without an argument (e.g. switchProduct).
   var pid = productIdArg || activeProductId;
   if (!DB.ready || !pid) return;
-  // Extra safety: if the active product has changed away from pid, still write
-  // to the ORIGINAL product — the user's edits belong there, not the new one.
+  // Hard invariant: the in-memory ADS must belong to the product we're about to
+  // write. If they don't (we're mid-switch, or a sync raced ahead), abort rather
+  // than persist the wrong data under the wrong product_id.
+  if (_adsProductId && _adsProductId !== pid) {
+    console.warn('[SB] abort save: in-memory data belongs to', _adsProductId, 'but tried to save as', pid);
+    return;
+  }
   await DB.saveProductData(pid, {
     ANGLES: ANGLES,
     PERSONAS: PERSONAS,
@@ -9493,9 +9569,12 @@ async function loadState() {
   MATRIX_CELL_META = state.MATRIX_CELL_META || {};
   CELL_CREATIVE_ASSIGNMENTS = state.CELL_CREATIVE_ASSIGNMENTS || {};
   MANUAL_ACTIONS = state.MANUAL_ACTIONS || [];
-  PRODUCTION_CLICKUP_IDS = {}; // re-derived from ADS.clickupTaskId
+  PRODUCTION_CLICKUP_IDS = {}; // rebuilt from ADS: { [clickupTaskId]: sourceFormatAdId }
   for (var pi = 0; pi < ADS.length; pi++) {
-    if (ADS[pi].clickupTaskId) PRODUCTION_CLICKUP_IDS[ADS[pi].id] = ADS[pi].clickupTaskId;
+    var _a = ADS[pi];
+    if (_a.taskType === 'production' && _a._clickupId && _a.sourceFormatId) {
+      PRODUCTION_CLICKUP_IDS[_a._clickupId] = _a.sourceFormatId;
+    }
   }
   // Migration: fix null liveStatus on old manual actions
   for (var lsi = 0; lsi < MANUAL_ACTIONS.length; lsi++) {
@@ -9550,6 +9629,10 @@ async function switchProduct(productId) {
   if (activeProductId) _inspoByProductCache[activeProductId] = (INSPIRATIONS || []).slice();
 
   activeProductId = productId;
+  // CRITICAL: clear the guard BEFORE loadProductData completes. Any sync / save /
+  // realtime merge that fires during the load window will now bail (because
+  // _adsProductId !== activeProductId), preventing product-data corruption.
+  _adsProductId = null;
   try { localStorage.setItem('immuvi_active_product', activeProductId); } catch(e) {}
 
   // Load this product's data from Supabase
@@ -9561,9 +9644,12 @@ async function switchProduct(productId) {
     MATRIX_CELL_META = st.MATRIX_CELL_META || {};
     CELL_CREATIVE_ASSIGNMENTS = st.CELL_CREATIVE_ASSIGNMENTS || {};
     MANUAL_ACTIONS = st.MANUAL_ACTIONS || [];
-    PRODUCTION_CLICKUP_IDS = {};
+    PRODUCTION_CLICKUP_IDS = {}; // { [clickupTaskId]: sourceFormatAdId }
     for (var ai = 0; ai < ADS.length; ai++) {
-      if (ADS[ai].clickupTaskId) PRODUCTION_CLICKUP_IDS[ADS[ai].id] = ADS[ai].clickupTaskId;
+      var _sa = ADS[ai];
+      if (_sa.taskType === 'production' && _sa._clickupId && _sa.sourceFormatId) {
+        PRODUCTION_CLICKUP_IDS[_sa._clickupId] = _sa.sourceFormatId;
+      }
     }
     nextAdSerial = (ADS.length || 0) + 1;
     for (var lsi = 0; lsi < MANUAL_ACTIONS.length; lsi++) {
@@ -9575,6 +9661,8 @@ async function switchProduct(productId) {
     MATRIX_CELL_META = {}; CELL_CREATIVE_ASSIGNMENTS = {}; MANUAL_ACTIONS = []; PRODUCTION_CLICKUP_IDS = {};
     nextAdSerial = 1;
   }
+  // Data is now aligned with the active product — safe for saves/syncs to proceed.
+  _adsProductId = activeProductId;
   P = process(ADS);
   if (typeof deriveWinners === 'function') deriveWinners();
   if (typeof genActions === 'function') genActions();
@@ -10185,6 +10273,8 @@ window.addEventListener('load', async function () {
     PROD = [];
     ANGLE_PERSONAS = {};
   }
+  // Mark whose data is currently in memory — guards writes/syncs from misattributing.
+  _adsProductId = activeProductId || null;
 
   // Restore saved API key
   var savedKey = localStorage.getItem('immuvi_api_key');
@@ -11519,7 +11609,9 @@ function addFormatToCell(angle, persona, sourceAdId, formatName, adType) {
   var prodAd = {
     id:                 prodAdId,
     formatName:         (sourceAd && sourceAd.formatName) || formatName,
-    adLink:             (sourceAd && sourceAd.adLink)      || '',
+    // If source has a real ad link, carry it over. Otherwise fall back to its drive
+    // link so the new task isn't "No link" in the tracker (restores pre-migration behavior).
+    adLink:             (sourceAd && (sourceAd.adLink || sourceAd.driveLink)) || '',
     driveLink:          '',   // production clone starts with empty Drive Link — source format's
                               // driveLink is reference/inspiration material, shown in ClickUp
                               // description as "Inspiration Drive" (not the production output)

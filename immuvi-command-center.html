@@ -3588,9 +3588,22 @@ const DB = {
     ]);
     const meta = {}, assigns = {};
     (cells.data || []).forEach(function (c) {
-      const k = (c.meta && c.meta.cell_key) || (c.angle_id + '||' + c.persona_id);
-      meta[k] = (c.meta && c.meta.meta) || {};
-      assigns[k] = c.creative_assignments || [];
+      const cellKey2 = (c.meta && c.meta.cell_key) || (c.angle_id + '||' + c.persona_id);
+      meta[cellKey2] = (c.meta && c.meta.meta) || {};
+      assigns[cellKey2] = c.creative_assignments || [];
+      // ── Rehydrate 3-part per-ad metadata back into MATRIX_CELL_META ──
+      // On save, keys like "adId||angle||persona" get folded into meta.per_ad
+      // as { adId: {...meta} }. Without this rehydration step, task names,
+      // descriptions, due dates, and actionStatus stored per-ad-in-cell are
+      // lost on every page reload — causing the UI to show stale / blank
+      // task names and duplicating Action Plan pushes.
+      const perAd = c.meta && c.meta.per_ad;
+      if (perAd && typeof perAd === 'object') {
+        Object.keys(perAd).forEach(function (adId) {
+          const adKey = adId + '||' + c.angle_id + '||' + c.persona_id;
+          meta[adKey] = perAd[adId] || {};
+        });
+      }
     });
     return {
       ANGLES: (angles.data || []).map(function (a) { return { id: a.id, name: a.name, status: a.status, sourceLink: a.source_link || '', notes: a.notes || '' }; }),
@@ -4857,7 +4870,7 @@ function showUsagePopup(adId) {
   );
 }
 
-function createActionFromMatrix(adId, angleName, personaName) {
+function createActionFromMatrix(adId, angleName, personaName, btnEl) {
   var ad = null;
   for (var i = 0; i < ADS.length; i++) {
     if (ADS[i].id === adId) { ad = ADS[i]; break; }
@@ -4899,17 +4912,21 @@ function createActionFromMatrix(adId, angleName, personaName) {
   MATRIX_CELL_META[cellAdKey].actionStatus = 'Untested';
   genActions();
   // Defensive: ensure the AD is still in CELL_CREATIVE_ASSIGNMENTS for this cell.
-  // genActions → buildCreativeUsageIndex only auto-adds ADs by their own angle/persona;
-  // if the AD was assigned to this cell via addFormatToCell with a different angle/persona,
-  // it should stay here regardless.
   var _cellKey = angleName + '||' + personaName;
   if (!CELL_CREATIVE_ASSIGNMENTS[_cellKey]) CELL_CREATIVE_ASSIGNMENTS[_cellKey] = [];
   if (CELL_CREATIVE_ASSIGNMENTS[_cellKey].indexOf(adId) === -1) {
     CELL_CREATIVE_ASSIGNMENTS[_cellKey].push(adId);
   }
-  renderActionPlan();
-  renderMatrix();
-  saveState();
+  // ── Targeted DOM swap: replace ONLY the clicked button with the "In Action
+  // Plan" label. This avoids re-rendering the entire matrix (which caused the
+  // open cell popup to tear down + rebuild, producing a jarring blank flash).
+  // The button's parent <td> is in the cell detail popup.
+  if (btnEl && btnEl.parentNode) {
+    btnEl.parentNode.innerHTML = '<span class="mx-dt-action-sent">&#10003; In Action Plan &mdash; Untested</span>';
+  }
+  renderActionPlan();                    // refresh Action Plan tab content
+  updateTabCounts();                     // update "Action Plan N" badge in nav
+  saveState();                           // debounced persist
   toast(adId + ' added to Action Plan', 'ok');
   return actionId;
 }
@@ -4958,7 +4975,9 @@ function createVariationAction(varId, angleName, personaName) {
     CELL_CREATIVE_ASSIGNMENTS[_vCellKey].push(varId);
   }
   renderActionPlan();
-  renderMatrix();
+  // Skip the expensive full-matrix re-render — the row the user clicked will
+  // reflect the change at the next natural render pass. Prevents blank flash.
+  updateTabCounts();
   saveState();
   toast(varId + ' added to Action Plan', 'ok');
 }
@@ -11140,7 +11159,7 @@ function renderDetailPanel(angleName, personaName) {
           html += '<span class="mx-dt-action-sent">&#10003; In Action Plan &mdash; ' + esc(actionInfo.status) + '</span>';
         }
       } else {
-        html += '<button class="mx-dt-action-btn" onclick="event.stopPropagation();createActionFromMatrix(\'' + escAttr(ad.id) + '\',\'' + escJs(angleName) + '\',\'' + escJs(personaName) + '\')">&rarr; Action Plan</button>';
+        html += '<button class="mx-dt-action-btn" onclick="event.stopPropagation();createActionFromMatrix(\'' + escAttr(ad.id) + '\',\'' + escJs(angleName) + '\',\'' + escJs(personaName) + '\', this)">&rarr; Action Plan</button>';
       }
       html += '</td>';
 

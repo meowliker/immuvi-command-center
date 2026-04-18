@@ -47,15 +47,17 @@ def main():
     cur = conn.cursor()
 
     # ────────────────────────────────────────────────────────────
-    # Wipe tables (in FK-safe order) — we're seeding from scratch
+    # Wipe ONLY the 3 original products' scoped rows — leave any products
+    # the user added later (e.g. "canva") untouched.
     # ────────────────────────────────────────────────────────────
-    print("Clearing existing rows (if any)…")
+    original_ids = tuple([p["id"] for p in products])
+    print(f"Clearing scoped rows for {len(original_ids)} original products only: {original_ids}")
     for t in [
         "inspiration_results", "inspiration_queue", "inspirations",
         "manual_actions", "matrix_cells", "ads",
-        "angle_personas", "personas", "angles", "products",
+        "angle_personas", "personas", "angles",
     ]:
-        cur.execute(f"delete from public.{t}")
+        cur.execute(f"delete from public.{t} where product_id = any(%s)", (list(original_ids),))
     conn.commit()
 
     # ────────────────────────────────────────────────────────────
@@ -78,7 +80,11 @@ def main():
         product_rows.append((pid, name, Json(config)))
     execute_values(
         cur,
-        "insert into public.products (id, name, config) values %s",
+        """insert into public.products (id, name, config) values %s
+           on conflict (id) do update set
+             name = excluded.name,
+             config = excluded.config,
+             updated_at = now()""",
         product_rows,
     )
     conn.commit()
@@ -190,28 +196,38 @@ def main():
             )
             total_ads += len(ad_rows)
 
-        # MATRIX CELLS = combine MATRIX_CELL_META + CELL_CREATIVE_ASSIGNMENTS
+        # MATRIX CELLS: only 2-part keys ("angle||persona") are real cells.
+        # 3-part keys ("adId||angle||persona") are per-ad metadata — fold them
+        # into the cell's jsonb blob so no phantom rows get created.
         meta_map = pdata.get("MATRIX_CELL_META", {}) or {}
         assign_map = pdata.get("CELL_CREATIVE_ASSIGNMENTS", {}) or {}
-        cell_keys = set(meta_map.keys()) | set(assign_map.keys())
+
+        cell2 = {}  # "angle||persona" → {meta, per_ad}
+        for k, v in meta_map.items():
+            parts = k.split("||")
+            if len(parts) == 2:
+                cell2.setdefault(k, {"meta": {}, "per_ad": {}})["meta"] = v
+            elif len(parts) == 3:
+                parent = parts[1] + "||" + parts[2]
+                cell2.setdefault(parent, {"meta": {}, "per_ad": {}})["per_ad"][parts[0]] = v
+        for k, v in assign_map.items():
+            parts = k.split("||")
+            if len(parts) == 2:
+                cell2.setdefault(k, {"meta": {}, "per_ad": {}})
+                cell2[k]["assignments"] = v
 
         cell_rows = []
-        for ck in cell_keys:
-            if "||" not in ck:
-                continue
-            # Cell key format in dashboard JS: "<angleName>||<personaName>"
-            # We store as meta (blob) + creative_assignments (blob) keyed on angle/persona NAMES not IDs
-            # For now, store the cell key itself as "angle_id||persona_id" placeholder, real mapping is inside meta.
+        for ck, info in cell2.items():
             angle_name, persona_name = ck.split("||", 1)
-            meta = meta_map.get(ck, {}) or {}
-            assignments = assign_map.get(ck, []) or []
+            m = info.get("meta", {}) or {}
+            assignments = info.get("assignments", []) or []
             cell_rows.append((
                 pid,
                 angle_name,
                 persona_name,
-                Json({"cell_key": ck, "meta": meta}),
+                Json({"cell_key": ck, "meta": m, "per_ad": info.get("per_ad", {})}),
                 Json(assignments),
-                (meta.get("status") if isinstance(meta, dict) else None),
+                (m.get("status") if isinstance(m, dict) else None),
             ))
         if cell_rows:
             execute_values(
@@ -252,18 +268,25 @@ def main():
                 ins_rows.append((
                     i.get("id") or f"ins-{pid}-{len(ins_rows)}",
                     pid,
-                    i.get("url") or "",
-                    i.get("title"),
+                    i.get("sourceUrl") or i.get("url") or "",
+                    i.get("title") or i.get("formatName"),
                     i.get("platform"),
                     i.get("addedBy"),
                     i.get("status") or "saved",
+                    Json(i),  # full blob — preserves all 30+ classification fields
                 ))
         if ins_rows:
             execute_values(
                 cur,
                 """insert into public.inspirations
-                   (id, product_id, url, title, platform, added_by, status)
-                   values %s on conflict (id) do nothing""",
+                   (id, product_id, url, title, platform, added_by, status, data)
+                   values %s on conflict (id) do update set
+                     url = excluded.url,
+                     title = excluded.title,
+                     platform = excluded.platform,
+                     added_by = excluded.added_by,
+                     status = excluded.status,
+                     data = excluded.data""",
                 ins_rows,
             )
             total_ins += len(ins_rows)

@@ -3518,19 +3518,41 @@ const DB = {
     if (Array.isArray(state.ADS) && state.ADS.length) {
       tasks.push(SB.from('ads').upsert(state.ADS.map(function (a) { return _adToRow(a, productId); })));
     }
-    // Matrix cells — reconstruct from MATRIX_CELL_META + CELL_CREATIVE_ASSIGNMENTS
+    // Matrix cells — reconstruct ONLY from 2-part keys ("angle||persona"). Per-ad
+    // metadata entries use 3-part keys ("adId||angle||persona") which are folded
+    // into the 2-part cell row's meta jsonb so no phantom cells are created.
     const meta = state.MATRIX_CELL_META || {}, assigns = state.CELL_CREATIVE_ASSIGNMENTS || {};
-    const cellKeys = Object.keys(Object.assign({}, meta, assigns));
-    const cellRows = cellKeys.filter(function (k) { return k.indexOf('||') >= 0; }).map(function (k) {
-      const parts = k.split('||'), angleName = parts[0], personaName = parts[1];
-      return {
+    const cellKeys2 = new Set();
+    const perAdMeta = {}; // "angle||persona" → { adId: meta }
+    Object.keys(meta).forEach(function (k) {
+      const parts = k.split('||');
+      if (parts.length === 2) {
+        cellKeys2.add(k);
+      } else if (parts.length === 3) {
+        const cellKey = parts[1] + '||' + parts[2];
+        if (!perAdMeta[cellKey]) perAdMeta[cellKey] = {};
+        perAdMeta[cellKey][parts[0]] = meta[k];
+      }
+    });
+    Object.keys(assigns).forEach(function (k) {
+      if (k.split('||').length === 2) cellKeys2.add(k);
+    });
+
+    const cellRows = [];
+    cellKeys2.forEach(function (k) {
+      const parts = k.split('||');
+      cellRows.push({
         product_id: productId,
-        angle_id: angleName,
-        persona_id: personaName,
-        meta: { cell_key: k, meta: meta[k] || {} },
+        angle_id: parts[0],
+        persona_id: parts[1],
+        meta: {
+          cell_key: k,
+          meta: meta[k] || {},
+          per_ad: perAdMeta[k] || {}    // collapsed 3-part entries go here
+        },
         creative_assignments: assigns[k] || [],
         action_status: (meta[k] && meta[k].status) || null
-      };
+      });
     });
     if (cellRows.length) {
       tasks.push(SB.from('matrix_cells').upsert(cellRows, { onConflict: 'product_id,angle_id,persona_id' }));
@@ -3544,17 +3566,45 @@ const DB = {
     if (!SB) return [];
     const { data, error } = await SB.from('inspirations').select('*').eq('product_id', productId).order('created_at');
     if (error) { console.error('[SB] listInspirations', error); return []; }
+    // Merge the jsonb `data` blob with top-level columns so all fields
+    // (sourceUrl, angle, persona, hookType, creativeStructure, _clickupDocPageUrl,
+    // importTags, etc.) are present — restoring full parity with localStorage.
     return (data || []).map(function (r) {
-      return { id: r.id, url: r.url, title: r.title || '', platform: r.platform || '', addedBy: r.added_by || '', status: r.status };
+      const blob = r.data || {};
+      return Object.assign({}, blob, {
+        id: r.id,
+        url: r.url || blob.url,
+        sourceUrl: blob.sourceUrl || r.url,
+        title: r.title || blob.title || '',
+        platform: r.platform || blob.platform || '',
+        addedBy: r.added_by || blob.addedBy || '',
+        status: r.status || blob.status || 'saved'
+      });
     });
   },
 
   async saveInspirations(productId, inspirations) {
     if (!SB) return;
-    // Upsert each inspiration
     if (!Array.isArray(inspirations) || !inspirations.length) return;
+    // Strip only truly transient keys before storing. Everything else (angle, persona,
+    // hookType, _clickupDocPageUrl, body_copy, …) goes into the `data` jsonb blob.
     const rows = inspirations.map(function (i) {
-      return { id: i.id, product_id: productId, url: i.url || '', title: i.title || null, platform: i.platform || null, added_by: i.addedBy || null, status: i.status || 'saved' };
+      const blob = {};
+      Object.keys(i).forEach(function (k) {
+        // Skip undefined and the mirrored top-level columns
+        if (i[k] === undefined) return;
+        blob[k] = i[k];
+      });
+      return {
+        id: i.id,
+        product_id: productId,
+        url: i.sourceUrl || i.url || '',
+        title: i.title || i.formatName || null,
+        platform: i.platform || null,
+        added_by: i.addedBy || null,
+        status: i.status || 'saved',
+        data: blob
+      };
     });
     const { error } = await SB.from('inspirations').upsert(rows);
     if (error) console.error('[SB] saveInspirations', error);

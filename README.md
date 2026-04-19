@@ -20,7 +20,7 @@ Single-page dashboard for managing paid-ad creative pipelines — angles, person
 
 Deployed to Vercel from the `main` branch — auto-deploy on push.
 
-> Vercel URL will be added here after first deploy.
+**Production:** https://immuvi-command-center.vercel.app
 
 ---
 

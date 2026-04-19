@@ -566,6 +566,33 @@ body::before {
 }
 .ap-cu-create-btn:hover { background: rgba(79,70,229,0.14); transform: translateY(-1px); }
 .ap-cu-create-btn:disabled { opacity: .45; cursor: not-allowed; transform: none; }
+/* Animated loading state while ClickUp task-create is in flight.
+   Replaces the old plain "Creating..." text for a smoother feel. */
+.ap-cu-create-btn.loading {
+  cursor: progress;
+  color: var(--test);
+  background: rgba(79,70,229,0.10);
+  transform: none;
+  /* soft color pulse so the button breathes while work is happening */
+  animation: ap-cu-breathe 1.6s ease-in-out infinite;
+}
+.ap-cu-create-btn.loading:hover { transform: none; background: rgba(79,70,229,0.10); }
+.ap-cu-create-btn.loading::before {
+  content: '';
+  display: inline-block;
+  width: 10px; height: 10px;
+  border: 2px solid rgba(79,70,229,0.25);
+  border-top-color: var(--test);
+  border-radius: 50%;
+  animation: ap-cu-spin 0.7s linear infinite;
+  margin-right: 2px;
+  vertical-align: -1px;
+}
+@keyframes ap-cu-spin { to { transform: rotate(360deg); } }
+@keyframes ap-cu-breathe {
+  0%, 100% { background: rgba(79,70,229,0.08); }
+  50%      { background: rgba(79,70,229,0.18); }
+}
 .ap-cu-done-link {
   display: inline-flex; align-items: center; gap: 3px;
   padding: 3px 8px; border-radius: 6px; font-size: 0.65rem; font-weight: 600;
@@ -3684,16 +3711,31 @@ const DB = {
       if (ma._dbId) row.id = ma._dbId;
       return row;
     });
-    // Simplest: delete all manual_actions for this product then insert new set.
-    // Small row count; idempotent. Avoids tricky PostgREST 'not in' quoting.
-    tasks.push(SB.from('manual_actions').delete().eq('product_id', productId));
-    if (actRows.length) {
+    // DELETE → INSERT for manual_actions. Small row count, idempotent.
+    //
+    // CRITICAL: these MUST be serialized (awaited sequentially) inside a single
+    // promise, NOT pushed as two independent entries into `tasks` (which is
+    // eventually fed to Promise.allSettled). Pushing them independently means
+    // the DELETE and INSERT requests race on the wire — if the INSERT arrives
+    // at Supabase first and the DELETE arrives second, the DELETE wipes the
+    // newly-inserted rows. Server-side `manual_actions` ends up empty; the
+    // subsequent realtime echo (after the 1500ms self-save grace window)
+    // reads that empty state and replaces in-memory `MANUAL_ACTIONS`, causing
+    // the just-created task to silently disappear from the Action Plan AND
+    // the Production filter (since renderCreativeTracker derives its
+    // "production" pool from MANUAL_ACTIONS' _clickupId set + ad.taskType).
+    tasks.push((async function () {
+      const del = await SB.from('manual_actions').delete().eq('product_id', productId);
+      if (del && del.error) throw del.error;
+      if (!actRows.length) return { data: null, error: null };
       // Strip _dbId (uuid) from rows to let DB generate fresh ones, avoids PK conflicts
-      tasks.push(SB.from('manual_actions').insert(actRows.map(function (r) {
+      const ins = await SB.from('manual_actions').insert(actRows.map(function (r) {
         var { id, ...rest } = r;
         return rest;
-      })));
-    }
+      }));
+      if (ins && ins.error) throw ins.error;
+      return ins;
+    })());
 
     const results = await Promise.allSettled(tasks);
     const errs = results.filter(function (r) { return r.status === 'rejected' || (r.value && r.value.error); });
@@ -3865,10 +3907,92 @@ function _resubscribeRealtime() {
         if (_adsProductId && _adsProductId !== activeProductId) return;
         ANGLES = st.ANGLES || ANGLES;
         PERSONAS = st.PERSONAS || PERSONAS;
-        ADS = st.ADS || ADS;
+        // ── ADS: union-merge preserving LOCAL provenance fields ──
+        //
+        // Same class of bug as MANUAL_ACTIONS below: a realtime event on one
+        // table (e.g. matrix_cells) triggers a re-read of ALL tables including
+        // ads. If our latest save hasn't propagated to the read replica yet,
+        // st.ADS contains the PRE-update view — blind-overwriting ADS would
+        // demote a just-promoted production task back to 'format' and make it
+        // drop out of the Production filter 10-20s after creation.
+        //
+        // Strategy: per-ad, prefer DB for ClickUp-authoritative fields (angle,
+        // persona, status, etc. — those come back from ClickUp) but prefer the
+        // LOCAL copy for provenance fields listed in _META_FIELDS (taskType,
+        // sourceFormatId, _fromInspoId, …). Any DB-only ads are added; any
+        // local-only ads (save still pending) are kept.
+        if (Array.isArray(st.ADS)) {
+          var _localAdById = {};
+          for (var _la = 0; _la < ADS.length; _la++) {
+            if (ADS[_la] && ADS[_la].id) _localAdById[ADS[_la].id] = ADS[_la];
+          }
+          var _mergedAds = [];
+          for (var _dai = 0; _dai < st.ADS.length; _dai++) {
+            var _dbAd = st.ADS[_dai];
+            if (!_dbAd || !_dbAd.id) continue;
+            var _localAd = _localAdById[_dbAd.id];
+            if (_localAd) {
+              // Prefer LOCAL provenance fields over DB (race-window safety)
+              for (var _mfi = 0; _mfi < _META_FIELDS.length; _mfi++) {
+                var _mf = _META_FIELDS[_mfi];
+                if (_localAd[_mf] !== undefined && _localAd[_mf] !== null && _localAd[_mf] !== '') {
+                  _dbAd[_mf] = _localAd[_mf];
+                }
+              }
+              // Preserve _clickupId link if local has it (covers save-lag window)
+              if (_localAd._clickupId && !_dbAd._clickupId) {
+                _dbAd._clickupId = _localAd._clickupId;
+                _dbAd._clickupUrl = _localAd._clickupUrl || _dbAd._clickupUrl;
+              }
+              _mergedAds.push(_dbAd);
+              delete _localAdById[_dbAd.id];
+            } else {
+              _mergedAds.push(_dbAd);
+            }
+          }
+          // Any local-only ads (newly created, save still pending) — keep them
+          for (var _lo in _localAdById) _mergedAds.push(_localAdById[_lo]);
+          ADS = _mergedAds;
+        }
         MATRIX_CELL_META = st.MATRIX_CELL_META || MATRIX_CELL_META;
         CELL_CREATIVE_ASSIGNMENTS = st.CELL_CREATIVE_ASSIGNMENTS || CELL_CREATIVE_ASSIGNMENTS;
-        MANUAL_ACTIONS = st.MANUAL_ACTIONS || MANUAL_ACTIONS;
+        // ── MANUAL_ACTIONS: union-merge, do NOT blind-overwrite ──
+        //
+        // The realtime subscription does NOT listen to the `manual_actions` table
+        // (see DB.subscribeToProduct — only ads/matrix_cells/angles/personas/inspirations*).
+        // So when the handler fires (triggered by a change to some OTHER table) and re-reads
+        // manual_actions from DB as a side effect, it can observe stale/empty state — e.g.
+        // when our own recent DELETE→INSERT hasn't committed on the read replica yet, or
+        // when the read happens between our own writes on another tab.
+        //
+        // Blindly doing `MANUAL_ACTIONS = st.MANUAL_ACTIONS` in that window WIPES locally-
+        // created actions, which is the "task vanishes 10-20s after creation" bug.
+        //
+        // Safer: union by id, preferring the local copy (which reflects the user's latest
+        // in-memory edits). Only add entries from DB that we don't already have locally.
+        if (Array.isArray(st.MANUAL_ACTIONS)) {
+          var _localById = {};
+          for (var _li = 0; _li < MANUAL_ACTIONS.length; _li++) {
+            if (MANUAL_ACTIONS[_li] && MANUAL_ACTIONS[_li].id) {
+              _localById[MANUAL_ACTIONS[_li].id] = MANUAL_ACTIONS[_li];
+            }
+          }
+          for (var _di = 0; _di < st.MANUAL_ACTIONS.length; _di++) {
+            var _dbAct = st.MANUAL_ACTIONS[_di];
+            if (!_dbAct || !_dbAct.id) continue;
+            if (!_localById[_dbAct.id]) {
+              // Local doesn't have it — another tab/session added it. Include.
+              MANUAL_ACTIONS.push(_dbAct);
+              _localById[_dbAct.id] = _dbAct;
+            } else if (_dbAct._clickupId && !_localById[_dbAct.id]._clickupId) {
+              // DB has a ClickUp id we don't — merge it in so the "↗ ClickUp" link appears.
+              _localById[_dbAct.id]._clickupId = _dbAct._clickupId;
+            } else if (_dbAct.liveStatus && _localById[_dbAct.id].liveStatus !== _dbAct.liveStatus) {
+              // Refresh the live ClickUp status from DB.
+              _localById[_dbAct.id].liveStatus = _dbAct.liveStatus;
+            }
+          }
+        }
         // Re-derive + re-render
         P = process(ADS);
         if (typeof deriveWinners === 'function') deriveWinners();
@@ -6528,10 +6652,16 @@ function renderActionPlan() {
         }
       }
 
-      // ClickUp link or create button
+      // ClickUp link or create button.
+      // Three mutually-exclusive render states:
+      //   1. Task already in ClickUp  → open-link pill
+      //   2. Create-in-flight          → animated spinner button (disabled — survives re-render mid-fetch)
+      //   3. Idle                      → "+ ClickUp" create button
       var cuControl = '';
       if (act._clickupId) {
         cuControl = '<a class="ap-cu-done-link" href="https://app.clickup.com/t/' + escAttr(act._clickupId) + '" target="_blank" rel="noopener">&#8599; ClickUp</a>';
+      } else if (act._cu_creating) {
+        cuControl = '<button class="ap-cu-create-btn loading" id="ap_cu_btn_' + escAttr(act.id) + '" disabled aria-busy="true">Creating</button>';
       } else {
         cuControl = '<button class="ap-cu-create-btn" id="ap_cu_btn_' + escAttr(act.id) + '" onclick="createClickUpTaskFromAction(\'' + escAttr(act.id) + '\')">&#43; ClickUp</button>';
       }
@@ -8288,6 +8418,12 @@ function createClickUpTaskFromAction(actionId, onDone) {
   }
   if (!act) return;
   if (act._clickupId) { toast('Already in ClickUp', 'warn'); return; }
+  // Action-level in-flight lock — DOM disable alone isn't enough because the
+  // Action Plan can re-render mid-fetch (saveState, auto-sync, realtime echo),
+  // reviving an enabled button. This guard survives any re-render because
+  // it lives on the action object, not the button.
+  if (act._cu_creating) { return; }
+  act._cu_creating = true;
 
   var activeProd = getActiveProduct();
   var listId = activeProd && activeProd.clickupListId;
@@ -8358,8 +8494,15 @@ function createClickUpTaskFromAction(actionId, onDone) {
 
   var dueTs = act.dueDate ? new Date(act.dueDate).getTime() : null;
 
+  // Replace the idle button with the animated loading button for immediate feedback
+  // (the next renderActionPlan() call will rebuild it identically via act._cu_creating).
   var btn = document.getElementById('ap_cu_btn_' + actionId);
-  if (btn) { btn.disabled = true; btn.textContent = 'Creating...'; }
+  if (btn) {
+    btn.disabled = true;
+    btn.classList.add('loading');
+    btn.textContent = 'Creating';
+    btn.setAttribute('aria-busy', 'true');
+  }
 
   // Step 1 — create task; include description in the initial POST so it's reliably sent
   // (a separate PUT via corsproxy can silently fail, causing blank descriptions)
@@ -8398,9 +8541,12 @@ function createClickUpTaskFromAction(actionId, onDone) {
     }
 
     // Promote to production task — makes it visible in the "🎬 Production" view
-    // of the Creative Tracker. Inspo-sourced ADs have no taskType initially;
-    // tracker-format production clones already have taskType:'production' (no-op).
-    if (sourceAd && !sourceAd.taskType) {
+    // of the Creative Tracker. Once a ClickUp task has been pushed from the Action
+    // Plan for this AD, the AD IS a production task regardless of where it started.
+    // Previously this was gated on !sourceAd.taskType, which meant plain tracker-
+    // format ADs (taskType:'format') never got promoted — they'd be created in
+    // ClickUp but never appear under the Production filter.
+    if (sourceAd) {
       sourceAd.taskType = 'production';
     }
 
@@ -8543,6 +8689,9 @@ function createClickUpTaskFromAction(actionId, onDone) {
       console.warn('[S2] Source AD has no prior ClickUp task — cannot create relationship');
     }
 
+    // Release the in-flight lock before re-rendering so the idle "↗ ClickUp"
+    // link (driven by act._clickupId) wins the render.
+    act._cu_creating = false;
     saveState();
     renderActionPlan();
     // Also refresh that specific Creative Tracker row
@@ -8553,7 +8702,17 @@ function createClickUpTaskFromAction(actionId, onDone) {
     if (onDone) onDone(true);
   })
   .catch(function(err) {
-    if (btn) { btn.disabled = false; btn.textContent = '→ ClickUp'; }
+    // IMPORTANT: clear the action-level lock so a subsequent retry can proceed.
+    // Without this, a failed create would leave the action permanently stuck.
+    act._cu_creating = false;
+    if (btn) {
+      btn.disabled = false;
+      btn.classList.remove('loading');
+      btn.removeAttribute('aria-busy');
+      btn.textContent = '+ ClickUp';
+    }
+    // If a re-render occurred during the fetch, this call restores the idle button.
+    renderActionPlan();
     toast('ClickUp error: ' + (err.message || String(err)), 'err');
     if (onDone) onDone(false);
   });
@@ -9388,9 +9547,32 @@ function parseClickUpTask(t) {
     if (parts.length >= 2) { angle = parts[0].trim(); persona = parts[1].trim(); }
   }
 
-  // Check if this is a production task (created via action-plan push from our app)
-  var isProduction = !!(t.id && PRODUCTION_CLICKUP_IDS[t.id]);
-  var sourceFormatId = isProduction ? PRODUCTION_CLICKUP_IDS[t.id] : null;
+  // Check if this is a production task (created via action-plan push from our app).
+  // Priority of truth:
+  //  1. PRODUCTION_CLICKUP_IDS (in-memory map rebuilt from ADs' own taskType)
+  //  2. MANUAL_ACTIONS — if any action owns this ClickUp task id, it was pushed
+  //     from our Action Plan and is therefore a production task. This fallback
+  //     plugs the race window where the 30s auto-sync fetches a just-created
+  //     task before the create-promise has marked its sourceAd taskType.
+  var isProduction = false;
+  var sourceFormatId = null;
+  if (t.id) {
+    if (PRODUCTION_CLICKUP_IDS[t.id]) {
+      isProduction = true;
+      sourceFormatId = PRODUCTION_CLICKUP_IDS[t.id];
+    } else if (Array.isArray(MANUAL_ACTIONS)) {
+      for (var _mai = 0; _mai < MANUAL_ACTIONS.length; _mai++) {
+        var _ma = MANUAL_ACTIONS[_mai];
+        if (_ma && _ma._clickupId === t.id) {
+          isProduction = true;
+          sourceFormatId = _ma.sourceAdId || _ma.adId || null;
+          // Backfill the in-memory map so later lookups are O(1) again.
+          PRODUCTION_CLICKUP_IDS[t.id] = sourceFormatId || '';
+          break;
+        }
+      }
+    }
+  }
 
   return {
     id: t.id || ('ad-' + Date.now() + '-' + Math.random().toString(36).slice(2,6)),
@@ -9504,9 +9686,25 @@ function pollFullSync() {
       }
 
       // ── Pass 2: import NEW tasks (tasks in ClickUp not yet in local ADS) ─────────────
+      // Build a set of ClickUp task ids already owned by a MANUAL_ACTION. These were
+      // pushed from our Action Plan — the corresponding local AD already exists under
+      // its own local serial id (not the ClickUp id), so we must NOT insert a second
+      // AD here or we get the duplicate-in-tracker + vanishing-production-flag bug.
+      var ownedByManualAction = {};
+      for (var _mai2 = 0; _mai2 < MANUAL_ACTIONS.length; _mai2++) {
+        var _ma2 = MANUAL_ACTIONS[_mai2];
+        if (_ma2 && _ma2._clickupId) ownedByManualAction[_ma2._clickupId] = true;
+      }
       var newTaskCount = 0;
       for (var cuid in taskMap) {
         if (!existingClickupIds[cuid]) {
+          // Skip duplicates that are already represented by a MANUAL_ACTION.
+          // The originating sourceAd is in ADS under its local serial id; the
+          // merge-by-_clickupId in Pass 1 will handle any future field updates.
+          if (ownedByManualAction[cuid]) {
+            existingClickupIds[cuid] = true;
+            continue;
+          }
           var freshAd = taskMap[cuid];
           // Ensure the id is stable — use the ClickUp task id as the local id,
           // matching the convention used in importTasksFromClickUp.
@@ -12518,8 +12716,12 @@ function skipInsMatch(type, detectedName) {
 }
 
 // ── Duplicate creative detection (4-level) ───────────────────────
+// Returns true iff this call actually mutated `ins`, so callers can skip
+// a persistence round-trip when the computed dupe state matches what's
+// already on the object. Prevents a spurious `saveInspirations()` on every
+// page load (refreshAllDupeChecks ran this on every classified row).
 function checkDuplicateCreative(ins) {
-  if (!ins.angle && !ins.persona) return;
+  if (!ins.angle && !ins.persona) return false;
 
   var norm = function(s){ return (s||'').toLowerCase().trim(); };
   var wordOverlap = function(a, b) {
@@ -12562,9 +12764,15 @@ function checkDuplicateCreative(ins) {
 
   var allMatches = exactMatches.concat(comboMatches).concat(formatMatches);
   if (!allMatches.length) {
-    // Clear any old dupe data
-    delete ins._dupeType; delete ins._dupeSimilar; delete ins._dupeDetail;
-    return;
+    // Clear any old dupe data — only count as "changed" if something was there to clear.
+    var hadData = ins._dupeType !== undefined
+               || ins._dupeSimilar !== undefined
+               || ins._dupeDetail !== undefined;
+    if (hadData) {
+      delete ins._dupeType; delete ins._dupeSimilar; delete ins._dupeDetail;
+      return true;
+    }
+    return false;
   }
 
   var hasWinner = allMatches.some(function(d){ return d.status === 'Winner' || d.status === 'Scale'; });
@@ -12580,22 +12788,35 @@ function checkDuplicateCreative(ins) {
     dupeDetail = 'Similar hook + structure format used in another creative for this angle/persona';
   }
 
-  ins._dupeType    = dupeType;
-  ins._dupeSimilar = allMatches.slice(0, 4);
-  ins._dupeDetail  = dupeDetail;
+  var newSimilar = allMatches.slice(0, 4);
+  var changed = false;
+  if (ins._dupeType !== dupeType) { ins._dupeType = dupeType; changed = true; }
+  if (JSON.stringify(ins._dupeSimilar) !== JSON.stringify(newSimilar)) {
+    ins._dupeSimilar = newSimilar;
+    changed = true;
+  }
+  if (ins._dupeDetail !== dupeDetail) { ins._dupeDetail = dupeDetail; changed = true; }
   // Reset dismissed state when dupe data refreshes (new match found)
-  if (ins._dupeBannerDismissed) ins._dupeBannerDismissed = false;
+  if (ins._dupeBannerDismissed) { ins._dupeBannerDismissed = false; changed = true; }
+  return changed;
 }
 
-// Run dupe check on ALL classified inspirations (called on load + product switch)
+// Run dupe check on ALL classified inspirations (called on load + product switch).
+// Only persists if at least one row actually changed — prevents the pre-fix behavior
+// where every page load fired a full `POST /rest/v1/inspirations` upsert.
 function refreshAllDupeChecks(saveAndRender) {
+  var anyChanged = false;
   INSPIRATIONS.forEach(function(ins) {
     if (ins.status === 'Classified' || ins.status === 'Approved') {
-      checkDuplicateCreative(ins);
+      if (checkDuplicateCreative(ins) === true) anyChanged = true;
     }
   });
-  if (saveAndRender) { saveInspirations(); renderInspirations(); }
-  else { saveInspirations(); }
+  if (saveAndRender) {
+    if (anyChanged) saveInspirations();
+    renderInspirations();
+  } else if (anyChanged) {
+    saveInspirations();
+  }
 }
 
 // ── Dismiss dupe banner ─────────────────────────────

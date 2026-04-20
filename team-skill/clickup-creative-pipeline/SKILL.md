@@ -330,47 +330,78 @@ Each agent prompt must include:
 ### 3a. Download from Google Drive
 
 ```python
-import subprocess, re, requests, os
+import subprocess, re, os, glob, shutil
 
-def list_folder_files(folder_id):
-    result = subprocess.run(
-        ["python3", "-m", "gdown", "--folder",
-         f"https://drive.google.com/drive/folders/{folder_id}", "--dry-run"],
-        capture_output=True, text=True, timeout=30)
-    output = result.stdout + result.stderr
-    ids = re.findall(r'(?:Processing file|id=)([a-zA-Z0-9_-]{25,})', output)
-    ids += re.findall(r'/file/d/([a-zA-Z0-9_-]{25,})', output)
-    return list(dict.fromkeys(ids))
+# Normalize Drive URLs. Google sometimes puts /u/0/ or /u/1/ in the path
+# (account-scoped view). The account-scoped URLs only work if the folder
+# is actually shared publicly; stripping /u/N/ doesn't grant access to
+# private folders — it just gives cleaner errors. If gdown returns an
+# empty folder for a /u/1/ URL, that folder is private and the task
+# should be skipped with status "private_folder_or_access_denied".
+def normalize_drive_url(u):
+    return re.sub(r'/drive/u/\d+/', '/drive/', u or '')
 
-def download_file(file_id, dest):
-    url = f"https://drive.usercontent.google.com/download?id={file_id}&export=download&authuser=0&confirm=t"
-    r = requests.get(url, stream=True, timeout=120)
-    size = 0
-    with open(dest, "wb") as f:
-        for chunk in r.iter_content(65536):
-            if chunk: f.write(chunk); size += len(chunk)
-    return size
+def video_or_image(path):
+    """Return type tag or None if neither."""
+    lo = path.lower()
+    if lo.endswith(('.mp4', '.mov', '.mkv', '.webm')): return 'video'
+    if lo.endswith(('.jpg', '.jpeg', '.png', '.webp')): return 'image'
+    return None
 
 work_dir = f"/tmp/cu_work_{task_id}"
 os.makedirs(work_dir, exist_ok=True)
+url = normalize_drive_url(drive_url)
 
-# Parse folder vs file URL
-m = re.search(r'/folders/([a-zA-Z0-9_-]+)', drive_url)
-if m:
-    file_ids = list_folder_files(m.group(1))
-else:
-    m2 = re.search(r'/file/d/([a-zA-Z0-9_-]+)', drive_url)
-    file_ids = [m2.group(1)] if m2 else []
+# Case A — folder URL: use gdown --folder to download everything at once.
+# (There is NO --dry-run flag in gdown; we were wrong to use it before.)
+# gdown creates a subdirectory inside work_dir named after the folder,
+# so we glob the whole work_dir recursively to find files.
+m_folder = re.search(r'/folders/([a-zA-Z0-9_-]+)', url)
+m_file   = re.search(r'/file/d/([a-zA-Z0-9_-]+)', url)
 
-# Download: prefer video, then image
 downloaded = None
-for fid in file_ids[:5]:
-    for ext in ['.mp4', '.mov', '.jpg', '.jpeg', '.png']:
+if m_folder:
+    try:
+        subprocess.run(
+            ["python3", "-m", "gdown", "--folder", url,
+             "-O", work_dir, "--quiet"],
+            capture_output=True, text=True, timeout=300, check=False)
+    except subprocess.TimeoutExpired:
+        pass
+    # Pick the first video, else the first image, else give up
+    all_files = sorted(glob.glob(f"{work_dir}/**/*", recursive=True))
+    vids = [f for f in all_files if video_or_image(f) == 'video' and os.path.getsize(f) > 10000]
+    imgs = [f for f in all_files if video_or_image(f) == 'image' and os.path.getsize(f) > 10000]
+    if vids:
+        downloaded = vids[0]
+    elif imgs:
+        downloaded = imgs[0]
+elif m_file:
+    # Single-file share link — download directly via requests (not gdown).
+    import requests
+    fid = m_file.group(1)
+    for ext in ('.mp4', '.mov', '.jpg', '.jpeg', '.png'):
         dest = f"{work_dir}/creative{ext}"
-        size = download_file(fid, dest)
-        if size > 10000:
-            downloaded = dest; break
-    if downloaded: break
+        r = requests.get(
+            f"https://drive.usercontent.google.com/download?id={fid}&export=download&authuser=0&confirm=t",
+            stream=True, timeout=120)
+        size = 0
+        with open(dest, "wb") as f:
+            for chunk in r.iter_content(65536):
+                if chunk: f.write(chunk); size += len(chunk)
+        # Detect HTML-return (private/error) by first bytes
+        with open(dest, "rb") as f: head = f.read(200)
+        if size > 10000 and not head.startswith(b"<!DOCTYPE") and not head.lower().startswith(b"<html"):
+            downloaded = dest
+            break
+        os.remove(dest)
+
+# If still nothing, mark as private/missing and skip this task
+if not downloaded:
+    result = {"task_id": task_id, "success": False,
+              "error": "private_folder_or_empty_or_no_media",
+              "drive_url": drive_url}
+    # write result JSON and continue to next task
 ```
 
 ### 3b. Extract frames

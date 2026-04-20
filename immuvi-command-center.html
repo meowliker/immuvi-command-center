@@ -9679,12 +9679,32 @@ function pollFullSync() {
   if (_adsProductId && _adsProductId !== activeProductId) return;
   if (!_adsProductId) return; // no load has completed yet
 
+  // CAPTURE the product identity at function entry. Below we await a network
+  // round-trip to ClickUp (~500ms+); during that window the user may switch
+  // products. If we don't re-check, Pass 2 would happily push Product A's
+  // tasks into Product B's ADS array — doubling counts on every switch. See
+  // the guard inside the .then() below.
+  var _startProductId = activeProductId;
+  var _startListId = activeProd.clickupListId;
+
   var dot = document.getElementById('statusDot');
   if (dot) dot.className = 'live-dot syncing';
 
   // Fetch ALL pages (up to 500 tasks) — same as manual Sync, so we don't miss new tasks beyond page 0
-  fetchAllTasks(activeProd.clickupListId)
+  fetchAllTasks(_startListId)
     .then(function(tasks) {
+      // RACE-CONDITION GUARD: verify we're still on the same product before
+      // mutating ADS. If the user switched products during the fetch, the
+      // fetched tasks belong to a DIFFERENT product's list and must NOT be
+      // merged into the current ADS (would create cross-product duplicates).
+      if (activeProductId !== _startProductId) {
+        if (dot) dot.className = 'live-dot';
+        return;
+      }
+      if (_adsProductId !== _startProductId) {
+        if (dot) dot.className = 'live-dot';
+        return;
+      }
       if (!tasks || !tasks.length) { _onSyncSuccess(dot, 0, false); return; }
 
       // Build lookup: _clickupId → freshly-parsed task
@@ -10030,9 +10050,23 @@ async function switchProduct(productId) {
     }
   }
 
-  // Stash current product's inspirations into the cross-product cache so when the
-  // user switches back, render is instant.
-  if (activeProductId) _inspoByProductCache[activeProductId] = (INSPIRATIONS || []).slice();
+  // Stash current product's data into the cross-product cache so when the
+  // user switches back, render is instant (no 200-500ms DB round-trip wait).
+  if (activeProductId) {
+    _inspoByProductCache[activeProductId] = (INSPIRATIONS || []).slice();
+    // Snapshot ADS + taxonomy + matrix state for instant-restore on switch-back.
+    _productDataCache[activeProductId] = {
+      ANGLES: ANGLES.slice(),
+      PERSONAS: PERSONAS.slice(),
+      ADS: ADS.slice(),
+      PROD: PROD.slice(),
+      ANGLE_PERSONAS: Object.assign({}, ANGLE_PERSONAS),
+      MATRIX_CELL_META: Object.assign({}, MATRIX_CELL_META),
+      CELL_CREATIVE_ASSIGNMENTS: Object.assign({}, CELL_CREATIVE_ASSIGNMENTS),
+      MANUAL_ACTIONS: MANUAL_ACTIONS.slice(),
+      ts: Date.now()
+    };
+  }
 
   activeProductId = productId;
   // CRITICAL: clear the guard BEFORE loadProductData completes. Any sync / save /
@@ -10041,9 +10075,36 @@ async function switchProduct(productId) {
   _adsProductId = null;
   try { localStorage.setItem('immuvi_active_product', activeProductId); } catch(e) {}
 
-  // Load this product's data from Supabase
+  // OPTIMISTIC FAST RENDER: if we have a recent cache for the target product,
+  // hydrate in-memory arrays from it IMMEDIATELY and render. The DB fetch
+  // below still runs — it will correct any drift — but the UI no longer has
+  // to wait for the network round-trip to show numbers.
+  var _cachedPD = _productDataCache[productId];
+  var _rendered = false;
+  if (_cachedPD && (Date.now() - _cachedPD.ts) < _PRODUCT_CACHE_MAX_MS) {
+    ANGLES = _cachedPD.ANGLES.slice();
+    PERSONAS = _cachedPD.PERSONAS.slice();
+    ADS = _cachedPD.ADS.slice();
+    PROD = _cachedPD.PROD.slice();
+    ANGLE_PERSONAS = Object.assign({}, _cachedPD.ANGLE_PERSONAS || {});
+    MATRIX_CELL_META = Object.assign({}, _cachedPD.MATRIX_CELL_META || {});
+    CELL_CREATIVE_ASSIGNMENTS = Object.assign({}, _cachedPD.CELL_CREATIVE_ASSIGNMENTS || {});
+    MANUAL_ACTIONS = (_cachedPD.MANUAL_ACTIONS || []).slice();
+    nextAdSerial = (ADS.length || 0) + 1;
+    _adsProductId = activeProductId;       // mark guard so sync/save can proceed against cached state
+    P = process(ADS);
+    if (typeof deriveWinners === 'function') deriveWinners();
+    if (typeof genActions === 'function') genActions();
+    if (typeof buildCreativeUsageIndex === 'function') buildCreativeUsageIndex();
+    renderAll();
+    _rendered = true;
+  }
+
+  // Load fresh from Supabase (background if we already rendered from cache).
   var st = null;
   try { st = await DB.loadProductData(productId); } catch (e) { console.error('[SB] switchProduct load', e); }
+  // Abort fresh-apply if the user switched AGAIN during this load.
+  if (productId !== activeProductId) return;
   if (st) {
     ANGLES = st.ANGLES || []; PERSONAS = st.PERSONAS || []; ADS = st.ADS || [];
     PROD = st.PROD || []; ANGLE_PERSONAS = st.ANGLE_PERSONAS || {};
@@ -13492,6 +13553,16 @@ function saveProductRegistry(registry) {
 
 // Cross-product inspiration cache (populated alongside _winnersByProductCache).
 var _inspoByProductCache = {};
+
+// Cross-product snapshot cache for instant product-switch rendering.
+// Populated in switchProduct() right before we leave a product; restored at
+// the top of switchProduct() for the destination. Each entry is a shallow
+// clone of { ANGLES, PERSONAS, ADS, PROD, ANGLE_PERSONAS, MATRIX_CELL_META,
+// CELL_CREATIVE_ASSIGNMENTS, MANUAL_ACTIONS, ts }. The DB fetch still runs
+// and overwrites — this is pure perceived-latency optimisation. Entries
+// older than _PRODUCT_CACHE_MAX_MS are ignored (fall back to DB wait).
+var _productDataCache = {};
+var _PRODUCT_CACHE_MAX_MS = 5 * 60 * 1000; // 5 minutes
 async function refreshInspoCache() {
   if (!DB.ready) return;
   for (var i = 0; i < PRODUCTS.length; i++) {

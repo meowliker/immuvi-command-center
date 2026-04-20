@@ -52,8 +52,6 @@ export default async function handler(req, res) {
   const osRaw = String((req.query && req.query.os) || 'mac').toLowerCase();
   const os = /^(wsl|linux|ubuntu|debian)/.test(osRaw) ? 'wsl' : 'mac';
 
-  // bash-safe single-quote escape (wraps value in '...' and escapes any ')
-  const sq = (s) => "'" + String(s).replace(/'/g, "'\\''") + "'";
   const SRK = sq(serviceKey);
   const DBP = sq(dbPassword);
 
@@ -331,8 +329,14 @@ echo ""
 }
 
 // ────────────────────────────────────────────────────────────────────────────
-// Timing-safe string compare (no external deps)
+// Utilities used by both installer builders (must be module-scope so the
+// helper functions can access them — this bit us with a ReferenceError
+// when sq() was scoped to handler() and called from buildMacInstaller).
 // ────────────────────────────────────────────────────────────────────────────
+
+// bash-safe single-quote escape: wraps the value in '...' and escapes any ' inside.
+function sq(s) { return "'" + String(s).replace(/'/g, "'\\''") + "'"; }
+
 function timingSafeEqual(a, b) {
   const ab = Buffer.from(a);
   const bb = Buffer.from(b);

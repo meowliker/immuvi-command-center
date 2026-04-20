@@ -4257,6 +4257,23 @@ let MANUAL_ACTIONS = []; // manually created actions from matrix (preserved acro
 // replica is still returning the old row. Also short-circuits the "added in
 // another tab?" heuristic in the merge. Entries self-expire after ~8s.
 var _recentlyDeletedMaIds = new Set();
+
+// Tombstone set for deleted product ids — prevents _flushStateToSupabase's
+// products-upsert loop from resurrecting a product another tab just deleted.
+// Same TTL pattern as MANUAL_ACTIONS tombstones.
+var _recentlyDeletedProductIds = new Set();
+function _rememberProductDeletion(productId) {
+  if (!productId) return;
+  _recentlyDeletedProductIds.add(productId);
+  setTimeout(function () { _recentlyDeletedProductIds.delete(productId); }, 15000);
+}
+
+// Flag set for the duration of a fresh DB load inside switchProduct. While
+// true, the debounced save must NOT fire — otherwise cached-but-stale ADS
+// could be flushed back to Supabase before the fresh fetch lands, resurrecting
+// rows that were deleted upstream (e.g. by the ClickUp reconcile auto-poll or
+// another tab). Cleared when the fresh load applies or fails.
+var _freshLoadInProgress = false;
 function _rememberManualActionDeletion(id, dbId) {
   if (id) _recentlyDeletedMaIds.add(id);
   setTimeout(function () { if (id) _recentlyDeletedMaIds.delete(id); }, 8000);
@@ -10060,6 +10077,16 @@ async function _flushStateToSupabase(productIdArg) {
   // activeProductId only if called directly without an argument (e.g. switchProduct).
   var pid = productIdArg || activeProductId;
   if (!DB.ready || !pid) return;
+  // Guard: if a switchProduct is mid-way through its fresh DB load (cached
+  // data has been optimistically rendered but the authoritative fetch hasn't
+  // applied yet), writing now would flush CACHED arrays back to Supabase —
+  // potentially resurrecting rows the reconciler auto-deleted, or overwriting
+  // changes another tab made. Bail; the next save after the fresh load
+  // settles will write the correct state.
+  if (_freshLoadInProgress) {
+    console.log('[SB] skip flush — fresh load in progress for', pid);
+    return;
+  }
   // Hard invariant: the in-memory ADS must belong to the product we're about to
   // write. If they don't (we're mid-switch, or a sync raced ahead), abort rather
   // than persist the wrong data under the wrong product_id.
@@ -10077,8 +10104,12 @@ async function _flushStateToSupabase(productIdArg) {
       CELL_CREATIVE_ASSIGNMENTS: CELL_CREATIVE_ASSIGNMENTS,
       MANUAL_ACTIONS: MANUAL_ACTIONS
     });
-    // Keep products list in sync (catches rename / color / clickup list changes)
+    // Keep products list in sync (catches rename / color / clickup list changes).
+    // Skip any id in the recent-delete tombstone — otherwise if this tab still
+    // has a product the user just deleted in another tab, upsert would
+    // resurrect it.
     for (var pi = 0; pi < PRODUCTS.length; pi++) {
+      if (_recentlyDeletedProductIds.has(PRODUCTS[pi].id)) continue;
       await DB.upsertProduct(PRODUCTS[pi]);
     }
   } finally {
@@ -10236,10 +10267,15 @@ async function switchProduct(productId) {
   }
 
   // Load fresh from Supabase (background if we already rendered from cache).
+  // Gate saves during this window: _freshLoadInProgress prevents the debounced
+  // flush from writing CACHED-but-possibly-stale state to Supabase while the
+  // authoritative fetch is in flight. Cleared once st is applied (or the
+  // switch is aborted).
+  _freshLoadInProgress = true;
   var st = null;
   try { st = await DB.loadProductData(productId); } catch (e) { console.error('[SB] switchProduct load', e); }
   // Abort fresh-apply if the user switched AGAIN during this load.
-  if (productId !== activeProductId) return;
+  if (productId !== activeProductId) { _freshLoadInProgress = false; return; }
   if (st) {
     ANGLES = st.ANGLES || []; PERSONAS = st.PERSONAS || []; ADS = st.ADS || [];
     PROD = st.PROD || []; ANGLE_PERSONAS = st.ANGLE_PERSONAS || {};
@@ -10263,6 +10299,8 @@ async function switchProduct(productId) {
     MATRIX_CELL_META = {}; CELL_CREATIVE_ASSIGNMENTS = {}; MANUAL_ACTIONS = []; PRODUCTION_CLICKUP_IDS = {};
     nextAdSerial = 1;
   }
+  // Fresh state applied — saves can now fire safely.
+  _freshLoadInProgress = false;
   // Data is now aligned with the active product — safe for saves/syncs to proceed.
   _adsProductId = activeProductId;
   P = process(ADS);
@@ -10351,6 +10389,10 @@ async function saveProductClickUpLink(productId, listId, listName) {
 
 async function confirmDeleteProduct(productId) {
   if (!confirm('Delete this product and all its data from the cloud database? This cannot be undone.')) return;
+  // Tombstone BEFORE filter so any concurrent _flushStateToSupabase can't
+  // re-upsert the product via its PRODUCTS loop. Also protects against
+  // another tab that still has this product in its in-memory PRODUCTS.
+  _rememberProductDeletion(productId);
   PRODUCTS = PRODUCTS.filter(function(p) { return p.id !== productId; });
   try { await DB.deleteProduct(productId); } catch (e) { console.error('[SB] deleteProduct', e); }
   if (PRODUCTS.length > 0) {
@@ -12370,6 +12412,9 @@ function createVariationFromMatrix(parentId, count) {
   if (typeof deriveWinners === 'function') deriveWinners();
   if (typeof genActions === 'function') genActions();
   renderAll();
+  // Persist — missing save was causing freshly-created variations to be lost
+  // on refresh if no other save fired before the user navigated away.
+  saveState();
 
   toast(count + ' variation' + (count > 1 ? 's' : '') + ' created for ' + parentId, 'ok');
 }

@@ -16,27 +16,64 @@ This skill reads the queue from Supabase and writes results back to Supabase —
 
 ## Step 0 — Auto-update (always run this first)
 
-Before doing anything else, silently refresh the skill files from origin. Next
-invocation of the skill will load the updated `SKILL.md`; `fb_ad_classifier.py`
-is re-imported on every run so its update takes effect immediately.
+Before doing anything else, silently refresh the skill files from origin using
+HTTP ETags so unchanged files are a 304 Not Modified (zero bytes transferred,
+~90ms). Next invocation of the skill loads the updated `SKILL.md`; the
+`fb_ad_classifier.py` helper is re-imported on every run so its update takes
+effect immediately.
 
 ```bash
 SKILL_DIR="$HOME/.claude/skills/classify-inspiration"
 ASSET_BASE="https://immuvi-command-center.vercel.app/team-skill"
 
-# Atomic swap — download to .tmp then mv, so a failed mid-download never
-# leaves a truncated file on disk that would break subsequent runs.
 for f in SKILL.md fb_ad_classifier.py; do
-  if curl -fsSL --max-time 10 "$ASSET_BASE/$f" -o "$SKILL_DIR/.$f.tmp" 2>/dev/null; then
-    mv "$SKILL_DIR/.$f.tmp" "$SKILL_DIR/$f"
-  else
-    rm -f "$SKILL_DIR/.$f.tmp" 2>/dev/null || true
+  file_path="$SKILL_DIR/$f"
+  etag_path="$SKILL_DIR/.$f.etag"
+  tmp_body="$SKILL_DIR/.$f.body.tmp"
+  tmp_head="$SKILL_DIR/.$f.head.tmp"
+
+  # Only send If-None-Match when BOTH the file and the stored ETag exist.
+  # If either is missing (fresh install, manual delete) we want the full 200.
+  inm_args=()
+  if [ -f "$file_path" ] && [ -s "$etag_path" ]; then
+    inm_args=(-H "If-None-Match: $(cat "$etag_path")")
   fi
+
+  # `|| http=""` catches network failures; -w prints only the HTTP status.
+  http=$(
+    curl -sS --max-time 10 \
+      "${inm_args[@]}" \
+      -D "$tmp_head" \
+      -o "$tmp_body" \
+      -w "%{http_code}" \
+      "$ASSET_BASE/$f" 2>/dev/null
+  ) || http=""
+
+  case "$http" in
+    200)
+      # New content — atomic swap + store the new ETag for next time.
+      mv "$tmp_body" "$file_path"
+      # Last Etag: header wins (handles any redirects); strip CR from raw headers.
+      new_etag=$(awk -F': ' 'tolower($1)=="etag"{gsub(/\r/,"",$2); e=$2} END{print e}' "$tmp_head")
+      [ -n "$new_etag" ] && printf '%s' "$new_etag" > "$etag_path"
+      ;;
+    304)
+      # Unchanged — discard the empty body, keep existing file + stored ETag.
+      rm -f "$tmp_body"
+      ;;
+    *)
+      # Network error, 5xx, or anything else — leave on-disk copy untouched.
+      rm -f "$tmp_body"
+      ;;
+  esac
+  rm -f "$tmp_head"
 done
 ```
 
-If the network is down the updates quietly fail and we continue with whatever
-version is already on disk — no error shown to the user.
+**Timing:** ~90ms per file when nothing changed (304, 0 bytes downloaded);
+~200-500ms per file when an update landed (200, full download). Worst case
+(hung network) is capped at 10s per file by `--max-time`. Network errors fail
+silently; the skill proceeds with whatever version is already on disk.
 
 ---
 

@@ -4020,6 +4020,10 @@ function _resubscribeRealtime() {
             var _dbAct = st.MANUAL_ACTIONS[_di];
             if (!_dbAct || !_dbAct.id) continue;
             if (!_localById[_dbAct.id]) {
+              // TOMBSTONE CHECK: if this id was deleted by the user in the
+              // last few seconds, our direct DB-delete may not have
+              // propagated to the read replica yet. Don't resurrect it.
+              if (_recentlyDeletedMaIds.has(_dbAct.id)) continue;
               // Local doesn't have it — another tab/session added it. Include.
               MANUAL_ACTIONS.push(_dbAct);
               _localById[_dbAct.id] = _dbAct;
@@ -4247,6 +4251,38 @@ let CREATIVE_USAGE = {}; // { 'AD-001': [{angle, persona, status}], ... }
 let MATRIX_CELL_META = {}; // { 'angle||persona': { description }, 'adId||angle||persona': { status, uniqueName, description, dueDate } }
 let CELL_CREATIVE_ASSIGNMENTS = {}; // { 'angle||persona': ['AD-001', 'AD-005', ...] }
 let MANUAL_ACTIONS = []; // manually created actions from matrix (preserved across genActions rebuilds)
+
+// Tombstone set: ids of MANUAL_ACTIONS the user just deleted. Held for a short
+// window so the realtime-merge handler doesn't resurrect them if the DB read
+// replica is still returning the old row. Also short-circuits the "added in
+// another tab?" heuristic in the merge. Entries self-expire after ~8s.
+var _recentlyDeletedMaIds = new Set();
+function _rememberManualActionDeletion(id, dbId) {
+  if (id) _recentlyDeletedMaIds.add(id);
+  setTimeout(function () { if (id) _recentlyDeletedMaIds.delete(id); }, 8000);
+  // Fire an IMMEDIATE DB delete so the user's intent reaches Supabase right
+  // away — don't wait for the debounced saveState(). Prevents the bug where
+  // a realtime echo from some other save arrives before the delete is
+  // persisted and the merge logic re-adds the row.
+  if (typeof SB !== 'undefined' && SB && activeProductId) {
+    try {
+      if (dbId) {
+        SB.from('manual_actions').delete().eq('id', dbId).then(function(r){
+          if (r && r.error) console.error('[SB] manual_action direct delete (by dbId)', r.error);
+        });
+      } else {
+        // Fallback: match by payload->>'id' (text) within this product
+        SB.from('manual_actions')
+          .delete()
+          .eq('product_id', activeProductId)
+          .filter('payload->>id', 'eq', id)
+          .then(function(r){
+            if (r && r.error) console.error('[SB] manual_action direct delete (by payload id)', r.error);
+          });
+      }
+    } catch (e) { console.error('[SB] manual_action direct delete threw', e); }
+  }
+}
 let PRODUCTION_CLICKUP_IDS = {}; // { [clickupTaskId]: sourceFormatAdId } — tasks created via action-plan push
 let FIELD_OPTIONS = {
   creativeStructure: [],
@@ -6869,6 +6905,7 @@ function deleteManualAction(id) {
 
   // ── No source AD anywhere: just remove action + ClickUp task ─────────────
   if (!sourceAd) {
+    _rememberManualActionDeletion(act.id, act._dbId);
     MANUAL_ACTIONS = MANUAL_ACTIONS.filter(function(a) { return a.id !== id; });
     // Full re-derive + render so Creative Tracker / Matrix / counts all update
     P = process(ADS);
@@ -6925,6 +6962,7 @@ function deleteManualAction(id) {
 
     // Remove clones + the action from all arrays
     ADS            = ADS.filter(function(a) { return cloneIds.indexOf(a.id) === -1; });
+    _rememberManualActionDeletion(act.id, act._dbId);
     MANUAL_ACTIONS = MANUAL_ACTIONS.filter(function(a) { return a.id !== id; });
     PROD           = PROD.filter(function(p) {
       return cloneIds.indexOf(p.adId) === -1 && cloneIds.indexOf(p.sourceAdId) === -1;
@@ -7752,6 +7790,12 @@ function deleteAdEverywhere(adId) {
   ADS            = ADS.filter(function(a)  { return a.id !== adId && a.sourceFormatId !== adId; });
 
   // Filter 1: explicit ID match — remove actions whose sourceAdId/adId is in the deleted set
+  // Tombstone each action being removed so realtime merge doesn't resurrect them.
+  MANUAL_ACTIONS.forEach(function(a){
+    if (allSourceIds.indexOf(a.sourceAdId) !== -1 || allSourceIds.indexOf(a.adId) !== -1) {
+      _rememberManualActionDeletion(a.id, a._dbId);
+    }
+  });
   MANUAL_ACTIONS = MANUAL_ACTIONS.filter(function(a) {
     return allSourceIds.indexOf(a.sourceAdId) === -1 && allSourceIds.indexOf(a.adId) === -1;
   });
@@ -7760,6 +7804,12 @@ function deleteAdEverywhere(adId) {
   // AI recommendations have sourceAdId=null and adId=null — those are always kept.
   var _survivingAdIds = {};
   ADS.forEach(function(a) { _survivingAdIds[a.id] = true; });
+  MANUAL_ACTIONS.forEach(function(a){
+    var srcId = a.sourceAdId != null ? a.sourceAdId : (a.adId != null ? a.adId : null);
+    if (srcId != null && _survivingAdIds[srcId] !== true) {
+      _rememberManualActionDeletion(a.id, a._dbId);
+    }
+  });
   MANUAL_ACTIONS = MANUAL_ACTIONS.filter(function(a) {
     var srcId = a.sourceAdId != null ? a.sourceAdId : (a.adId != null ? a.adId : null);
     if (srcId == null) return true; // AI recommendation — keep it
@@ -12090,6 +12140,11 @@ function toggleFormatInCell(checkbox, angleName, personaName, adId, formatName, 
       // Clean up metadata and manual actions for this production AD
       var cellAdKey = prodAdId + '||' + angleName + '||' + personaName;
       delete MATRIX_CELL_META[cellAdKey];
+      MANUAL_ACTIONS.forEach(function(a){
+        if (a.sourceAdId === prodAdId || a.adId === prodAdId) {
+          _rememberManualActionDeletion(a.id, a._dbId);
+        }
+      });
       MANUAL_ACTIONS = MANUAL_ACTIONS.filter(function(a) {
         return a.sourceAdId !== prodAdId && a.adId !== prodAdId;
       });

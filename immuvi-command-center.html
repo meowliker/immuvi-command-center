@@ -13368,10 +13368,35 @@ function renderInspirations() {
   }).join('');
 }
 
-function deleteInspiration(id) {
+async function deleteInspiration(id) {
+  // Capture product_id before we strip the row from local state
+  var victim = INSPIRATIONS.find(function(ins){ return ins.id === id; });
+  var pid = (victim && victim.product_id) || activeProductId;
+
+  // 1. Remove from local in-memory state + re-render immediately (optimistic)
   INSPIRATIONS = INSPIRATIONS.filter(function(ins){ return ins.id !== id; });
-  saveInspirations();
   renderInspirations();
+
+  // 2. Explicitly DELETE from Supabase. saveInspirations() only upserts the
+  //    remaining rows — it never removes deleted ones, so without this call
+  //    the row resurrects on next refresh / realtime refetch.
+  if (SB && id) {
+    try {
+      var delIns = await SB.from('inspirations').delete().eq('id', id);
+      if (delIns && delIns.error) console.error('[SB] deleteInspiration inspirations', delIns.error);
+      // Also drop any queue entry so it doesn't get picked up by the classifier later
+      var delQ = await SB.from('inspiration_queue').delete().eq('ins_id', id);
+      if (delQ && delQ.error) console.error('[SB] deleteInspiration queue', delQ.error);
+      // And any prior classification result (safe if nothing matches)
+      if (pid) {
+        var delR = await SB.from('inspiration_results').delete().eq('ins_id', id).eq('product_id', pid);
+        if (delR && delR.error) console.error('[SB] deleteInspiration results', delR.error);
+      }
+    } catch (e) { console.error('[SB] deleteInspiration exception', e); }
+  }
+
+  // 3. Persist the remaining rows (unchanged rows get no-op upserts, harmless)
+  saveInspirations();
 }
 
 function useInspirationFormat(id) {

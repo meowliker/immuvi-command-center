@@ -9429,25 +9429,14 @@ function importTasksFromClickUp(tasks) {
   ADS = newAds;
   // Don't reset nextAdSerial — local serial IDs must remain unique and continuous
 
-  // Merge discovered angles into ANGLES (add new, keep existing)
-  var existingAngleNames = {};
-  ANGLES.forEach(function(a) { existingAngleNames[a.name] = true; });
-  for (var aName in seenAngles) {
-    if (!existingAngleNames[aName]) {
-      ANGLES.push({ id: 'ang-' + Date.now() + '-' + Math.random().toString(36).slice(2,6), name: aName, status: 'Untested', sourceLink: '', notes: '' });
-      existingAngleNames[aName] = true;
-    }
-  }
-
-  // Merge discovered personas into PERSONAS
-  var existingPersonaNames = {};
-  PERSONAS.forEach(function(p) { existingPersonaNames[p.name] = true; });
-  for (var pName in seenPersonas) {
-    if (!existingPersonaNames[pName]) {
-      PERSONAS.push({ id: 'per-' + Date.now() + '-' + Math.random().toString(36).slice(2,6), name: pName, status: 'Untested', sourceLink: '', notes: '' });
-      existingPersonaNames[pName] = true;
-    }
-  }
+  // NOTE: Previously this path auto-pushed any new angle/persona value seen in
+  // ClickUp task custom fields into the product's ANGLES/PERSONAS arrays.
+  // That caused cross-product contamination (e.g. canva & KLS inheriting each
+  // other's parenting/astrology taxonomy). Angles and personas are now a
+  // manually-curated list per product — the ad keeps its value (so matrix /
+  // tracker render correctly), but the taxonomy stays clean.
+  // If you want the old behavior, re-add the push blocks here + in Pass 2
+  // (~line 9713). Left intentionally blank.
 
   // Auto-discover new taxonomy values from imported tasks
   var fieldKeyMap = {
@@ -9710,12 +9699,11 @@ function pollFullSync() {
           // matching the convention used in importTasksFromClickUp.
           if (!freshAd.id) freshAd.id = cuid;
           ADS.push(freshAd);
-          if (freshAd.angle && !ANGLES.some(function(a){ return a.name === freshAd.angle; })) {
-            ANGLES.push({ id: 'ang-' + Date.now() + '-' + Math.random().toString(36).slice(2,6), name: freshAd.angle, status: 'Untested', sourceLink: '', notes: '' });
-          }
-          if (freshAd.persona && !PERSONAS.some(function(p){ return p.name === freshAd.persona; })) {
-            PERSONAS.push({ id: 'per-' + Date.now() + '-' + Math.random().toString(36).slice(2,6), name: freshAd.persona, status: 'Untested', sourceLink: '', notes: '' });
-          }
+          // (Removed) auto-push of freshAd.angle / freshAd.persona into the
+          // product's ANGLES / PERSONAS arrays. Those lists are now
+          // manually-curated per product to prevent cross-product taxonomy
+          // contamination. The ad row keeps its angle/persona values so the
+          // creative tracker and matrix still render them correctly.
           newTaskCount++;
           changed = true;
         }

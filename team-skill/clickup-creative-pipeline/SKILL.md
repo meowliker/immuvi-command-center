@@ -317,11 +317,108 @@ PROD_OPTS = {
 Write batch files: `/tmp/cu_batch_{N}.json` — array of task objects.
 Spawn all agents in a single message with `run_in_background: true`.
 
-Each agent prompt must include:
-- API key + all field IDs + all dropdown UUIDs
-- Doc ID + Workspace ID
-- Known Angles + Known Personas
-- Batch file path + result file path
+### 2a. Canonical result schema (REQUIRED — do not deviate)
+
+Every agent **MUST** write `/tmp/cu_result_{task_id}.json` with this exact key set. This schema is the contract between agents and the writeback step. Historical bug: batches used `id`/`name` instead of `task_id`/`task_name`, crashing writeback with `KeyError`.
+
+```json
+{
+  "task_id": "86d2XXXX",                   // REQUIRED — string, from input batch
+  "task_name": "Art Therapy; 11439",       // REQUIRED — string, from input batch
+  "status": "testing",                     // from ClickUp, or "unknown"
+  "drive_url": "https://drive...",         // from input batch
+  "success": true,                         // REQUIRED — bool
+
+  "creative_modality": "VO-Driven",        // NEW — REQUIRED when photo_video=Video
+  "photo_video": "Video",
+  "hook_type": "Pain / Problem",
+  "creative_structure": "Hook + Offer",
+  "production_style": "Organic / Raw UGC",
+  "funnel_type": "TOF",
+  "angle": "Art as Therapy Alternative",
+  "persona": "Stressed Women 25-45",
+  "creative_usp": "...",
+  "creative_hypothesis": "...",
+  "notes": "...",
+
+  "vo_transcript_timed": [                 // NEW — voiceover lines, empty if no VO
+    {"t": "0-2", "text": "POV: my favorite kind of therapy", "confidence": "high"}
+  ],
+  "osd_text_timed": [                      // NEW — on-screen display (captions/overlays)
+    {"t": "0-2", "text": "So I went", "position": "bottom", "confidence": "high"}
+  ],
+
+  "verification_notes": "VO reconstructed from captions; music/VO split confirmed via audio RMS.",
+  "brief_markdown": "## 1. SNAPSHOT ...",
+  "frames_extracted": 6,
+  "clickup_doc_page_id": null,             // filled after doc write
+  "error": null
+}
+```
+
+**Forbidden key names** (historical mistakes — will fail validator): `id`, `name`, `body_copy_from_frames`, `id_clickup`, `task`.
+
+### 2b. Agent prompt template (copy verbatim into each spawn)
+
+```
+You are processing batch {N} of the creative pipeline. Inputs:
+- Batch file:        /tmp/cu_batch_{N}.json   (array of {task_id, task_name, drive_url, status})
+- Result directory:  /tmp/                      (write cu_result_{task_id}.json for each task)
+- ClickUp API key:   <key>
+- Doc ID:            <doc_id>   Workspace ID: <ws_id>
+- Known Angles:      [list]     Known Personas: [list]
+- Field IDs:         <FIELDS dict>
+- Dropdown UUIDs:    <HOOK_OPTS, STRUCT_OPTS, PROD_OPTS, PV_OPTS, FUNNEL_OPTS>
+
+For each task: Step 3a → 3b → 3c → 3d → write cu_result_{task_id}.json per §2a schema.
+
+HARD RULES:
+1. Use EXACTLY these keys: task_id, task_name, success, creative_modality, photo_video,
+   hook_type, creative_structure, production_style, funnel_type, angle, persona,
+   creative_usp, creative_hypothesis, notes, vo_transcript_timed, osd_text_timed,
+   verification_notes, brief_markdown, frames_extracted, drive_url, status, error.
+   NEVER use `id` or `name` (both crash the writeback).
+2. If you cannot determine a field, set it to null — never omit the key.
+3. Before writing the result file, validate: `set(result.keys()) >= REQUIRED_KEYS`.
+4. For video tasks, also run the audio probe in §3b to populate creative_modality.
+5. If classification fails, still write the result with success=false + error=<reason>.
+```
+
+### 2c. Pre-writeback validator (runs once after all agents finish)
+
+```python
+import json, glob, os
+REQUIRED = {"task_id","task_name","success","photo_video","hook_type",
+            "creative_structure","production_style","funnel_type","angle","persona",
+            "creative_usp","creative_hypothesis","notes","brief_markdown"}
+
+def normalize_result(path):
+    d = json.load(open(path))
+    # Legacy-key auto-fix (prevents the April 20 KeyError crash from recurring)
+    if "task_id" not in d and "id" in d:     d["task_id"]   = d.pop("id")
+    if "task_name" not in d and "name" in d: d["task_name"] = d.pop("name")
+    # Infer task_id from filename if still missing
+    if not d.get("task_id"):
+        base = os.path.basename(path)
+        d["task_id"] = base.replace("cu_result_","").replace(".json","")
+    # Pad missing required keys with None so downstream doesn't KeyError
+    for k in REQUIRED:
+        d.setdefault(k, None)
+    json.dump(d, open(path, "w"), indent=2)
+    return d, sorted(k for k in REQUIRED if d.get(k) in (None, ""))
+
+bad = []
+for p in glob.glob("/tmp/cu_result_*.json"):
+    d, missing = normalize_result(p)
+    if missing: bad.append((d["task_id"], missing))
+
+print(f"Validated {len(glob.glob('/tmp/cu_result_*.json'))} results; "
+      f"{len(bad)} have missing fields.")
+for tid, miss in bad[:10]:
+    print(f"  {tid}: {miss}")
+```
+
+If any task has `success=true` but a missing required field, halt and ask the user before writeback.
 
 ---
 
@@ -404,31 +501,86 @@ if not downloaded:
     # write result JSON and continue to next task
 ```
 
-### 3b. Extract frames
+### 3b. Extract frames + audio probe (NEW — audio-aware)
+
+Lesson from the AT-VID-001 correction (Apr 20 2026): a VO-driven ad was misclassified as music-style because frames alone can't reveal what's on the audio track. Fix: probe audio with ffmpeg before classification so the model knows whether there's a voice.
 
 ```python
-import subprocess, glob, shutil
+import subprocess, glob, shutil, json, re
 
-if downloaded and downloaded.endswith(('.mp4', '.mov')):
+# 1. Extract frames (one every 5s, max 6 frames)
+if downloaded and downloaded.endswith(('.mp4', '.mov', '.mkv', '.webm')):
     subprocess.run([
         "ffmpeg", "-i", downloaded,
         "-vf", "fps=1/5,scale=800:-1", "-q:v", "2",
         f"{work_dir}/frame_%03d.jpg"
     ], capture_output=True)
-    os.remove(downloaded)
-elif downloaded:
+elif downloaded:  # image
     shutil.copy(downloaded, f"{work_dir}/frame_001.jpg")
 
 frames = sorted(glob.glob(f"{work_dir}/frame_*.jpg"))[:6]
+
+# 2. Audio probe (video only) — tells the classifier whether VO is present
+audio_probe = {"has_audio": False, "has_voice": None, "rms_db": None, "duration": None}
+if downloaded and downloaded.endswith(('.mp4','.mov','.mkv','.webm')):
+    # ffprobe for duration + audio stream existence
+    probe = subprocess.run([
+        "ffprobe","-v","error","-print_format","json",
+        "-show_format","-show_streams", downloaded
+    ], capture_output=True, text=True)
+    try:
+        meta = json.loads(probe.stdout)
+        audio_probe["duration"] = float(meta.get("format",{}).get("duration") or 0)
+        audio_probe["has_audio"] = any(s.get("codec_type")=="audio" for s in meta.get("streams",[]))
+    except Exception:
+        pass
+
+    if audio_probe["has_audio"]:
+        # Extract audio, then measure RMS in speech band (80Hz-3kHz) vs full band
+        wav = f"{work_dir}/audio.wav"
+        subprocess.run(["ffmpeg","-y","-i",downloaded,"-vn","-ac","1","-ar","16000", wav],
+                       capture_output=True)
+        # Speech-band RMS
+        speech = subprocess.run([
+            "ffmpeg","-i",wav,"-af",
+            "highpass=f=80,lowpass=f=3000,astats=metadata=1:reset=1",
+            "-f","null","-"], capture_output=True, text=True).stderr
+        # Full-band RMS
+        full = subprocess.run([
+            "ffmpeg","-i",wav,"-af","astats=metadata=1:reset=1","-f","null","-"],
+            capture_output=True, text=True).stderr
+        def rms(txt):
+            m = re.search(r"RMS level dB: (-?\d+\.\d+)", txt)
+            return float(m.group(1)) if m else None
+        s_db, f_db = rms(speech), rms(full)
+        audio_probe["rms_db"] = f_db
+        # Heuristic: if speech-band RMS is within 3dB of full-band, voice is probably dominant
+        if s_db is not None and f_db is not None:
+            audio_probe["has_voice"] = (f_db - s_db) < 3.0
+        # Keep the wav — used later for optional Whisper transcription
+
+# 3. Save probe result for the classifier to read
+json.dump(audio_probe, open(f"{work_dir}/audio_probe.json","w"))
+
+# 4. Optional: if has_voice and you have OpenAI/Whisper available, transcribe:
+#    This is the ground-truth VO transcript. Skip if unavailable — the classifier
+#    can reconstruct from captions and the modality heuristic still holds.
+# subprocess.run(["whisper", f"{work_dir}/audio.wav", "--model","base","--output_format","json",
+#                 "--output_dir", work_dir], capture_output=True)
+
+os.remove(downloaded) if downloaded and os.path.exists(downloaded) else None
 ```
 
-### 3c. Visually classify (Read tool — up to 6 frames)
+### 3c. Visually classify (Read tool — up to 6 frames + audio probe)
 
-You are a senior media buyer. For each creative classify:
+You are a senior media buyer. Before classifying, **always read `{work_dir}/audio_probe.json`** — it tells you whether a human voice is on the audio track. This directly drives `creative_modality`.
+
+**Classification fields:**
 
 | Field | Valid values |
 |---|---|
 | photo_video | Video, Photo |
+| **creative_modality** (NEW) | VO-Driven, Music-Driven, Caption-Driven, Demo-Driven, Silent-Visual, Static (Photo) |
 | hook_type | Pain / Problem, Fear, Curiosity, Social Proof, Aspirational, Direct Offer, Controversy / Bold Claim, POV, Question, Pattern Interrupt |
 | creative_structure | UGC, Testimonial, Demo, Tutorial/How-To, Story/Narrative, Hook+Offer, Listicle, Static/Photo, Comparison, Interview, Skit/Roleplay, AI/Voiceover |
 | production_style | Organic/Raw UGC, Polished UGC, Professional Studio, AI Generated, Screen Record, Animation/Motion, Static Graphic, Slideshow, Repurposed Organic, Competitor Inspired |
@@ -438,22 +590,165 @@ You are a senior media buyer. For each creative classify:
 | creative_usp | 20 words max |
 | creative_hypothesis | 2 sentences: why made + why it works. 35 words max |
 | notes | What you literally see. 30 words max |
-| body_copy_from_frames | All visible on-screen text / subtitles |
 
-### 3d. Build 7-section brief
+**Modality decision tree:**
+- `audio_probe.has_voice == True` → candidate is **VO-Driven**; confirm captions are subtitles to a voice, not standalone text
+- `audio_probe.has_voice == False` and `has_audio == True` → **Music-Driven** (music bed only, captions carry story)
+- `audio_probe.has_audio == False` → **Silent-Visual** or **Caption-Driven** depending on on-screen text density
+- Photo task → **Static (Photo)**
+- Screen-recording of app/product demo with pointer/UI → **Demo-Driven** (override modality from audio)
+
+**Transcript fields (NEW — replaces the old single `body_copy_from_frames`):**
+
+| Field | What goes here |
+|---|---|
+| `vo_transcript_timed` | Array of `{t: "start-end", text, confidence}`. Populate only if `has_voice`. Reconstruct from captions when Whisper isn't available — **mark confidence as "medium"** and note this in `verification_notes`. |
+| `osd_text_timed` | Array of `{t, text, position, confidence}` for every burned-in caption, top overlay, watermark, or end-card text. This is **ground truth** from frame OCR — confidence "high." |
+| `verification_notes` | One short paragraph stating: what was observed vs reconstructed, whether audio probe ran, whether Whisper ran, any uncertainty flags. This is the bug-prevention layer — missing this field was the root cause of the 5773-1 misclassification. |
+
+### 3d. Build the 12-section brief (upgraded)
+
+This template is modeled on the AT-VID-001 gold-standard brief. Every output has the same 12 sections so downstream readers (editors, strategists, paid media) know exactly where to look.
 
 ```
-FRAME_BY_FRAME: | Time | Label | What Happens | Emotion |
-WHY_IT_WORKS: 4-5 psychological mechanisms
-REPLICATION_BRIEF: talent, set, overlays, pacing, music, end card
-WHAT_TO_TEST: 5 variation ideas
-COMPETITOR_INTEL: scale, funnel, gap, lane decision
-OUR_NEXT_AD: steal, differ, 3-bullet editor brief, hypothesis
+1. SNAPSHOT            table: task_id, funnel, modality, hook, structure, angle, persona, drive
+2. CREATIVE BREAKDOWN  | Time | VO (if any) | OSD text | Visual | Emotion |
+3. WHY IT WORKS        4-5 psychological mechanisms tied to specific timestamps
+4. REPLICATION BRIEF   talent, set, overlays, pacing, music, end card — prose
+5. WHAT TO TEST        isolated-variable matrix (see §3d.1 below)
+6. COMPETITOR INTEL    scale, funnel, gap, lane decision
+7. OUR NEXT AD         steal, differ, 3-bullet editor brief, hypothesis
+8. PERSONA LOCK        §3d.2 — feels / must-never-feel
+9. ANGLE LOCK          §3d.3 — voice rules / phrases that work / phrases that BREAK
+10. LOCKED ELEMENTS    §3d.4 — what never changes if scaling
+11. PRODUCTION SPEC    §3d.5 — aspect, fps, LUFS, captions, end card table
+12. HAND-OFF CHECKLIST §3d.6 — editor TODOs with owner names
+13. VERIFICATION NOTES §3d.7 — confidence flags + policy lint
 ```
 
-Also build:
-- **PERSONA ANALYSIS**: Demographics | Core Pain Points (3) | What They Want | How This Creative Speaks to Them | Messaging That Resonates | Messaging to Avoid
-- **ANGLE ANALYSIS**: Core Insight | Why It Works | How It's Executed Here | Variants to Explore (3)
+#### 3d.1 — Isolated-variable test matrix (replaces flat "5 ideas")
+
+Instead of 5 disconnected test ideas, produce a matrix: **2-4 sets × 3 variations**, each set changes exactly one variable. AT-VID-001 uses Hook Visual / VO Delivery / VO CTA Tail / VO Script. Pick variables appropriate to the modality:
+
+| Modality | Recommended test axes |
+|---|---|
+| VO-Driven | Hook Visual · VO Delivery Style · VO CTA Tail · VO Script |
+| Music-Driven | Hook 0-3s · Music Track · Caption Rhythm · End-Card Offer |
+| Caption-Driven | Hook Caption · Caption Cadence · Visual B-Roll · CTA Caption |
+| Demo-Driven | App-Screen Opener · VO Script · Pain Hook · CTA End-Card |
+| Static (Photo) | Hook Headline · Primary Image · Color Palette · CTA |
+
+Produce a markdown table like:
+
+```
+| Set | Variable | V1 | V2 | V3 | Everything held constant |
+|-----|---|---|---|---|---|
+| S1  | Hook Visual (0-5s) | Paper quilling | Watercolor bloom | Zentangle mandala | Full VO, music, captions, product section |
+| S2  | ... | ... | ... | ... | ... |
+```
+
+#### 3d.2 — PERSONA LOCK section (extends old PERSONA ANALYSIS)
+
+| Row | Content |
+|---|---|
+| Demographics | Age range · gender · life stage · platforms |
+| Core Pain Points (3) | Bullets, concrete, lived-experience language |
+| What She Wants | The emotional outcome, not the product |
+| How This Creative Speaks to Her | Map specific beats to specific needs |
+| **What She Feels When This Ad Lands** (NEW) | 4-5 bullets — Recognition / Trust / Desire / Action moments |
+| **What She Must NEVER Feel** (NEW — bug-prevention) | 4-5 bullets — Shame / Overwhelm / Sales pressure / Clinical coldness |
+| Messaging That Resonates | 3-5 phrase examples (≤ 6 words each) |
+| Messaging to Avoid | 3-5 phrases that break the trust |
+
+#### 3d.3 — ANGLE LOCK section (extends old ANGLE ANALYSIS)
+
+| Row | Content |
+|---|---|
+| Core Insight | One sentence |
+| Why It Works | 2-3 sentences |
+| How It's Executed Here | Tie to specific timestamps |
+| **Voice Rules** (NEW) | 4-6 bullets — "First person always", "Past tense for experience, present for share", "Warm quiet confidence", etc. |
+| **Phrases That Work** (NEW) | 4-6 exact phrases matching the angle |
+| **Phrases That BREAK the Angle** (NEW — the lint layer) | 4-6 exact phrases that violate the angle voice |
+| Variants to Explore | 3 angle-consistent variant directions |
+
+#### 3d.4 — LOCKED ELEMENTS section (NEW)
+
+If this creative is a winner and we scale it, document what must never change or we lose the thing that worked:
+
+```
+| Element | Detail (what the winning version uses) |
+|---|---|
+| Length | 29 seconds exactly |
+| VO voice | ElevenLabs "Rachel" warm-conversational (lock character) |
+| Music bed | Soft ambient, ducked -18 LUFS under VO |
+| Caption style | White pill, bottom-third, 3-5 words per beat |
+| Top overlay | "POV:" hook 0-5s, "Get this now" 17-29s |
+| Watermark | "FREE today" 40% opacity, centered, 5-17s |
+| End card URL | mindingart.com (NOT printableswithlily.com) |
+| Props | Pink roses + framed art + colored pencils — identical |
+| Child demo | Same child, striped shirt, wooden desk |
+```
+
+Populate per creative. For a generic task without scale data yet, populate from what's visible in frames.
+
+#### 3d.5 — PRODUCTION SPEC section (NEW — hard technical table)
+
+```
+| Spec | Value |
+|---|---|
+| Aspect ratio | 9:16 vertical |
+| Resolution | 1080×1920 preferred (720×1280 minimum) |
+| Frame rate | 30fps |
+| Length | {duration}s ±1s |
+| Audio mix | VO 0 dB / music -18 LUFS ducked under VO |
+| Sample rate | 44.1 kHz stereo |
+| Caption style | White pill, rounded corners, black text, bottom-third |
+| Top overlay style | White sans-serif, centered, slight drop shadow |
+| Watermark | 40% opacity, centered, "FREE today" or offer text |
+| End card | 1-second product cover + URL |
+| Filename convention | `{ad_id}-{set}{variation}_{descriptor}.mp4` (e.g. `5773-1-S1V1_quilling.mp4`) |
+```
+
+#### 3d.6 — HAND-OFF CHECKLIST section (NEW)
+
+```
+**For editor (Nitin / Shivam / Samriddhi / Kirti — replace with your team):**
+
+- [ ] Watch the original creative in full before attempting variation
+- [ ] Listen to VO in isolation (strip music if present) to lock delivery match
+- [ ] Confirm which ElevenLabs voice is used (lock for Set 2 V2 control)
+- [ ] Read PERSONA LOCK + ANGLE LOCK top to bottom
+- [ ] Source OR shoot Set 1 hook clips (3 variations)
+- [ ] Render Set 2 VOs via ElevenLabs (3 different voice characters, same script)
+- [ ] Render Set 3 VO tails (3 different closes, same voice as original)
+- [ ] Re-burn captions for Set 4 to match each new VO word-for-word
+- [ ] Meta policy check: no "FREE TODAY" as standalone headline; flag $ claims
+- [ ] Week 1 deliverables: Set 1 + Set 4 (6 videos) in 5 working days
+- [ ] Week 2 deliverables: Set 2 + Set 3 (6 videos) within 7 days of Week 1 approval
+```
+
+#### 3d.7 — VERIFICATION NOTES section (NEW — bug-prevention layer)
+
+Every brief ends with a short verification block:
+
+```
+**Verification confidence:**
+- Frames observed: {N} at 5-second intervals ✅
+- Audio probe ran: {yes/no}, has_voice={true/false/null}
+- VO transcript source: {Whisper ground-truth / reconstructed from captions / not applicable}
+- OSD text: OCR'd from frames — high confidence ✅
+- Modality classification driven by: {audio_probe / caption density / visual cues}
+- Known unknowns: {e.g. "Original ElevenLabs voice name not confirmed; lock via Slack before producing Set 2 V2"}
+
+**Meta policy lint:** {PASS / FLAG with reason}
+- "FREE TODAY" as standalone headline: {not present / present — move to subtitle}
+- Price anchor in headline ("$99 / FREE TODAY"): {not present / present — keep in subtitle only}
+- Clinical claims ("evidence-based", "clinically proven"): {not present / present — soften}
+- Superlatives ("best ever", "game-changer"): {not present / present — remove}
+```
+
+If any lint item fails, surface the flag in the ClickUp comment too so the reviewer sees it without opening the doc.
 
 ---
 
@@ -596,7 +891,8 @@ content_format: "text/md"
 content: <full markdown below>
 ```
 
-**Page markdown template:**
+**Page markdown template (13 sections — matches §3d):**
+
 ```markdown
 # {task_name} — {angle}
 
@@ -610,6 +906,7 @@ content: <full markdown below>
 | **Platform** | Facebook / Meta |
 | **Funnel** | {funnel_type} |
 | **Format** | {photo_video} — {production_style} |
+| **Modality** | {creative_modality}  ← NEW |
 | **Hook Type** | {hook_type} |
 | **Creative Structure** | {creative_structure} |
 | **Angle** | {angle} |
@@ -617,7 +914,6 @@ content: <full markdown below>
 | **Status** | {status} |
 | **Drive Link** | {drive_url} |
 
-**Body Copy from Frames:** {body_copy_from_frames}
 **Creative USP:** {creative_usp}
 **In one sentence:** {creative_hypothesis}
 **Notes:** {notes}
@@ -625,22 +921,31 @@ content: <full markdown below>
 ---
 
 ## 2. CREATIVE BREAKDOWN
-{FRAME_BY_FRAME table}
+{FRAME_BY_FRAME table: | Time | VO (if any) | OSD text | Visual | Emotion |}
+
+*VO transcript and OSD text rendered side-by-side from `vo_transcript_timed` + `osd_text_timed`. If modality is Music/Caption/Static/Silent, the VO column is N/A.*
 
 ---
 
 ## 3. WHY IT WORKS
-{4-5 psychological mechanisms}
+{4-5 psychological mechanisms, each tied to a specific timestamp in §2}
 
 ---
 
 ## 4. REPLICATION BRIEF
-{talent, set, overlays, pacing, music, end card}
+{talent, set, overlays, pacing, music, end card — prose}
 
 ---
 
-## 5. WHAT TO TEST
-{5 numbered variation ideas}
+## 5. WHAT TO TEST (isolated-variable matrix)
+| Set | Variable | V1 | V2 | V3 | Everything held constant |
+|-----|---|---|---|---|---|
+| S1  | ... | ... | ... | ... | ... |
+| S2  | ... | ... | ... | ... | ... |
+...
+
+**Kill rules:** $15 spend + CTR <2.5% → kill early. $50 spend + ROAS <0.85 → kill late.
+**Winner threshold:** ROAS >1.5 at $100 spend → scale. CTR >3.5% → hook winner.
 
 ---
 
@@ -654,28 +959,123 @@ content: <full markdown below>
 
 ---
 
-## 8. PERSONA ANALYSIS
+## 8. PERSONA LOCK
 | Attribute | Detail |
 |---|---|
 | **Demographics** | ... |
 | **Core Pain Points** | ... |
-| **What They Want** | ... |
-| **How This Creative Speaks to Them** | ... |
+| **What She Wants** | ... |
+| **How This Creative Speaks to Her** | ... |
+| **What She Feels When This Ad Lands** | 1. ... / 2. ... / 3. ... / 4. ... |
+| **What She Must NEVER Feel** | 1. ... / 2. ... / 3. ... / 4. ... |
 | **Messaging That Resonates** | ... |
 | **Messaging to Avoid** | ... |
 
 ---
 
-## 9. ANGLE ANALYSIS
+## 9. ANGLE LOCK
 - **Core Insight:** ...
 - **Why It Works:** ...
 - **How It's Executed Here:** ...
+- **Voice Rules:**
+  - ...
+  - ...
+- **Phrases That Work:** ..., ..., ...
+- **Phrases That BREAK the Angle:** ..., ..., ...
 - **Variants to Explore:** ...
+
+---
+
+## 10. LOCKED ELEMENTS (if we scale this, never change these)
+| Element | Value |
+|---|---|
+| Length | ... |
+| VO voice | ... |
+| Music bed | ... |
+| Caption style | ... |
+| Top overlay | ... |
+| Watermark | ... |
+| End card URL | ... |
+| Props / Set | ... |
+
+---
+
+## 11. PRODUCTION SPEC
+| Spec | Value |
+|---|---|
+| Aspect ratio | 9:16 vertical |
+| Resolution | 1080×1920 preferred |
+| Frame rate | 30fps |
+| Length | ... |
+| Audio mix | VO 0 dB / music -18 LUFS ducked |
+| Caption style | ... |
+| End card | ... |
+| Filename convention | `{ad_id}-{set}{variation}_{descriptor}.mp4` |
+
+---
+
+## 12. HAND-OFF CHECKLIST
+- [ ] Watch original in full
+- [ ] Listen to VO in isolation
+- [ ] Confirm ElevenLabs voice name
+- [ ] Source / shoot Set 1 variations
+- [ ] Render Set 2 VOs (different voice characters)
+- [ ] Render Set 3 VO tails (same voice, different close)
+- [ ] Re-burn captions for Set 4
+- [ ] Meta policy check (see §13 lint)
+- [ ] Week 1 deliverables in 5 working days
+- [ ] Week 2 deliverables within 7 days of Week 1 approval
+
+---
+
+## 13. VERIFICATION NOTES
+- Frames observed: {N} at 5s intervals ✅
+- Audio probe: {ran / skipped}, has_voice={true / false / null}
+- VO transcript source: {Whisper ground-truth / reconstructed from captions / N/A}
+- OSD text: OCR'd from frames — high confidence ✅
+- Modality driver: {audio_probe / caption density / visual cues}
+- Known unknowns: ...
+
+**Meta policy lint:** {PASS / FLAG}
+- "FREE TODAY" standalone headline: ...
+- Price anchor in headline: ...
+- Clinical claims: ...
+- Superlatives: ...
 ```
 
 ---
 
-## STEP 5 — Update ClickUp task (11 operations)
+## STEP 5 — Update ClickUp task (12 operations + optional policy-flag surfacing)
+
+If the list has a `Creative Modality` field, write to it. If not, auto-create it (see below).
+
+```python
+# Auto-create creative_modality dropdown field on the list if it doesn't exist yet.
+# Run this once per list, not per task.
+def ensure_modality_field(list_id, api_key):
+    r = requests.get(f"https://api.clickup.com/api/v2/list/{list_id}/field",
+                     headers={"Authorization": api_key})
+    fields = r.json().get("fields", [])
+    for f in fields:
+        if f["name"].lower() in ("creative modality","modality"):
+            return f["id"], {o["name"]: o["id"] for o in f.get("type_config",{}).get("options",[])}
+    # Create it
+    body = {"name": "Creative Modality", "type": "drop_down",
+            "type_config": {"options": [
+                {"name":"VO-Driven","color":"#7b68ee"},
+                {"name":"Music-Driven","color":"#ff7f50"},
+                {"name":"Caption-Driven","color":"#1bbc9c"},
+                {"name":"Demo-Driven","color":"#f39c12"},
+                {"name":"Silent-Visual","color":"#95a5a6"},
+                {"name":"Static (Photo)","color":"#bdc3c7"},
+            ]}}
+    # NOTE: ClickUp's POST /list/{id}/field endpoint currently requires admin auth.
+    # If it fails with 401/403, fall back to a text field named "Creative Modality"
+    # and set the raw string value.
+    ...
+```
+
+**Per-task writes:**
 
 ```python
 doc_url = f"https://app.clickup.com/{WORKSPACE_ID}/docs/{DOC_ID}/{page_id}"
@@ -692,48 +1092,72 @@ if doc_url not in existing_desc:
     new_desc = f"📄 Creative Brief: {doc_url}\n\n{existing_desc}".strip()
     requests.put(f"{BASE}/task/{task_id}", headers=HEADERS, json={"description": new_desc})
 
-# 2. Add comment
+# 2. Add comment — include policy-lint flags inline so reviewers see without opening doc
+lint = result.get("meta_policy_lint", {})
+lint_line = ""
+if lint and not lint.get("pass", True):
+    lint_line = f"\n\n⚠️ **Policy flags:** {', '.join(lint.get('flags', []))}"
+
 comment = (
     f"📄 Creative Brief: {doc_url}\n\n"
-    f"Full visual analysis, frame-by-frame breakdown, persona + angle analysis, "
-    f"and replication brief are in the doc above.\n\n"
-    f"Angle: {angle} | Persona: {persona} | Hook: {hook_type} | Funnel: {funnel_type}"
+    f"Full visual analysis, frame-by-frame breakdown, persona + angle LOCK, "
+    f"locked elements, production spec, and hand-off checklist in the doc.\n\n"
+    f"Angle: {angle} | Persona: {persona} | Hook: {hook_type} | "
+    f"Modality: {creative_modality} | Funnel: {funnel_type}"
+    f"{lint_line}"
 )
 requests.post(f"{BASE}/task/{task_id}/comment", headers=HEADERS, json={"comment_text": comment})
 
-# 3-11. Custom fields
+# 3-12. Custom fields
 set_field(task_id, FIELDS["angle_tag"], angle)
 set_field(task_id, FIELDS["persona_tag"], persona)
 set_field(task_id, FIELDS["creative_usp"], creative_usp)
 set_field(task_id, FIELDS["notes"], notes[:200])
-if hook_type in HOOK_OPTS:       set_field(task_id, FIELDS["hook_type"], HOOK_OPTS[hook_type])
+if hook_type in HOOK_OPTS:            set_field(task_id, FIELDS["hook_type"], HOOK_OPTS[hook_type])
 if creative_structure in STRUCT_OPTS: set_field(task_id, FIELDS["creative_structure"], STRUCT_OPTS[creative_structure])
-if funnel_type in FUNNEL_OPTS:   set_field(task_id, FIELDS["funnel_type"], FUNNEL_OPTS[funnel_type])
-if photo_video in PV_OPTS:       set_field(task_id, FIELDS["photo_video"], PV_OPTS[photo_video])
-if production_style in PROD_OPTS: set_field(task_id, FIELDS["production_style"], PROD_OPTS[production_style])
+if funnel_type in FUNNEL_OPTS:        set_field(task_id, FIELDS["funnel_type"], FUNNEL_OPTS[funnel_type])
+if photo_video in PV_OPTS:            set_field(task_id, FIELDS["photo_video"], PV_OPTS[photo_video])
+if production_style in PROD_OPTS:     set_field(task_id, FIELDS["production_style"], PROD_OPTS[production_style])
+
+# NEW: Creative Modality field — dropdown if it was auto-created, else text
+if MODALITY_FIELD_ID:
+    if creative_modality in MODALITY_OPTS:
+        set_field(task_id, MODALITY_FIELD_ID, MODALITY_OPTS[creative_modality])
+    else:
+        set_field(task_id, MODALITY_FIELD_ID, creative_modality)  # text fallback
 ```
 
 ---
 
 ## STEP 6 — Save result + cleanup
 
-Each agent writes `/tmp/cu_result_{task_id}.json`:
+Each agent writes `/tmp/cu_result_{task_id}.json` matching the **Canonical result schema** in §2a. Full shape reproduced here for easy reference:
+
 ```json
 {
-  "task_id": "...", "task_name": "...", "status": "...",
+  "task_id": "86d2XXXX", "task_name": "...", "status": "...",
   "success": true,
-  "photo_video": "...", "hook_type": "...",
+  "creative_modality": "VO-Driven",
+  "photo_video": "Video", "hook_type": "...",
   "creative_structure": "...", "production_style": "...",
   "funnel_type": "...", "angle": "...", "angle_matched": true,
   "persona": "...", "persona_matched": true,
-  "creative_usp": "...", "creative_hypothesis": "...",
-  "notes": "...", "body_copy_from_frames": "...",
-  "clickup_doc_page_id": "...",
-  "error": null
+  "creative_usp": "...", "creative_hypothesis": "...", "notes": "...",
+  "vo_transcript_timed":  [{"t":"0-2","text":"...","confidence":"high"}],
+  "osd_text_timed":       [{"t":"0-2","text":"...","position":"bottom","confidence":"high"}],
+  "verification_notes":   "VO reconstructed from captions; audio probe confirms has_voice=true.",
+  "meta_policy_lint":     {"pass": true, "flags": []},
+  "brief_markdown":       "## 1. SNAPSHOT ...",
+  "frames_extracted":     6,
+  "clickup_doc_page_id":  "8cq1r3y-XXXXX",
+  "drive_url":            "https://drive...",
+  "error":                null
 }
 ```
 
-Cleanup: `rm -rf /tmp/cu_work_{task_id}`
+**REMINDER:** Never use `id` or `name` — use `task_id` and `task_name`. The §2c validator will auto-normalize legacy keys, but agents should write the correct keys on the first try.
+
+Cleanup: `rm -rf /tmp/cu_work_{task_id}` (keep `audio.wav` for 24h in case re-analysis is needed)
 
 ---
 
@@ -810,14 +1234,29 @@ Example invocations:
 | `success=false` in result | Skip ClickUp updates — classification failed |
 | Empty `clickup_doc_page_id` | Skip field updates — doc creation failed |
 | gdown `--folder` lists 0 files | Try direct file ID download instead |
+| **KeyError: 'task_id' during writeback** | Agent wrote legacy keys. Run §2c `normalize_result()` on every `/tmp/cu_result_*.json` before writeback. Fixed by §2a schema lock on next run. |
+| **`creative_modality` missing for video task** | Audio probe didn't run. Re-run §3b; if still missing, ask the user to confirm modality manually before writeback. |
+| **Meta policy lint flags `FREE TODAY` headline** | Move the "FREE TODAY" text from headline → subtitle/caption before producing the variation. Surface the flag in the ClickUp comment. |
+| **VO transcript confidence = "low"** | Means Whisper didn't run and captions were sparse. Flag in `verification_notes`; ask the production team to verify VO manually before scaling. |
 
 ---
 
 ## Prerequisites
 
 ```bash
-ffmpeg -version        # must be installed
+ffmpeg -version        # must be installed (for frames + audio probe)
+ffprobe -version       # ships with ffmpeg
 pip3 install gdown requests
+# Optional but strongly recommended for VO-driven ads:
+pip3 install openai-whisper  # or: brew install whisper-cpp  → enables ground-truth VO transcripts
 ```
 
 Google Drive folders must be set to "Anyone with the link can view".
+
+---
+
+## Changelog
+
+- **2026-04-21** — v2: Added `creative_modality` field + audio probe (§3b) + VO/OSD transcript split (§3c) + 12-section brief template (§3d) + strict result schema (§2a) + validator (§2c) + policy lint (§3d.7). Fixes the AT-VID-001 misclassification bug (VO-driven treated as music-style) and the Apr 20 writeback crash (parallel agents writing `id` instead of `task_id`).
+- **2026-04-20** — v1.1: Fixed `gdown --dry-run` flag (doesn't exist), added incremental mode, consolidation checkpoint, env loader.
+- **2026-04-19** — v1.0: Merged `/clickup-creative-classifier` + `/clickup-creative-data-fill` into `/clickup-creative-pipeline`.

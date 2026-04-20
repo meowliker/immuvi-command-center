@@ -8566,6 +8566,12 @@ function createClickUpTaskFromAction(actionId, onDone) {
     // (inspo ADs are fresh — tracker-format ADs already have the tracker task's ID)
     if (sourceAd && !sourceAd._clickupId) {
       sourceAd._clickupId = newId;
+      // IMPORTANT: also set clickupTaskId so _adToRow persists it to the
+      // clickup_task_id DB column. _adToRow prefers clickupTaskId over
+      // _clickupId, and _rowToAd reads FROM clickup_task_id on load — so
+      // setting only _clickupId left the link ephemeral and the next sync
+      // created a duplicate ad from the same ClickUp task.
+      sourceAd.clickupTaskId = newId;
     }
 
     // Sync the task name back to the local AD so Creative Tracker + Matrix show
@@ -9403,6 +9409,29 @@ function importTasksFromClickUp(tasks) {
     if (ADS[i]._clickupId) localByClickupId[ADS[i]._clickupId] = ADS[i];
   }
 
+  // Secondary index: MANUAL_ACTIONS → sourceAd. When the user pushes an
+  // action-plan item to ClickUp, the MANUAL_ACTION gets _clickupId but the
+  // sourceAd's _clickupId may be lost across a browser refresh before the
+  // next sync. Without this fallback index, the fetched task comes back
+  // "unknown" and gets imported as a brand-new ad — creating a duplicate
+  // (e.g. AD-198 local + 86d2qa5tx ClickUp-synced, both pointing at the
+  // same underlying task). Here we look up the sourceAd through the
+  // MANUAL_ACTION and promote it into localByClickupId + fix the link.
+  for (var mi = 0; mi < MANUAL_ACTIONS.length; mi++) {
+    var _act = MANUAL_ACTIONS[mi];
+    if (!_act || !_act._clickupId || !_act._sourceAdId) continue;
+    if (localByClickupId[_act._clickupId]) continue; // already linked
+    for (var si = 0; si < ADS.length; si++) {
+      if (ADS[si].id === _act._sourceAdId) {
+        // Repair the link in memory so future syncs don't re-create duplicates
+        ADS[si]._clickupId   = _act._clickupId;
+        ADS[si].clickupTaskId = _act._clickupId;
+        localByClickupId[_act._clickupId] = ADS[si];
+        break;
+      }
+    }
+  }
+
   // Set of ClickUp task IDs in this fetch (to detect tasks removed from ClickUp)
   var fetchedClickupIds = {};
   for (var i = 0; i < tasks.length; i++) {
@@ -9714,8 +9743,27 @@ function pollFullSync() {
         if (parsed._clickupId) taskMap[parsed._clickupId] = parsed;
       }
 
-      // ── Pass 1: update existing ads (diff check) ─────────────────────
+      // ── Pass 0: repair missing ad._clickupId from MANUAL_ACTIONS ──────
+      // When the user pushes an action-plan item to ClickUp, the MANUAL_ACTION
+      // is the authoritative source of truth for the ClickUp task ID. The
+      // source ad SHOULD have its _clickupId mirrored but can drift (across
+      // refresh / stale load). If we don't repair before Pass 1, the task
+      // looks "new" and Pass 2 imports it as a duplicate.
       var changed = false;
+      for (var mai = 0; mai < MANUAL_ACTIONS.length; mai++) {
+        var _ma = MANUAL_ACTIONS[mai];
+        if (!_ma || !_ma._clickupId || !_ma._sourceAdId) continue;
+        for (var aidx = 0; aidx < ADS.length; aidx++) {
+          if (ADS[aidx].id === _ma._sourceAdId && !ADS[aidx]._clickupId) {
+            ADS[aidx]._clickupId   = _ma._clickupId;
+            ADS[aidx].clickupTaskId = _ma._clickupId;
+            changed = true;
+            break;
+          }
+        }
+      }
+
+      // ── Pass 1: update existing ads (diff check) ─────────────────────
       var fieldUpdates = 0;
       var existingClickupIds = {};
       for (var i = 0; i < ADS.length; i++) {

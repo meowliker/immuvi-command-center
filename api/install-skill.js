@@ -27,18 +27,21 @@ export default async function handler(req, res) {
   const provided = (req.query && req.query.t) || '';
   const expected = process.env.INSTALL_SKILL_SECRET || '';
   if (!expected) {
-    res.status(500).type('text/plain').send('Installer disabled: INSTALL_SKILL_SECRET not configured.\n');
+    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+    res.status(500).send('Installer disabled: INSTALL_SKILL_SECRET not configured.\n');
     return;
   }
   if (provided.length !== expected.length || !timingSafeEqual(provided, expected)) {
-    res.status(401).type('text/plain').send('Unauthorized. Contact Gaurav for the correct install link.\n');
+    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+    res.status(401).send('Unauthorized. Contact Gaurav for the correct install link.\n');
     return;
   }
 
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   const dbPassword = process.env.SUPABASE_DB_PASSWORD;
   if (!serviceKey || !dbPassword) {
-    res.status(500).type('text/plain').send('Installer misconfigured: SUPABASE_* env vars missing on the server.\n');
+    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+    res.status(500).send('Installer misconfigured: SUPABASE_* env vars missing on the server.\n');
     return;
   }
 
@@ -184,7 +187,8 @@ echo "To uninstall: rm -rf $SKILL_DIR $ENV_FILE"
 echo ""
 `;
 
-  res.status(200).type('text/x-shellscript; charset=utf-8').send(script);
+  res.setHeader('Content-Type', 'text/x-shellscript; charset=utf-8');
+  res.status(200).send(script);
 }
 
 // Timing-safe string compare (no external deps)

@@ -1,11 +1,11 @@
 ---
 name: classify-inspiration
-description: Classify competitor ad URLs for the Immuvi Command Center. Reads pending items from the Supabase `inspiration_queue` table, downloads video/frames, classifies using Claude vision, creates ClickUp doc pages with 7-section creative briefs, writes results to Supabase `inspiration_results`.
+description: Classify competitor ad URLs for the Immuvi Command Center. Reads pending items from the Supabase `inspiration_queue` table, downloads video/frames, classifies using Claude vision, creates ClickUp doc pages with 7-section creative briefs, writes results to Supabase `inspiration_results`. Bridge/localhost/JSON files are deprecated as of April 2026.
 ---
 
-# Classify Inspiration Skill (Supabase-native, portable)
+# Classify Inspiration Skill (Supabase-native)
 
-This skill reads the queue from Supabase and writes results back to Supabase — no local bridge, no `/tmp` JSON files to babysit. Anyone on the team can queue a URL from the live dashboard; whoever has this skill installed classifies it; results stream back to everyone's browser in real time via Supabase realtime.
+This skill reads the queue and writes results directly to Supabase — no more local bridge, no `/tmp` JSON files. Anyone on the team can queue a URL from the live dashboard; you (running Claude locally with ffmpeg) classify; results stream back to the team's browser in real time.
 
 ## Prerequisites (installed by `install-skill.sh`)
 
@@ -14,13 +14,11 @@ This skill reads the queue from Supabase and writes results back to Supabase —
 - **Env file:** `~/.classify-inspiration.env` with `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_DB_URL`, `SUPABASE_DB_PASSWORD`
 - **Bundled:** `fb_ad_classifier.py` must sit next to this `SKILL.md` in `~/.claude/skills/classify-inspiration/`
 
+---
+
 ## Step 0 — Auto-update (always run this first)
 
-Before doing anything else, silently refresh the skill files from origin using
-HTTP ETags so unchanged files are a 304 Not Modified (zero bytes transferred,
-~90ms). Next invocation of the skill loads the updated `SKILL.md`; the
-`fb_ad_classifier.py` helper is re-imported on every run so its update takes
-effect immediately.
+Silently refresh the skill files from origin using HTTP ETags — unchanged files are a 304 Not Modified (zero bytes transferred, ~90ms). Next run loads the updated `SKILL.md`; `fb_ad_classifier.py` is re-imported every run so its update takes effect immediately.
 
 ```bash
 SKILL_DIR="$HOME/.claude/skills/classify-inspiration"
@@ -32,79 +30,82 @@ for f in SKILL.md fb_ad_classifier.py; do
   tmp_body="$SKILL_DIR/.$f.body.tmp"
   tmp_head="$SKILL_DIR/.$f.head.tmp"
 
-  # Only send If-None-Match when BOTH the file and the stored ETag exist.
-  # If either is missing (fresh install, manual delete) we want the full 200.
   inm_args=()
   if [ -f "$file_path" ] && [ -s "$etag_path" ]; then
     inm_args=(-H "If-None-Match: $(cat "$etag_path")")
   fi
 
-  # `|| http=""` catches network failures; -w prints only the HTTP status.
-  http=$(
-    curl -sS --max-time 10 \
-      "${inm_args[@]}" \
-      -D "$tmp_head" \
-      -o "$tmp_body" \
-      -w "%{http_code}" \
-      "$ASSET_BASE/$f" 2>/dev/null
-  ) || http=""
+  http=$(curl -sS --max-time 10 "${inm_args[@]}" -D "$tmp_head" -o "$tmp_body" \
+    -w "%{http_code}" "$ASSET_BASE/$f" 2>/dev/null) || http=""
 
   case "$http" in
     200)
-      # New content — atomic swap + store the new ETag for next time.
       mv "$tmp_body" "$file_path"
-      # Last Etag: header wins (handles any redirects); strip CR from raw headers.
       new_etag=$(awk -F': ' 'tolower($1)=="etag"{gsub(/\r/,"",$2); e=$2} END{print e}' "$tmp_head")
       [ -n "$new_etag" ] && printf '%s' "$new_etag" > "$etag_path"
       ;;
-    304)
-      # Unchanged — discard the empty body, keep existing file + stored ETag.
-      rm -f "$tmp_body"
-      ;;
-    *)
-      # Network error, 5xx, or anything else — leave on-disk copy untouched.
-      rm -f "$tmp_body"
-      ;;
+    304|*) rm -f "$tmp_body" ;;
   esac
   rm -f "$tmp_head"
 done
 ```
 
-**Timing:** ~90ms per file when nothing changed (304, 0 bytes downloaded);
-~200-500ms per file when an update landed (200, full download). Worst case
-(hung network) is capped at 10s per file by `--max-time`. Network errors fail
-silently; the skill proceeds with whatever version is already on disk.
+Fails silently on network errors and continues with the on-disk copy.
 
 ---
 
-## Env loader helper (use this in every shell step)
+## Env loader helper (referenced in every shell step below)
 
-At the top of every bash step in this skill, load the env file. The skill searches in this order:
+Whenever a step says `source_env` (or shows the env-loader block), it means:
 
 ```bash
-# Find the classify-inspiration env file (teammate-portable)
-_find_env() {
-  for p in "$HOME/.classify-inspiration.env" "$PWD/.env" "$HOME/.env"; do
-    [ -f "$p" ] && { echo "$p"; return 0; }
-  done
-  echo ""
-}
-ENV_FILE="$(_find_env)"
-[ -n "$ENV_FILE" ] || { echo "No env file found. Run the installer." >&2; exit 1; }
-# Export vars, ignoring commented lines
-set -a; source "$ENV_FILE"; set +a
+for _p in "$HOME/.classify-inspiration.env" "$PWD/.env" "$HOME/.env"; do
+  [ -f "$_p" ] && { set -a; source "$_p"; set +a; break; }
+done
 ```
 
-If a step below shows just `source_env` below as shorthand, replace it with the block above.
+This finds the first `.env` file in the fallback chain and exports all its
+non-comment variables. Installed by `install-skill.sh` into
+`~/.classify-inspiration.env`.
+
+---
+
+## Connection details
+
+- **Supabase URL:** `https://hdniumnkprkadlrrataz.supabase.co`
+- **Service role key:** loaded by the installer into `~/.classify-inspiration.env` (key `SUPABASE_SERVICE_ROLE_KEY`). Never commit this key.
+- **Direct Postgres connection string:** stored in same `.env` as `SUPABASE_DB_URL` (host: `db.hdniumnkprkadlrrataz.supabase.co`).
+
+Throughout this skill, export the env vars at the start of every shell step:
+
+```bash
+# Portable env loader — reads from ~/.classify-inspiration.env (set by installer).
+# Fallback chain: ~/.classify-inspiration.env → $PWD/.env → ~/.env.
+for _p in "$HOME/.classify-inspiration.env" "$PWD/.env" "$HOME/.env"; do
+  [ -f "$_p" ] && { set -a; source "$_p"; set +a; break; }
+done
+```
+
+## ClickUp constants (shared across all product docs)
+
+- **Workspace ID:** `9016762494`
+- **Inspiration Library folder ID:** `90169348848` (inside space `90162807791`). **ALL product inspiration-library docs created by this skill MUST be parented here** so the team has one clean folder view.
+- **Parent payload for `clickup_create_document`:** `{"id": "90169348848", "type": "5"}` — type 5 = folder.
+- **Naming convention for new product libs:** `"[PRODUCT_NAME_UPPERCASE] — Inspiration Library"`
+- **Default page created by `clickup_create_document` with `create_page=true`:** starts unnamed. Always rename it to `"📋 Master Tracker"` and seed it with the empty-tracker template (see Step 6.5) before creating any inspiration pages.
 
 ---
 
 ## Step 1 — Pull the queue from Supabase
 
 ```bash
-source_env
+# Portable env loader — reads from ~/.classify-inspiration.env (set by installer).
+# Fallback chain: ~/.classify-inspiration.env → $PWD/.env → ~/.env.
+for _p in "$HOME/.classify-inspiration.env" "$PWD/.env" "$HOME/.env"; do
+  [ -f "$_p" ] && { set -a; source "$_p"; set +a; break; }
+done
 
-# Pending items — all products. Each row has product_id, ins_id, url, platform.
+# Get pending items — all of them, across products. Each row has product_id, ins_id, url, platform.
 PGPASSWORD="$SUPABASE_DB_PASSWORD" psql "$SUPABASE_DB_URL" -At -F$'\t' -c "
   select q.ins_id, q.product_id, q.url, q.platform, p.name as product_name, p.config->>'doc_id' as doc_id
   from public.inspiration_queue q
@@ -129,6 +130,7 @@ Remove from the work list any items whose `(ins_id, product_id)` appears in the 
 **Load the product's angles and personas** so you can classify with context:
 
 ```bash
+# For the product_id(s) being processed, fetch angle + persona name lists
 PGPASSWORD="$SUPABASE_DB_PASSWORD" psql "$SUPABASE_DB_URL" -At -c "
   select string_agg(name, ', ') from public.angles where product_id = '<PRODUCT_ID>'
 "
@@ -156,9 +158,9 @@ PGPASSWORD="$SUPABASE_DB_PASSWORD" psql "$SUPABASE_DB_URL" -c "
 
 ## Step 2 — Dispatch parallel agents (one per item)
 
-**1 item** → process inline (Steps 3–5 directly).
+**1 item** → process inline (Steps 3–4 directly).
 
-**2+ items** → spawn one agent per item in parallel using the Agent tool. Each agent handles Steps 3–5 (classification + frames + result write). Paste this self-contained prompt per agent, filling in real values:
+**2+ items** → spawn one agent per item in parallel using the Agent tool. Each agent handles Steps 3–4 (classification + frames + result write). Paste this self-contained prompt per agent, filling in real values:
 
 ```
 You are classifying a single competitor ad creative.
@@ -174,17 +176,19 @@ CONTEXT:
 - Personas: [comma-separated list or "none provided"]
 
 ENVIRONMENT:
-Before running shell commands, load env from the teammate-portable locations:
-  for p in "$HOME/.classify-inspiration.env" "$PWD/.env" "$HOME/.env"; do
-    [ -f "$p" ] && { set -a; source "$p"; set +a; break; }
-  done
+Before running shell commands, export env:
+  # Portable env loader — reads from ~/.classify-inspiration.env (set by installer).
+# Fallback chain: ~/.classify-inspiration.env → $PWD/.env → ~/.env.
+for _p in "$HOME/.classify-inspiration.env" "$PWD/.env" "$HOME/.env"; do
+  [ -f "$_p" ] && { set -a; source "$_p"; set +a; break; }
+done
 
 TASK:
-1. Save the pipeline script (see Step 3) to /tmp/ins_pipeline_[INS_ID].py
+1. Save the pipeline script (see below) to /tmp/ins_pipeline_[INS_ID].py
 2. Run it: python3 /tmp/ins_pipeline_[INS_ID].py "[URL]" "/tmp/ins_work_[INS_ID]"
 3. Read each produced frame with the Read tool (up to 6 frames)
 4. Classify using the dimensions in Step 4
-5. Insert the classification into Supabase `public.inspirations.data` jsonb (Step 5)
+5. Insert the classification into Supabase `public.inspiration_results` via psql
 6. Update the matching `public.inspiration_queue` row: status='done', processed_at=now()
 7. Clean up: rm -rf /tmp/ins_work_[INS_ID] /tmp/ins_pipeline_[INS_ID].py
 8. Print: "DONE [INS_ID]: [hook_type] | [creative_structure] | [funnel_type]"
@@ -198,19 +202,15 @@ Wait for ALL agents to complete before moving to Step 6 (doc page creation).
 
 ---
 
-## Step 3 — Pipeline script
+## Step 3 — Pipeline script (unchanged from bridge version)
 
-Downloads the video/image, extracts frames, returns metadata. Save to `/tmp/ins_pipeline_[INS_ID].py`.
-
-**Important:** the `fb_ad_classifier` helper lives next to this SKILL.md (installed by the installer into `~/.claude/skills/classify-inspiration/`). The pipeline adds that directory to `sys.path` so the import works on any teammate's Mac:
+Same Python script as before — downloads the video/image, extracts frames, returns metadata. Save to `/tmp/ins_pipeline_[INS_ID].py`:
 
 ```python
 import asyncio, json, os, re, shutil, subprocess, sys, urllib.request
 
-# Locate fb_ad_classifier.py — installed next to this skill's SKILL.md.
-_SKILL_DIR = os.path.expanduser("~/.claude/skills/classify-inspiration")
-if _SKILL_DIR not in sys.path:
-    sys.path.insert(0, _SKILL_DIR)
+_SKILL_DIR = os.path.expanduser('~/.claude/skills/classify-inspiration')
+if _SKILL_DIR not in sys.path: sys.path.insert(0, _SKILL_DIR)
 from fb_ad_classifier import fetch_ad_snapshot, download_video, extract_frames, extract_ad_id, decode_unicode, USER_AGENT, OUTPUT_BASE
 
 def detect_platform(url):
@@ -307,15 +307,15 @@ Read each frame with the **Read tool** (up to 6 frames). You are a senior media 
 | creative_hypothesis | 2 sentences: why made + why it works. Max 35 words. |
 | notes | What you literally see. Max 30 words. |
 | body_copy_from_frames | Transcribe all visible on-screen text / subtitles from the frames |
-| page_name | From pipeline page_name metadata, or visually identified brand name if pipeline returned empty. **IMPORTANT:** dashboard reads `metadata.page_name` for the Brand column. |
-| brand | Same value as page_name |
+| page_name | From pipeline page_name metadata, or visually identified brand name if pipeline returned empty (Instagram/TikTok). **IMPORTANT:** dashboard reads `metadata.page_name` for the Brand column — always populate this field, even if the pipeline didn't. |
+| brand | Same value as page_name (human-readable alias) |
 | body_text | From body_text metadata |
 | title / headline | From title metadata (dashboard reads both keys — write the same value to both) |
 | cta_text | From cta_text metadata |
 | landing_url / link_url | From link_url metadata (write to both keys) |
 | duration_seconds | From pipeline output |
 
-**Also build the full 7-section brief data:**
+**Also build the full 7-section brief data** (same as before):
 
 ```
 FRAME_BY_FRAME: timestamped breakdown with label (HOOK/TENSION/PROOF/BRIDGE/CTA) + what happens + emotion triggered
@@ -328,9 +328,116 @@ OUR_NEXT_AD: what to steal, what to do differently, 3-bullet editor brief, hypot
 
 ---
 
-## Step 5 — Write result DIRECTLY to `public.inspirations.data`
+## Step 5 — Write result to Supabase
 
-**Why direct-to-inspirations (not inspiration_results):** the dashboard polls `inspiration_results` every 6 s, maps fields into `inspirations.data`, then DELETEs the source row. If the poller tab isn't open, or a second row update arrives before the next poll, fields get lost. Writing directly to `inspirations.data` is lossless and triggers the dashboard's realtime subscription on the `inspirations` table within 1–2 s.
+For each classified item, insert a row into `inspiration_results` and mark the queue row done:
+
+```bash
+# Portable env loader — reads from ~/.classify-inspiration.env (set by installer).
+# Fallback chain: ~/.classify-inspiration.env → $PWD/.env → ~/.env.
+for _p in "$HOME/.classify-inspiration.env" "$PWD/.env" "$HOME/.env"; do
+  [ -f "$_p" ] && { set -a; source "$_p"; set +a; break; }
+done
+
+# Build JSON payloads (use a temp file so quoting doesn't break)
+cat > /tmp/result_[INS_ID].json <<'JSON'
+{
+  "metadata": {
+    "page_name": "...",
+    "brand": "...",
+    "body_text": "...",
+    "title": "...",
+    "headline": "...",
+    "cta_text": "...",
+    "landing_url": "...",
+    "link_url": "...",
+    "ad_id": "...",
+    "body_copy_from_frames": "..."
+  },
+  "classification": {
+    "photo_video": "...",
+    "hook_type": "...",
+    "creative_structure": "...",
+    "production_style": "...",
+    "funnel_type": "...",
+    "persona": "...",
+    "persona_matched": true,
+    "angle": "...",
+    "angle_matched": true,
+    "creative_usp": "...",
+    "creative_hypothesis": "...",
+    "notes": "..."
+  },
+  "brief": {
+    "frame_by_frame": [ ... ],
+    "why_it_works": "...",
+    "replication_brief": "...",
+    "what_to_test": "...",
+    "competitor_intel": "...",
+    "our_next_ad": "..."
+  }
+}
+JSON
+
+PGPASSWORD="$SUPABASE_DB_PASSWORD" psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 <<SQL
+insert into public.inspiration_results
+  (ins_id, product_id, source_url, platform, metadata, classification, brief,
+   duration_seconds, frames_extracted, classified_at)
+values
+  ('[INS_ID]', '[PRODUCT_ID]', '[URL]', '[PLATFORM]',
+   (select metadata from json_populate_record(null::record, pg_read_file('/tmp/result_[INS_ID].json')::json)),  -- easier: use jsonb literal below instead
+   '...'::jsonb, '...'::jsonb,
+   [duration_seconds], [frames_count], now())
+on conflict (ins_id, product_id) do update
+  set metadata = excluded.metadata,
+      classification = excluded.classification,
+      brief = excluded.brief,
+      classified_at = now();
+SQL
+```
+
+**Simpler recommended form** — use Python with `psycopg2` or the Supabase REST API (with the service_role key) to insert. Example via REST:
+
+```bash
+curl -s -X POST "$SUPABASE_URL/rest/v1/inspiration_results" \
+  -H "apikey: $SUPABASE_SERVICE_ROLE_KEY" \
+  -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY" \
+  -H "Content-Type: application/json" \
+  -H "Prefer: resolution=merge-duplicates" \
+  --data @/tmp/result_[INS_ID].json
+```
+
+Where the JSON file has the full shape:
+
+```json
+{
+  "ins_id": "[INS_ID]",
+  "product_id": "[PRODUCT_ID]",
+  "source_url": "[URL]",
+  "platform": "[PLATFORM]",
+  "metadata": { ... },
+  "classification": { ... },
+  "brief": { ... },
+  "duration_seconds": 12.5,
+  "frames_extracted": 6
+}
+```
+
+Then mark the queue row done:
+
+```bash
+curl -s -X PATCH "$SUPABASE_URL/rest/v1/inspiration_queue?ins_id=eq.[INS_ID]&product_id=eq.[PRODUCT_ID]" \
+  -H "apikey: $SUPABASE_SERVICE_ROLE_KEY" \
+  -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY" \
+  -H "Content-Type: application/json" \
+  --data '{"status":"done","processed_at":"now()"}'
+```
+
+---
+
+## Step 5b — Write DIRECTLY to `public.inspirations.data` (avoid poller race)
+
+**Why:** The dashboard polls `inspiration_results` every 6 s, maps fields into `inspirations.data`, then DELETES the source row (`DB.clearResults`). If the poller tab isn't open, or a second row update arrives before the next poll, fields get lost or overwritten with defaults. Writing directly to `inspirations.data` is lossless and triggers the dashboard's realtime subscription on the `inspirations` table within 1–2 s.
 
 The dashboard's `applyClassificationResults` function expects these **camelCase** keys inside `inspirations.data`:
 
@@ -363,24 +470,16 @@ The dashboard's `applyClassificationResults` function expects these **camelCase*
 | `_clickupDocId` | set in Step 6 after page create/update |
 | `_inspoDocCreated` | `true` after Step 6 |
 
-Use `psycopg2`:
+Use `psycopg2` (simpler than curl with JSON escaping):
 
 ```bash
-source_env
+# Portable env loader — reads from ~/.classify-inspiration.env (set by installer).
+# Fallback chain: ~/.classify-inspiration.env → $PWD/.env → ~/.env.
+for _p in "$HOME/.classify-inspiration.env" "$PWD/.env" "$HOME/.env"; do
+  [ -f "$_p" ] && { set -a; source "$_p"; set +a; break; }
+done
 python3 <<'PYEOF'
 import json, os, psycopg2, time
-
-# Load env (fallback chain for teammate portability)
-if "SUPABASE_DB_URL" not in os.environ:
-    for p in [os.path.expanduser("~/.classify-inspiration.env"),
-              os.path.expanduser("~/.env"), ".env"]:
-        if os.path.isfile(p):
-            for line in open(p):
-                line = line.strip()
-                if not line or line.startswith("#") or "=" not in line: continue
-                k, v = line.split("=", 1); os.environ[k] = v
-            break
-
 result = json.load(open('/tmp/result_[INS_ID].json'))
 md = result['metadata']
 cls = result['classification']
@@ -417,6 +516,7 @@ patch = {
 }
 
 conn = psycopg2.connect(os.environ['SUPABASE_DB_URL']); cur = conn.cursor()
+# Merge patch into existing data jsonb (JSONB || operator, right wins)
 cur.execute("""
   update public.inspirations
   set data = coalesce(data,'{}'::jsonb) || %s::jsonb,
@@ -435,7 +535,51 @@ The dashboard sees this within 1–2 s via its realtime subscription on `public.
 
 ## Step 6 — Create or UPDATE ClickUp Doc Page (7-section brief)
 
-Uses the `doc_id` from `products.config->>'doc_id'` (pulled in Step 1). **IMPORTANT:** always list existing pages first. If a page already starts with `[INS_ID]` (same ins_id), UPDATE it instead of creating a duplicate.
+Uses the `doc_id` from `products.config->>'doc_id'` (pulled in Step 1). **IMPORTANT:** always list existing pages first. If a page already starts with `[INS_ID]` (same ins_id, regardless of old/stale title), UPDATE it instead of creating a duplicate.
+
+### 6-pre — Auto-create library doc if product has no `doc_id`
+
+If `products.config->>'doc_id'` is empty/null (first-ever classification for this product), auto-create the library doc + seed a Master Tracker page, then save the IDs back to Supabase so future runs reuse them.
+
+```text
+Call: clickup_create_document
+  workspace_id: "9016762494"
+  name: "[PRODUCT_NAME uppercased] — Inspiration Library"
+  parent: {"id": "90169348848", "type": "5"}   ← Inspiration Lib folder (type 5 = folder)
+  visibility: "PUBLIC"
+  create_page: true
+
+Response → capture document_id (this becomes the new doc_id).
+
+Call: clickup_list_document_pages(document_id)
+→ grab the single auto-created page's id (this becomes the new master_tracker_page_id).
+
+Call: clickup_update_document_page to rename + seed content
+  document_id: <new doc_id>
+  page_id: <that page id>
+  name: "📋 Master Tracker"
+  sub_title: "All [PRODUCT_NAME] inspirations — status, decision, quick reference"
+  content_format: "text/md"
+  content: empty-tracker markdown (see Step 6.5 for the seed template — use the empty state with "_empty — run the skill to populate_" row)
+
+Then persist to Supabase:
+```
+```bash
+python3 <<PYEOF
+import os, psycopg2, json
+conn = psycopg2.connect(os.environ['SUPABASE_DB_URL']); cur = conn.cursor()
+cur.execute("""
+  update public.products
+  set config = coalesce(config,'{}'::jsonb) || %s::jsonb
+  where id = %s
+""", (json.dumps({'doc_id': '[NEW_DOC_ID]', 'master_tracker_page_id': '[NEW_TRACKER_PAGE_ID]'}), '[PRODUCT_ID]'))
+conn.commit(); cur.close(); conn.close()
+PYEOF
+```
+
+After this, proceed to 6a with the freshly-minted `doc_id`. Note the existing KLS/KMH/Astro docs were created manually for the first batch; every new product after today will be auto-created here by the skill — zero manual setup.
+
+⚠️ **Known MCP quirk:** parent type `"5"` (folder) currently works against folder `90169348848`. Earlier attempts against OTHER folders returned "Resource not found" — auth is per-folder. If auto-create fails: fall back to parent `{"id": "90162807791", "type": "4"}` (space root), then tell the user to drag the new doc into the folder manually.
 
 ### 6a — List existing pages + decide create vs update
 
@@ -455,7 +599,7 @@ Use `clickup_list_document_pages` MCP tool with `document_id = [DOC_ID]`. Scan r
 
 ### 6c — 7-section page content template
 
-The `content` field should be markdown with these 7 H2 sections:
+The `content` field should be markdown with these 7 H2 sections — format matches existing pages in the doc for consistency:
 
 ```markdown
 # [INS_ID] — [Brand] | [Angle]
@@ -529,10 +673,13 @@ The `content` field should be markdown with these 7 H2 sections:
 After create/update, capture the page URL (format: `https://app.clickup.com/[workspace_id]/docs/[doc_id]/[page_id]`) and the page id. Update `inspirations.data` so the dashboard renders the 📄 Brief link:
 
 ```bash
-source_env
+# Portable env loader — reads from ~/.classify-inspiration.env (set by installer).
+# Fallback chain: ~/.classify-inspiration.env → $PWD/.env → ~/.env.
+for _p in "$HOME/.classify-inspiration.env" "$PWD/.env" "$HOME/.env"; do
+  [ -f "$_p" ] && { set -a; source "$_p"; set +a; break; }
+done
 python3 <<'PYEOF'
 import json, os, psycopg2
-# (Same env-loader fallback as Step 5 if needed)
 conn = psycopg2.connect(os.environ['SUPABASE_DB_URL']); cur = conn.cursor()
 cur.execute("""
   update public.inspirations
@@ -553,10 +700,14 @@ PYEOF
 
 Product config stores `master_tracker_page_id`. If absent, skip this step and tell the user to add it (same pattern as `doc_id`).
 
-**Strategy:** regenerate the entire tracker table from Supabase on every classify — cleaner than parsing/merging existing markdown.
+**Strategy:** regenerate the entire tracker table from Supabase on every classify — cleaner than parsing/merging existing markdown. The `inspirations` table for this product IS the source of truth.
 
 ```bash
-source_env
+# Portable env loader — reads from ~/.classify-inspiration.env (set by installer).
+# Fallback chain: ~/.classify-inspiration.env → $PWD/.env → ~/.env.
+for _p in "$HOME/.classify-inspiration.env" "$PWD/.env" "$HOME/.env"; do
+  [ -f "$_p" ] && { set -a; source "$_p"; set +a; break; }
+done
 python3 <<'PYEOF' > /tmp/tracker_[PRODUCT_ID].md
 import os, psycopg2, datetime
 conn = psycopg2.connect(os.environ['SUPABASE_DB_URL']); cur = conn.cursor()
@@ -605,6 +756,8 @@ Then write the file contents as the new page content via `clickup_update_documen
 rm -rf /tmp/ins_work_* /tmp/ins_pipeline_*.py /tmp/result_*.json /tmp/tracker_*.md
 ```
 
+No more bridge cleanup — there is no bridge.
+
 ---
 
 ## Step 8 — Print summary
@@ -625,10 +778,16 @@ Tell the user: "Done. The dashboard auto-updates via Supabase realtime — check
 
 ## Error handling
 
-- **Env file missing**: tell the user to run `curl -fsSL https://immuvi-command-center.vercel.app/install-skill.sh | bash` to (re)install.
-- **Supabase connection fails**: print the error, stop, tell the user to check `~/.classify-inspiration.env` and their internet.
+- **Supabase connection fails**: print the error, stop, tell the user to check `.env` and internet connectivity.
 - **Queue empty**: print "No pending items in inspiration_queue. Queue some URLs from the dashboard." Stop.
 - **Product has empty `doc_id`**: Skip doc creation for that product. Still write the classification result. Note `clickup_doc_page_url: ""`. Tell user to add doc_id to `products.config->>'doc_id'` via the Supabase SQL editor.
 - **Doc page creation fails**: still save the classification result. Just leave `clickup_doc_page_url` empty.
 - **Facebook ad not found / yt-dlp fails / no frames**: update queue row with `status='error'` and `error_message='<message>'`; do NOT write a result row; continue with other items.
-- **Prerequisites missing**: re-run the installer — it's idempotent and fixes missing deps.
+- **Prerequisites missing**: `brew install ffmpeg` · `pip3 install psycopg2-binary requests playwright` · `python3 -m playwright install chromium`
+
+---
+
+## Migration notes
+
+- As of April 2026, the bridge at `localhost:5002` is deprecated. If you find references to `INS_BRIDGE`, `/tmp/immuvi_pending.json`, or `/tmp/immuvi_classification_results.json` anywhere, they can be removed.
+- The dashboard at `https://immuvi-command-center.vercel.app` reads/writes Supabase directly. Teammates can queue URLs; only Gaurav (on this Mac) runs the classifier due to ffmpeg/yt-dlp/Playwright requirements.

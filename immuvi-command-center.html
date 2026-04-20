@@ -9868,6 +9868,43 @@ function pollFullSync() {
         }
       }
 
+      // ── Pass 2.5: reconcile deletes from ClickUp ──────────────────────────
+      // If a local ad has a _clickupId that isn't in the fresh taskMap, the
+      // task was likely deleted or archived in ClickUp. Drop it locally so
+      // the dashboard stays in sync. Three safety guards so we never
+      // accidentally nuke good data:
+      //   (a) Skip if the fetch returned suspiciously few tasks — could be a
+      //       partial fetch or network issue. Refuse to drop if < 5 tasks.
+      //   (b) Skip if the delta would remove more than 40% of local ads in
+      //       one shot — that's almost certainly a pagination / fetch bug,
+      //       not genuine mass deletion. Warn the user instead.
+      //   (c) Never drop ads without _clickupId (local-only, not yet pushed).
+      var _fetchedCount = Object.keys(taskMap).length;
+      if (_fetchedCount >= 5) {
+        var _localWithCid = 0;
+        for (var _li2 = 0; _li2 < ADS.length; _li2++) {
+          if (ADS[_li2]._clickupId) _localWithCid++;
+        }
+        var _wouldDrop = [];
+        for (var _li3 = 0; _li3 < ADS.length; _li3++) {
+          var _ad = ADS[_li3];
+          if (_ad._clickupId && !taskMap[_ad._clickupId]) {
+            _wouldDrop.push(_ad.id);
+          }
+        }
+        var _dropPct = _localWithCid > 0 ? (_wouldDrop.length / _localWithCid) : 0;
+        if (_wouldDrop.length > 0 && _dropPct <= 0.4) {
+          var _dropSet = {};
+          for (var _dsi = 0; _dsi < _wouldDrop.length; _dsi++) _dropSet[_wouldDrop[_dsi]] = true;
+          ADS = ADS.filter(function (a) { return !_dropSet[a.id]; });
+          changed = true;
+          console.log('[poll] reconciled — dropped', _wouldDrop.length, 'stale ads deleted from ClickUp');
+        } else if (_wouldDrop.length > 0 && _dropPct > 0.4) {
+          console.warn('[poll] reconcile SKIPPED — would drop', _wouldDrop.length, 'of', _localWithCid,
+            '(' + Math.round(_dropPct * 100) + '%) which exceeds 40% safety threshold. Click Sync Now to force reconcile.');
+        }
+      }
+
       // ── Pass 3: sync MANUAL_ACTIONS liveStatus ───────────────────────
       for (var i = 0; i < MANUAL_ACTIONS.length; i++) {
         if (MANUAL_ACTIONS[i]._clickupId && taskMap[MANUAL_ACTIONS[i]._clickupId]) {

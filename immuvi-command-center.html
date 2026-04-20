@@ -3641,7 +3641,24 @@ const DB = {
     const tasks = [];
 
     // ── ANGLES ───────────────────────────────────────────────────
-    const angleRows = (state.ANGLES || []).map(function (a) {
+    // DB-authoritative policy (added Apr 2026 to stop stale-cache resurrection):
+    // If a local angle has an id the DB doesn't know about AND is NOT flagged
+    // as locally-added-this-session (_localNew), it's a stale in-memory row
+    // from a browser tab that wasn't refreshed after an external DELETE.
+    // DROP those from local state instead of upserting them back.
+    const existingAngleIdSet = new Set((existingAngles.data || []).map(function(r){ return r.id; }));
+    const survivingLocalAngles = (state.ANGLES || []).filter(function(a){
+      return existingAngleIdSet.has(a.id) || a._localNew === true;
+    });
+    const droppedAngleCount = (state.ANGLES || []).length - survivingLocalAngles.length;
+    if (droppedAngleCount > 0) {
+      console.log('[SB] pruned', droppedAngleCount, 'stale local angles (deleted elsewhere, not upserting back)');
+      // Also reflect the pruning in live memory so the UI updates.
+      if (typeof ANGLES !== 'undefined' && Array.isArray(ANGLES)) {
+        ANGLES = ANGLES.filter(function(a){ return existingAngleIdSet.has(a.id) || a._localNew === true; });
+      }
+    }
+    const angleRows = survivingLocalAngles.map(function (a) {
       return { id: a.id, product_id: productId, name: a.name || '', status: a.status || 'Untested', source_link: a.sourceLink || null, notes: a.notes || null };
     });
     const angleIds = new Set(angleRows.map(function (r) { return r.id; }));
@@ -3650,7 +3667,19 @@ const DB = {
     if (angleRows.length)    tasks.push(SB.from('angles').upsert(angleRows));
 
     // ── PERSONAS ─────────────────────────────────────────────────
-    const personaRows = (state.PERSONAS || []).map(function (p) {
+    // Same DB-authoritative policy as ANGLES above.
+    const existingPersonaIdSet = new Set((existingPersonas.data || []).map(function(r){ return r.id; }));
+    const survivingLocalPersonas = (state.PERSONAS || []).filter(function(p){
+      return existingPersonaIdSet.has(p.id) || p._localNew === true;
+    });
+    const droppedPersonaCount = (state.PERSONAS || []).length - survivingLocalPersonas.length;
+    if (droppedPersonaCount > 0) {
+      console.log('[SB] pruned', droppedPersonaCount, 'stale local personas (deleted elsewhere, not upserting back)');
+      if (typeof PERSONAS !== 'undefined' && Array.isArray(PERSONAS)) {
+        PERSONAS = PERSONAS.filter(function(p){ return existingPersonaIdSet.has(p.id) || p._localNew === true; });
+      }
+    }
+    const personaRows = survivingLocalPersonas.map(function (p) {
       return { id: p.id, product_id: productId, name: p.name || '', status: p.status || 'Untested', source_link: p.sourceLink || null, notes: p.notes || null };
     });
     const personaIds = new Set(personaRows.map(function (r) { return r.id; }));
@@ -3743,6 +3772,16 @@ const DB = {
       console.warn('[SB] saveProductData partial errors', errs);
       return { ok: false, errors: errs };
     }
+    // After a clean save, clear the _localNew flag on any angles/personas so
+    // they are no longer exempt from the stale-pruning logic on subsequent
+    // saves. If a row is deleted externally after this, the next save will
+    // correctly drop it from local state instead of resurrecting it.
+    try {
+      if (typeof ANGLES !== 'undefined' && Array.isArray(ANGLES))
+        ANGLES.forEach(function (a) { if (a && a._localNew) delete a._localNew; });
+      if (typeof PERSONAS !== 'undefined' && Array.isArray(PERSONAS))
+        PERSONAS.forEach(function (p) { if (p && p._localNew) delete p._localNew; });
+    } catch (_) { /* best-effort, never block the save */ }
     return { ok: true };
   },
 
@@ -7128,7 +7167,8 @@ function addAngleRow() {
     name: 'New Angle',
     status: 'Untested',
     sourceLink: '',
-    notes: ''
+    notes: '',
+    _localNew: true   // so saveProductData doesn't prune this before first persist
   });
   renderAngles();
   updateTabCounts();
@@ -7249,7 +7289,8 @@ function addPersonaRow() {
     name: 'New Persona',
     status: 'Untested',
     sourceLink: '',
-    notes: ''
+    notes: '',
+    _localNew: true   // so saveProductData doesn't prune this before first persist
   });
   renderPersonas();
   updateTabCounts();
@@ -7548,10 +7589,10 @@ function _executeMergeFromModal(type) {
     // Insert survivor into ANGLES/PERSONAS array if not already present
     if (type === 'angle') {
       var exists = ANGLES.some(function(a){ return a.name === survivorName; });
-      if (!exists) ANGLES.push({ id: 'ang-merge-' + Date.now(), name: survivorName, status: 'Untested', sourceLink: '', notes: '' });
+      if (!exists) ANGLES.push({ id: 'ang-merge-' + Date.now(), name: survivorName, status: 'Untested', sourceLink: '', notes: '', _localNew: true });
     } else {
       var exists = PERSONAS.some(function(p){ return p.name === survivorName; });
-      if (!exists) PERSONAS.push({ id: 'per-merge-' + Date.now(), name: survivorName, status: 'Untested', sourceLink: '', notes: '' });
+      if (!exists) PERSONAS.push({ id: 'per-merge-' + Date.now(), name: survivorName, status: 'Untested', sourceLink: '', notes: '', _localNew: true });
     }
   }
 
@@ -10508,11 +10549,11 @@ function updateCreativeFieldInline(adId, field, val) {
   // Auto-add to ANGLES/PERSONAS arrays if new value not seen before
   var addedNew = false;
   if (field === 'angle' && val && !ANGLES.some(function(a) { return a.name === val; })) {
-    ANGLES.push({ id: 'ang-' + Date.now(), name: val, status: 'Untested', sourceLink: '', notes: '' });
+    ANGLES.push({ id: 'ang-' + Date.now(), name: val, status: 'Untested', sourceLink: '', notes: '', _localNew: true });
     addedNew = true;
   }
   if (field === 'persona' && val && !PERSONAS.some(function(p) { return p.name === val; })) {
-    PERSONAS.push({ id: 'per-' + Date.now(), name: val, status: 'Untested', sourceLink: '', notes: '' });
+    PERSONAS.push({ id: 'per-' + Date.now(), name: val, status: 'Untested', sourceLink: '', notes: '', _localNew: true });
     addedNew = true;
   }
 

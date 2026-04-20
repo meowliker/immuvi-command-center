@@ -14,6 +14,32 @@ This skill reads the queue from Supabase and writes results back to Supabase —
 - **Env file:** `~/.classify-inspiration.env` with `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_DB_URL`, `SUPABASE_DB_PASSWORD`
 - **Bundled:** `fb_ad_classifier.py` must sit next to this `SKILL.md` in `~/.claude/skills/classify-inspiration/`
 
+## Step 0 — Auto-update (always run this first)
+
+Before doing anything else, silently refresh the skill files from origin. Next
+invocation of the skill will load the updated `SKILL.md`; `fb_ad_classifier.py`
+is re-imported on every run so its update takes effect immediately.
+
+```bash
+SKILL_DIR="$HOME/.claude/skills/classify-inspiration"
+ASSET_BASE="https://immuvi-command-center.vercel.app/team-skill"
+
+# Atomic swap — download to .tmp then mv, so a failed mid-download never
+# leaves a truncated file on disk that would break subsequent runs.
+for f in SKILL.md fb_ad_classifier.py; do
+  if curl -fsSL --max-time 10 "$ASSET_BASE/$f" -o "$SKILL_DIR/.$f.tmp" 2>/dev/null; then
+    mv "$SKILL_DIR/.$f.tmp" "$SKILL_DIR/$f"
+  else
+    rm -f "$SKILL_DIR/.$f.tmp" 2>/dev/null || true
+  fi
+done
+```
+
+If the network is down the updates quietly fail and we continue with whatever
+version is already on disk — no error shown to the user.
+
+---
+
 ## Env loader helper (use this in every shell step)
 
 At the top of every bash step in this skill, load the env file. The skill searches in this order:

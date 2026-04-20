@@ -110,7 +110,6 @@ $ProgressPreference    = 'SilentlyContinue'   # speeds up Invoke-WebRequest
 
 $INSTALLER_VERSION = '${version}'
 $ASSET_BASE        = '${assetBase}'
-$SKILL_DIR         = Join-Path $env:USERPROFILE '.claude\\skills\\classify-inspiration'
 $ENV_FILE          = Join-Path $env:USERPROFILE '.classify-inspiration.env'
 
 # Embedded credentials — only this teammate's machine sees them.
@@ -201,11 +200,19 @@ try {
 }
 
 # ── 5. Download skill files ────────────────────────────────────────────────
-Say "Downloading skill files to $SKILL_DIR"
-New-Item -ItemType Directory -Force -Path $SKILL_DIR | Out-Null
-Invoke-WebRequest -UseBasicParsing "$ASSET_BASE/SKILL.md"            -OutFile (Join-Path $SKILL_DIR 'SKILL.md')
-Invoke-WebRequest -UseBasicParsing "$ASSET_BASE/fb_ad_classifier.py" -OutFile (Join-Path $SKILL_DIR 'fb_ad_classifier.py')
-OK "SKILL.md + fb_ad_classifier.py installed"
+Say "Downloading skill files"
+$SkillsRoot = Join-Path $env:USERPROFILE '.claude\\skills'
+# /classify-inspiration
+$CI_Dir = Join-Path $SkillsRoot 'classify-inspiration'
+New-Item -ItemType Directory -Force -Path $CI_Dir | Out-Null
+Invoke-WebRequest -UseBasicParsing "$ASSET_BASE/SKILL.md"            -OutFile (Join-Path $CI_Dir 'SKILL.md')
+Invoke-WebRequest -UseBasicParsing "$ASSET_BASE/fb_ad_classifier.py" -OutFile (Join-Path $CI_Dir 'fb_ad_classifier.py')
+OK "/classify-inspiration installed"
+# /clickup-creative-pipeline
+$CP_Dir = Join-Path $SkillsRoot 'clickup-creative-pipeline'
+New-Item -ItemType Directory -Force -Path $CP_Dir | Out-Null
+Invoke-WebRequest -UseBasicParsing "$ASSET_BASE/clickup-creative-pipeline/SKILL.md" -OutFile (Join-Path $CP_Dir 'SKILL.md')
+OK "/clickup-creative-pipeline installed"
 
 # ── 6. Supabase smoke test ─────────────────────────────────────────────────
 Say "Running a quick smoke test against Supabase"
@@ -239,10 +246,12 @@ Write-Host ""
 Write-Host "IMPORTANT:" -ForegroundColor Yellow
 Write-Host "  1. Fully quit Claude Desktop (right-click tray icon -> Quit, not just close window)"
 Write-Host "  2. Reopen Claude Desktop"
-Write-Host "  3. In a new chat, type '/' and select /classify-inspiration"
+Write-Host "  3. In a new chat, type '/' and try:"
+Write-Host "       /classify-inspiration       (classify a URL queued from Immuvi dashboard)"
+Write-Host "       /clickup-creative-pipeline  (bulk-classify a ClickUp list with Drive-Linked tasks)"
 Write-Host ""
 Write-Host "To update later: re-run this same command."
-Write-Host "To uninstall:   Remove-Item -Recurse '$SKILL_DIR'; Remove-Item '$ENV_FILE'"
+Write-Host "To uninstall:   Remove-Item -Recurse '$CI_Dir','$CP_Dir'; Remove-Item '$ENV_FILE'"
 Write-Host ""
 `;
 }
@@ -261,7 +270,6 @@ set -euo pipefail
 
 INSTALLER_VERSION=${sq(version)}
 ASSET_BASE=${sq(assetBase)}
-SKILL_DIR="$HOME/.claude/skills/classify-inspiration"
 ENV_FILE="$HOME/.classify-inspiration.env"
 
 SUPABASE_SERVICE_ROLE_KEY=${SRK}
@@ -322,11 +330,17 @@ python3 -m playwright install chromium >/dev/null 2>&1 || {
 }
 ok "Playwright Chromium ready"
 
-say "Downloading skill files to $SKILL_DIR"
-mkdir -p "$SKILL_DIR"
-curl -fsSL "\${ASSET_BASE}/SKILL.md"            -o "$SKILL_DIR/SKILL.md"
-curl -fsSL "\${ASSET_BASE}/fb_ad_classifier.py" -o "$SKILL_DIR/fb_ad_classifier.py"
-ok "SKILL.md + fb_ad_classifier.py installed"
+say "Downloading skill files to \${HOME}/.claude/skills/"
+SKILLS_ROOT="\${HOME}/.claude/skills"
+# /classify-inspiration (Supabase-queued competitor URL classifier)
+mkdir -p "\${SKILLS_ROOT}/classify-inspiration"
+curl -fsSL "\${ASSET_BASE}/SKILL.md"            -o "\${SKILLS_ROOT}/classify-inspiration/SKILL.md"
+curl -fsSL "\${ASSET_BASE}/fb_ad_classifier.py" -o "\${SKILLS_ROOT}/classify-inspiration/fb_ad_classifier.py"
+ok "/classify-inspiration installed"
+# /clickup-creative-pipeline (bulk-classify any ClickUp list with Drive-Linked tasks)
+mkdir -p "\${SKILLS_ROOT}/clickup-creative-pipeline"
+curl -fsSL "\${ASSET_BASE}/clickup-creative-pipeline/SKILL.md" -o "\${SKILLS_ROOT}/clickup-creative-pipeline/SKILL.md"
+ok "/clickup-creative-pipeline installed"
 
 say "Running a quick smoke test against Supabase"
 SMOKE_OUT=$(python3 - <<PYEOF 2>&1
@@ -352,9 +366,11 @@ else
 fi
 
 echo ""
-echo "\${BOLD}\${GRN}🎉 Installation complete\${OFF}"
+echo "\${BOLD}\${GRN}🎉 Installation complete — 2 skills installed\${OFF}"
 echo ""
-echo "Open Claude Code and run \${BOLD}/classify-inspiration\${OFF}"
+echo "Open Claude Code (or Claude Desktop) and try:"
+echo "  \${BOLD}/classify-inspiration\${OFF}       — classify a URL queued from the Immuvi dashboard"
+echo "  \${BOLD}/clickup-creative-pipeline\${OFF}  — bulk-classify any ClickUp list with Drive-Linked tasks"
 echo ""
 `;
 }
@@ -378,7 +394,6 @@ set -euo pipefail
 
 INSTALLER_VERSION=${sq(version)}
 ASSET_BASE=${sq(assetBase)}
-SKILL_DIR="$HOME/.claude/skills/classify-inspiration"
 ENV_FILE="$HOME/.classify-inspiration.env"
 
 SUPABASE_SERVICE_ROLE_KEY=${SRK}
@@ -463,11 +478,15 @@ python3 -m playwright install --with-deps chromium 2>/dev/null || {
 ok "Playwright Chromium ready"
 
 # ── 5. Download skill files ───────────────────────────────────────────────
-say "Downloading skill files to $SKILL_DIR"
-mkdir -p "$SKILL_DIR"
-curl -fsSL "\${ASSET_BASE}/SKILL.md"            -o "$SKILL_DIR/SKILL.md"
-curl -fsSL "\${ASSET_BASE}/fb_ad_classifier.py" -o "$SKILL_DIR/fb_ad_classifier.py"
-ok "SKILL.md + fb_ad_classifier.py installed"
+say "Downloading skill files to \${HOME}/.claude/skills/"
+SKILLS_ROOT="\${HOME}/.claude/skills"
+mkdir -p "\${SKILLS_ROOT}/classify-inspiration"
+curl -fsSL "\${ASSET_BASE}/SKILL.md"            -o "\${SKILLS_ROOT}/classify-inspiration/SKILL.md"
+curl -fsSL "\${ASSET_BASE}/fb_ad_classifier.py" -o "\${SKILLS_ROOT}/classify-inspiration/fb_ad_classifier.py"
+ok "/classify-inspiration installed"
+mkdir -p "\${SKILLS_ROOT}/clickup-creative-pipeline"
+curl -fsSL "\${ASSET_BASE}/clickup-creative-pipeline/SKILL.md" -o "\${SKILLS_ROOT}/clickup-creative-pipeline/SKILL.md"
+ok "/clickup-creative-pipeline installed"
 
 # ── 6. Supabase smoke test ────────────────────────────────────────────────
 say "Running a quick smoke test against Supabase"
@@ -495,12 +514,13 @@ else
 fi
 
 echo ""
-echo "\${BOLD}\${GRN}🎉 Installation complete\${OFF}"
+echo "\${BOLD}\${GRN}🎉 Installation complete — 2 skills installed\${OFF}"
 echo ""
 echo "Next steps:"
-echo "  1. Open Claude Code (in your WSL terminal — it must see the skill dir at $SKILL_DIR)"
-echo "  2. Run \${BOLD}/classify-inspiration\${OFF}"
-echo "  3. Pending URLs queued on https://immuvi-command-center.vercel.app get classified"
+echo "  1. Open Claude Code in your WSL terminal"
+echo "  2. Try one of:"
+echo "       \${BOLD}/classify-inspiration\${OFF}       (classify a URL queued from Immuvi dashboard)"
+echo "       \${BOLD}/clickup-creative-pipeline\${OFF}  (bulk-classify a ClickUp list with Drive-Linked tasks)"
 echo ""
 echo "If ~/.local/bin isn't permanently on PATH, add this to ~/.bashrc:"
 echo "  echo 'export PATH=\\"\\$HOME/.local/bin:\\$PATH\\"' >> ~/.bashrc"

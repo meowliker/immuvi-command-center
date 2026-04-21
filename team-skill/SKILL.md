@@ -750,6 +750,84 @@ Then write the file contents as the new page content via `clickup_update_documen
 
 ---
 
+## Step 6.7 — Self-heal wiped brief URLs (NEW — run after every batch)
+
+**Why:** Even though we write `_clickupDocPageUrl` directly to `inspirations.data`, the dashboard's frontend `saveInspirations` historically did a full-object upsert using its in-memory copy, which could overwrite the URL with an empty string if the frontend's copy was stale (e.g. realtime event arrived after the save was queued). The dashboard code was fixed in April 2026 to server-win for server-owned keys, but older dashboard deploys may still exhibit the bug. This self-heal step makes every run idempotently repair URLs — so even if something wipes the URL between runs, the next run fixes it.
+
+Run this at the end of every classify batch, AFTER all per-item writes and doc page creates are done:
+
+```bash
+export $(grep -v '^#' "/Users/gauravpataila/Documents/Claude/Clickup /.env" | xargs)
+python3 <<'PYEOF'
+import os, json, psycopg2, requests, re
+conn = psycopg2.connect(os.environ['SUPABASE_DB_URL']); cur = conn.cursor()
+
+# Find all classified rows missing a brief URL, grouped by product
+cur.execute("""
+  select i.product_id,
+         coalesce(p.config->>'doc_id','') as doc_id,
+         i.id,
+         (coalesce(i.data->>'brand','') || ' | ' || coalesce(i.data->>'angle','')) as search_hint
+  from public.inspirations i
+  join public.products p on p.id = i.product_id
+  where i.status = 'Classified'
+    and coalesce(i.data->>'_clickupDocPageUrl','') = ''
+    and coalesce(p.config->>'doc_id','') <> ''
+""")
+orphans = cur.fetchall()
+print(f'[self-heal] {len(orphans)} rows missing brief URLs')
+
+# Group by doc_id → list doc's pages once, match by ins_id prefix
+from collections import defaultdict
+by_doc = defaultdict(list)
+for product_id, doc_id, ins_id, hint in orphans:
+    by_doc[doc_id].append((product_id, ins_id, hint))
+
+CLICKUP_TOKEN = os.environ.get('CLICKUP_API_KEY','')
+WS_ID = '9016762494'
+headers = {'Authorization': CLICKUP_TOKEN}
+repaired = 0
+
+for doc_id, items in by_doc.items():
+    # List all pages in this doc
+    r = requests.get(f'https://api.clickup.com/api/v3/workspaces/{WS_ID}/docs/{doc_id}/pages',
+                     headers=headers, timeout=30)
+    if r.status_code != 200:
+        print(f'  [self-heal] could not list pages for doc {doc_id}: {r.status_code}')
+        continue
+    pages = r.json() if isinstance(r.json(), list) else r.json().get('pages', [])
+    # Build ins_id → page_id lookup from page names (they start with "INS-XXX" or "[INS-XXX]")
+    page_by_ins = {}
+    for p in pages:
+        name = p.get('name','') or ''
+        m = re.match(r'^\[?([A-Z0-9-]+)[\]\s]', name)
+        if m: page_by_ins[m.group(1)] = p.get('id')
+
+    for product_id, ins_id, hint in items:
+        page_id = page_by_ins.get(ins_id)
+        if not page_id: continue
+        url = f'https://app.clickup.com/{WS_ID}/docs/{doc_id}/{page_id}'
+        cur.execute("""
+          update public.inspirations
+          set data = coalesce(data,'{}'::jsonb) || %s::jsonb
+          where id = %s and product_id = %s
+        """, (json.dumps({
+          '_clickupDocPageUrl': url,
+          '_clickupDocId': page_id,
+          '_inspoDocCreated': True,
+        }), ins_id, product_id))
+        repaired += 1
+        print(f'  [self-heal] repaired {ins_id} -> {url}')
+
+conn.commit(); cur.close(); conn.close()
+print(f'[self-heal] done: repaired {repaired} row(s)')
+PYEOF
+```
+
+This step is cheap (one ClickUp API call per doc, one UPDATE per orphan row) and guarantees that by the time Step 8 prints the summary, no classified inspiration is missing its brief link in the dashboard.
+
+---
+
 ## Step 7 — Clean up
 
 ```bash

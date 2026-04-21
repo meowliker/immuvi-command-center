@@ -3826,6 +3826,38 @@ const DB = {
   async saveInspirations(productId, inspirations) {
     if (!SB) return;
     if (!Array.isArray(inspirations) || !inspirations.length) return;
+
+    // Keys the classify-inspiration skill writes server-side after classification.
+    // The frontend's in-memory copy may be stale (e.g. realtime event missed, or
+    // the skill patched these fields between our last fetch and this save). We
+    // re-read the current server values and let the SERVER WIN for these keys
+    // so we never clobber a just-created brief URL with an empty string.
+    const SERVER_OWNED_KEYS = [
+      '_clickupDocPageUrl',
+      '_clickupDocId',
+      '_inspoDocCreated'
+    ];
+
+    // Pre-read current server state for exactly the rows we're about to upsert
+    // so we can preserve server-owned keys. One round-trip, no transaction
+    // needed — race window shrinks from seconds (realtime poll cadence) to
+    // milliseconds (read-then-write).
+    const ids = inspirations.map(function (i) { return i.id; }).filter(Boolean);
+    let serverDataById = {};
+    if (ids.length) {
+      const preRead = await SB.from('inspirations')
+        .select('id, data')
+        .in('id', ids)
+        .eq('product_id', productId);
+      if (preRead.error) {
+        console.warn('[SB] saveInspirations pre-read failed, falling back to blind upsert:', preRead.error);
+      } else {
+        (preRead.data || []).forEach(function (r) {
+          serverDataById[r.id] = r.data || {};
+        });
+      }
+    }
+
     // Strip only truly transient keys before storing. Everything else (angle, persona,
     // hookType, _clickupDocPageUrl, body_copy, …) goes into the `data` jsonb blob.
     const rows = inspirations.map(function (i) {
@@ -3834,6 +3866,18 @@ const DB = {
         // Skip undefined and the mirrored top-level columns
         if (i[k] === undefined) return;
         blob[k] = i[k];
+      });
+      // Merge: server wins for server-owned keys. If the server has a value and
+      // our in-memory copy is empty/missing, take the server's value.
+      const serverData = serverDataById[i.id] || {};
+      SERVER_OWNED_KEYS.forEach(function (k) {
+        var serverVal = serverData[k];
+        var localVal  = blob[k];
+        // Take server value if it exists and local value is empty/missing.
+        if (serverVal !== undefined && serverVal !== null && serverVal !== '' &&
+            (localVal === undefined || localVal === null || localVal === '')) {
+          blob[k] = serverVal;
+        }
       });
       return {
         id: i.id,

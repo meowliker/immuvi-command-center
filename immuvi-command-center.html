@@ -1570,6 +1570,23 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   transition: background 0.15s;
 }
 .mx-cell-inactive:hover { background: rgba(99,102,241,0.04); }
+/* ── Clickable unassigned / inactive placeholder cells ────────────── */
+.mx-cell-unassigned.mx-cell-clickable,
+.mx-cell-inactive.mx-cell-clickable {
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+.mx-cell-unassigned.mx-cell-clickable:hover {
+  background: rgba(99,102,241,0.06);
+  color: var(--inprog);
+  font-weight: 600;
+  font-style: normal;
+}
+.mx-cell-inactive.mx-cell-clickable:hover {
+  background: rgba(99,102,241,0.06);
+  border-left-color: rgba(99,102,241,0.3);
+  border-right-color: rgba(99,102,241,0.3);
+}
 .mx-cell-inactive .mx-inactive-icon {
   width: 22px; height: 22px; border-radius: 50%;
   border: 1.5px dashed rgba(15,23,42,0.2);
@@ -11090,7 +11107,46 @@ function addPersonaToAngle(angleName, personaName) {
     ANGLE_PERSONAS[angleName].push(personaName);
   }
   renderMatrix();
+  saveState();
   toast('Added ' + personaName + ' to ' + angleName, 'ok');
+}
+
+// ================================================
+// assignAndExpandCell — one-click from an unassigned matrix cell: assigns the
+// persona to the angle, expands the cell detail, and scrolls it into view so
+// the user can immediately add a creative. Used by the "+"/"Assign & add
+// creative" placeholder in renderMatrix().
+// ================================================
+function assignAndExpandCell(angleName, personaName) {
+  // Belt & suspenders: also ensure the persona exists in the PERSONAS array.
+  // If a matrix column was sourced from ANGLE_PERSONAS but the persona is
+  // missing from PERSONAS (rare, but happens when state syncs race a create),
+  // add a stub so the "+ Add Persona" popup + tracker tab stay in sync.
+  var hasInPersonas = false;
+  for (var pi = 0; pi < PERSONAS.length; pi++) {
+    if (PERSONAS[pi].name === personaName) { hasInPersonas = true; break; }
+  }
+  if (!hasInPersonas) {
+    PERSONAS.push({
+      id: 'per-' + (PERSONAS.length + 1),
+      name: personaName,
+      status: 'Untested',
+      sourceLink: '',
+      notes: '',
+      _localNew: true
+    });
+  }
+  // Assign persona to angle (mirror of addPersonaToAngle, minus toast).
+  if (!ANGLE_PERSONAS[angleName]) ANGLE_PERSONAS[angleName] = [];
+  if (ANGLE_PERSONAS[angleName].indexOf(personaName) === -1) {
+    ANGLE_PERSONAS[angleName].push(personaName);
+  }
+  // Expand this cell so the add-creative UI is immediately visible.
+  matrixExpandedCell = angleName + '||' + personaName;
+  renderMatrix();
+  updateTabCounts();
+  saveState();
+  toast('Assigned ' + personaName + ' — add a creative below', 'ok');
 }
 
 // ================================================
@@ -11124,7 +11180,10 @@ function openAddPersonaPopup(angleName, btnEl) {
   document.querySelectorAll('.mx-persona-dropdown').forEach(function (d) { d.remove(); });
 
   var assigned = ANGLE_PERSONAS[angleName] || [];
-  var allPersonaNames = PERSONAS.map(function (p) { return p.name; });
+  // Union of PERSONAS + anything seen in ANGLE_PERSONAS so personas that exist
+  // in state but haven't been pushed to PERSONAS yet still surface here instead
+  // of the popup falsely claiming "All personas assigned".
+  var allPersonaNames = deriveMasterPersonas();
   var unassigned = allPersonaNames.filter(function (pn) { return assigned.indexOf(pn) === -1; });
 
   var html = '<div class="mx-persona-dropdown">';
@@ -11304,13 +11363,20 @@ function renderMatrix() {
       var isActive   = isPersonaActive(pn);
 
       if (!isAssigned) {
-        // Unassigned cell. For globally-inactive personas in "show all" mode we
-        // surface "No creatives yet" so the column's empty state is legible; for
-        // everything else a plain "--" placeholder.
+        // Unassigned cell — clickable to assign the persona to this angle AND
+        // open the cell's add-creative UI in one step. For globally-inactive
+        // personas in "show all" mode we surface "No creatives yet" so the
+        // column's empty state is legible; for everything else a plain "+".
+        var _assignClick = 'onclick="event.stopPropagation();assignAndExpandCell(\'' +
+          escJs(angle.name) + '\',\'' + escJs(pn) + '\')"';
+        var _assignTip   = 'title="Click to assign ' + escAttr(pn) + ' to ' + escAttr(angle.name) + ' and add a creative"';
         if (!isActive && _matrixPersonaFilter === 'all') {
-          html += '<div class="mx-cell-inactive">No creatives yet</div>';
+          html += '<div class="mx-cell-inactive mx-cell-clickable" ' + _assignClick + ' ' + _assignTip + '>' +
+            '<div class="mx-cell-empty-icon" style="font-size:1.2rem;opacity:0.7">+</div>' +
+            '<div style="font-size:0.65rem;color:var(--t3);margin-top:2px">Assign &amp; add creative</div>' +
+            '</div>';
         } else {
-          html += '<div class="mx-cell-unassigned">--</div>';
+          html += '<div class="mx-cell-unassigned mx-cell-clickable" ' + _assignClick + ' ' + _assignTip + '>+</div>';
         }
         return;
       }

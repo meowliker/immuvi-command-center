@@ -11303,16 +11303,21 @@ function renderMatrix() {
       var isAssigned = assignedPersonas.indexOf(pn) !== -1;
       var isActive   = isPersonaActive(pn);
 
-      // Inactive persona column — show greyed placeholder
-      if (!isActive && _matrixPersonaFilter === 'all') {
-        html += '<div class="mx-cell-inactive">No creatives yet</div>';
-        return;
-      }
-
       if (!isAssigned) {
-        html += '<div class="mx-cell-unassigned">--</div>';
+        // Unassigned cell. For globally-inactive personas in "show all" mode we
+        // surface "No creatives yet" so the column's empty state is legible; for
+        // everything else a plain "--" placeholder.
+        if (!isActive && _matrixPersonaFilter === 'all') {
+          html += '<div class="mx-cell-inactive">No creatives yet</div>';
+        } else {
+          html += '<div class="mx-cell-unassigned">--</div>';
+        }
         return;
       }
+      // Persona is assigned to this angle — always render the interactive cell,
+      // even when the persona has no creatives anywhere yet, so the user can add
+      // the first one. (Previously the inactive-check short-circuited here and
+      // rendered a dead "No creatives yet" div for assigned-but-empty cells.)
       html += renderMatrixCellV2(angle.name, pn);
     });
 

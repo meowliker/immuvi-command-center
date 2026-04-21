@@ -9463,6 +9463,100 @@ function pushAllToClickUp() {
   toast('Pushing ' + pushed + ' field values to ClickUp...', 'ok');
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Scoped auto-discover for angles & personas.
+//
+// Context: earlier versions of this sync code auto-pushed new angle/persona
+// values into global arrays without a product guard, which leaked KLS
+// taxonomy into Astro Rekha and vice-versa. That behavior was removed and
+// replaced with fully-manual curation. The manual path is safe but painful:
+// every time a new product is added, the team has to type its angles + personas
+// into the Angles / Personas tabs before the Creative Matrix and Coverage
+// Intelligence cards populate.
+//
+// This helper brings auto-discover back, but SCOPED:
+//   • It only ever writes to the current in-memory ANGLES / PERSONAS (which
+//     are swapped on every switchProduct), so it cannot cross products.
+//   • Both call sites (importTasksFromClickUp, pollFullSync Pass 2) are
+//     already guarded by the `_adsProductId === activeProductId` invariant,
+//     so the sync that triggered this is itself scoped to one product.
+//   • Match is case-insensitive so typos like "stressed women 25-45" vs
+//     "Stressed Women 25-45" don't add duplicate entries.
+//   • New entries get `_localNew: true` so the existing filter logic in
+//     switchProduct keeps them on refresh until a save completes.
+//
+// Returns { addedAngles: [...], addedPersonas: [...] } for diagnostic output.
+//
+// Rollback: `git reset --hard pre-scoped-autodiscover-2026-04-21`
+// ─────────────────────────────────────────────────────────────────────────────
+function autoDiscoverTaxonomy(sourceAds) {
+  // Guard: if the global ANGLES/PERSONAS arrays are not yet bound to the active
+  // product (mid product-switch), do nothing. The next sync tick will pick it up.
+  if (_adsProductId && activeProductId && _adsProductId !== activeProductId) {
+    return { addedAngles: [], addedPersonas: [] };
+  }
+
+  var existingAngleNamesLC   = {};
+  var existingPersonaNamesLC = {};
+  for (var ai = 0; ai < ANGLES.length; ai++) {
+    var aname = (ANGLES[ai] && ANGLES[ai].name) ? ANGLES[ai].name : '';
+    if (aname) existingAngleNamesLC[aname.toLowerCase().trim()] = true;
+  }
+  for (var pi = 0; pi < PERSONAS.length; pi++) {
+    var pname = (PERSONAS[pi] && PERSONAS[pi].name) ? PERSONAS[pi].name : '';
+    if (pname) existingPersonaNamesLC[pname.toLowerCase().trim()] = true;
+  }
+
+  var angleSeen   = {}; // preserve first-seen casing
+  var personaSeen = {};
+  var addedAngles   = [];
+  var addedPersonas = [];
+
+  for (var i = 0; i < (sourceAds || []).length; i++) {
+    var ad = sourceAds[i];
+    if (!ad) continue;
+
+    var ang = (ad.angle || '').trim();
+    if (ang && !angleSeen[ang.toLowerCase()] && !existingAngleNamesLC[ang.toLowerCase()]) {
+      angleSeen[ang.toLowerCase()] = true;
+      ANGLES.push({
+        id: 'ang-auto-' + Date.now() + '-' + addedAngles.length,
+        name: ang,
+        status: 'Untested',
+        sourceLink: '',
+        notes: '',
+        _localNew: true,
+        _autoDiscovered: true
+      });
+      existingAngleNamesLC[ang.toLowerCase()] = true;
+      addedAngles.push(ang);
+    }
+
+    var per = (ad.persona || '').trim();
+    if (per && !personaSeen[per.toLowerCase()] && !existingPersonaNamesLC[per.toLowerCase()]) {
+      personaSeen[per.toLowerCase()] = true;
+      PERSONAS.push({
+        id: 'per-auto-' + Date.now() + '-' + addedPersonas.length,
+        name: per,
+        status: 'Untested',
+        sourceLink: '',
+        notes: '',
+        _localNew: true,
+        _autoDiscovered: true
+      });
+      existingPersonaNamesLC[per.toLowerCase()] = true;
+      addedPersonas.push(per);
+    }
+  }
+
+  if (addedAngles.length || addedPersonas.length) {
+    console.log('[autoDiscover] product', activeProductId,
+      '+', addedAngles.length, 'angles:', addedAngles,
+      '+', addedPersonas.length, 'personas:', addedPersonas);
+  }
+  return { addedAngles: addedAngles, addedPersonas: addedPersonas };
+}
+
 function importTasksFromClickUp(tasks) {
   // ── MERGE STRATEGY (not full replace) ──────────────────────────────────────
   // Matching existing local ADs by _clickupId and updating only the fields that
@@ -9583,14 +9677,13 @@ function importTasksFromClickUp(tasks) {
   ADS = newAds;
   // Don't reset nextAdSerial — local serial IDs must remain unique and continuous
 
-  // NOTE: Previously this path auto-pushed any new angle/persona value seen in
-  // ClickUp task custom fields into the product's ANGLES/PERSONAS arrays.
-  // That caused cross-product contamination (e.g. canva & KLS inheriting each
-  // other's parenting/astrology taxonomy). Angles and personas are now a
-  // manually-curated list per product — the ad keeps its value (so matrix /
-  // tracker render correctly), but the taxonomy stays clean.
-  // If you want the old behavior, re-add the push blocks here + in Pass 2
-  // (~line 9713). Left intentionally blank.
+  // Scoped auto-discover: push any new angle/persona values found in ADS into
+  // the active product's ANGLES / PERSONAS master lists. Scoped by the active
+  // product (the `_adsProductId === activeProductId` guard at the sync entry
+  // point ensures ADS belongs to this product; autoDiscoverTaxonomy writes
+  // only to the globals which are swapped on switchProduct, so no leak).
+  // Restored 2026-04-21 (option 3). Rollback tag: pre-scoped-autodiscover-2026-04-21.
+  autoDiscoverTaxonomy(ADS);
 
   // Auto-discover new taxonomy values from imported tasks
   var fieldKeyMap = {
@@ -9892,15 +9985,21 @@ function pollFullSync() {
           // matching the convention used in importTasksFromClickUp.
           if (!freshAd.id) freshAd.id = cuid;
           ADS.push(freshAd);
-          // (Removed) auto-push of freshAd.angle / freshAd.persona into the
-          // product's ANGLES / PERSONAS arrays. Those lists are now
-          // manually-curated per product to prevent cross-product taxonomy
-          // contamination. The ad row keeps its angle/persona values so the
-          // creative tracker and matrix still render them correctly.
+          // Scoped auto-discover is called once after Pass 2 + Pass 1 below,
+          // so it picks up angle/persona changes from existing-ad diffs too.
           newTaskCount++;
           changed = true;
         }
       }
+
+      // Scoped auto-discover runs AFTER Pass 1 (field-updates on existing ads)
+      // and Pass 2 (newly-imported tasks) — catches both sources of new
+      // taxonomy. Guarded by `_adsProductId === _startProductId` at the top
+      // of this .then() block, so ADS is confirmed product-scoped here.
+      // Restored 2026-04-21 (option 3). Rollback tag: pre-scoped-autodiscover-2026-04-21.
+      var _discovered = autoDiscoverTaxonomy(ADS);
+      var _newTaxonomy = _discovered.addedAngles.length + _discovered.addedPersonas.length;
+      if (_newTaxonomy > 0) changed = true;
 
       // ── Pass 2.5: reconcile deletes from ClickUp ──────────────────────────
       // If a local ad has a _clickupId that isn't in the fresh taskMap, the
@@ -9953,7 +10052,10 @@ function pollFullSync() {
       _onSyncSuccess(dot, fieldUpdates, changed);
 
       if (changed) {
-        if (newTaskCount > 0) initAnglePersonas();   // rebuild matrix if new angles/personas appeared
+        // Rebuild matrix if new tasks arrived OR auto-discover added new
+        // master-list entries (even without new tasks, e.g. when Pass 1
+        // detected that an existing task's angle was changed in ClickUp).
+        if (newTaskCount > 0 || _newTaxonomy > 0) initAnglePersonas();
         P = process(ADS);
         buildCreativeUsageIndex();
         deriveWinners();

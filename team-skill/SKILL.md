@@ -537,49 +537,75 @@ The dashboard sees this within 1–2 s via its realtime subscription on `public.
 
 Uses the `doc_id` from `products.config->>'doc_id'` (pulled in Step 1). **IMPORTANT:** always list existing pages first. If a page already starts with `[INS_ID]` (same ins_id, regardless of old/stale title), UPDATE it instead of creating a duplicate.
 
-### 6-pre — Auto-create library doc if product has no `doc_id`
+### 6-pre — Resolve library doc (discover → create) + heal product config
 
-If `products.config->>'doc_id'` is empty/null (first-ever classification for this product), auto-create the library doc + seed a Master Tracker page, then save the IDs back to Supabase so future runs reuse them.
+**Always** run this block, even when `products.config->>'doc_id'` already looks set. The `products.config` jsonb can be clobbered by the ClickUp list-sync job (which replaces fields like `last_synced_at_ms`), so `doc_id`/`master_tracker_page_id` can silently go missing between runs. This block is idempotent: it re-verifies both IDs against ClickUp and writes them back if they're wrong, missing, or pointing at a deleted page.
+
+Do this **once per distinct product_id in the batch**, before any 6a/6b work for that product:
 
 ```text
-Call: clickup_create_document
-  workspace_id: "9016762494"
-  name: "[PRODUCT_NAME uppercased] — Inspiration Library"
-  parent: {"id": "90169348848", "type": "5"}   ← Inspiration Lib folder (type 5 = folder)
-  visibility: "PUBLIC"
-  create_page: true
+1. CONFIG CHECK
+   • If config has both doc_id AND master_tracker_page_id → verify both still resolve:
+       - GET  https://api.clickup.com/api/v3/workspaces/9016762494/docs/{doc_id}/pages
+       - If that returns 200 AND page_id appears in the list AND its name starts with "📋 Master Tracker"
+         → config is healthy, skip to 6a with these IDs.
+   • Otherwise → fall through to step 2 (discover).
 
-Response → capture document_id (this becomes the new doc_id).
+2. DISCOVER EXISTING LIBRARY DOC (never create if one already exists)
+   • Search the Inspiration Library folder (90169348848) for an existing doc whose name matches this product:
+       clickup_search({
+         workspace_id: "9016762494",
+         keywords: "[PRODUCT_NAME] Inspiration Library",
+         filters: { asset_types: ["doc"], location: { categories: ["90169348848"] } }
+       })
+   • Accept a hit when the doc name, case-insensitively, contains both the product name AND "inspiration library". Prefer exact "[PRODUCT_NAME uppercased] — Inspiration Library".
+   • If found → use its id as doc_id. Then list pages and find the one whose name is exactly "📋 Master Tracker"
+     (or starts with "📋 Master Tracker" / "Master Tracker"). Use its id as master_tracker_page_id.
+   • Go to step 4 (heal config).
 
-Call: clickup_list_document_pages(document_id)
-→ grab the single auto-created page's id (this becomes the new master_tracker_page_id).
+3. CREATE (only reached when nothing was discovered)
+   Call: clickup_create_document
+     workspace_id: "9016762494"
+     name: "[PRODUCT_NAME uppercased] — Inspiration Library"
+     parent: {"id": "90169348848", "type": "5"}   ← Inspiration Lib folder (type 5 = folder)
+     visibility: "PUBLIC"
+     create_page: true
 
-Call: clickup_update_document_page to rename + seed content
-  document_id: <new doc_id>
-  page_id: <that page id>
-  name: "📋 Master Tracker"
-  sub_title: "All [PRODUCT_NAME] inspirations — status, decision, quick reference"
-  content_format: "text/md"
-  content: empty-tracker markdown (see Step 6.5 for the seed template — use the empty state with "_empty — run the skill to populate_" row)
+   Response → capture document_id as doc_id.
 
-Then persist to Supabase:
+   Call: clickup_list_document_pages(document_id)
+   → grab the single auto-created page's id; that becomes master_tracker_page_id.
+
+   Call: clickup_update_document_page to rename + seed content
+     document_id: <new doc_id>
+     page_id: <that page id>
+     name: "📋 Master Tracker"
+     sub_title: "All [PRODUCT_NAME] inspirations — status, decision, quick reference"
+     content_format: "text/md"
+     content: empty-tracker markdown (see Step 6.5 for the seed template — use the empty state with "_empty — run the skill to populate_" row)
+
+4. HEAL CONFIG (runs after discover OR create, not after the healthy-check path)
+   Always merge the verified IDs back into products.config so future runs don't rediscover them.
 ```
 ```bash
 python3 <<PYEOF
 import os, psycopg2, json
 conn = psycopg2.connect(os.environ['SUPABASE_DB_URL']); cur = conn.cursor()
+# jsonb || merges; right-hand wins. Doesn't clobber other config keys like clickup_list_id, color, ins_prefix, etc.
 cur.execute("""
   update public.products
   set config = coalesce(config,'{}'::jsonb) || %s::jsonb
   where id = %s
-""", (json.dumps({'doc_id': '[NEW_DOC_ID]', 'master_tracker_page_id': '[NEW_TRACKER_PAGE_ID]'}), '[PRODUCT_ID]'))
+""", (json.dumps({'doc_id': '[RESOLVED_DOC_ID]', 'master_tracker_page_id': '[RESOLVED_TRACKER_PAGE_ID]'}), '[PRODUCT_ID]'))
 conn.commit(); cur.close(); conn.close()
 PYEOF
 ```
 
-After this, proceed to 6a with the freshly-minted `doc_id`. Note the existing KLS/KMH/Astro docs were created manually for the first batch; every new product after today will be auto-created here by the skill — zero manual setup.
+**Why discover before create:** without discovery, a wiped `doc_id` causes the skill to create a *second* library doc in the Inspiration Library folder — leaving the team with split briefs across two docs and broken historical brief URLs in `inspirations.data`. The Apr-2026 AT-INS-008 incident is exactly this failure mode: Art Therapy had its config cleared by a list-sync, and only the self-heal step (6.7) rescued the brief link because the page happened to already exist. Discovery prevents the duplicate entirely.
 
-⚠️ **Known MCP quirk:** parent type `"5"` (folder) currently works against folder `90169348848`. Earlier attempts against OTHER folders returned "Resource not found" — auth is per-folder. If auto-create fails: fall back to parent `{"id": "90162807791", "type": "4"}` (space root), then tell the user to drag the new doc into the folder manually.
+After this, proceed to 6a with the resolved `doc_id` + `master_tracker_page_id`. Note the existing KLS/KMH/Astro/Art-Therapy docs were created manually for the first batch; every new product after today will be discovered or auto-created here by the skill — zero manual setup.
+
+⚠️ **Known MCP quirk:** parent type `"5"` (folder) currently works against folder `90169348848`. Earlier attempts against OTHER folders returned "Resource not found" — auth is per-folder. If create fails after discovery returned nothing: fall back to parent `{"id": "90162807791", "type": "4"}` (space root), then tell the user to drag the new doc into the folder manually.
 
 ### 6a — List existing pages + decide create vs update
 
@@ -858,7 +884,7 @@ Tell the user: "Done. The dashboard auto-updates via Supabase realtime — check
 
 - **Supabase connection fails**: print the error, stop, tell the user to check `.env` and internet connectivity.
 - **Queue empty**: print "No pending items in inspiration_queue. Queue some URLs from the dashboard." Stop.
-- **Product has empty `doc_id`**: Skip doc creation for that product. Still write the classification result. Note `clickup_doc_page_url: ""`. Tell user to add doc_id to `products.config->>'doc_id'` via the Supabase SQL editor.
+- **Product has empty `doc_id`**: Step 6-pre now auto-discovers an existing library doc in folder `90169348848` by name match, and only creates a new one if none is found. It also heals `products.config` on every run so a clobbered config self-repairs. If both discovery and creation fail, skip doc creation for that product, still write the classification result, and tell the user to check that the Inspiration Library folder is reachable via the ClickUp MCP.
 - **Doc page creation fails**: still save the classification result. Just leave `clickup_doc_page_url` empty.
 - **Facebook ad not found / yt-dlp fails / no frames**: update queue row with `status='error'` and `error_message='<message>'`; do NOT write a result row; continue with other items.
 - **Prerequisites missing**: `brew install ffmpeg` · `pip3 install psycopg2-binary requests playwright` · `python3 -m playwright install chromium`

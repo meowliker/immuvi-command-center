@@ -16,13 +16,14 @@ This skill reads the queue and writes results directly to Supabase — no more l
 
 ---
 
-## Step 0 — Auto-update (always run this first)
+## Step 0 — Auto-update (always run this first) + hot-reload on change
 
-Silently refresh the skill files from origin using HTTP ETags — unchanged files are a 304 Not Modified (zero bytes transferred, ~90ms). Next run loads the updated `SKILL.md`; `fb_ad_classifier.py` is re-imported every run so its update takes effect immediately.
+Silently refresh the skill files from origin using HTTP ETags — unchanged files are a 304 Not Modified (zero bytes transferred, ~90ms). When the origin has a newer `SKILL.md`, the script prints a single sentinel line: `SKILL_UPDATED_RELOAD_NOW`. **If you (the agent) see that sentinel in the output, stop following these in-context instructions immediately and Read `~/.claude/skills/classify-inspiration/SKILL.md` with the Read tool — then follow THAT freshly-downloaded version for the rest of this run. This eliminates the one-run lag so every SKILL.md change applies on the same run it was published.** (`fb_ad_classifier.py` is re-imported every run anyway, so Python changes take effect immediately with no reload needed.)
 
 ```bash
 SKILL_DIR="$HOME/.claude/skills/classify-inspiration"
 ASSET_BASE="https://immuvi-command-center.vercel.app/team-skill"
+SKILL_MD_UPDATED=0
 
 for f in SKILL.md fb_ad_classifier.py; do
   file_path="$SKILL_DIR/$f"
@@ -40,7 +41,14 @@ for f in SKILL.md fb_ad_classifier.py; do
 
   case "$http" in
     200)
-      mv "$tmp_body" "$file_path"
+      # Only count as "changed" if the new body actually differs from what's on disk.
+      # Protects against the rare case where origin re-hashed but content is identical.
+      if [ ! -f "$file_path" ] || ! cmp -s "$tmp_body" "$file_path"; then
+        mv "$tmp_body" "$file_path"
+        [ "$f" = "SKILL.md" ] && SKILL_MD_UPDATED=1
+      else
+        rm -f "$tmp_body"
+      fi
       new_etag=$(awk -F': ' 'tolower($1)=="etag"{gsub(/\r/,"",$2); e=$2} END{print e}' "$tmp_head")
       [ -n "$new_etag" ] && printf '%s' "$new_etag" > "$etag_path"
       ;;
@@ -48,9 +56,23 @@ for f in SKILL.md fb_ad_classifier.py; do
   esac
   rm -f "$tmp_head"
 done
+
+if [ "$SKILL_MD_UPDATED" = "1" ]; then
+  echo "SKILL_UPDATED_RELOAD_NOW"
+  echo "[skill-update] A newer SKILL.md was downloaded to $SKILL_DIR/SKILL.md — reload it now before continuing."
+fi
 ```
 
 Fails silently on network errors and continues with the on-disk copy.
+
+**Agent reload protocol when you see `SKILL_UPDATED_RELOAD_NOW`:**
+
+1. Call `Read` on `~/.claude/skills/classify-inspiration/SKILL.md` (the full file — no offset/limit).
+2. Discard the version of the instructions currently in your context from Steps 1–8; follow the freshly-read file end-to-end instead.
+3. Do not re-run Step 0 after the reload (it just ran — no ETag drift in the same second).
+4. Continue from Step 1 of the newly-read instructions.
+
+**One-time lag disclaimer:** this reload protocol only activates once a teammate has already picked up *this* version of Step 0. The first update after introducing the reload protocol still takes one run to propagate (their old Step 0 silently downloads the new file but doesn't print the sentinel). Every update after that applies on the same run it was published.
 
 ---
 

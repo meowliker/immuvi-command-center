@@ -8988,7 +8988,7 @@ function createClickUpTaskFromAction(actionId, onDone) {
 
   // Step 1 — create task; include description in the initial POST so it's reliably sent
   // (a separate PUT via corsproxy can silently fail, causing blank descriptions)
-  var createPayload = { name: act.title };
+  var createPayload = { name: act.title, tags: ['production'] };
   if (desc) createPayload.description = desc;
   if (dueTs) createPayload.due_date = dueTs;
   if (customFields && customFields.length > 0) createPayload.custom_fields = customFields;
@@ -9408,13 +9408,16 @@ function apiFetch(path, opts) {
 }
 
 function apiCreateTask(listId, taskPayload) {
-  // taskPayload: { name, description, due_date, priority, custom_fields }
+  // taskPayload: { name, description, due_date, priority, custom_fields, tags }
   var body = { name: taskPayload.name || taskPayload };
   if (taskPayload.description) body.description = taskPayload.description;
   if (taskPayload.due_date)    body.due_date = taskPayload.due_date;
   if (taskPayload.priority)    body.priority  = taskPayload.priority;
   if (taskPayload.custom_fields && taskPayload.custom_fields.length > 0) {
     body.custom_fields = taskPayload.custom_fields;
+  }
+  if (taskPayload.tags && taskPayload.tags.length > 0) {
+    body.tags = taskPayload.tags;
   }
   return apiFetch('/list/' + listId + '/task', { method: 'POST', body: body });
 }
@@ -12838,6 +12841,7 @@ function addInspoToCell(insId, angleName, personaName) {
     parentAdId: null,
     variationNumber: null,
     adOrigin: 'From Inspo',
+    taskType: 'production', // inspo tasks are production tasks — tag immediately
     _fromInspoId: insId,
     _clickupId: null,
     _clickupStatus: null

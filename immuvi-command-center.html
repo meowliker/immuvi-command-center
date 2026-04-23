@@ -4137,37 +4137,64 @@ const DB = {
     if (cellRows.length)      tasks.push(SB.from('matrix_cells').upsert(cellRows, { onConflict: 'product_id,angle_id,persona_id' }));
 
     // ── MANUAL_ACTIONS ───────────────────────────────────────────
-    const actRows = (state.MANUAL_ACTIONS || []).map(function (ma) {
-      var payload = {};
-      for (var k in ma) { if (k !== '_dbId') payload[k] = ma[k]; }
-      var row = { product_id: productId, payload: payload, live_status: ma.liveStatus || null };
-      if (ma._dbId) row.id = ma._dbId;
-      return row;
-    });
-    // DELETE → INSERT for manual_actions. Small row count, idempotent.
+    // ── MANUAL_ACTIONS: smart per-row upsert (no global DELETE) ──────────────
+    // Replaces the old DELETE→INSERT pattern that caused a race condition:
+    // the DB was momentarily empty between DELETE and INSERT, and any realtime
+    // re-fetch landing in that window would blank the Action Plan on screen.
     //
-    // CRITICAL: these MUST be serialized (awaited sequentially) inside a single
-    // promise, NOT pushed as two independent entries into `tasks` (which is
-    // eventually fed to Promise.allSettled). Pushing them independently means
-    // the DELETE and INSERT requests race on the wire — if the INSERT arrives
-    // at Supabase first and the DELETE arrives second, the DELETE wipes the
-    // newly-inserted rows. Server-side `manual_actions` ends up empty; the
-    // subsequent realtime echo (after the 1500ms self-save grace window)
-    // reads that empty state and replaces in-memory `MANUAL_ACTIONS`, causing
-    // the just-created task to silently disappear from the Action Plan AND
-    // the Production filter (since renderCreativeTracker derives its
-    // "production" pool from MANUAL_ACTIONS' _clickupId set + ad.taskType).
+    // New strategy:
+    //   1. Stamp _clientId into each payload → self-echoes detected precisely.
+    //   2. Rows with _dbId → upsert (update existing DB row).
+    //   3. Rows without _dbId → insert (new action, DB assigns UUID).
+    //   4. DB rows whose UUID is not in local state → delete (user deleted them).
+    //
+    // This also fixes: two users saving simultaneously (no full-table wipe),
+    // and the two-tabs race (each tab has a distinct _myClientId).
     tasks.push((async function () {
-      const del = await SB.from('manual_actions').delete().eq('product_id', productId);
-      if (del && del.error) throw del.error;
-      if (!actRows.length) return { data: null, error: null };
-      // Strip _dbId (uuid) from rows to let DB generate fresh ones, avoids PK conflicts
-      const ins = await SB.from('manual_actions').insert(actRows.map(function (r) {
-        var { id, ...rest } = r;
-        return rest;
-      }));
-      if (ins && ins.error) throw ins.error;
-      return ins;
+      const _saveClientId = typeof _myClientId !== 'undefined' ? _myClientId : null;
+
+      // Build final rows, stamping clientId into payload for self-echo detection
+      const finalRows = (state.MANUAL_ACTIONS || []).map(function (ma) {
+        var payload = {};
+        for (var k in ma) { if (k !== '_dbId') payload[k] = ma[k]; }
+        if (_saveClientId) payload._clientId = _saveClientId;
+        var row = { product_id: productId, payload: payload, live_status: ma.liveStatus || null };
+        if (ma._dbId) row.id = ma._dbId;
+        return row;
+      });
+
+      const toUpsert = finalRows.filter(function (r) { return !!r.id; });
+      const toInsert = finalRows.filter(function (r) { return !r.id; });
+      const keepDbIds = new Set(toUpsert.map(function (r) { return r.id; }));
+
+      // Find DB rows that no longer exist in local state → delete them
+      const existing = await SB.from('manual_actions').select('id').eq('product_id', productId);
+      if (existing.error) throw existing.error;
+      const toDeleteIds = (existing.data || []).map(function (r) { return r.id; }).filter(function (id) { return !keepDbIds.has(id); });
+
+      if (toDeleteIds.length) {
+        const del = await SB.from('manual_actions').delete().in('id', toDeleteIds);
+        if (del.error) throw del.error;
+      }
+      if (toUpsert.length) {
+        const up = await SB.from('manual_actions').upsert(toUpsert, { onConflict: 'id' });
+        if (up.error) throw up.error;
+      }
+      if (toInsert.length) {
+        const ins = await SB.from('manual_actions').insert(toInsert.map(function (r) {
+          var { id, ...rest } = r; return rest;
+        })).select();
+        if (ins.error) throw ins.error;
+        // Write back newly-generated DB UUIDs so next save can upsert correctly
+        if (ins.data && typeof MANUAL_ACTIONS !== 'undefined') {
+          ins.data.forEach(function (r) {
+            if (!r.id || !r.payload || !r.payload.id) return;
+            var ma = MANUAL_ACTIONS.find(function (m) { return m.id === r.payload.id; });
+            if (ma) ma._dbId = r.id;
+          });
+        }
+      }
+      return { ok: true };
     })());
 
     const results = await Promise.allSettled(tasks);
@@ -4401,22 +4428,19 @@ function _resubscribeRealtime() {
         // state is already up to date. Re-fetching would clobber just-typed values
         // with stale DB data before the write has committed on the read replica.
         // Changes from OTHER clients always go through.
+        // Self-echo detection for ads table (stamps _clientId in meta)
         var _payloadClientId = _payloadNew && _payloadNew.meta && _payloadNew.meta._clientId;
         var _isSelfEcho = _payloadClientId && _payloadClientId === _myClientId;
-        if (_isSelfEcho) return; // always ignore own echoes
-        // Grace window for ads + manual_actions.
-        // - ads: stamps _clientId so we detect self-echoes above; grace covers
-        //   the case where clientId is absent (rare, e.g. server-side writes).
-        // - manual_actions: DELETE→INSERT pattern in saveProductData fires a
-        //   DELETE event immediately; the realtime re-fetch can land BETWEEN
-        //   the DELETE and the INSERT and see empty state, causing the merge
-        //   to treat local actions as "another client deleted it" and drop them.
-        //   A 5 s grace window after our own save prevents this race.
-        //   Cross-client action plan changes are deferred by at most 5 s — acceptable.
+        if (_isSelfEcho) return; // always ignore own echoes from ads table
+        // Self-echo detection for manual_actions (stamps _clientId in payload)
+        var _maPayloadClientId = _payloadNew && _payloadNew.payload && _payloadNew.payload._clientId;
+        var _isMaSelfEcho = _maPayloadClientId && _maPayloadClientId === _myClientId;
+        if (_isMaSelfEcho) return; // always ignore own echoes from manual_actions
+        // Grace window for ads (clientId absent = rare server-side write)
         var _isAdsTable = _payloadTable === 'ads';
         if (_isAdsTable && !_payloadClientId && Date.now() - _lastSaveCompletedAt < 3000) return;
-        var _isManualActTable = _payloadTable === 'manual_actions';
-        if (_isManualActTable && Date.now() - _lastSaveCompletedAt < 5000) return;
+        // manual_actions: no blunt grace window needed — _clientId stamp above
+        // catches self-echoes precisely without blocking cross-client updates.
 
         // Only merge if we're still on the same product
         const pid = activeProductId;
@@ -5001,7 +5025,10 @@ function getProductPrefix() {
 // ============================================================
 function generateTaskName(source, inspoId, formatName) {
   var prefix = getProductPrefix();
+  // Bump serial immediately so two tasks created before the debounced
+  // save fires never share the same KL-207/KL-207 prefix (Scenario 9 fix).
   var serial = String(nextAdSerial).padStart(3, '0');
+  nextAdSerial++;
 
   if (source === 'inspo' && inspoId) {
     // Extract "INS-007" from "AR-INS-007" or "IM-INS-003"
@@ -10456,10 +10483,34 @@ function importTasksFromClickUp(tasks) {
     var t = tasks[i];
     if (t.id && t.status && t.status.status) taskStatusMap[t.id] = t.status.status;
   }
+  var _liveStatusChanged = false;
   for (var i = 0; i < MANUAL_ACTIONS.length; i++) {
     if (MANUAL_ACTIONS[i]._clickupId && taskStatusMap[MANUAL_ACTIONS[i]._clickupId]) {
       var mapped = mapClickUpStatus(taskStatusMap[MANUAL_ACTIONS[i]._clickupId]);
-      if (mapped) MANUAL_ACTIONS[i].liveStatus = mapped;
+      if (mapped && mapped !== MANUAL_ACTIONS[i].liveStatus) {
+        MANUAL_ACTIONS[i].liveStatus = mapped;
+        _liveStatusChanged = true;
+      }
+    }
+  }
+  // Persist status changes so they survive a page reload (Scenario 5 fix)
+  if (_liveStatusChanged && typeof saveState === 'function') {
+    saveState();
+  }
+
+  // Ghost link detection: mark ADs/actions whose ClickUp task no longer exists (Scenario 7 fix)
+  var _validClickupIds = new Set();
+  for (var i = 0; i < tasks.length; i++) {
+    if (tasks[i].id) _validClickupIds.add(tasks[i].id);
+  }
+  for (var i = 0; i < newAds.length; i++) {
+    if (newAds[i]._clickupId) {
+      newAds[i]._clickupTaskDeleted = !_validClickupIds.has(newAds[i]._clickupId);
+    }
+  }
+  for (var i = 0; i < MANUAL_ACTIONS.length; i++) {
+    if (MANUAL_ACTIONS[i]._clickupId) {
+      MANUAL_ACTIONS[i]._clickupTaskDeleted = !_validClickupIds.has(MANUAL_ACTIONS[i]._clickupId);
     }
   }
 
@@ -12644,24 +12695,35 @@ function renderDetailPanel(angleName, personaName) {
       });
       html += '</select></td>';
 
-      // Action Plan — only show for Untested tasks
+      // Action Plan column
       html += '<td>';
       if (actionInfo && actionInfo.inActionPlan) {
         if (actionInfo.clickupId) {
-          // ClickUp production task was created — show a direct link to it
-          html += '<a href="https://app.clickup.com/t/' + escAttr(actionInfo.clickupId) + '" ' +
-            'target="_blank" class="mx-dt-action-cu-link" onclick="event.stopPropagation()" ' +
-            'title="Open production task in ClickUp">&#10003; ClickUp Task &#8599;</a>';
+          // Check ghost: was this ClickUp task deleted in ClickUp?
+          var _maGhost = null;
+          for (var _gmi = 0; _gmi < MANUAL_ACTIONS.length; _gmi++) {
+            if (MANUAL_ACTIONS[_gmi]._clickupId === actionInfo.clickupId) { _maGhost = MANUAL_ACTIONS[_gmi]; break; }
+          }
+          if (_maGhost && _maGhost._clickupTaskDeleted) {
+            html += '<span class="mx-dt-action-sent" style="color:var(--test)" title="This ClickUp task was deleted in ClickUp. Push to Action Plan again to recreate it.">&#9888; ClickUp Deleted</span>';
+          } else {
+            html += '<a href="https://app.clickup.com/t/' + escAttr(actionInfo.clickupId) + '" ' +
+              'target="_blank" class="mx-dt-action-cu-link" onclick="event.stopPropagation()" ' +
+              'title="Open production task in ClickUp">&#10003; ClickUp Task &#8599;</a>';
+          }
         } else {
           html += '<span class="mx-dt-action-sent">&#10003; In Action Plan &mdash; ' + esc(actionInfo.status) + '</span>';
         }
       } else if (ad._clickupId) {
-        // Task was pushed to ClickUp from this app — always show the ClickUp link
-        html += '<a href="https://app.clickup.com/t/' + escAttr(ad._clickupId) + '" ' +
-          'target="_blank" class="mx-dt-action-cu-link" onclick="event.stopPropagation()" ' +
-          'title="Open in ClickUp">&#10003; ClickUp Task &#8599;</a>';
+        if (ad._clickupTaskDeleted) {
+          html += '<span class="mx-dt-action-sent" style="color:var(--test)" title="This ClickUp task was deleted in ClickUp.">&#9888; ClickUp Deleted</span>';
+        } else {
+          html += '<a href="https://app.clickup.com/t/' + escAttr(ad._clickupId) + '" ' +
+            'target="_blank" class="mx-dt-action-cu-link" onclick="event.stopPropagation()" ' +
+            'title="Open in ClickUp">&#10003; ClickUp Task &#8599;</a>';
+        }
       } else {
-        // Not yet in action plan — show button regardless of status
+        // Not yet in action plan — show push button
         html += '<button class="mx-dt-action-btn" onclick="event.stopPropagation();createActionFromMatrix(\'' + escAttr(ad.id) + '\',\'' + escJs(angleName) + '\',\'' + escJs(personaName) + '\', this)">&rarr; Action Plan</button>';
       }
       html += '</td>';

@@ -4404,11 +4404,19 @@ function _resubscribeRealtime() {
         var _payloadClientId = _payloadNew && _payloadNew.meta && _payloadNew.meta._clientId;
         var _isSelfEcho = _payloadClientId && _payloadClientId === _myClientId;
         if (_isSelfEcho) return; // always ignore own echoes
-        // Grace window only for ads table (which stamps clientId). Non-ads tables
-        // (manual_actions, matrix_cells, angles, personas) don't stamp clientId —
-        // we must NOT block those or cross-client changes are silently dropped.
+        // Grace window for ads + manual_actions.
+        // - ads: stamps _clientId so we detect self-echoes above; grace covers
+        //   the case where clientId is absent (rare, e.g. server-side writes).
+        // - manual_actions: DELETE→INSERT pattern in saveProductData fires a
+        //   DELETE event immediately; the realtime re-fetch can land BETWEEN
+        //   the DELETE and the INSERT and see empty state, causing the merge
+        //   to treat local actions as "another client deleted it" and drop them.
+        //   A 5 s grace window after our own save prevents this race.
+        //   Cross-client action plan changes are deferred by at most 5 s — acceptable.
         var _isAdsTable = _payloadTable === 'ads';
         if (_isAdsTable && !_payloadClientId && Date.now() - _lastSaveCompletedAt < 3000) return;
+        var _isManualActTable = _payloadTable === 'manual_actions';
+        if (_isManualActTable && Date.now() - _lastSaveCompletedAt < 5000) return;
 
         // Only merge if we're still on the same product
         const pid = activeProductId;
@@ -7260,6 +7268,10 @@ function renderActionPlan() {
   html += '<span class="ap-section-count">' + MANUAL_ACTIONS.length + '</span>';
   html += '</div>';
 
+  // Separate active tasks from completed ones
+  var _activeActions = MANUAL_ACTIONS.filter(function(a) { return a.liveStatus !== 'Complete'; });
+  var _completedActions = MANUAL_ACTIONS.filter(function(a) { return a.liveStatus === 'Complete'; });
+
   if (MANUAL_ACTIONS.length === 0) {
     html += '<div class="empty-state" style="padding:24px 0">';
     html += '<div class="empty-state-icon">&#9654;</div>';
@@ -7267,8 +7279,14 @@ function renderActionPlan() {
     html += '<div class="empty-state-hint">Push tasks from the Creative Matrix using the &rarr; Action Plan button.</div>';
     html += '</div>';
   } else {
-    for (var i = 0; i < MANUAL_ACTIONS.length; i++) {
-      var act = MANUAL_ACTIONS[i];
+    // Render active tasks first (all non-Complete)
+    var _apRenderList = _activeActions.concat(_completedActions);
+    for (var i = 0; i < _apRenderList.length; i++) {
+      var act = _apRenderList[i];
+      // Visual separator before completed section
+      if (i === _activeActions.length && _completedActions.length > 0) {
+        html += '<div style="margin:10px 0 6px;font-size:0.62rem;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.05em;padding:0 2px;">✓ Completed (' + _completedActions.length + ')</div>';
+      }
       var statusCls = act.liveStatus === 'Complete' || act.liveStatus === 'Winner' || act.liveStatus === 'Scale' ? 'done' :
                      (act.liveStatus === 'Testing' || act.liveStatus === 'In Production' || act.liveStatus === 'Ready to Launch' ? 'in-progress' : 'not-started');
       var borderColor = (act.liveStatus === 'Winner' || act.liveStatus === 'Scale' || act.liveStatus === 'Complete') ? 'var(--win)' :
@@ -7484,8 +7502,18 @@ function updateManualActionStatus(id, newStatus) {
   for (var i = 0; i < MANUAL_ACTIONS.length; i++) {
     if (MANUAL_ACTIONS[i].id === id) {
       MANUAL_ACTIONS[i].liveStatus = newStatus;
-      // Also update MATRIX_CELL_META actionStatus if sourceAdId exists
       var act = MANUAL_ACTIONS[i];
+      // Sync status to the source AD so Creative Tracker stays consistent
+      var sourceAdId = act.sourceAdId || act.adId;
+      if (sourceAdId) {
+        for (var j = 0; j < ADS.length; j++) {
+          if (ADS[j].id === sourceAdId) {
+            ADS[j].status = newStatus;
+            break;
+          }
+        }
+      }
+      // Also update MATRIX_CELL_META actionStatus if sourceAdId exists
       if (act.sourceAdId && act.sourceAngle && act.sourcePersona) {
         var cellAdKey = act.sourceAdId + '||' + act.sourceAngle + '||' + act.sourcePersona;
         if (!MATRIX_CELL_META[cellAdKey]) MATRIX_CELL_META[cellAdKey] = {};
@@ -7497,6 +7525,7 @@ function updateManualActionStatus(id, newStatus) {
   rebuildProdFromManual();
   renderActionPlan();
   renderProduction();
+  renderCreatives();  // refresh Creative Tracker to reflect new status
   saveState();
 }
 
@@ -10463,6 +10492,62 @@ function importTasksFromClickUp(tasks) {
   }
   saveFieldOptions();
 
+  // ── Fix 3: Ensure production taskType on all app-pushed tasks ──
+  // Any AD whose _clickupId is in PRODUCTION_CLICKUP_IDS was pushed from this
+  // app via the Action Plan — it IS a production task regardless of sync state.
+  for (var pi = 0; pi < ADS.length; pi++) {
+    var _pAd = ADS[pi];
+    if (_pAd._clickupId && PRODUCTION_CLICKUP_IDS[_pAd._clickupId] !== undefined) {
+      if (_pAd.taskType !== 'production') _pAd.taskType = 'production';
+    }
+    // Also check MANUAL_ACTIONS: if any action has _clickupId matching this AD's _clickupId
+    for (var _mi = 0; _mi < MANUAL_ACTIONS.length; _mi++) {
+      if (MANUAL_ACTIONS[_mi]._clickupId && MANUAL_ACTIONS[_mi]._clickupId === _pAd._clickupId) {
+        if (_pAd.taskType !== 'production') _pAd.taskType = 'production';
+        break;
+      }
+    }
+  }
+
+  // ── Fix 4: Resurrect missing MANUAL_ACTIONS for app-pushed tasks ──
+  // If a task was pushed from the app (in PRODUCTION_CLICKUP_IDS) but its
+  // MANUAL_ACTION entry is gone (lost on refresh/sync race), re-create it
+  // so it always appears in the Action Plan.
+  var _existingMaCuIds = {};
+  for (var _ei = 0; _ei < MANUAL_ACTIONS.length; _ei++) {
+    if (MANUAL_ACTIONS[_ei]._clickupId) _existingMaCuIds[MANUAL_ACTIONS[_ei]._clickupId] = true;
+  }
+  for (var _cuId in PRODUCTION_CLICKUP_IDS) {
+    if (_existingMaCuIds[_cuId]) continue; // already have an action for this
+    if (_recentlyDeletedMaIds && _recentlyDeletedMaIds.size) {
+      // skip if the user just explicitly deleted it
+      var _wasDeleted = false;
+      _recentlyDeletedMaIds.forEach(function(v){ if (v === _cuId) _wasDeleted = true; });
+      if (_wasDeleted) continue;
+    }
+    // Find the AD this ClickUp task belongs to
+    var _resAd = null;
+    for (var _ri = 0; _ri < ADS.length; _ri++) {
+      if (ADS[_ri]._clickupId === _cuId) { _resAd = ADS[_ri]; break; }
+    }
+    if (!_resAd) continue;
+    // Re-create the MANUAL_ACTION entry
+    var _resAction = {
+      id:          'ma-res-' + _cuId,
+      title:       _resAd.formatName || _resAd.taskName || _cuId,
+      angle:       _resAd.angle || '',
+      persona:     _resAd.persona || '',
+      funnelStage: _resAd.funnelStage || '',
+      liveStatus:  _resAd.status || 'Untested',
+      sourceAdId:  _resAd.id,
+      _clickupId:  _cuId,
+      _resurrected: true
+    };
+    MANUAL_ACTIONS.push(_resAction);
+    _existingMaCuIds[_cuId] = true;
+    console.log('[sync] Resurrected missing MANUAL_ACTION for', _cuId, '→', _resAd.formatName);
+  }
+
   // Rebuild ANGLE_PERSONAS from ADS
   initAnglePersonas();
 }
@@ -12570,10 +12655,14 @@ function renderDetailPanel(angleName, personaName) {
         } else {
           html += '<span class="mx-dt-action-sent">&#10003; In Action Plan &mdash; ' + esc(actionInfo.status) + '</span>';
         }
-      } else if (_isUntested(ad.status)) {
-        html += '<button class="mx-dt-action-btn" onclick="event.stopPropagation();createActionFromMatrix(\'' + escAttr(ad.id) + '\',\'' + escJs(angleName) + '\',\'' + escJs(personaName) + '\', this)">&rarr; Action Plan</button>';
+      } else if (ad._clickupId) {
+        // Task was pushed to ClickUp from this app — always show the ClickUp link
+        html += '<a href="https://app.clickup.com/t/' + escAttr(ad._clickupId) + '" ' +
+          'target="_blank" class="mx-dt-action-cu-link" onclick="event.stopPropagation()" ' +
+          'title="Open in ClickUp">&#10003; ClickUp Task &#8599;</a>';
       } else {
-        html += '<span style="color:var(--t3);font-size:0.62rem">—</span>';
+        // Not yet in action plan — show button regardless of status
+        html += '<button class="mx-dt-action-btn" onclick="event.stopPropagation();createActionFromMatrix(\'' + escAttr(ad.id) + '\',\'' + escJs(angleName) + '\',\'' + escJs(personaName) + '\', this)">&rarr; Action Plan</button>';
       }
       html += '</td>';
 
@@ -13363,9 +13452,13 @@ function addFormatToCell(angle, persona, sourceAdId, formatName, adType) {
   var safeAngle   = angle.replace(/[^a-zA-Z0-9]/g, '').substring(0, 5).toUpperCase();
   var safePersona = persona.replace(/[^a-zA-Z0-9]/g, '').substring(0, 5).toUpperCase();
   var prodAdId = sourceAdId + '-PROD-' + safeAngle + safePersona + Date.now().toString().slice(-3);
+  // Production clone gets a proper serial name: KL-207-kids life-12843
+  // (prefix + serial + source format name) so it's identifiable in Action Plan + ClickUp
+  var _srcFmtName = (sourceAd && sourceAd.formatName) || formatName;
+  var _prodFormatName = generateTaskName('tracker', null, _srcFmtName);
   var prodAd = {
     id:                 prodAdId,
-    formatName:         (sourceAd && sourceAd.formatName) || formatName,
+    formatName:         _prodFormatName,
     // If source has a real ad link, carry it over. Otherwise fall back to its drive
     // link so the new task isn't "No link" in the tracker (restores pre-migration behavior).
     adLink:             (sourceAd && (sourceAd.adLink || sourceAd.driveLink)) || '',
@@ -13404,7 +13497,7 @@ function addFormatToCell(angle, persona, sourceAdId, formatName, adType) {
   if (!MATRIX_CELL_META[cellAdKey]) {
     MATRIX_CELL_META[cellAdKey] = {
       status:     'Not Started',
-      uniqueName: generateTaskName('tracker', null, prodAd.formatName),
+      uniqueName: _prodFormatName, // already serial-stamped — don't double-prefix
       description: '',
       dueDate:    ''
     };

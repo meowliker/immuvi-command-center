@@ -4569,8 +4569,14 @@ function _resubscribeRealtime() {
               // DB has a ClickUp id we don't — merge it in so the "↗ ClickUp" link appears.
               _localById[_dbAct.id]._clickupId = _dbAct._clickupId;
             } else if (_dbAct.liveStatus && _localById[_dbAct.id].liveStatus !== _dbAct.liveStatus) {
-              // Refresh the live ClickUp status from DB.
-              _localById[_dbAct.id].liveStatus = _dbAct.liveStatus;
+              // Only update liveStatus from DB if the user hasn't changed it locally
+              // in the last 10 seconds. Without this guard, realtime re-fetches that
+              // land before the DB read replica catches up overwrite a just-changed
+              // status with the stale old value (the "reverts to Untested" bug).
+              var _localUpdatedAt = _localById[_dbAct.id]._liveStatusChangedAt || 0;
+              if (Date.now() - _localUpdatedAt > 10000) {
+                _localById[_dbAct.id].liveStatus = _dbAct.liveStatus;
+              }
             }
           }
         }
@@ -7530,6 +7536,7 @@ function updateManualActionStatus(id, newStatus) {
   for (var i = 0; i < MANUAL_ACTIONS.length; i++) {
     if (MANUAL_ACTIONS[i].id === id) {
       MANUAL_ACTIONS[i].liveStatus = newStatus;
+      MANUAL_ACTIONS[i]._liveStatusChangedAt = Date.now(); // guard against stale realtime overwrite
       act = MANUAL_ACTIONS[i];
       // Sync status to the source AD so Creative Tracker stays consistent
       var sourceAdId = act.sourceAdId || act.adId;
@@ -10513,10 +10520,16 @@ function importTasksFromClickUp(tasks) {
     if (t.id && t.status && t.status.status) taskStatusMap[t.id] = t.status.status;
   }
   var _liveStatusChanged = false;
+  var _now = Date.now();
   for (var i = 0; i < MANUAL_ACTIONS.length; i++) {
     if (MANUAL_ACTIONS[i]._clickupId && taskStatusMap[MANUAL_ACTIONS[i]._clickupId]) {
       var mapped = mapClickUpStatus(taskStatusMap[MANUAL_ACTIONS[i]._clickupId]);
       if (mapped && mapped !== MANUAL_ACTIONS[i].liveStatus) {
+        // Don't overwrite a status the user just changed locally within the last 15s.
+        // This prevents a stale ClickUp poll (that hasn't picked up our push yet)
+        // from reverting the user's just-changed status back to the old value.
+        var _changedAt = MANUAL_ACTIONS[i]._liveStatusChangedAt || 0;
+        if (_now - _changedAt < 15000) continue;
         MANUAL_ACTIONS[i].liveStatus = mapped;
         _liveStatusChanged = true;
       }

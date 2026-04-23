@@ -9312,6 +9312,20 @@ function createClickUpTaskFromAction(actionId, onDone) {
   if (desc) createPayload.description = desc;
   if (dueTs) createPayload.due_date = dueTs;
   if (customFields && customFields.length > 0) createPayload.custom_fields = customFields;
+  // Pass the current liveStatus as the initial ClickUp status so tasks created
+  // as "Approved" / "In Production" etc don't land in ClickUp as "to do".
+  var _cuStatusMap = {
+    'Approved':       'approved',
+    'In Production':  'in production',
+    'Ready to Launch':'ready to launch',
+    'Testing':        'testing',
+    'Winner':         'winner',
+    'Loser':          'loser',
+    'Scale':          'scale',
+    'Complete':       'complete'
+  };
+  var _initCuStatus = _cuStatusMap[act.liveStatus];
+  if (_initCuStatus) createPayload.status = _initCuStatus;
 
   apiCreateTask(listId, createPayload)
   .then(function(resp) {

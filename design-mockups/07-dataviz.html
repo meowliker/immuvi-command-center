@@ -1,0 +1,752 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Creative Tracker — Data-Viz direction</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:           #fafaf9;
+  --surface:      #ffffff;
+  --surface-2:    #f5f5f4;
+  --line:         #e7e5e4;
+  --line-hi:      #d6d3d1;
+  --text:         #1c1917;
+  --text-2:       #57534e;
+  --text-3:       #78716c;
+  --text-4:       #a8a29e;
+  --primary:      #1c1917;
+  --chart-1:      #0ea5e9;         /* sky */
+  --chart-2:      #8b5cf6;         /* violet */
+  --chart-3:      #f59e0b;
+  --good:         #15803d;
+  --good-soft:    #dcfce7;
+  --ok:           #ca8a04;
+  --ok-soft:      #fef3c7;
+  --warn:         #c2410c;
+  --warn-soft:    #ffedd5;
+  --bad:          #b91c1c;
+  --bad-soft:     #fee2e2;
+  --neutral:      #0369a1;
+  --neutral-soft: #dbeafe;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; background: var(--bg); }
+body {
+  font-family: 'Inter', sans-serif;
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  font-feature-settings: "ss01";
+}
+.mono { font-family: 'JetBrains Mono', monospace; font-variant-numeric: tabular-nums; }
+
+/* Header */
+.topbar {
+  height: 54px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+  padding: 0 20px;
+  display: flex; align-items: center; gap: 16px;
+  position: sticky; top: 0; z-index: 10;
+}
+.brand {
+  display: flex; align-items: center; gap: 9px;
+  font-size: 14.5px; font-weight: 600;
+  letter-spacing: -0.015em;
+}
+.brand .mk {
+  width: 24px; height: 24px;
+  background: var(--primary); color: var(--surface);
+  border-radius: 6px;
+  display: grid; place-items: center;
+  font-weight: 700; font-size: 11px;
+  font-family: 'JetBrains Mono', monospace;
+}
+.topbar .sep { width: 1px; height: 22px; background: var(--line); }
+.prod {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 6px 10px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font-size: 13px; font-weight: 500;
+  cursor: pointer;
+}
+.prod .d { width: 8px; height: 8px; border-radius: 50%; background: var(--chart-3); }
+.prod .chev { color: var(--text-4); font-size: 10px; }
+.tabs { display: flex; gap: 2px; margin-left: 10px; }
+.tabs a {
+  padding: 7px 12px;
+  font-size: 12.5px; font-weight: 500;
+  color: var(--text-3);
+  border-radius: 6px;
+  cursor: pointer;
+  text-decoration: none;
+  display: inline-flex; align-items: center; gap: 6px;
+}
+.tabs a:hover { color: var(--text); background: var(--surface-2); }
+.tabs a.active { color: var(--primary); background: var(--surface-2); font-weight: 600; }
+.tabs a .ct {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10.5px;
+  color: var(--text-3);
+}
+.tabs a.active .ct { color: var(--primary); }
+
+.topbar .right { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+.btn {
+  height: 32px; padding: 0 12px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  font-family: inherit; font-size: 12.5px; font-weight: 500;
+  color: var(--text);
+  cursor: pointer;
+  display: inline-flex; align-items: center; gap: 6px;
+}
+.btn:hover { background: var(--surface-2); border-color: var(--line-hi); }
+.btn-primary {
+  background: var(--primary); color: var(--surface);
+  border-color: var(--primary);
+}
+
+main { padding: 24px 20px 60px; }
+
+.page-head {
+  display: flex; align-items: baseline; gap: 14px;
+  margin-bottom: 20px;
+}
+.page-head h1 {
+  font-size: 24px; font-weight: 600;
+  letter-spacing: -0.025em;
+}
+.page-head .cnt {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 14px; color: var(--text-3);
+  font-weight: 500;
+}
+.page-head .meta {
+  margin-left: auto;
+  font-size: 12px; color: var(--text-3);
+  display: flex; align-items: center; gap: 8px;
+}
+.page-head .meta::before {
+  content: ''; width: 6px; height: 6px; border-radius: 50%;
+  background: var(--good);
+  animation: pulse 2.5s infinite;
+}
+@keyframes pulse { 50% { opacity: 0.5; } }
+
+/* KPI band with line charts */
+.kpi-band {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 18px 20px;
+  margin-bottom: 20px;
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 24px;
+}
+.kpi {
+  display: flex; flex-direction: column; gap: 6px;
+  padding-right: 20px;
+  border-right: 1px solid var(--line);
+}
+.kpi:last-child { border-right: none; padding-right: 0; }
+.kpi .label {
+  font-size: 11.5px;
+  color: var(--text-3);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+.kpi .value-row {
+  display: flex; align-items: baseline; gap: 8px;
+}
+.kpi .value {
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+}
+.kpi .delta {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--good);
+  padding: 2px 6px;
+  background: var(--good-soft);
+  border-radius: 4px;
+}
+.kpi .delta.down { color: var(--bad); background: var(--bad-soft); }
+.kpi svg { display: block; margin-top: 2px; }
+
+/* Filters — stripe-style */
+.filter-row {
+  display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px 10px 0 0;
+  padding: 10px;
+  border-bottom: none;
+}
+.search {
+  flex: 1; min-width: 240px;
+  position: relative;
+}
+.search input {
+  width: 100%; height: 34px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 0 36px 0 34px;
+  font-family: inherit; font-size: 13px;
+  color: var(--text);
+  outline: none;
+  background: var(--surface);
+}
+.search::before {
+  content: '⌕'; position: absolute; left: 12px; top: 50%; transform: translateY(-50%);
+  color: var(--text-4); font-size: 14px;
+}
+.search input::placeholder { color: var(--text-4); }
+.chip {
+  height: 30px; padding: 0 11px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--text-2);
+  cursor: pointer;
+  display: inline-flex; align-items: center; gap: 5px;
+}
+.chip:hover { background: var(--surface-2); }
+.chip.on {
+  background: var(--primary); color: var(--surface); border-color: var(--primary);
+}
+.chip .ch { color: var(--text-4); font-size: 10px; }
+.chip.on .ch { color: rgba(255,255,255,.6); }
+
+/* Table */
+.t-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 0 0 10px 10px;
+  overflow: hidden;
+}
+table.t {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+}
+table.t thead th {
+  text-align: left;
+  padding: 11px 14px;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--text-3);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+}
+table.t thead th.num { text-align: right; }
+table.t thead th.chart { text-align: center; }
+table.t tbody td {
+  padding: 13px 14px;
+  vertical-align: middle;
+  border-bottom: 1px solid var(--line);
+  color: var(--text);
+}
+table.t tbody tr { transition: background .1s; }
+table.t tbody tr:hover { background: var(--surface-2); }
+table.t tbody tr:last-child td { border-bottom: none; }
+
+/* Creative cell */
+.cc { display: flex; align-items: center; gap: 12px; }
+.thm {
+  width: 44px; height: 44px;
+  border-radius: 7px;
+  flex-shrink: 0;
+  background: linear-gradient(135deg, var(--chart-1) 0%, var(--chart-2) 100%);
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 1px 3px rgba(0,0,0,.08);
+}
+.thm::after {
+  content: '▶'; position: absolute; inset: 0;
+  display: grid; place-items: center;
+  color: white; font-size: 13px;
+  text-shadow: 0 1px 2px rgba(0,0,0,.2);
+}
+.thm.photo { background: linear-gradient(135deg, #f59e0b 0%, #dc2626 100%); }
+.thm.photo::after { content: '◈'; }
+.cc .name {
+  font-weight: 600; color: var(--text); font-size: 13px; letter-spacing: -0.005em;
+}
+.cc .sub {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px; color: var(--text-3); margin-top: 2px;
+}
+
+/* Tags */
+.tg {
+  display: inline-block;
+  padding: 3px 8px;
+  font-size: 11.5px; font-weight: 500;
+  border-radius: 5px;
+  background: var(--surface-2);
+  color: var(--text-2);
+  border: 1px solid var(--line);
+}
+.tg.angle   { background: #f1e6ff; color: #6b21a8; border-color: transparent; }
+.tg.persona { background: #dbeafe; color: #1e3a8a; border-color: transparent; }
+.tg.hook    { background: #fed7aa; color: #9a3412; border-color: transparent; }
+
+/* Status — solid pill */
+.st {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 3px 9px;
+  border-radius: 5px;
+  font-size: 11.5px;
+  font-weight: 600;
+}
+.st.massive { background: var(--good-soft); color: var(--good); }
+.st.winner  { background: var(--good-soft); color: var(--good); }
+.st.mild    { background: var(--ok-soft); color: var(--ok); }
+.st.fatigue { background: var(--warn-soft); color: var(--warn); }
+.st.testing { background: var(--neutral-soft); color: var(--neutral); }
+.st.loser   { background: var(--bad-soft); color: var(--bad); }
+
+/* Chart cells */
+.spark-col { min-width: 120px; }
+.spark-col svg { display: block; margin: 0 auto; }
+
+/* Bar-in-cell for spend */
+.spend-cell {
+  display: flex; flex-direction: column; gap: 4px;
+  align-items: flex-end;
+  min-width: 110px;
+}
+.spend-cell .v {
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 600;
+  font-size: 12.5px;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+.spend-bar {
+  width: 80px; height: 4px;
+  background: var(--surface-2);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.spend-bar .fill {
+  height: 100%;
+  background: var(--primary);
+  border-radius: 2px;
+}
+
+/* Numbers */
+.n {
+  text-align: right;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+}
+.n.big { font-weight: 600; font-size: 13px; }
+.roas { font-weight: 700; }
+.roas.up { color: var(--good); }
+.roas.massive { color: var(--good); }
+.roas.mild { color: var(--ok); }
+.roas.down { color: var(--warn); }
+.roas.loser { color: var(--bad); }
+.roas.dim { color: var(--text-4); }
+
+.date { font-family: 'JetBrains Mono', monospace; font-size: 11.5px; color: var(--text-3); }
+
+/* Trend arrow badges */
+.trend {
+  display: inline-flex; align-items: center; gap: 3px;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-family: 'JetBrains Mono', monospace;
+}
+.trend.up { background: var(--good-soft); color: var(--good); }
+.trend.down { background: var(--bad-soft); color: var(--bad); }
+.trend.flat { background: var(--surface-2); color: var(--text-3); }
+
+.links { display: inline-flex; gap: 2px; }
+.links a {
+  width: 26px; height: 26px;
+  display: grid; place-items: center;
+  border-radius: 5px;
+  color: var(--text-3);
+  text-decoration: none;
+  transition: background .12s;
+}
+.links a:hover { background: var(--surface-2); color: var(--primary); }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="brand"><div class="mk">I</div>Immuvi</div>
+  <div class="sep"></div>
+  <div class="prod"><span class="d"></span>Art Therapy<span class="chev">▾</span></div>
+  <div class="tabs">
+    <a>HQ</a>
+    <a>Angles <span class="ct">7</span></a>
+    <a>Personas <span class="ct">5</span></a>
+    <a class="active">Tracker <span class="ct">66</span></a>
+    <a>Matrix <span class="ct">19/35</span></a>
+    <a>Action <span class="ct">3</span></a>
+  </div>
+  <div class="right">
+    <button class="btn">⇡ Push</button>
+    <button class="btn btn-primary">↻ Sync</button>
+  </div>
+</div>
+
+<main>
+  <div class="page-head">
+    <h1>Creative Tracker</h1>
+    <span class="cnt">66 creatives · 18 winners · 3 fatigued</span>
+    <div class="meta">Live · synced 16 seconds ago</div>
+  </div>
+
+  <div class="kpi-band">
+    <div class="kpi">
+      <div class="label">Creatives active</div>
+      <div class="value-row">
+        <div class="value">66</div>
+        <div class="delta">+3</div>
+      </div>
+      <svg width="100%" height="28" viewBox="0 0 200 28" preserveAspectRatio="none">
+        <defs><linearGradient id="g1" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#0ea5e9" stop-opacity="0.3"/><stop offset="1" stop-color="#0ea5e9" stop-opacity="0"/></linearGradient></defs>
+        <path d="M0,20 L30,18 60,16 90,15 120,12 150,10 180,8 200,6 L200,28 L0,28 Z" fill="url(#g1)"/>
+        <polyline fill="none" stroke="#0ea5e9" stroke-width="1.5" points="0,20 30,18 60,16 90,15 120,12 150,10 180,8 200,6"/>
+      </svg>
+    </div>
+    <div class="kpi">
+      <div class="label">Winners 7d</div>
+      <div class="value-row">
+        <div class="value">18</div>
+        <div class="delta">+2</div>
+      </div>
+      <svg width="100%" height="28" viewBox="0 0 200 28" preserveAspectRatio="none">
+        <defs><linearGradient id="g2" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#15803d" stop-opacity="0.3"/><stop offset="1" stop-color="#15803d" stop-opacity="0"/></linearGradient></defs>
+        <path d="M0,22 L30,20 60,19 90,17 120,14 150,12 180,10 200,8 L200,28 L0,28 Z" fill="url(#g2)"/>
+        <polyline fill="none" stroke="#15803d" stroke-width="1.5" points="0,22 30,20 60,19 90,17 120,14 150,12 180,10 200,8"/>
+      </svg>
+    </div>
+    <div class="kpi">
+      <div class="label">Fatigued</div>
+      <div class="value-row">
+        <div class="value">3</div>
+        <div class="delta down">+1</div>
+      </div>
+      <svg width="100%" height="28" viewBox="0 0 200 28" preserveAspectRatio="none">
+        <polyline fill="none" stroke="#c2410c" stroke-width="1.5" points="0,14 30,15 60,14 90,16 120,18 150,20 180,22 200,23"/>
+      </svg>
+    </div>
+    <div class="kpi">
+      <div class="label">Spend 7d</div>
+      <div class="value-row">
+        <div class="value">$12.4k</div>
+        <div class="delta">+18%</div>
+      </div>
+      <!-- bar chart -->
+      <svg width="100%" height="28" viewBox="0 0 200 28" preserveAspectRatio="none">
+        <rect x="0"   y="16" width="22" height="12" fill="#1c1917" opacity="0.4"/>
+        <rect x="26"  y="14" width="22" height="14" fill="#1c1917" opacity="0.5"/>
+        <rect x="52"  y="10" width="22" height="18" fill="#1c1917" opacity="0.6"/>
+        <rect x="78"  y="12" width="22" height="16" fill="#1c1917" opacity="0.7"/>
+        <rect x="104" y="7"  width="22" height="21" fill="#1c1917" opacity="0.8"/>
+        <rect x="130" y="4"  width="22" height="24" fill="#1c1917" opacity="0.9"/>
+        <rect x="156" y="2"  width="22" height="26" fill="#1c1917"/>
+        <rect x="182" y="0"  width="18" height="28" fill="#0ea5e9"/>
+      </svg>
+    </div>
+    <div class="kpi">
+      <div class="label">Blended ROAS</div>
+      <div class="value-row">
+        <div class="value">1.38×</div>
+        <div class="delta">+0.04</div>
+      </div>
+      <svg width="100%" height="28" viewBox="0 0 200 28" preserveAspectRatio="none">
+        <line x1="0" y1="14" x2="200" y2="14" stroke="#a8a29e" stroke-dasharray="2 3" stroke-width="1"/>
+        <polyline fill="none" stroke="#8b5cf6" stroke-width="1.6" points="0,18 30,16 60,19 90,15 120,13 150,11 180,10 200,9"/>
+      </svg>
+    </div>
+  </div>
+
+  <div class="filter-row">
+    <div class="search"><input placeholder="Search creatives, angles, personas…"></div>
+    <div class="chip on">Winners <span class="ch">▾</span></div>
+    <div class="chip">Angle <span class="ch">▾</span></div>
+    <div class="chip">Persona <span class="ch">▾</span></div>
+    <div class="chip">Hook <span class="ch">▾</span></div>
+    <div class="chip">Funnel <span class="ch">▾</span></div>
+    <div class="chip">7D <span class="ch">▾</span></div>
+  </div>
+
+  <div class="t-card">
+    <table class="t">
+      <thead>
+        <tr>
+          <th>Creative</th>
+          <th>Angle</th>
+          <th>Hook</th>
+          <th>Status</th>
+          <th class="num">Spend</th>
+          <th class="chart">Spend distribution</th>
+          <th class="num">ROAS</th>
+          <th class="chart">ROAS 14d</th>
+          <th class="num">Δ WoW</th>
+          <th>Created</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>
+            <div class="cc">
+              <div class="thm"></div>
+              <div>
+                <div class="name">5773-1 old winner</div>
+                <div class="sub">AT-11439 · <a href="#">CU</a></div>
+              </div>
+            </div>
+          </td>
+          <td><span class="tg angle">Art as Therapy</span></td>
+          <td><span class="tg hook">POV</span></td>
+          <td><span class="st massive">◆ Massive</span></td>
+          <td>
+            <div class="spend-cell">
+              <div class="v">$1,842</div>
+              <div class="spend-bar"><div class="fill" style="width: 100%;"></div></div>
+            </div>
+          </td>
+          <td class="spark-col">
+            <svg width="100" height="32" viewBox="0 0 100 32">
+              <rect x="0"  y="20" width="6" height="12" fill="#15803d" opacity="0.4"/>
+              <rect x="8"  y="16" width="6" height="16" fill="#15803d" opacity="0.5"/>
+              <rect x="16" y="14" width="6" height="18" fill="#15803d" opacity="0.6"/>
+              <rect x="24" y="10" width="6" height="22" fill="#15803d" opacity="0.7"/>
+              <rect x="32" y="8"  width="6" height="24" fill="#15803d" opacity="0.8"/>
+              <rect x="40" y="6"  width="6" height="26" fill="#15803d" opacity="0.9"/>
+              <rect x="48" y="4"  width="6" height="28" fill="#15803d"/>
+            </svg>
+          </td>
+          <td class="n roas massive">1.92×</td>
+          <td class="spark-col">
+            <svg width="120" height="32" viewBox="0 0 120 32">
+              <line x1="0" y1="20" x2="120" y2="20" stroke="#e7e5e4" stroke-dasharray="2 3"/>
+              <polyline fill="none" stroke="#15803d" stroke-width="2" points="0,26 12,22 24,20 36,18 48,14 60,12 72,10 84,8 96,6 108,5 120,4"/>
+            </svg>
+          </td>
+          <td><span class="trend up">↑ 24%</span></td>
+          <td class="date">21.04</td>
+        </tr>
+        <tr>
+          <td>
+            <div class="cc">
+              <div class="thm photo"></div>
+              <div>
+                <div class="name">4570-1 old winner</div>
+                <div class="sub">AT-10835 · <a href="#">CU</a></div>
+              </div>
+            </div>
+          </td>
+          <td><span class="tg angle">Emotional Lit.</span></td>
+          <td><span class="tg hook">Curiosity</span></td>
+          <td><span class="st winner">Winner</span></td>
+          <td>
+            <div class="spend-cell">
+              <div class="v">$806</div>
+              <div class="spend-bar"><div class="fill" style="width: 44%;"></div></div>
+            </div>
+          </td>
+          <td class="spark-col">
+            <svg width="100" height="32" viewBox="0 0 100 32">
+              <rect x="0"  y="18" width="6" height="14" fill="#15803d" opacity="0.5"/>
+              <rect x="8"  y="14" width="6" height="18" fill="#15803d" opacity="0.6"/>
+              <rect x="16" y="15" width="6" height="17" fill="#15803d" opacity="0.6"/>
+              <rect x="24" y="12" width="6" height="20" fill="#15803d" opacity="0.7"/>
+              <rect x="32" y="11" width="6" height="21" fill="#15803d" opacity="0.75"/>
+              <rect x="40" y="10" width="6" height="22" fill="#15803d" opacity="0.8"/>
+              <rect x="48" y="9"  width="6" height="23" fill="#15803d" opacity="0.9"/>
+            </svg>
+          </td>
+          <td class="n roas up">1.54×</td>
+          <td class="spark-col">
+            <svg width="120" height="32" viewBox="0 0 120 32">
+              <line x1="0" y1="20" x2="120" y2="20" stroke="#e7e5e4" stroke-dasharray="2 3"/>
+              <polyline fill="none" stroke="#15803d" stroke-width="2" points="0,20 12,18 24,17 36,16 48,15 60,13 72,12 84,11 96,10 108,10 120,9"/>
+            </svg>
+          </td>
+          <td><span class="trend up">↑ 8%</span></td>
+          <td class="date">19.04</td>
+        </tr>
+        <tr>
+          <td>
+            <div class="cc">
+              <div class="thm photo"></div>
+              <div>
+                <div class="name">4569-2 old winner</div>
+                <div class="sub">AT-10834 · <a href="#">CU</a></div>
+              </div>
+            </div>
+          </td>
+          <td><span class="tg angle">Scarcity</span></td>
+          <td><span class="tg hook">Pattern Intr.</span></td>
+          <td><span class="st mild">Mild</span></td>
+          <td>
+            <div class="spend-cell">
+              <div class="v">$412</div>
+              <div class="spend-bar"><div class="fill" style="width: 22%;"></div></div>
+            </div>
+          </td>
+          <td class="spark-col">
+            <svg width="100" height="32" viewBox="0 0 100 32">
+              <rect x="0"  y="14" width="6" height="18" fill="#ca8a04" opacity="0.6"/>
+              <rect x="8"  y="13" width="6" height="19" fill="#ca8a04" opacity="0.65"/>
+              <rect x="16" y="14" width="6" height="18" fill="#ca8a04" opacity="0.6"/>
+              <rect x="24" y="15" width="6" height="17" fill="#ca8a04" opacity="0.55"/>
+              <rect x="32" y="14" width="6" height="18" fill="#ca8a04" opacity="0.6"/>
+              <rect x="40" y="15" width="6" height="17" fill="#ca8a04" opacity="0.55"/>
+              <rect x="48" y="13" width="6" height="19" fill="#ca8a04" opacity="0.65"/>
+            </svg>
+          </td>
+          <td class="n roas mild">1.33×</td>
+          <td class="spark-col">
+            <svg width="120" height="32" viewBox="0 0 120 32">
+              <line x1="0" y1="20" x2="120" y2="20" stroke="#e7e5e4" stroke-dasharray="2 3"/>
+              <polyline fill="none" stroke="#ca8a04" stroke-width="2" points="0,18 12,19 24,17 36,18 48,19 60,17 72,18 84,19 96,17 108,18 120,17"/>
+            </svg>
+          </td>
+          <td><span class="trend flat">→ 0%</span></td>
+          <td class="date">18.04</td>
+        </tr>
+        <tr>
+          <td>
+            <div class="cc">
+              <div class="thm photo"></div>
+              <div>
+                <div class="name">10785-2 old winner</div>
+                <div class="sub">AT-10733 · <a href="#">CU</a></div>
+              </div>
+            </div>
+          </td>
+          <td><span class="tg angle">Scarcity</span></td>
+          <td><span class="tg hook">Pattern Intr.</span></td>
+          <td><span class="st fatigue">Fatigued</span></td>
+          <td>
+            <div class="spend-cell">
+              <div class="v">$1,205</div>
+              <div class="spend-bar"><div class="fill" style="width: 65%;"></div></div>
+            </div>
+          </td>
+          <td class="spark-col">
+            <svg width="100" height="32" viewBox="0 0 100 32">
+              <rect x="0"  y="6"  width="6" height="26" fill="#c2410c" opacity="0.9"/>
+              <rect x="8"  y="8"  width="6" height="24" fill="#c2410c" opacity="0.85"/>
+              <rect x="16" y="10" width="6" height="22" fill="#c2410c" opacity="0.8"/>
+              <rect x="24" y="13" width="6" height="19" fill="#c2410c" opacity="0.7"/>
+              <rect x="32" y="15" width="6" height="17" fill="#c2410c" opacity="0.6"/>
+              <rect x="40" y="18" width="6" height="14" fill="#c2410c" opacity="0.5"/>
+              <rect x="48" y="20" width="6" height="12" fill="#c2410c" opacity="0.4"/>
+            </svg>
+          </td>
+          <td class="n roas down">0.98× ↓</td>
+          <td class="spark-col">
+            <svg width="120" height="32" viewBox="0 0 120 32">
+              <line x1="0" y1="20" x2="120" y2="20" stroke="#e7e5e4" stroke-dasharray="2 3"/>
+              <polyline fill="none" stroke="#c2410c" stroke-width="2" points="0,6 12,8 24,10 36,12 48,14 60,16 72,18 84,20 96,22 108,24 120,25"/>
+              <circle cx="84" cy="20" r="3" fill="#c2410c"/>
+            </svg>
+          </td>
+          <td><span class="trend down">↓ 42%</span></td>
+          <td class="date">10.04</td>
+        </tr>
+        <tr>
+          <td>
+            <div class="cc">
+              <div class="thm photo"></div>
+              <div>
+                <div class="name">6197-1 old winner</div>
+                <div class="sub">AT-10612 · <a href="#">CU</a></div>
+              </div>
+            </div>
+          </td>
+          <td><span class="tg angle">Scarcity</span></td>
+          <td><span class="tg hook">Direct Offer</span></td>
+          <td><span class="st testing">Testing</span></td>
+          <td>
+            <div class="spend-cell">
+              <div class="v" style="color: var(--text-3)">$28</div>
+              <div class="spend-bar"><div class="fill" style="width: 3%;"></div></div>
+            </div>
+          </td>
+          <td class="spark-col" style="color: var(--text-4); font-size: 11px; text-align: center;">—</td>
+          <td class="n roas dim">—</td>
+          <td class="spark-col" style="color: var(--text-4); font-size: 11px; text-align: center;">building data</td>
+          <td><span class="trend flat">—</span></td>
+          <td class="date">21.04</td>
+        </tr>
+        <tr>
+          <td>
+            <div class="cc">
+              <div class="thm"></div>
+              <div>
+                <div class="name">11436 new concept</div>
+                <div class="sub">AT-11436 · <a href="#">CU</a></div>
+              </div>
+            </div>
+          </td>
+          <td><span class="tg angle">Calm / Unwind</span></td>
+          <td><span class="tg hook">Curiosity</span></td>
+          <td><span class="st loser">Loser</span></td>
+          <td>
+            <div class="spend-cell">
+              <div class="v">$187</div>
+              <div class="spend-bar"><div class="fill" style="width: 10%;"></div></div>
+            </div>
+          </td>
+          <td class="spark-col">
+            <svg width="100" height="32" viewBox="0 0 100 32">
+              <rect x="0"  y="12" width="6" height="20" fill="#b91c1c" opacity="0.6"/>
+              <rect x="8"  y="15" width="6" height="17" fill="#b91c1c" opacity="0.5"/>
+              <rect x="16" y="18" width="6" height="14" fill="#b91c1c" opacity="0.4"/>
+              <rect x="24" y="20" width="6" height="12" fill="#b91c1c" opacity="0.35"/>
+              <rect x="32" y="23" width="6" height="9"  fill="#b91c1c" opacity="0.3"/>
+              <rect x="40" y="26" width="6" height="6"  fill="#b91c1c" opacity="0.3"/>
+              <rect x="48" y="27" width="6" height="5"  fill="#b91c1c" opacity="0.3"/>
+            </svg>
+          </td>
+          <td class="n roas loser">0.42×</td>
+          <td class="spark-col">
+            <svg width="120" height="32" viewBox="0 0 120 32">
+              <line x1="0" y1="20" x2="120" y2="20" stroke="#e7e5e4" stroke-dasharray="2 3"/>
+              <polyline fill="none" stroke="#b91c1c" stroke-width="2" points="0,16 12,18 24,20 36,22 48,23 60,25 72,26 84,27 96,27 108,28 120,28"/>
+            </svg>
+          </td>
+          <td><span class="trend down">↓ 58%</span></td>
+          <td class="date">14.04</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</main>
+
+</body>
+</html>

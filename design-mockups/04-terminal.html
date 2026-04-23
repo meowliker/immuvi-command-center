@@ -1,0 +1,639 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Creative Tracker — Terminal direction</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:           #05060a;
+  --bg-2:         #0b0d13;
+  --surface:      #0f121a;
+  --surface-hi:   #161a25;
+  --line:         #1a1f2c;
+  --line-hi:      #262c3c;
+  --text:         #e8eaf0;
+  --text-2:       #8a93a8;
+  --text-3:       #5a6376;
+  --accent:       #ff7b00;         /* bloomberg orange */
+  --accent-2:     #22c6ff;          /* info blue */
+  --g-massive:    #00e4a0;
+  --g-winner:     #22d167;
+  --g-mild:       #e6c84b;
+  --g-fatigue:    #ff8c3a;
+  --g-testing:    #22c6ff;
+  --g-loser:      #ff5760;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; background: var(--bg); }
+body {
+  color: var(--text);
+  font-family: 'Inter', sans-serif;
+  font-size: 12.5px;
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+}
+.mono { font-family: 'JetBrains Mono', monospace; }
+
+/* ── Status bar top ──────────────────────────────────────────────── */
+.sbar {
+  height: 22px;
+  background: #000;
+  border-bottom: 1px solid var(--line);
+  display: flex; align-items: center;
+  padding: 0 10px; gap: 14px;
+  font-size: 10.5px;
+  color: var(--text-2);
+  font-family: 'JetBrains Mono', monospace;
+  letter-spacing: 0.04em;
+}
+.sbar span.k { color: var(--text-3); }
+.sbar span.v { color: var(--text); }
+.sbar .live {
+  display: inline-flex; align-items: center; gap: 5px;
+  color: var(--g-winner);
+}
+.sbar .live::before {
+  content: '●'; animation: blink 1.5s infinite;
+}
+@keyframes blink { 50% { opacity: 0.3; } }
+.sbar .right { margin-left: auto; display: flex; gap: 14px; }
+
+/* ── Masthead ────────────────────────────────────────────────────── */
+.masthead {
+  padding: 14px 18px 12px;
+  display: flex; align-items: flex-end; gap: 16px;
+  border-bottom: 1px solid var(--line);
+  background: var(--bg-2);
+}
+.masthead .brand {
+  display: flex; align-items: baseline; gap: 10px;
+}
+.masthead .brand h1 {
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 600; font-size: 15px;
+  letter-spacing: 0.04em;
+  color: var(--text);
+}
+.masthead .brand h1 .amp { color: var(--accent); }
+.masthead .brand .tag {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10.5px;
+  color: var(--text-3);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 2px 6px;
+  border: 1px solid var(--line-hi);
+  border-radius: 2px;
+}
+
+.masthead .product {
+  display: inline-flex; align-items: center; gap: 8px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  padding: 6px 10px;
+  background: var(--surface);
+  border: 1px solid var(--line-hi);
+  border-left: 3px solid var(--accent);
+  cursor: pointer;
+  color: var(--text);
+}
+.masthead .product .chev { color: var(--text-3); }
+
+.masthead .spacer { flex: 1; }
+
+.masthead .ticker {
+  display: flex; gap: 14px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+}
+.masthead .ticker .bit {
+  display: flex; flex-direction: column; gap: 2px;
+  align-items: flex-end;
+}
+.masthead .ticker .k { color: var(--text-3); font-size: 9.5px; letter-spacing: 0.06em; text-transform: uppercase; }
+.masthead .ticker .v { color: var(--text); font-size: 13px; font-weight: 600; }
+.masthead .ticker .v.up   { color: var(--g-winner); }
+.masthead .ticker .v.down { color: var(--g-loser); }
+
+.masthead .btn {
+  height: 28px; padding: 0 10px;
+  background: var(--accent); color: #000;
+  border: none; border-radius: 2px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px; font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+.masthead .btn:hover { filter: brightness(1.15); }
+
+/* ── Tab bar ─────────────────────────────────────────────────────── */
+.tabs {
+  display: flex;
+  background: #000;
+  border-bottom: 1px solid var(--line);
+  padding-left: 4px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+}
+.tabs a {
+  padding: 9px 14px;
+  color: var(--text-3);
+  text-decoration: none;
+  text-transform: uppercase;
+  position: relative;
+  cursor: pointer;
+  border-right: 1px solid var(--line);
+  display: inline-flex; align-items: center; gap: 8px;
+}
+.tabs a:hover { color: var(--text); background: var(--surface); }
+.tabs a.active { color: var(--text); background: var(--bg-2); }
+.tabs a.active::after {
+  content: ''; position: absolute; left: 0; right: 0; bottom: -1px; height: 2px;
+  background: var(--accent);
+}
+.tabs a .ct {
+  background: var(--line-hi);
+  color: var(--text-2);
+  padding: 1px 6px;
+  border-radius: 2px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+.tabs a.active .ct { color: var(--accent); background: #2b1d0d; }
+
+/* ── Subheader / filters ─────────────────────────────────────────── */
+.subhdr {
+  padding: 10px 12px;
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  background: var(--bg-2);
+  border-bottom: 1px solid var(--line);
+  font-family: 'JetBrains Mono', monospace;
+}
+.subhdr h2 {
+  font-size: 11px; font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-right: 8px;
+}
+.subhdr .cnt { color: var(--text-3); font-size: 11px; margin-right: 12px; }
+
+.search {
+  flex: 1; min-width: 220px;
+  position: relative;
+}
+.search input {
+  width: 100%; height: 26px;
+  background: #000; border: 1px solid var(--line-hi);
+  color: var(--text); padding: 0 8px 0 22px;
+  font-family: 'JetBrains Mono', monospace; font-size: 11.5px;
+  outline: none; border-radius: 2px;
+}
+.search input::placeholder { color: var(--text-3); text-transform: uppercase; letter-spacing: 0.04em; }
+.search input:focus { border-color: var(--accent); }
+.search::before {
+  content: '>';
+  position: absolute; left: 8px; top: 50%; transform: translateY(-50%);
+  color: var(--accent); font-size: 11px;
+}
+.f {
+  display: inline-flex; align-items: center; gap: 5px;
+  height: 26px; padding: 0 9px;
+  background: var(--surface);
+  border: 1px solid var(--line-hi);
+  color: var(--text-2);
+  font-size: 10.5px; font-weight: 500;
+  letter-spacing: 0.04em; text-transform: uppercase;
+  cursor: pointer; border-radius: 2px;
+  font-family: 'JetBrains Mono', monospace;
+  white-space: nowrap;
+}
+.f:hover { background: var(--surface-hi); color: var(--text); }
+.f.on {
+  background: #2b1d0d;
+  color: var(--accent);
+  border-color: var(--accent);
+}
+.f .ch { color: var(--text-3); font-size: 9px; }
+
+/* ── Table ───────────────────────────────────────────────────────── */
+.tbl-wrap {
+  background: var(--bg);
+  overflow: auto;
+}
+table.tbl {
+  width: 100%;
+  border-collapse: separate; border-spacing: 0;
+  font-family: 'Inter', sans-serif;
+  font-size: 12.5px;
+}
+table.tbl thead th {
+  position: sticky; top: 0; z-index: 2;
+  text-align: left;
+  background: var(--bg-2);
+  color: var(--accent);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--line-hi);
+  border-top: 1px solid var(--line);
+  white-space: nowrap;
+}
+table.tbl thead th.n { text-align: right; }
+
+table.tbl tbody td {
+  padding: 9px 10px;
+  border-bottom: 1px solid var(--line);
+  vertical-align: middle;
+  white-space: nowrap;
+}
+table.tbl tbody tr { cursor: pointer; transition: background .1s; }
+table.tbl tbody tr:hover { background: var(--surface); }
+table.tbl tbody tr:hover td:first-child {
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+/* Creative cell */
+.cc { display: flex; align-items: center; gap: 10px; }
+.cc .thm {
+  width: 30px; height: 30px; border-radius: 2px;
+  background: linear-gradient(135deg, #2a1a40 0%, #1a0f25 100%);
+  border: 1px solid var(--line-hi);
+  position: relative;
+  flex-shrink: 0;
+}
+.cc .thm::after {
+  content: '▶'; position: absolute; inset: 0;
+  display: grid; place-items: center;
+  color: var(--accent); font-size: 9px;
+}
+.cc .thm.ph { background: linear-gradient(135deg, #1a2a40 0%, #0f1a25 100%); }
+.cc .thm.ph::after { content: '◈'; color: var(--accent-2); }
+.cc .info { min-width: 0; }
+.cc .nm {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  letter-spacing: 0.02em;
+}
+.cc .id {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10.5px;
+  color: var(--text-3);
+  margin-top: 1px;
+  display: flex; gap: 4px; align-items: center;
+}
+.cc .id a { color: var(--text-3); text-decoration: none; }
+.cc .id a:hover { color: var(--accent); }
+.cc .id::before { content: '›'; color: var(--text-3); }
+
+/* Pills — terminal style are UPPERCASE monospace */
+.p {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  padding: 2px 6px;
+  border-radius: 2px;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.p.angle   { background: rgba(255,123,0,.08); color: #ffa960; border: 1px solid rgba(255,123,0,.25); }
+.p.persona { background: rgba(34,198,255,.08); color: #6ad8ff; border: 1px solid rgba(34,198,255,.25); }
+.p.hook    { background: rgba(230,200,75,.06); color: #f0d982; border: 1px solid rgba(230,200,75,.2); }
+.p.struct  { background: var(--surface); color: var(--text-2); border: 1px solid var(--line-hi); }
+
+/* Status flag: [STATUS] */
+.st {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 2px 8px;
+  border-radius: 2px;
+  border: 1px solid currentColor;
+  display: inline-flex; align-items: center; gap: 4px;
+}
+.st::before {
+  content: '●';
+  font-size: 7px;
+}
+.st.massive { color: var(--g-massive); background: rgba(0,228,160,.08); }
+.st.winner  { color: var(--g-winner); background: rgba(34,209,103,.08); }
+.st.mild    { color: var(--g-mild); background: rgba(230,200,75,.08); }
+.st.fatigue { color: var(--g-fatigue); background: rgba(255,140,58,.1); }
+.st.testing { color: var(--g-testing); background: rgba(34,198,255,.08); }
+.st.loser   { color: var(--g-loser); background: rgba(255,87,96,.08); }
+
+/* Funnel flag */
+.fnl {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px; font-weight: 700;
+  letter-spacing: 0.08em;
+  padding: 2px 5px;
+  color: var(--accent); background: rgba(255,123,0,.1);
+  border-radius: 2px;
+}
+.fnl.mof { color: #e6c84b; background: rgba(230,200,75,.1); }
+.fnl.bof { color: var(--g-winner); background: rgba(34,209,103,.1); }
+
+/* Numbers */
+.n {
+  text-align: right;
+  font-family: 'JetBrains Mono', monospace;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+  font-weight: 500;
+  font-size: 12px;
+}
+.n.roas.up      { color: var(--g-winner); }
+.n.roas.massive { color: var(--g-massive); font-weight: 600; }
+.n.roas.mild    { color: var(--g-mild); }
+.n.roas.down    { color: var(--g-fatigue); }
+.n.roas.loser   { color: var(--g-loser); }
+.n.dim { color: var(--text-3); }
+.n.date { color: var(--text-2); font-size: 11px; }
+
+/* Link icons */
+.lnk {
+  display: inline-flex; gap: 2px;
+}
+.lnk a {
+  width: 22px; height: 22px;
+  display: grid; place-items: center;
+  border-radius: 2px;
+  color: var(--text-3);
+  text-decoration: none;
+  font-size: 12px;
+  transition: all .12s;
+}
+.lnk a:hover {
+  background: rgba(255,123,0,.1);
+  color: var(--accent);
+}
+
+/* Footer status bar */
+.foot {
+  height: 24px;
+  background: #000;
+  border-top: 1px solid var(--line);
+  padding: 0 12px;
+  display: flex; align-items: center; gap: 16px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10.5px;
+  color: var(--text-2);
+  letter-spacing: 0.04em;
+}
+.foot strong { color: var(--text); font-weight: 600; }
+.foot .r { margin-left: auto; display: flex; gap: 14px; }
+.foot .kbd {
+  padding: 1px 5px;
+  background: var(--surface);
+  border: 1px solid var(--line-hi);
+  color: var(--text-2);
+  border-radius: 2px;
+  font-size: 9.5px;
+}
+</style>
+</head>
+<body>
+
+<div class="sbar">
+  <span class="live">LIVE</span>
+  <span><span class="k">SYNC</span> <span class="v">16s</span></span>
+  <span><span class="k">WS</span> <span class="v">CONNECTED</span></span>
+  <span><span class="k">META</span> <span class="v">—</span></span>
+  <span class="right">
+    <span>21.04.2026</span>
+    <span class="mono">14:37:12 IST</span>
+  </span>
+</div>
+
+<div class="masthead">
+  <div class="brand">
+    <h1>IMMUVI<span class="amp">//</span>CMD</h1>
+    <span class="tag">v2.1</span>
+  </div>
+  <div class="product">
+    <span style="color: var(--accent);">◼</span>
+    Art Therapy
+    <span class="chev">▾</span>
+  </div>
+  <div class="spacer"></div>
+  <div class="ticker">
+    <div class="bit"><span class="k">Spend 7d</span><span class="v">$12,418</span></div>
+    <div class="bit"><span class="k">ROAS</span><span class="v up">1.38×</span></div>
+    <div class="bit"><span class="k">Winners</span><span class="v up">18</span></div>
+    <div class="bit"><span class="k">Fatigued</span><span class="v down">3</span></div>
+  </div>
+  <button class="btn">↻ Sync</button>
+</div>
+
+<div class="tabs">
+  <a>CMD HQ</a>
+  <a>Angles <span class="ct">7</span></a>
+  <a>Personas <span class="ct">5</span></a>
+  <a class="active">Tracker <span class="ct">66</span></a>
+  <a>Matrix <span class="ct">19/35</span></a>
+  <a>Action <span class="ct">3</span></a>
+  <a>Production <span class="ct">3</span></a>
+  <a>Inspiration <span class="ct">0</span></a>
+</div>
+
+<div class="subhdr">
+  <h2>Creative Tracker</h2>
+  <span class="cnt mono">66 rows · 18 W · 3 F · 2 L</span>
+  <div class="search"><input placeholder="FILTER ROWS…"></div>
+  <span class="f on">Winners <span class="ch">▾</span></span>
+  <span class="f">Angle <span class="ch">▾</span></span>
+  <span class="f">Persona <span class="ch">▾</span></span>
+  <span class="f">Hook <span class="ch">▾</span></span>
+  <span class="f">Funnel <span class="ch">▾</span></span>
+  <span class="f">7D <span class="ch">▾</span></span>
+</div>
+
+<div class="tbl-wrap">
+<table class="tbl">
+  <thead>
+    <tr>
+      <th style="width:22%">Creative</th>
+      <th>Angle</th>
+      <th>Persona</th>
+      <th>Structure</th>
+      <th>Hook</th>
+      <th>Funnel</th>
+      <th>Status</th>
+      <th class="n">Spend 7d ↓</th>
+      <th class="n">CTR</th>
+      <th class="n">CPA</th>
+      <th class="n">ROAS</th>
+      <th>Links</th>
+      <th>Created</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>
+        <div class="cc">
+          <div class="thm"></div>
+          <div class="info">
+            <div class="nm">5773-1_OLD_WINNER</div>
+            <div class="id">AT-11439-v1 <a href="#">· CU</a></div>
+          </div>
+        </div>
+      </td>
+      <td><span class="p angle">Art as Therapy</span></td>
+      <td><span class="p persona">Women 25-45</span></td>
+      <td><span class="p struct">UGC</span></td>
+      <td><span class="p hook">POV</span></td>
+      <td><span class="fnl">TOF</span></td>
+      <td><span class="st massive">Massive</span></td>
+      <td class="n">$1,842</td>
+      <td class="n">3.28%</td>
+      <td class="n">$12.40</td>
+      <td class="n roas massive">1.92×</td>
+      <td><div class="lnk"><a>↗</a><a>📄</a></div></td>
+      <td class="n date">21.04</td>
+    </tr>
+    <tr>
+      <td>
+        <div class="cc">
+          <div class="thm ph"></div>
+          <div class="info">
+            <div class="nm">4570-1_OLD_WINNER</div>
+            <div class="id">AT-10835 <a href="#">· CU</a></div>
+          </div>
+        </div>
+      </td>
+      <td><span class="p angle">Emotional Lit.</span></td>
+      <td><span class="p persona">Women 25-45</span></td>
+      <td><span class="p struct">Static</span></td>
+      <td><span class="p hook">Curiosity</span></td>
+      <td><span class="fnl">TOF</span></td>
+      <td><span class="st winner">Winner</span></td>
+      <td class="n">$806</td>
+      <td class="n">2.74%</td>
+      <td class="n">$14.80</td>
+      <td class="n roas up">1.54×</td>
+      <td><div class="lnk"><a>↗</a><a>📄</a></div></td>
+      <td class="n date">19.04</td>
+    </tr>
+    <tr>
+      <td>
+        <div class="cc">
+          <div class="thm ph"></div>
+          <div class="info">
+            <div class="nm">4569-2_OLD_WINNER</div>
+            <div class="id">AT-10834 <a href="#">· CU</a></div>
+          </div>
+        </div>
+      </td>
+      <td><span class="p angle">Scarcity</span></td>
+      <td><span class="p persona">Women 25-45</span></td>
+      <td><span class="p struct">Static</span></td>
+      <td><span class="p hook">Pattern Intr.</span></td>
+      <td><span class="fnl">TOF</span></td>
+      <td><span class="st mild">Mild</span></td>
+      <td class="n">$412</td>
+      <td class="n">2.11%</td>
+      <td class="n">$17.20</td>
+      <td class="n roas mild">1.33×</td>
+      <td><div class="lnk"><a>↗</a><a>📄</a></div></td>
+      <td class="n date">18.04</td>
+    </tr>
+    <tr>
+      <td>
+        <div class="cc">
+          <div class="thm ph"></div>
+          <div class="info">
+            <div class="nm">10785-2_OLD_WINNER</div>
+            <div class="id">AT-10733 <a href="#">· CU</a></div>
+          </div>
+        </div>
+      </td>
+      <td><span class="p angle">Scarcity</span></td>
+      <td><span class="p persona">Women 25-45</span></td>
+      <td><span class="p struct">Static</span></td>
+      <td><span class="p hook">Pattern Intr.</span></td>
+      <td><span class="fnl">TOF</span></td>
+      <td><span class="st fatigue">Fatigued</span></td>
+      <td class="n">$1,205</td>
+      <td class="n">1.42%</td>
+      <td class="n">$26.80</td>
+      <td class="n roas down">0.98× ↓</td>
+      <td><div class="lnk"><a>↗</a><a>📄</a></div></td>
+      <td class="n date">10.04</td>
+    </tr>
+    <tr>
+      <td>
+        <div class="cc">
+          <div class="thm ph"></div>
+          <div class="info">
+            <div class="nm">6197-1_OLD_WINNER</div>
+            <div class="id">AT-10612 <a href="#">· CU</a></div>
+          </div>
+        </div>
+      </td>
+      <td><span class="p angle">Scarcity</span></td>
+      <td><span class="p persona">Women 25-45</span></td>
+      <td><span class="p struct">Static</span></td>
+      <td><span class="p hook">Direct Offer</span></td>
+      <td><span class="fnl">TOF</span></td>
+      <td><span class="st testing">Testing</span></td>
+      <td class="n dim">$28</td>
+      <td class="n dim">—</td>
+      <td class="n dim">—</td>
+      <td class="n roas dim">—</td>
+      <td><div class="lnk"><a>↗</a><a>📄</a></div></td>
+      <td class="n date">21.04</td>
+    </tr>
+    <tr>
+      <td>
+        <div class="cc">
+          <div class="thm"></div>
+          <div class="info">
+            <div class="nm">11436_NEW_CONCEPT</div>
+            <div class="id">AT-11436 <a href="#">· CU</a></div>
+          </div>
+        </div>
+      </td>
+      <td><span class="p angle">Calm / Unwind</span></td>
+      <td><span class="p persona">Self-Care</span></td>
+      <td><span class="p struct">Hook + Offer</span></td>
+      <td><span class="p hook">Curiosity</span></td>
+      <td><span class="fnl">TOF</span></td>
+      <td><span class="st loser">Loser</span></td>
+      <td class="n">$187</td>
+      <td class="n">0.88%</td>
+      <td class="n">$48.60</td>
+      <td class="n roas loser">0.42×</td>
+      <td><div class="lnk"><a>↗</a><a>📄</a></div></td>
+      <td class="n date">14.04</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+
+<div class="foot">
+  <span><strong>6</strong> of <strong>66</strong> rows</span>
+  <span><strong>$4,480</strong> spend shown</span>
+  <span><strong>1.34×</strong> blended ROAS</span>
+  <span class="r">
+    <span>Meta API: <span class="kbd">DISCONNECTED</span></span>
+    <span>⏎ open · J/K nav · ⌘R refresh</span>
+  </span>
+</div>
+
+</body>
+</html>

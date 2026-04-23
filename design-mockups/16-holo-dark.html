@@ -1,0 +1,771 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Layout 16 — Holo Dark</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:           #0b0d1a;       /* deep navy */
+  --bg-2:         #11142a;
+  --surface:      #161a35;
+  --surface-hi:   #1d2244;
+  --line:         rgba(255,255,255,0.08);
+  --line-hi:      rgba(255,255,255,0.12);
+  --text:         #f4f7fc;
+  --text-2:       #a8b0c9;
+  --text-3:       #6d7595;
+  --text-4:       #454c6c;
+
+  --cyan:         #00d4ff;       /* electric cyan — the signature */
+  --cyan-deep:    #00a7cc;
+  --cyan-glow:    rgba(0,212,255,0.22);
+  --cyan-soft:    rgba(0,212,255,0.08);
+  --violet:       #7c5cff;
+  --violet-soft:  rgba(124,92,255,0.12);
+
+  --lime:         #a3e635;       /* massive */
+  --green:        #22d383;       /* winner */
+  --amber:        #f5c147;       /* mild */
+  --coral:        #ff7b57;       /* fatigue */
+  --rose:         #ff5788;       /* loser */
+  --sky:          #4da3ff;       /* testing */
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { background: var(--bg); height: 100%; }
+body {
+  color: var(--text);
+  font-family: 'Inter', -apple-system, sans-serif;
+  font-feature-settings: "cv11","ss01","ss02";
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  background-image:
+    radial-gradient(ellipse 80% 50% at 20% -10%, var(--cyan-glow), transparent 60%),
+    radial-gradient(ellipse 60% 40% at 80% 10%, var(--violet-soft), transparent 60%);
+  background-attachment: fixed;
+  background-repeat: no-repeat;
+  min-height: 100vh;
+}
+.mono { font-family: 'JetBrains Mono', monospace; }
+
+/* ══════════ NAV ══════════ */
+.nav {
+  position: sticky; top: 0; z-index: 50;
+  backdrop-filter: blur(20px) saturate(1.2);
+  -webkit-backdrop-filter: blur(20px) saturate(1.2);
+  background: rgba(11, 13, 26, 0.72);
+  border-bottom: 1px solid var(--line);
+}
+.nav-inner {
+  max-width: 1360px; margin: 0 auto;
+  padding: 14px 28px;
+  display: flex; align-items: center; gap: 18px;
+}
+.logo {
+  display: flex; align-items: center; gap: 9px;
+  font-weight: 700; font-size: 17px;
+  letter-spacing: -0.025em;
+}
+.logo-mark {
+  width: 26px; height: 26px;
+  border-radius: 7px;
+  background:
+    radial-gradient(circle at 30% 30%, var(--cyan), var(--cyan-deep) 50%, #007799);
+  box-shadow:
+    0 0 0 1px rgba(255,255,255,.06),
+    0 6px 20px var(--cyan-glow),
+    inset 0 1px 0 rgba(255,255,255,.25);
+  position: relative;
+}
+.logo-mark::after {
+  content: '';
+  position: absolute; inset: 4px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 35%, rgba(255,255,255,.7), transparent 60%);
+}
+.nav-links {
+  display: flex; gap: 2px; margin-left: 20px;
+}
+.nav-link {
+  padding: 7px 13px;
+  font-size: 13.5px; font-weight: 500;
+  color: var(--text-2);
+  border-radius: 7px;
+  cursor: pointer;
+  display: inline-flex; align-items: center; gap: 7px;
+  transition: color .12s, background .12s;
+}
+.nav-link:hover { color: var(--text); background: var(--surface); }
+.nav-link.active {
+  color: var(--text);
+  background: var(--surface);
+  box-shadow: inset 0 0 0 1px var(--line-hi);
+}
+.nav-link .ct {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10.5px;
+  color: var(--text-3);
+  background: var(--surface-hi);
+  padding: 1px 6px; border-radius: 3px;
+}
+.nav-link.active .ct {
+  background: var(--cyan-soft);
+  color: var(--cyan);
+}
+
+.nav .right { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+
+.live-pill {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 6px 11px;
+  border-radius: 100px;
+  font-size: 11.5px; font-weight: 500;
+  background: rgba(34,211,131,0.1);
+  color: var(--green);
+  border: 1px solid rgba(34,211,131,0.22);
+}
+.live-pill::before {
+  content: ''; width: 6px; height: 6px; border-radius: 50%;
+  background: var(--green);
+  box-shadow: 0 0 8px var(--green);
+  animation: pulse 2.2s infinite;
+}
+@keyframes pulse { 50% { opacity: 0.45; } }
+
+.btn {
+  height: 34px; padding: 0 14px;
+  background: var(--surface);
+  border: 1px solid var(--line-hi);
+  border-radius: 8px;
+  color: var(--text);
+  font-family: inherit; font-size: 13px; font-weight: 500;
+  cursor: pointer;
+  display: inline-flex; align-items: center; gap: 7px;
+  transition: background .12s, border-color .12s;
+}
+.btn:hover { background: var(--surface-hi); border-color: rgba(255,255,255,.2); }
+.btn-primary {
+  background: linear-gradient(180deg, var(--cyan) 0%, var(--cyan-deep) 100%);
+  color: #001622;
+  border: none;
+  font-weight: 600;
+  box-shadow:
+    0 0 0 1px rgba(0,212,255,.4),
+    0 4px 14px var(--cyan-glow),
+    inset 0 1px 0 rgba(255,255,255,.2);
+}
+.btn-primary:hover {
+  filter: brightness(1.1);
+  transform: translateY(-1px);
+  box-shadow:
+    0 0 0 1px rgba(0,212,255,.5),
+    0 6px 20px var(--cyan-glow),
+    inset 0 1px 0 rgba(255,255,255,.25);
+}
+
+/* ══════════ HERO STRIP ══════════ */
+.hero {
+  max-width: 1360px; margin: 0 auto;
+  padding: 48px 28px 24px;
+}
+.hero-top {
+  display: flex; align-items: center; gap: 10px;
+  margin-bottom: 18px;
+}
+.badge {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 5px 11px 5px 5px;
+  border-radius: 100px;
+  background: var(--surface);
+  border: 1px solid var(--line-hi);
+  font-size: 11.5px;
+  color: var(--text-2);
+}
+.badge .dot-pill {
+  padding: 1px 8px;
+  border-radius: 100px;
+  font-size: 10px; font-weight: 600;
+  background: var(--cyan-soft);
+  color: var(--cyan);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  font-family: 'JetBrains Mono', monospace;
+}
+.badge strong { color: var(--text); font-weight: 600; }
+
+.hero h1 {
+  font-size: clamp(38px, 4.5vw, 56px);
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1.05;
+  max-width: 880px;
+}
+.hero h1 .grad {
+  background: linear-gradient(90deg, var(--cyan) 0%, var(--violet) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+.hero .sub {
+  margin-top: 14px;
+  color: var(--text-2);
+  font-size: 16px;
+  max-width: 680px;
+  line-height: 1.55;
+}
+
+.hero-meta {
+  display: flex; flex-wrap: wrap; gap: 24px;
+  margin-top: 22px;
+  font-size: 12.5px;
+  color: var(--text-3);
+  font-family: 'JetBrains Mono', monospace;
+  letter-spacing: 0.02em;
+}
+.hero-meta span { display: inline-flex; align-items: center; gap: 6px; }
+.hero-meta span::before {
+  content: '◆'; color: var(--cyan); font-size: 9px;
+}
+
+/* ══════════ STATS ROW ══════════ */
+.stats {
+  max-width: 1360px; margin: 0 auto;
+  padding: 28px 28px 0;
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 12px;
+}
+.stat-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 16px 18px;
+  position: relative;
+  overflow: hidden;
+  transition: border-color .15s, transform .15s;
+}
+.stat-card:hover {
+  border-color: var(--line-hi);
+  transform: translateY(-2px);
+}
+.stat-card::before {
+  content: '';
+  position: absolute; top: 0; left: 0; right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--cyan), transparent);
+  opacity: 0;
+  transition: opacity .2s;
+}
+.stat-card:hover::before { opacity: 1; }
+.stat-card .label {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10.5px;
+  color: var(--text-3);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.stat-card .value {
+  font-size: 32px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  margin-top: 6px;
+  font-variant-numeric: tabular-nums;
+  background: linear-gradient(180deg, #ffffff 0%, #a8b0c9 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+.stat-card .value .unit { font-size: 16px; color: var(--text-3); font-weight: 600; }
+.stat-card .delta {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11.5px; font-weight: 600;
+  margin-top: 3px;
+  display: inline-flex; align-items: center; gap: 5px;
+}
+.stat-card .delta.up   { color: var(--green); }
+.stat-card .delta.down { color: var(--coral); }
+.stat-card .delta.flat { color: var(--text-3); }
+.stat-card.hi {
+  background:
+    linear-gradient(145deg, rgba(0,212,255,.14) 0%, rgba(0,212,255,.02) 100%),
+    var(--surface);
+  border-color: rgba(0,212,255,.2);
+}
+.stat-card.hi::before { opacity: 1; }
+
+/* ══════════ MAIN TABLE ══════════ */
+.main {
+  max-width: 1360px; margin: 0 auto;
+  padding: 28px 28px 60px;
+}
+
+.table-head {
+  display: flex; align-items: flex-end; gap: 14px;
+  margin-bottom: 18px;
+}
+.table-head h2 {
+  font-size: 22px; font-weight: 700;
+  letter-spacing: -0.02em;
+}
+.table-head .count {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px; color: var(--text-3);
+  padding: 3px 10px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 100px;
+}
+.table-head .spacer { flex: 1; }
+
+.filter-bar {
+  display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+  margin-bottom: 16px;
+}
+.search {
+  flex: 1; min-width: 260px; position: relative;
+}
+.search input {
+  width: 100%; height: 38px;
+  background: var(--surface); border: 1px solid var(--line-hi);
+  border-radius: 10px; padding: 0 44px 0 38px;
+  color: var(--text);
+  font-family: inherit; font-size: 13.5px;
+  outline: none;
+  transition: border-color .12s, box-shadow .12s;
+}
+.search input::placeholder { color: var(--text-3); }
+.search input:focus {
+  border-color: var(--cyan);
+  box-shadow: 0 0 0 3px var(--cyan-soft);
+}
+.search::before {
+  content: '⌕'; position: absolute; left: 14px; top: 50%; transform: translateY(-50%);
+  color: var(--text-3); font-size: 15px;
+}
+.search .kbd {
+  position: absolute; right: 10px; top: 50%; transform: translateY(-50%);
+  font-family: 'JetBrains Mono', monospace; font-size: 10.5px;
+  color: var(--text-3);
+  background: var(--surface-hi);
+  padding: 2px 7px; border-radius: 5px;
+  border: 1px solid var(--line);
+}
+.chip {
+  height: 34px; padding: 0 12px;
+  background: var(--surface); border: 1px solid var(--line-hi);
+  border-radius: 8px; cursor: pointer;
+  font-size: 12.5px; color: var(--text-2);
+  display: inline-flex; align-items: center; gap: 6px;
+  transition: all .12s;
+}
+.chip:hover { background: var(--surface-hi); color: var(--text); }
+.chip.on {
+  background: var(--cyan-soft);
+  color: var(--cyan);
+  border-color: rgba(0,212,255,.3);
+}
+.chip .ch { font-size: 10px; opacity: 0.7; }
+
+/* Table card */
+.table-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  overflow: hidden;
+  box-shadow: 0 1px 3px rgba(0,0,0,.3), 0 10px 40px rgba(0,0,0,.2);
+}
+table.t {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+table.t thead th {
+  text-align: left;
+  padding: 13px 16px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--text-3);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  background: var(--bg-2);
+  border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+}
+table.t thead th.num { text-align: right; }
+table.t tbody td {
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--line);
+  vertical-align: middle;
+  color: var(--text);
+}
+table.t tbody tr { cursor: pointer; transition: background .12s; }
+table.t tbody tr:hover { background: rgba(0,212,255,.03); }
+table.t tbody tr:last-child td { border-bottom: none; }
+
+/* Creative cell */
+.cc { display: flex; align-items: center; gap: 12px; }
+.thm {
+  width: 40px; height: 40px; border-radius: 8px;
+  flex-shrink: 0;
+  background:
+    linear-gradient(135deg, var(--violet) 0%, var(--cyan) 100%);
+  position: relative;
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.15),
+    0 2px 8px rgba(124,92,255,.25);
+}
+.thm::after {
+  content: '▶'; position: absolute; inset: 0;
+  display: grid; place-items: center;
+  color: rgba(255,255,255,.85); font-size: 12px;
+  text-shadow: 0 1px 2px rgba(0,0,0,.3);
+}
+.thm.photo { background: linear-gradient(135deg, var(--coral) 0%, var(--amber) 100%); box-shadow: inset 0 1px 0 rgba(255,255,255,.15), 0 2px 8px rgba(255,123,87,.25); }
+.thm.photo::after { content: '◈'; }
+.cc .name { font-weight: 600; font-size: 14px; letter-spacing: -0.01em; }
+.cc .sub {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px; color: var(--text-3);
+  margin-top: 2px;
+}
+.cc .sub a { color: var(--text-3); text-decoration: none; }
+.cc .sub a:hover { color: var(--cyan); }
+
+/* Tag pills */
+.tg {
+  display: inline-block;
+  padding: 3px 9px;
+  border-radius: 6px;
+  font-size: 11.5px;
+  font-weight: 500;
+  background: var(--surface-hi);
+  color: var(--text-2);
+}
+.tg.angle {
+  background: var(--cyan-soft);
+  color: var(--cyan);
+  border: 1px solid rgba(0,212,255,.2);
+}
+.tg.persona {
+  background: var(--violet-soft);
+  color: #b3a0ff;
+  border: 1px solid rgba(124,92,255,.22);
+}
+.tg.hook {
+  background: rgba(245,193,71,.1);
+  color: var(--amber);
+  border: 1px solid rgba(245,193,71,.2);
+}
+
+/* Status */
+.st {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 11.5px; font-weight: 600;
+  letter-spacing: -0.005em;
+}
+.st .d { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.st.massive { color: var(--lime); background: rgba(163,230,53,0.1); border: 1px solid rgba(163,230,53,0.25); }
+.st.massive .d { box-shadow: 0 0 8px var(--lime); }
+.st.winner  { color: var(--green); background: rgba(34,211,131,0.1); border: 1px solid rgba(34,211,131,0.25); }
+.st.mild    { color: var(--amber); background: rgba(245,193,71,0.1); border: 1px solid rgba(245,193,71,0.25); }
+.st.fatigue { color: var(--coral); background: rgba(255,123,87,0.1); border: 1px solid rgba(255,123,87,0.25); }
+.st.testing { color: var(--sky); background: rgba(77,163,255,0.1); border: 1px solid rgba(77,163,255,0.25); }
+.st.loser   { color: var(--rose); background: rgba(255,87,136,0.1); border: 1px solid rgba(255,87,136,0.25); }
+
+.funnel {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--text-2);
+  padding: 2px 7px;
+  background: var(--surface-hi);
+  border-radius: 4px;
+  letter-spacing: 0.04em;
+}
+
+.n {
+  text-align: right;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+}
+.n.big { font-weight: 600; font-size: 13.5px; }
+.n.roas { font-weight: 700; font-size: 14px; }
+.n.roas.massive { color: var(--lime); }
+.n.roas.up      { color: var(--green); }
+.n.roas.mild    { color: var(--amber); }
+.n.roas.down    { color: var(--coral); }
+.n.roas.loser   { color: var(--rose); }
+.n.dim          { color: var(--text-4); }
+
+.spark-cell svg { display: block; }
+.date { color: var(--text-3); font-size: 11.5px; font-family: 'JetBrains Mono', monospace; }
+
+.links { display: inline-flex; gap: 2px; }
+.links a {
+  width: 28px; height: 28px;
+  display: grid; place-items: center;
+  border-radius: 6px;
+  color: var(--text-3); text-decoration: none;
+  font-size: 13px;
+}
+.links a:hover { background: var(--cyan-soft); color: var(--cyan); }
+</style>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="nav-inner">
+    <div class="logo">
+      <div class="logo-mark"></div>
+      Immuvi
+    </div>
+    <div class="nav-links">
+      <a class="nav-link">Command HQ</a>
+      <a class="nav-link">Angles <span class="ct">7</span></a>
+      <a class="nav-link active">Tracker <span class="ct">66</span></a>
+      <a class="nav-link">Matrix <span class="ct">19/35</span></a>
+      <a class="nav-link">Action <span class="ct">3</span></a>
+    </div>
+    <div class="right">
+      <span class="live-pill">Live · 16s</span>
+      <button class="btn">⇡ Push</button>
+      <button class="btn btn-primary">↻ Sync ClickUp</button>
+    </div>
+  </div>
+</nav>
+
+<header class="hero">
+  <div class="hero-top">
+    <div class="badge">
+      <span class="dot-pill">Art Therapy</span>
+      <span>66 creatives · last synced <strong>16s ago</strong></span>
+    </div>
+    <div class="badge">
+      <span class="dot-pill" style="background: rgba(245,193,71,.1); color: var(--amber); border-color: transparent;">Meta ⚠</span>
+      <span>not connected</span>
+    </div>
+  </div>
+
+  <h1>
+    Scroll-stopping ads,
+    <span class="grad">live in minutes.</span>
+  </h1>
+  <p class="sub">
+    Every creative you've ever run. Every angle × persona combo. Live Meta performance,
+    auto-classified into winners, losers, and the ones about to fade.
+  </p>
+
+  <div class="hero-meta">
+    <span>OpenAI-powered classification</span>
+    <span>Meta Ads integrated</span>
+    <span>ClickUp synced</span>
+    <span>Shopify-ready</span>
+  </div>
+</header>
+
+<section class="stats">
+  <div class="stat-card hi">
+    <div class="label">Creatives</div>
+    <div class="value">66</div>
+    <div class="delta up">↑ +3 this week</div>
+  </div>
+  <div class="stat-card">
+    <div class="label">Winners 7d</div>
+    <div class="value">18</div>
+    <div class="delta up">↑ +2 promoted</div>
+  </div>
+  <div class="stat-card">
+    <div class="label">Fatigued</div>
+    <div class="value">3</div>
+    <div class="delta down">↑ +1 flagged</div>
+  </div>
+  <div class="stat-card">
+    <div class="label">Spend 7d</div>
+    <div class="value">$12.4<span class="unit">K</span></div>
+    <div class="delta up">↑ +18%</div>
+  </div>
+  <div class="stat-card">
+    <div class="label">Blended ROAS</div>
+    <div class="value">1.38<span class="unit">×</span></div>
+    <div class="delta up">↑ +0.04 WoW</div>
+  </div>
+</section>
+
+<main class="main">
+  <div class="table-head">
+    <h2>Creative Tracker</h2>
+    <div class="count">66 rows · showing 8</div>
+    <div class="spacer"></div>
+  </div>
+
+  <div class="filter-bar">
+    <div class="search">
+      <input placeholder="Search creatives, angles, personas, hooks…">
+      <span class="kbd">⌘K</span>
+    </div>
+    <div class="chip on">Winners <span class="ch">▾</span></div>
+    <div class="chip">Angle <span class="ch">▾</span></div>
+    <div class="chip">Persona <span class="ch">▾</span></div>
+    <div class="chip">Hook <span class="ch">▾</span></div>
+    <div class="chip">Funnel <span class="ch">▾</span></div>
+    <div class="chip">7D <span class="ch">▾</span></div>
+  </div>
+
+  <div class="table-card">
+    <table class="t">
+      <thead>
+        <tr>
+          <th>Creative</th>
+          <th>Angle</th>
+          <th>Persona</th>
+          <th>Hook</th>
+          <th>Funnel</th>
+          <th>Status</th>
+          <th class="num">Spend 7d</th>
+          <th class="num">ROAS</th>
+          <th>Trend</th>
+          <th>Created</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><div class="cc"><div class="thm"></div><div><div class="name">5773-1 old winner</div><div class="sub">AT-11439-v1 · <a>CU</a></div></div></div></td>
+          <td><span class="tg angle">Art as Therapy</span></td>
+          <td><span class="tg persona">Women 25-45</span></td>
+          <td><span class="tg hook">POV</span></td>
+          <td><span class="funnel">TOF</span></td>
+          <td><span class="st massive"><span class="d"></span>Massive</span></td>
+          <td class="n big">$1,842</td>
+          <td class="n roas massive">1.92×</td>
+          <td class="spark-cell">
+            <svg width="80" height="22" viewBox="0 0 80 22">
+              <polyline fill="none" stroke="#a3e635" stroke-width="1.6" points="0,18 11,15 22,13 33,11 44,8 55,6 66,4 80,2"/>
+            </svg>
+          </td>
+          <td class="date">21.04</td>
+        </tr>
+        <tr>
+          <td><div class="cc"><div class="thm photo"></div><div><div class="name">4570-1 old winner</div><div class="sub">AT-10835 · <a>CU</a></div></div></div></td>
+          <td><span class="tg angle">Emotional Lit.</span></td>
+          <td><span class="tg persona">Women 25-45</span></td>
+          <td><span class="tg hook">Curiosity</span></td>
+          <td><span class="funnel">TOF</span></td>
+          <td><span class="st winner"><span class="d"></span>Winner</span></td>
+          <td class="n big">$806</td>
+          <td class="n roas up">1.54×</td>
+          <td class="spark-cell">
+            <svg width="80" height="22" viewBox="0 0 80 22">
+              <polyline fill="none" stroke="#22d383" stroke-width="1.6" points="0,14 11,13 22,11 33,12 44,10 55,9 66,8 80,7"/>
+            </svg>
+          </td>
+          <td class="date">19.04</td>
+        </tr>
+        <tr>
+          <td><div class="cc"><div class="thm photo"></div><div><div class="name">4569-2 old winner</div><div class="sub">AT-10834 · <a>CU</a></div></div></div></td>
+          <td><span class="tg angle">Scarcity</span></td>
+          <td><span class="tg persona">Women 25-45</span></td>
+          <td><span class="tg hook">Pattern Interrupt</span></td>
+          <td><span class="funnel">TOF</span></td>
+          <td><span class="st mild"><span class="d"></span>Mild</span></td>
+          <td class="n big">$412</td>
+          <td class="n roas mild">1.33×</td>
+          <td class="spark-cell">
+            <svg width="80" height="22" viewBox="0 0 80 22">
+              <polyline fill="none" stroke="#f5c147" stroke-width="1.6" points="0,12 11,13 22,11 33,12 44,13 55,11 66,12 80,11"/>
+            </svg>
+          </td>
+          <td class="date">18.04</td>
+        </tr>
+        <tr>
+          <td><div class="cc"><div class="thm photo"></div><div><div class="name">10785-2 old winner</div><div class="sub">AT-10733 · <a>CU</a></div></div></div></td>
+          <td><span class="tg angle">Scarcity</span></td>
+          <td><span class="tg persona">Women 25-45</span></td>
+          <td><span class="tg hook">Pattern Interrupt</span></td>
+          <td><span class="funnel">TOF</span></td>
+          <td><span class="st fatigue"><span class="d"></span>Fatigued</span></td>
+          <td class="n big">$1,205</td>
+          <td class="n roas down">0.98× ↓</td>
+          <td class="spark-cell">
+            <svg width="80" height="22" viewBox="0 0 80 22">
+              <polyline fill="none" stroke="#ff7b57" stroke-width="1.6" points="0,6 11,7 22,8 33,10 44,12 55,14 66,16 80,19"/>
+            </svg>
+          </td>
+          <td class="date">10.04</td>
+        </tr>
+        <tr>
+          <td><div class="cc"><div class="thm photo"></div><div><div class="name">6197-1 old winner</div><div class="sub">AT-10612 · <a>CU</a></div></div></div></td>
+          <td><span class="tg angle">Scarcity</span></td>
+          <td><span class="tg persona">Women 25-45</span></td>
+          <td><span class="tg hook">Direct Offer</span></td>
+          <td><span class="funnel">TOF</span></td>
+          <td><span class="st testing"><span class="d"></span>Testing</span></td>
+          <td class="n big dim">$28</td>
+          <td class="n roas dim">—</td>
+          <td class="spark-cell">
+            <svg width="80" height="22" viewBox="0 0 80 22">
+              <polyline fill="none" stroke="#454c6c" stroke-width="1.2" stroke-dasharray="3 2" points="0,11 80,11"/>
+            </svg>
+          </td>
+          <td class="date">21.04</td>
+        </tr>
+        <tr>
+          <td><div class="cc"><div class="thm"></div><div><div class="name">11591 new concept</div><div class="sub">AT-11591 · <a>CU</a></div></div></div></td>
+          <td><span class="tg angle">Emotional Lit.</span></td>
+          <td><span class="tg persona">Young Adults Grief</span></td>
+          <td><span class="tg hook">Pain</span></td>
+          <td><span class="funnel">TOF</span></td>
+          <td><span class="st winner"><span class="d"></span>Winner</span></td>
+          <td class="n big">$624</td>
+          <td class="n roas up">1.46×</td>
+          <td class="spark-cell">
+            <svg width="80" height="22" viewBox="0 0 80 22">
+              <polyline fill="none" stroke="#22d383" stroke-width="1.6" points="0,16 11,14 22,13 33,12 44,10 55,9 66,7 80,6"/>
+            </svg>
+          </td>
+          <td class="date">20.04</td>
+        </tr>
+        <tr>
+          <td><div class="cc"><div class="thm photo"></div><div><div class="name">11542 social proof</div><div class="sub">AT-11542 · <a>CU</a></div></div></div></td>
+          <td><span class="tg angle">Social Proof 18K</span></td>
+          <td><span class="tg persona">Women 25-45</span></td>
+          <td><span class="tg hook">Testimonial</span></td>
+          <td><span class="funnel">TOF</span></td>
+          <td><span class="st winner"><span class="d"></span>Winner</span></td>
+          <td class="n big">$488</td>
+          <td class="n roas up">1.41×</td>
+          <td class="spark-cell">
+            <svg width="80" height="22" viewBox="0 0 80 22">
+              <polyline fill="none" stroke="#22d383" stroke-width="1.6" points="0,14 11,13 22,12 33,11 44,10 55,10 66,9 80,8"/>
+            </svg>
+          </td>
+          <td class="date">17.04</td>
+        </tr>
+        <tr>
+          <td><div class="cc"><div class="thm"></div><div><div class="name">11436 new concept</div><div class="sub">AT-11436 · <a>CU</a></div></div></div></td>
+          <td><span class="tg angle">Calm / Unwind</span></td>
+          <td><span class="tg persona">Self-Care Adults</span></td>
+          <td><span class="tg hook">Curiosity</span></td>
+          <td><span class="funnel">TOF</span></td>
+          <td><span class="st loser"><span class="d"></span>Loser</span></td>
+          <td class="n big">$187</td>
+          <td class="n roas loser">0.42×</td>
+          <td class="spark-cell">
+            <svg width="80" height="22" viewBox="0 0 80 22">
+              <polyline fill="none" stroke="#ff5788" stroke-width="1.6" points="0,8 11,10 22,12 33,14 44,15 55,17 66,18 80,20"/>
+            </svg>
+          </td>
+          <td class="date">14.04</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</main>
+
+</body>
+</html>

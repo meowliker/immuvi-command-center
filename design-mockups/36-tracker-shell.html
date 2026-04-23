@@ -1,0 +1,1068 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Creative Tracker — Immuvi Command Center</title>
+  <link href="https://api.fontshare.com/v2/css?f[]=satoshi@400,500,600,700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Instrument+Serif:ital@1&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --canvas: #faf9f5;
+      --paper: #ffffff;
+      --paper-2: #f3f1e9;
+      --paper-3: #ede9dc;
+      --line: #e8e5dc;
+      --line-hi: #d6d1c1;
+      --ink: #1a1814;
+      --ink-2: #585449;
+      --ink-3: #8f8a7c;
+      --ink-4: #b8b3a2;
+      --accent: #c05336;
+      --accent-deep: #a4401f;
+      --accent-soft: #f5e3da;
+
+      --s-scale: #35683f;    --s-scale-soft: #dcecd8;
+      --s-winner: #5e7557;   --s-winner-soft: #e4ebdc;
+      --s-testing: #4f6780;  --s-testing-soft: #dde4ec;
+      --s-approved: #7c5c2e; --s-approved-soft: #f0e4cc;
+      --s-ready: #3a6b8a;    --s-ready-soft: #d4e8f0;
+      --s-prod: #c14400;     --s-prod-soft: #fbe0d0;
+      --s-loser: #a83b28;    --s-loser-soft: #f2dad6;
+      --s-untested: #8f8a7c; --s-untested-soft: #f3f1e9;
+
+      --tr: all 160ms cubic-bezier(0.32, 0.72, 0, 1);
+      --sh: 0 1px 2px rgba(26,24,20,.04), 0 4px 12px rgba(26,24,20,.06);
+    }
+
+    html, body {
+      height: 100%;
+      background: var(--canvas);
+      font-family: 'Satoshi', system-ui, sans-serif;
+      color: var(--ink);
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ─── MOCK NAV BAR (top 44px placeholder) ─── */
+    .nav-bar {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      height: 44px;
+      background: var(--paper);
+      border-bottom: 1px solid var(--line);
+      display: flex;
+      align-items: center;
+      padding: 0 24px;
+      gap: 8px;
+    }
+    .nav-logo {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--ink);
+      letter-spacing: -0.01em;
+    }
+    .nav-logo span {
+      color: var(--accent);
+    }
+    .nav-tabs {
+      display: flex;
+      align-items: center;
+      gap: 2px;
+      margin-left: 16px;
+    }
+    .nav-tab {
+      height: 28px;
+      padding: 0 12px;
+      border-radius: 6px;
+      font-size: 12.5px;
+      font-weight: 500;
+      color: var(--ink-3);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      transition: var(--tr);
+      border: none;
+      background: transparent;
+      font-family: 'Satoshi', system-ui, sans-serif;
+    }
+    .nav-tab:hover { background: var(--paper-2); color: var(--ink-2); }
+    .nav-tab.active { background: var(--accent-soft); color: var(--accent); }
+
+    /* ─── SECTION HEADER ─── */
+    .section-header {
+      position: sticky;
+      top: 44px;
+      z-index: 90;
+      background: var(--paper);
+      border-bottom: 1px solid var(--line);
+      padding: 12px 24px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .section-header-left {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      flex: 1;
+    }
+    .section-eyebrow {
+      font-size: 10px;
+      font-family: 'Satoshi', system-ui, sans-serif;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: var(--ink-3);
+      line-height: 1;
+    }
+    .section-title-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .section-title {
+      font-family: 'Instrument Serif', Georgia, serif;
+      font-style: italic;
+      font-size: 32px;
+      letter-spacing: -0.02em;
+      color: var(--ink);
+      line-height: 1;
+    }
+    .count-badge {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      font-weight: 500;
+      color: var(--ink-3);
+      background: var(--paper-2);
+      padding: 2px 8px;
+      border-radius: 100px;
+      margin-top: 4px;
+      border: 1px solid var(--line);
+    }
+    .section-header-right {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .btn-ghost {
+      height: 27px;
+      padding: 0 10px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: transparent;
+      font-size: 12px;
+      font-family: 'Satoshi', system-ui, sans-serif;
+      font-weight: 500;
+      color: var(--ink-2);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      transition: var(--tr);
+      white-space: nowrap;
+    }
+    .btn-ghost:hover {
+      background: var(--paper-2);
+      border-color: var(--line-hi);
+      color: var(--ink);
+    }
+    .btn-accent {
+      height: 27px;
+      padding: 0 10px;
+      border: none;
+      border-radius: 6px;
+      background: var(--accent);
+      font-size: 12px;
+      font-family: 'Satoshi', system-ui, sans-serif;
+      font-weight: 600;
+      color: #fff;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      transition: var(--tr);
+      white-space: nowrap;
+    }
+    .btn-accent:hover { background: var(--accent-deep); }
+
+    /* ─── TWO-TIER FILTER BAR ─── */
+    .filter-bar {
+      position: sticky;
+      top: 88px;
+      z-index: 89;
+      background: var(--paper);
+      border-bottom: 1px solid var(--line);
+      padding: 0 24px;
+    }
+    .filter-primary {
+      padding: 8px 0;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .filter-sep {
+      width: 1px;
+      height: 16px;
+      background: var(--line);
+      flex-shrink: 0;
+    }
+    .chip {
+      height: 28px;
+      padding: 0 12px;
+      border: 1px solid var(--line);
+      border-radius: 100px;
+      font-size: 12px;
+      font-family: 'Satoshi', system-ui, sans-serif;
+      font-weight: 500;
+      color: var(--ink-2);
+      background: transparent;
+      cursor: pointer;
+      transition: var(--tr);
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      white-space: nowrap;
+    }
+    .chip:hover {
+      background: var(--paper-2);
+      border-color: var(--line-hi);
+      color: var(--ink);
+    }
+    .chip.active {
+      background: var(--accent-soft);
+      border-color: var(--accent);
+      color: var(--accent);
+      font-weight: 500;
+    }
+    /* Task type pill group */
+    .pill-group {
+      display: flex;
+      align-items: center;
+      border: 1px solid var(--line);
+      border-radius: 100px;
+      overflow: hidden;
+    }
+    .pill-group .chip {
+      border: none;
+      border-radius: 0;
+      border-right: 1px solid var(--line);
+    }
+    .pill-group .chip:last-child { border-right: none; }
+    .pill-group .chip.active {
+      background: var(--accent-soft);
+      color: var(--accent);
+    }
+    /* Search chip */
+    .search-chip {
+      height: 28px;
+      padding: 0 10px;
+      border: 1px solid var(--line);
+      border-radius: 100px;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      width: 160px;
+      transition: var(--tr);
+    }
+    .search-chip:focus-within {
+      border-color: var(--line-hi);
+      background: var(--paper-2);
+    }
+    .search-icon {
+      color: var(--ink-4);
+      font-size: 11px;
+      flex-shrink: 0;
+    }
+    .search-input {
+      border: none;
+      background: transparent;
+      font-size: 12px;
+      font-family: 'Satoshi', system-ui, sans-serif;
+      color: var(--ink-2);
+      outline: none;
+      width: 100%;
+    }
+    .search-input::placeholder { color: var(--ink-4); }
+    .filter-right {
+      margin-left: auto;
+    }
+    .chip-muted {
+      font-size: 11.5px;
+      color: var(--ink-3);
+    }
+    /* Secondary filter row */
+    .filter-secondary {
+      max-height: 0;
+      overflow: hidden;
+      transition: max-height 280ms cubic-bezier(0.32, 0.72, 0, 1);
+    }
+    .filter-secondary.open { max-height: 44px; }
+    .filter-secondary-inner {
+      padding: 6px 0;
+      display: flex;
+      gap: 6px;
+      align-items: center;
+    }
+    .clear-all {
+      font-size: 12px;
+      color: var(--accent);
+      font-weight: 500;
+      cursor: pointer;
+      background: none;
+      border: none;
+      font-family: 'Satoshi', system-ui, sans-serif;
+      margin-left: 4px;
+      transition: var(--tr);
+    }
+    .clear-all:hover { color: var(--accent-deep); text-decoration: underline; }
+
+    /* ─── TABLE ─── */
+    .table-wrapper {
+      overflow-x: auto;
+      padding-bottom: 80px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      table-layout: fixed;
+      min-width: 1420px;
+    }
+    thead {
+      position: sticky;
+      top: calc(44px + 88px);
+      z-index: 85;
+    }
+    th {
+      font-size: 10.5px;
+      font-family: 'Satoshi', system-ui, sans-serif;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      color: var(--ink-3);
+      padding: 0 10px;
+      height: 32px;
+      text-align: left;
+      border-bottom: 1px solid var(--line);
+      white-space: nowrap;
+      cursor: pointer;
+      user-select: none;
+      background: var(--paper-2);
+      transition: var(--tr);
+      vertical-align: middle;
+    }
+    th:hover { color: var(--ink-2); background: var(--paper-3); }
+    .sort-icon {
+      display: inline-block;
+      margin-left: 3px;
+      color: var(--ink-4);
+      font-size: 9px;
+    }
+    th.sort-asc .sort-icon, th.sort-desc .sort-icon { color: var(--accent); }
+
+    /* Column widths */
+    .col-name      { width: 180px; }
+    .col-angle     { width: 140px; }
+    .col-persona   { width: 110px; }
+    .col-structure { width: 90px; }
+    .col-hook      { width: 80px; }
+    .col-prod      { width: 85px; }
+    .col-hypothesis{ width: 160px; }
+    .col-ad        { width: 55px; }
+    .col-drive     { width: 55px; }
+    .col-adtype    { width: 65px; }
+    .col-funnel    { width: 55px; }
+    .col-status    { width: 110px; }
+    .col-created   { width: 70px; }
+    .col-var       { width: 45px; }
+    .col-matrix    { width: 65px; }
+    .col-actions   { width: 70px; }
+
+    tbody tr {
+      height: 36px;
+      border-bottom: 1px solid rgba(232,229,220,0.7);
+      transition: background 100ms;
+    }
+    tbody tr:hover { background: #f9f7f1; }
+    tbody tr:nth-child(even) { background: rgba(26,24,20,0.008); }
+    tbody tr:nth-child(even):hover { background: #f9f7f1; }
+
+    td {
+      padding: 0 10px;
+      vertical-align: middle;
+      font-size: 12.5px;
+      font-family: 'Satoshi', system-ui, sans-serif;
+      color: var(--ink-2);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    /* Cell: Format Name */
+    .cell-id {
+      font-size: 10.5px;
+      color: var(--ink-4);
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .cell-dot {
+      color: var(--ink-4);
+      margin: 0 4px;
+    }
+    .cell-name {
+      font-weight: 500;
+      color: var(--ink);
+    }
+
+    /* Cell: plain-small */
+    .cell-sm {
+      font-size: 12px;
+      color: var(--ink-3);
+    }
+
+    /* Cell: hypothesis */
+    .cell-hypothesis {
+      font-style: italic;
+      color: var(--ink-3);
+      font-size: 12px;
+    }
+
+    /* Cell: links */
+    .cell-link {
+      color: var(--accent);
+      font-size: 11.5px;
+      font-family: 'JetBrains Mono', monospace;
+      text-decoration: none;
+      font-weight: 500;
+      transition: var(--tr);
+    }
+    .cell-link:hover { color: var(--accent-deep); }
+    .cell-empty {
+      color: var(--ink-4);
+      font-size: 13px;
+    }
+
+    /* Cell: ad type */
+    .cell-adtype {
+      font-size: 11px;
+      color: var(--ink-3);
+    }
+
+    /* Cell: funnel badge */
+    .badge-funnel {
+      display: inline-flex;
+      align-items: center;
+      height: 18px;
+      padding: 0 6px;
+      border-radius: 3px;
+      font-size: 9.5px;
+      font-family: 'Satoshi', system-ui, sans-serif;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .badge-tof { background: #fef3c7; color: #92400e; }
+    .badge-mof { background: var(--s-testing-soft); color: var(--s-testing); }
+    .badge-bof { background: var(--s-winner-soft); color: var(--s-winner); }
+
+    /* Cell: status pill */
+    .pill-status {
+      display: inline-flex;
+      align-items: center;
+      height: 20px;
+      padding: 0 9px;
+      border-radius: 10px;
+      font-size: 11px;
+      font-family: 'Satoshi', system-ui, sans-serif;
+      font-weight: 500;
+    }
+    .s-scale    { background: var(--s-scale-soft);    color: var(--s-scale); }
+    .s-winner   { background: var(--s-winner-soft);   color: var(--s-winner); }
+    .s-testing  { background: var(--s-testing-soft);  color: var(--s-testing); }
+    .s-approved { background: var(--s-approved-soft); color: var(--s-approved); }
+    .s-ready    { background: var(--s-ready-soft);    color: var(--s-ready); }
+    .s-prod     { background: var(--s-prod-soft);     color: var(--s-prod); }
+    .s-loser    { background: var(--s-loser-soft);    color: var(--s-loser); }
+    .s-untested { background: var(--s-untested-soft); color: var(--s-untested); }
+
+    /* Cell: created */
+    .cell-created {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      color: var(--ink-3);
+    }
+
+    /* Cell: variations */
+    .cell-var {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11.5px;
+      font-weight: 600;
+      color: var(--accent);
+    }
+
+    /* Cell: matrix */
+    .cell-matrix {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11.5px;
+      color: var(--ink-3);
+    }
+
+    /* Cell: actions */
+    .actions-cell {
+      display: flex;
+      align-items: center;
+      gap: 2px;
+    }
+    .action-btn {
+      width: 22px;
+      height: 22px;
+      border: none;
+      background: transparent;
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      font-size: 11px;
+      color: var(--ink-4);
+      transition: var(--tr);
+    }
+    .action-btn:hover { background: var(--paper-2); color: var(--ink-2); }
+    .action-btn.delete:hover { background: var(--s-loser-soft); color: var(--s-loser); }
+
+    /* Row stagger animation */
+    @keyframes staggerIn {
+      from {
+        opacity: 0;
+        transform: translateY(6px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+    tbody tr {
+      animation: staggerIn 0.25s cubic-bezier(0.32, 0.72, 0, 1) both;
+      animation-delay: calc(var(--i) * 35ms);
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Mock nav bar placeholder (44px) -->
+  <div class="nav-bar">
+    <div class="nav-logo">immuvi<span>.</span></div>
+    <nav class="nav-tabs">
+      <button class="nav-tab">Dashboard</button>
+      <button class="nav-tab">Matrix</button>
+      <button class="nav-tab active">Creative Tracker</button>
+      <button class="nav-tab">Brief</button>
+      <button class="nav-tab">Pipeline</button>
+    </nav>
+  </div>
+
+  <!-- Section header (sticky top:44px) -->
+  <header class="section-header">
+    <div class="section-header-left">
+      <div class="section-eyebrow">Creative Tracker</div>
+      <div class="section-title-row">
+        <h1 class="section-title">Creative Tracker.</h1>
+        <span class="count-badge">66</span>
+      </div>
+    </div>
+    <div class="section-header-right">
+      <button class="btn-ghost">
+        <span>↑</span> Push All to ClickUp
+      </button>
+      <button class="btn-accent">
+        <span>+</span> Add Creative
+      </button>
+    </div>
+  </header>
+
+  <!-- Two-tier filter bar (sticky top:88px) -->
+  <div class="filter-bar" id="filterBar">
+
+    <!-- Primary row -->
+    <div class="filter-primary">
+
+      <!-- Task type pill group -->
+      <div class="pill-group" id="taskTypeGroup">
+        <button class="chip active" data-type="all">All</button>
+        <button class="chip" data-type="formats">Formats</button>
+        <button class="chip" data-type="production">Production</button>
+      </div>
+
+      <div class="filter-sep"></div>
+
+      <button class="chip" id="statusFilter">Status <span>▾</span></button>
+      <button class="chip" id="funnelFilter">Funnel <span>▾</span></button>
+      <button class="chip" id="angleFilter">Angle <span>▾</span></button>
+      <button class="chip" id="personaFilter">Persona <span>▾</span></button>
+
+      <div class="filter-sep"></div>
+
+      <button class="chip" id="dateFilter">Date <span>▾</span></button>
+
+      <!-- Search -->
+      <div class="search-chip" id="searchChip">
+        <span class="search-icon">⌕</span>
+        <input class="search-input" type="text" id="searchInput" placeholder="Search...">
+      </div>
+
+      <!-- More filters — pushed right -->
+      <div class="filter-right">
+        <button class="chip chip-muted" id="moreFiltersBtn">More filters +</button>
+      </div>
+    </div>
+
+    <!-- Secondary row -->
+    <div class="filter-secondary" id="filterSecondary">
+      <div class="filter-secondary-inner">
+        <button class="chip">Format <span>▾</span></button>
+        <button class="chip">Structure <span>▾</span></button>
+        <button class="chip">Hook <span>▾</span></button>
+        <button class="chip">Production <span>▾</span></button>
+        <button class="chip">Ad Type <span>▾</span></button>
+        <button class="clear-all" id="clearAllBtn">Clear all</button>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Table -->
+  <div class="table-wrapper">
+    <table id="creativeTable">
+      <colgroup>
+        <col class="col-name">
+        <col class="col-angle">
+        <col class="col-persona">
+        <col class="col-structure">
+        <col class="col-hook">
+        <col class="col-prod">
+        <col class="col-hypothesis">
+        <col class="col-ad">
+        <col class="col-drive">
+        <col class="col-adtype">
+        <col class="col-funnel">
+        <col class="col-status">
+        <col class="col-created">
+        <col class="col-var">
+        <col class="col-matrix">
+        <col class="col-actions">
+      </colgroup>
+      <thead>
+        <tr>
+          <th data-col="name">Format Name <span class="sort-icon">↕</span></th>
+          <th data-col="angle">Angle <span class="sort-icon">↕</span></th>
+          <th data-col="persona">Persona <span class="sort-icon">↕</span></th>
+          <th data-col="structure">Structure <span class="sort-icon">↕</span></th>
+          <th data-col="hook">Hook <span class="sort-icon">↕</span></th>
+          <th data-col="production">Production <span class="sort-icon">↕</span></th>
+          <th data-col="hypothesis">Hypothesis <span class="sort-icon">↕</span></th>
+          <th data-col="ad">Ad Link <span class="sort-icon">↕</span></th>
+          <th data-col="drive">Drive <span class="sort-icon">↕</span></th>
+          <th data-col="adtype">Ad Type <span class="sort-icon">↕</span></th>
+          <th data-col="funnel">Funnel <span class="sort-icon">↕</span></th>
+          <th data-col="status">Status <span class="sort-icon">↕</span></th>
+          <th data-col="created">Created <span class="sort-icon">↕</span></th>
+          <th data-col="var">Var. <span class="sort-icon">↕</span></th>
+          <th data-col="matrix">Matrix <span class="sort-icon">↕</span></th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody id="tableBody">
+
+        <!-- Row 1: AT-001 -->
+        <tr style="--i:0">
+          <td>
+            <span class="cell-id">AT-001</span>
+            <span class="cell-dot">·</span>
+            <span class="cell-name">Story Loop 30s</span>
+          </td>
+          <td>Pain Agitate Solution</td>
+          <td>Busy Mom</td>
+          <td class="cell-sm">Problem-Solution</td>
+          <td class="cell-sm">Question</td>
+          <td class="cell-sm">UGC</td>
+          <td>
+            <span class="cell-hypothesis">Hook opens with pain point, agitates with relatable scenario, presents solution</span>
+          </td>
+          <td><a href="#" class="cell-link">↗ Ad</a></td>
+          <td><a href="#" class="cell-link">↗ Drive</a></td>
+          <td class="cell-adtype">Video</td>
+          <td><span class="badge-funnel badge-tof">TOF</span></td>
+          <td><span class="pill-status s-scale">Scale</span></td>
+          <td class="cell-created">Apr 08</td>
+          <td><span class="cell-var">5×</span></td>
+          <td class="cell-matrix">3 cells</td>
+          <td>
+            <div class="actions-cell">
+              <button class="action-btn" title="Edit">✏</button>
+              <button class="action-btn" title="Open in ClickUp">↗</button>
+              <button class="action-btn delete" title="Delete">✕</button>
+            </div>
+          </td>
+        </tr>
+
+        <!-- Row 2: AT-002 -->
+        <tr style="--i:1">
+          <td>
+            <span class="cell-id">AT-002</span>
+            <span class="cell-dot">·</span>
+            <span class="cell-name">Transformation 15s</span>
+          </td>
+          <td>Before/After</td>
+          <td>Health Enthusiast</td>
+          <td class="cell-sm">Contrast</td>
+          <td class="cell-sm">Stat</td>
+          <td class="cell-sm">Motion</td>
+          <td>
+            <span class="cell-hypothesis">Before/after visual transformation with stat overlay reinforcing the change</span>
+          </td>
+          <td><span class="cell-empty">—</span></td>
+          <td><a href="#" class="cell-link">↗ Drive</a></td>
+          <td class="cell-adtype">Video</td>
+          <td><span class="badge-funnel badge-mof">MOF</span></td>
+          <td><span class="pill-status s-testing">Testing</span></td>
+          <td class="cell-created">Apr 10</td>
+          <td><span class="cell-var">1×</span></td>
+          <td class="cell-matrix">1 cell</td>
+          <td>
+            <div class="actions-cell">
+              <button class="action-btn" title="Edit">✏</button>
+              <button class="action-btn" title="Open in ClickUp">↗</button>
+              <button class="action-btn delete" title="Delete">✕</button>
+            </div>
+          </td>
+        </tr>
+
+        <!-- Row 3: AT-003 -->
+        <tr style="--i:2">
+          <td>
+            <span class="cell-id">AT-003</span>
+            <span class="cell-dot">·</span>
+            <span class="cell-name">Testimonial Reel</span>
+          </td>
+          <td>Social Proof</td>
+          <td>Skeptic</td>
+          <td class="cell-sm">Authority</td>
+          <td class="cell-sm">Quote</td>
+          <td class="cell-sm">Studio</td>
+          <td>
+            <span class="cell-hypothesis">Multi-person testimonial cut to counter skeptical objections</span>
+          </td>
+          <td><a href="#" class="cell-link">↗ Ad</a></td>
+          <td><a href="#" class="cell-link">↗ Drive</a></td>
+          <td class="cell-adtype">Video</td>
+          <td><span class="badge-funnel badge-bof">BOF</span></td>
+          <td><span class="pill-status s-approved">Approved</span></td>
+          <td class="cell-created">Apr 11</td>
+          <td><span class="cell-empty">—</span></td>
+          <td class="cell-matrix">1 cell</td>
+          <td>
+            <div class="actions-cell">
+              <button class="action-btn" title="Edit">✏</button>
+              <button class="action-btn" title="Open in ClickUp">↗</button>
+              <button class="action-btn delete" title="Delete">✕</button>
+            </div>
+          </td>
+        </tr>
+
+        <!-- Row 4: AT-004 -->
+        <tr style="--i:3">
+          <td>
+            <span class="cell-id">AT-004</span>
+            <span class="cell-dot">·</span>
+            <span class="cell-name">Value Stack 60s</span>
+          </td>
+          <td>Benefits-First</td>
+          <td>Value Seeker</td>
+          <td class="cell-sm">List</td>
+          <td class="cell-sm">Statement</td>
+          <td class="cell-sm">Voiceover</td>
+          <td>
+            <span class="cell-hypothesis">Stack 7 benefits rapidly with kinetic text, price anchor at end</span>
+          </td>
+          <td><span class="cell-empty">—</span></td>
+          <td><span class="cell-empty">—</span></td>
+          <td class="cell-adtype">Video</td>
+          <td><span class="badge-funnel badge-tof">TOF</span></td>
+          <td><span class="pill-status s-loser">Loser</span></td>
+          <td class="cell-created">Apr 05</td>
+          <td><span class="cell-empty">—</span></td>
+          <td class="cell-matrix">1 cell</td>
+          <td>
+            <div class="actions-cell">
+              <button class="action-btn" title="Edit">✏</button>
+              <button class="action-btn" title="Open in ClickUp">↗</button>
+              <button class="action-btn delete" title="Delete">✕</button>
+            </div>
+          </td>
+        </tr>
+
+        <!-- Row 5: AT-005 -->
+        <tr style="--i:4">
+          <td>
+            <span class="cell-id">AT-005</span>
+            <span class="cell-dot">·</span>
+            <span class="cell-name">Fear Hook Cut</span>
+          </td>
+          <td>Fear Appeal</td>
+          <td>Busy Mom</td>
+          <td class="cell-sm">Problem</td>
+          <td class="cell-sm">Fear</td>
+          <td class="cell-sm">UGC</td>
+          <td>
+            <span class="cell-hypothesis">Opens with fear trigger, validates concern, then pivots to solution</span>
+          </td>
+          <td><a href="#" class="cell-link">↗ Ad</a></td>
+          <td><a href="#" class="cell-link">↗ Drive</a></td>
+          <td class="cell-adtype">Video</td>
+          <td><span class="badge-funnel badge-tof">TOF</span></td>
+          <td><span class="pill-status s-prod">In Production</span></td>
+          <td class="cell-created">Apr 18</td>
+          <td><span class="cell-empty">—</span></td>
+          <td class="cell-empty">—</td>
+          <td>
+            <div class="actions-cell">
+              <button class="action-btn" title="Edit">✏</button>
+              <button class="action-btn" title="Open in ClickUp">↗</button>
+              <button class="action-btn delete" title="Delete">✕</button>
+            </div>
+          </td>
+        </tr>
+
+        <!-- Row 6: AT-006 -->
+        <tr style="--i:5">
+          <td>
+            <span class="cell-id">AT-006</span>
+            <span class="cell-dot">·</span>
+            <span class="cell-name">Authority Doc</span>
+          </td>
+          <td>Social Proof</td>
+          <td>Health Enthusiast</td>
+          <td class="cell-sm">Authority</td>
+          <td class="cell-sm">Stat</td>
+          <td class="cell-sm">Documentary</td>
+          <td>
+            <span class="cell-hypothesis">Documentary-style authority piece with expert validation and proof stacks</span>
+          </td>
+          <td><span class="cell-empty">—</span></td>
+          <td><a href="#" class="cell-link">↗ Drive</a></td>
+          <td class="cell-adtype">Video</td>
+          <td><span class="badge-funnel badge-mof">MOF</span></td>
+          <td><span class="pill-status s-untested">Untested</span></td>
+          <td class="cell-created">Apr 20</td>
+          <td><span class="cell-empty">—</span></td>
+          <td class="cell-empty">—</td>
+          <td>
+            <div class="actions-cell">
+              <button class="action-btn" title="Edit">✏</button>
+              <button class="action-btn" title="Open in ClickUp">↗</button>
+              <button class="action-btn delete" title="Delete">✕</button>
+            </div>
+          </td>
+        </tr>
+
+        <!-- Row 7: AT-007 -->
+        <tr style="--i:6">
+          <td>
+            <span class="cell-id">AT-007</span>
+            <span class="cell-dot">·</span>
+            <span class="cell-name">Price Anchor Reel</span>
+          </td>
+          <td>Benefits-First</td>
+          <td>Value Seeker</td>
+          <td class="cell-sm">List</td>
+          <td class="cell-sm">Statement</td>
+          <td class="cell-sm">Motion</td>
+          <td>
+            <span class="cell-hypothesis">Compare to competitors then anchor on value, strong CTA</span>
+          </td>
+          <td><span class="cell-empty">—</span></td>
+          <td><span class="cell-empty">—</span></td>
+          <td class="cell-adtype">Video</td>
+          <td><span class="badge-funnel badge-bof">BOF</span></td>
+          <td><span class="pill-status s-ready">Ready to Launch</span></td>
+          <td class="cell-created">Apr 17</td>
+          <td><span class="cell-empty">—</span></td>
+          <td class="cell-matrix">1 cell</td>
+          <td>
+            <div class="actions-cell">
+              <button class="action-btn" title="Edit">✏</button>
+              <button class="action-btn" title="Open in ClickUp">↗</button>
+              <button class="action-btn delete" title="Delete">✕</button>
+            </div>
+          </td>
+        </tr>
+
+        <!-- Row 8: AT-008 -->
+        <tr style="--i:7">
+          <td>
+            <span class="cell-id">AT-008</span>
+            <span class="cell-dot">·</span>
+            <span class="cell-name">UGC Raw Clip</span>
+          </td>
+          <td>Pain Agitate Solution</td>
+          <td>Skeptic</td>
+          <td class="cell-sm">Problem-Solution</td>
+          <td class="cell-sm">Question</td>
+          <td class="cell-sm">UGC</td>
+          <td>
+            <span class="cell-hypothesis">Raw authentic UGC clip addressing skeptic objections</span>
+          </td>
+          <td><a href="#" class="cell-link">↗ Ad</a></td>
+          <td><span class="cell-empty">—</span></td>
+          <td class="cell-adtype">Video</td>
+          <td><span class="badge-funnel badge-tof">TOF</span></td>
+          <td><span class="pill-status s-winner">Winner</span></td>
+          <td class="cell-created">Apr 03</td>
+          <td><span class="cell-var">3×</span></td>
+          <td class="cell-matrix">2 cells</td>
+          <td>
+            <div class="actions-cell">
+              <button class="action-btn" title="Edit">✏</button>
+              <button class="action-btn" title="Open in ClickUp">↗</button>
+              <button class="action-btn delete" title="Delete">✕</button>
+            </div>
+          </td>
+        </tr>
+
+      </tbody>
+    </table>
+  </div>
+
+  <script>
+    (function () {
+      'use strict';
+
+      // ─── MORE FILTERS TOGGLE ───────────────────────────────────────────
+      const moreFiltersBtn = document.getElementById('moreFiltersBtn');
+      const filterSecondary = document.getElementById('filterSecondary');
+      let moreFiltersOpen = false;
+
+      moreFiltersBtn.addEventListener('click', function () {
+        moreFiltersOpen = !moreFiltersOpen;
+        filterSecondary.classList.toggle('open', moreFiltersOpen);
+        moreFiltersBtn.classList.toggle('active', moreFiltersOpen);
+        moreFiltersBtn.textContent = moreFiltersOpen ? 'Fewer filters −' : 'More filters +';
+      });
+
+      // ─── CLEAR ALL ────────────────────────────────────────────────────
+      const clearAllBtn = document.getElementById('clearAllBtn');
+      clearAllBtn.addEventListener('click', function () {
+        // Reset task type to "All"
+        setActiveType('all');
+        // Deactivate all standalone filter chips
+        document.querySelectorAll('#filterBar .chip:not(.pill-group .chip):not(.chip-muted)').forEach(function (c) {
+          c.classList.remove('active');
+        });
+        // Clear search
+        document.getElementById('searchInput').value = '';
+        // Close secondary row
+        moreFiltersOpen = false;
+        filterSecondary.classList.remove('open');
+        moreFiltersBtn.classList.remove('active');
+        moreFiltersBtn.textContent = 'More filters +';
+      });
+
+      // ─── TASK TYPE PILL GROUP ─────────────────────────────────────────
+      const taskTypeGroup = document.getElementById('taskTypeGroup');
+      const taskTypeBtns = taskTypeGroup.querySelectorAll('.chip');
+
+      function setActiveType(type) {
+        taskTypeBtns.forEach(function (btn) {
+          btn.classList.toggle('active', btn.dataset.type === type);
+        });
+      }
+
+      taskTypeBtns.forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          setActiveType(btn.dataset.type);
+        });
+      });
+
+      // ─── DROPDOWN CHIP TOGGLE (visual only) ──────────────────────────
+      const dropdownChips = document.querySelectorAll(
+        '#statusFilter, #funnelFilter, #angleFilter, #personaFilter, #dateFilter'
+      );
+      dropdownChips.forEach(function (chip) {
+        chip.addEventListener('click', function () {
+          const wasActive = chip.classList.contains('active');
+          // Close all others
+          dropdownChips.forEach(function (c) { c.classList.remove('active'); });
+          chip.classList.toggle('active', !wasActive);
+        });
+      });
+
+      // ─── COLUMN SORT ─────────────────────────────────────────────────
+      let currentSortCol = null;
+      let currentSortDir = null; // 'asc' | 'desc'
+
+      const headers = document.querySelectorAll('th[data-col]');
+      headers.forEach(function (th) {
+        th.addEventListener('click', function () {
+          const col = th.dataset.col;
+          const icon = th.querySelector('.sort-icon');
+
+          if (currentSortCol === col) {
+            // Cycle: asc → desc → none
+            if (currentSortDir === 'asc') {
+              currentSortDir = 'desc';
+              th.classList.remove('sort-asc');
+              th.classList.add('sort-desc');
+              icon.textContent = '▼';
+            } else {
+              currentSortDir = null;
+              currentSortCol = null;
+              th.classList.remove('sort-desc');
+              icon.textContent = '↕';
+            }
+          } else {
+            // New column: reset previous
+            if (currentSortCol) {
+              const prevTh = document.querySelector('th[data-col="' + currentSortCol + '"]');
+              if (prevTh) {
+                prevTh.classList.remove('sort-asc', 'sort-desc');
+                const prevIcon = prevTh.querySelector('.sort-icon');
+                if (prevIcon) prevIcon.textContent = '↕';
+              }
+            }
+            currentSortCol = col;
+            currentSortDir = 'asc';
+            th.classList.add('sort-asc');
+            icon.textContent = '▲';
+          }
+        });
+      });
+
+      // ─── SEARCH INPUT FOCUS ───────────────────────────────────────────
+      const searchInput = document.getElementById('searchInput');
+      const searchChip = document.getElementById('searchChip');
+
+      searchInput.addEventListener('focus', function () {
+        searchChip.style.borderColor = 'var(--line-hi)';
+        searchChip.style.background = 'var(--paper-2)';
+      });
+      searchInput.addEventListener('blur', function () {
+        searchChip.style.borderColor = '';
+        searchChip.style.background = '';
+      });
+
+      // Simple live search — show/hide rows by text content
+      searchInput.addEventListener('input', function () {
+        const query = searchInput.value.trim().toLowerCase();
+        const rows = document.querySelectorAll('#tableBody tr');
+        rows.forEach(function (row) {
+          const text = row.textContent.toLowerCase();
+          row.style.display = !query || text.includes(query) ? '' : 'none';
+        });
+      });
+
+    })();
+  </script>
+
+</body>
+</html>

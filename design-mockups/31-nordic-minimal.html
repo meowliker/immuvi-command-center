@@ -1,0 +1,718 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Immuvi Command Center — Nordic Minimal</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #fafafa;
+    --surface: #ffffff;
+    --border: #f0f0f0;
+    --border-mid: #e8e8e8;
+    --text-primary: #0a0a0a;
+    --text-secondary: #6b6b6b;
+    --text-muted: #a0a0a0;
+    --accent-line: #0a0a0a;
+
+    --dot-winner:  #16a34a;
+    --dot-loser:   #dc2626;
+    --dot-testing: #2563eb;
+    --dot-approved:#7c3aed;
+    --dot-inprod:  #d97706;
+    --dot-untested:#9ca3af;
+  }
+
+  body {
+    font-family: 'Inter', sans-serif;
+    background: var(--bg);
+    color: var(--text-primary);
+    font-size: 13px;
+    line-height: 1.5;
+    min-height: 100vh;
+  }
+
+  /* ── TOP NAV ── */
+  .nav {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 32px;
+    height: 52px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+  }
+  .nav-left {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+  .nav-title {
+    font-weight: 600;
+    font-size: 14px;
+    color: var(--text-primary);
+    letter-spacing: -0.3px;
+  }
+  .nav-divider {
+    width: 1px;
+    height: 14px;
+    background: var(--border-mid);
+  }
+  .nav-subtitle {
+    font-size: 13px;
+    color: var(--text-muted);
+  }
+  .nav-right {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+  }
+  .nav-stat {
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+  .nav-stat strong {
+    color: var(--text-secondary);
+    font-weight: 500;
+  }
+  .cmd-hint {
+    font-family: 'SF Mono', 'Fira Code', 'Fira Mono', monospace;
+    font-size: 11px;
+    color: var(--text-muted);
+    background: var(--bg);
+    border: 1px solid var(--border-mid);
+    padding: 3px 8px;
+    border-radius: 4px;
+    letter-spacing: 0.01em;
+  }
+
+  /* ── TAB BAR ── */
+  .tab-bar {
+    display: flex;
+    align-items: flex-end;
+    gap: 0;
+    padding: 0 32px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+  }
+  .tab-btn {
+    position: relative;
+    padding: 13px 0;
+    margin-right: 28px;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    font-family: 'Inter', sans-serif;
+    font-size: 13px;
+    font-weight: 400;
+    color: var(--text-secondary);
+    transition: color 0.12s;
+    white-space: nowrap;
+  }
+  .tab-btn::after {
+    content: '';
+    position: absolute;
+    bottom: -1px;
+    left: 0; right: 0;
+    height: 2px;
+    background: var(--accent-line);
+    transform: scaleX(0);
+    transition: transform 0.15s;
+    transform-origin: left;
+  }
+  .tab-btn.active {
+    color: var(--text-primary);
+    font-weight: 600;
+  }
+  .tab-btn.active::after {
+    transform: scaleX(1);
+  }
+  .tab-btn:hover:not(.active) {
+    color: var(--text-primary);
+  }
+
+  /* ── MAIN ── */
+  .main {
+    padding: 28px 32px 60px;
+  }
+
+  /* ── FILTER ROW ── */
+  .filter-row {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    margin-bottom: 20px;
+  }
+  .filter-label {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-right: 12px;
+  }
+  .filter-toggle {
+    padding: 4px 10px;
+    font-family: 'Inter', sans-serif;
+    font-size: 12px;
+    color: var(--text-muted);
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    border-radius: 4px;
+    transition: color 0.1s;
+  }
+  .filter-toggle.active {
+    color: var(--text-primary);
+    font-weight: 500;
+  }
+  .filter-toggle:hover {
+    color: var(--text-secondary);
+  }
+  .filter-sep {
+    color: var(--border-mid);
+    font-size: 11px;
+    select: none;
+  }
+  .record-count {
+    margin-left: auto;
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+
+  /* ── TRACKER TABLE ── */
+  .table-wrap {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    overflow: hidden;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+  thead th {
+    padding: 10px 16px;
+    text-align: left;
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.09em;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+  }
+  tbody tr {
+    border-bottom: 1px solid var(--border);
+    transition: background 0.08s;
+  }
+  tbody tr:last-child { border-bottom: none; }
+  tbody tr:hover td { background: #f5f5f5; }
+  tbody td {
+    padding: 9px 16px;
+    height: 36px;
+    font-size: 13px;
+    color: var(--text-secondary);
+    vertical-align: middle;
+    white-space: nowrap;
+  }
+  tbody td.td-name {
+    font-weight: 500;
+    color: var(--text-primary);
+  }
+  tbody td.td-name .tid {
+    color: var(--text-muted);
+    font-weight: 400;
+    font-size: 11px;
+    margin-right: 3px;
+  }
+
+  /* STATUS DOT */
+  .status-cell {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    font-size: 12px;
+    color: var(--text-secondary);
+  }
+  .sdot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .sdot-winner  { background: var(--dot-winner); }
+  .sdot-loser   { background: var(--dot-loser); }
+  .sdot-testing { background: var(--dot-testing); }
+  .sdot-approved{ background: var(--dot-approved); }
+  .sdot-inprod  { background: var(--dot-inprod); }
+  .sdot-untested{ background: var(--dot-untested); }
+
+  /* ── MATRIX ── */
+  .matrix-section {
+    margin-bottom: 28px;
+  }
+  .angle-block {
+    margin-bottom: 20px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    overflow: hidden;
+  }
+  .angle-block-header {
+    padding: 12px 20px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+  }
+  .angle-name {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text-primary);
+    letter-spacing: -0.3px;
+  }
+  .angle-meta {
+    font-size: 11px;
+    color: var(--text-muted);
+  }
+  .persona-row {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    border-top: none;
+  }
+  .persona-cell {
+    padding: 14px 20px;
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .persona-cell:last-child { border-right: none; }
+  .persona-cell.empty .pc-count { color: var(--text-muted); }
+
+  .pc-persona-name {
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    color: var(--text-muted);
+  }
+  .pc-count-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .pc-count {
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--text-primary);
+    line-height: 1;
+    letter-spacing: -0.5px;
+  }
+  .pc-status {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 11px;
+    color: var(--text-secondary);
+  }
+
+  /* ── LEGEND (matrix) ── */
+  .legend-row {
+    display: flex;
+    gap: 0;
+    margin-bottom: 24px;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+  .legend-label {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-right: 14px;
+  }
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 11px;
+    color: var(--text-secondary);
+    margin-right: 16px;
+  }
+
+  .hidden { display: none; }
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav class="nav">
+  <div class="nav-left">
+    <span class="nav-title">Immuvi Command Center</span>
+    <div class="nav-divider"></div>
+    <span class="nav-subtitle">Creative Ops</span>
+  </div>
+  <div class="nav-right">
+    <span class="nav-stat">6 creatives &nbsp;·&nbsp; <strong>2 winners</strong></span>
+    <span class="nav-stat">Updated <strong>2m ago</strong></span>
+    <span class="cmd-hint">⌘K</span>
+  </div>
+</nav>
+
+<!-- TAB BAR -->
+<div class="tab-bar">
+  <button class="tab-btn active" onclick="switchTab('tracker', this)">Creative Tracker</button>
+  <button class="tab-btn inactive" onclick="switchTab('matrix', this)">Creative Matrix</button>
+</div>
+
+<!-- MAIN -->
+<div class="main">
+
+  <!-- ── TRACKER PANEL ── -->
+  <div id="panel-tracker">
+    <div class="filter-row">
+      <span class="filter-label">Filter</span>
+      <button class="filter-toggle active">All</button>
+      <span class="filter-sep">/</span>
+      <button class="filter-toggle">Winners</button>
+      <span class="filter-sep">/</span>
+      <button class="filter-toggle">Testing</button>
+      <span class="filter-sep">/</span>
+      <button class="filter-toggle">In Production</button>
+      <span class="filter-sep">/</span>
+      <button class="filter-toggle">TOF</button>
+      <span class="filter-sep">/</span>
+      <button class="filter-toggle">MOF</button>
+      <span class="filter-sep">/</span>
+      <button class="filter-toggle">BOF</button>
+      <span class="record-count">6 records</span>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Format Name</th>
+            <th>Angle</th>
+            <th>Persona</th>
+            <th>Structure</th>
+            <th>Hook</th>
+            <th>Production</th>
+            <th>Funnel</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="td-name"><span class="tid">AT-001 ·</span>Story Loop 30s</td>
+            <td>Pain Agitate Solution</td>
+            <td>Busy Mom</td>
+            <td>Problem-Solution</td>
+            <td>Question</td>
+            <td>UGC</td>
+            <td>TOF</td>
+            <td>
+              <div class="status-cell">
+                <div class="sdot sdot-winner"></div>
+                Winner
+              </div>
+            </td>
+          </tr>
+          <tr>
+            <td class="td-name"><span class="tid">AT-002 ·</span>Transformation 15s</td>
+            <td>Before/After</td>
+            <td>Health Enthusiast</td>
+            <td>Contrast</td>
+            <td>Stat</td>
+            <td>Motion</td>
+            <td>MOF</td>
+            <td>
+              <div class="status-cell">
+                <div class="sdot sdot-testing"></div>
+                Testing
+              </div>
+            </td>
+          </tr>
+          <tr>
+            <td class="td-name"><span class="tid">AT-003 ·</span>Testimonial Reel</td>
+            <td>Social Proof</td>
+            <td>Skeptic</td>
+            <td>Authority</td>
+            <td>Quote</td>
+            <td>Studio</td>
+            <td>BOF</td>
+            <td>
+              <div class="status-cell">
+                <div class="sdot sdot-approved"></div>
+                Approved
+              </div>
+            </td>
+          </tr>
+          <tr>
+            <td class="td-name"><span class="tid">AT-004 ·</span>Value Stack 60s</td>
+            <td>Benefits-First</td>
+            <td>Value Seeker</td>
+            <td>List</td>
+            <td>Statement</td>
+            <td>Voiceover</td>
+            <td>TOF</td>
+            <td>
+              <div class="status-cell">
+                <div class="sdot sdot-loser"></div>
+                Loser
+              </div>
+            </td>
+          </tr>
+          <tr>
+            <td class="td-name"><span class="tid">AT-005 ·</span>Fear Hook Cut</td>
+            <td>Fear Appeal</td>
+            <td>Busy Mom</td>
+            <td>Problem</td>
+            <td>Fear</td>
+            <td>UGC</td>
+            <td>TOF</td>
+            <td>
+              <div class="status-cell">
+                <div class="sdot sdot-inprod"></div>
+                In Production
+              </div>
+            </td>
+          </tr>
+          <tr>
+            <td class="td-name"><span class="tid">AT-006 ·</span>Authority Doc</td>
+            <td>Social Proof</td>
+            <td>Health Enthusiast</td>
+            <td>Authority</td>
+            <td>Stat</td>
+            <td>Documentary</td>
+            <td>MOF</td>
+            <td>
+              <div class="status-cell">
+                <div class="sdot sdot-untested"></div>
+                Untested
+              </div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ── MATRIX PANEL ── -->
+  <div id="panel-matrix" class="hidden">
+
+    <div class="legend-row">
+      <span class="legend-label">Status</span>
+      <div class="legend-item"><div class="sdot sdot-winner"></div>Winner</div>
+      <div class="legend-item"><div class="sdot sdot-testing"></div>Testing</div>
+      <div class="legend-item"><div class="sdot sdot-approved"></div>Approved</div>
+      <div class="legend-item"><div class="sdot sdot-inprod"></div>In Production</div>
+      <div class="legend-item"><div class="sdot sdot-loser"></div>Loser</div>
+      <div class="legend-item"><div class="sdot sdot-untested"></div>Untested</div>
+    </div>
+
+    <!-- Pain Agitate Solution -->
+    <div class="angle-block">
+      <div class="angle-block-header">
+        <span class="angle-name">Pain Agitate Solution</span>
+        <span class="angle-meta">2 creatives across 2 personas</span>
+      </div>
+      <div class="persona-row">
+        <div class="persona-cell">
+          <div class="pc-persona-name">Busy Mom</div>
+          <div class="pc-count-row">
+            <div class="pc-count">2</div>
+            <div class="pc-status"><div class="sdot sdot-winner"></div>Winner</div>
+          </div>
+        </div>
+        <div class="persona-cell empty">
+          <div class="pc-persona-name">Health Enthusiast</div>
+          <div class="pc-count-row">
+            <div class="pc-count" style="color:var(--text-muted)">0</div>
+          </div>
+        </div>
+        <div class="persona-cell">
+          <div class="pc-persona-name">Skeptic</div>
+          <div class="pc-count-row">
+            <div class="pc-count">1</div>
+            <div class="pc-status"><div class="sdot sdot-testing"></div>Testing</div>
+          </div>
+        </div>
+        <div class="persona-cell empty">
+          <div class="pc-persona-name">Value Seeker</div>
+          <div class="pc-count-row">
+            <div class="pc-count" style="color:var(--text-muted)">0</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Before/After -->
+    <div class="angle-block">
+      <div class="angle-block-header">
+        <span class="angle-name">Before / After</span>
+        <span class="angle-meta">3 creatives across 3 personas</span>
+      </div>
+      <div class="persona-row">
+        <div class="persona-cell">
+          <div class="pc-persona-name">Busy Mom</div>
+          <div class="pc-count-row">
+            <div class="pc-count">1</div>
+            <div class="pc-status"><div class="sdot sdot-approved"></div>Approved</div>
+          </div>
+        </div>
+        <div class="persona-cell">
+          <div class="pc-persona-name">Health Enthusiast</div>
+          <div class="pc-count-row">
+            <div class="pc-count">1</div>
+            <div class="pc-status"><div class="sdot sdot-testing"></div>Testing</div>
+          </div>
+        </div>
+        <div class="persona-cell empty">
+          <div class="pc-persona-name">Skeptic</div>
+          <div class="pc-count-row">
+            <div class="pc-count" style="color:var(--text-muted)">0</div>
+          </div>
+        </div>
+        <div class="persona-cell">
+          <div class="pc-persona-name">Value Seeker</div>
+          <div class="pc-count-row">
+            <div class="pc-count">2</div>
+            <div class="pc-status"><div class="sdot sdot-winner"></div>Winner</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Social Proof -->
+    <div class="angle-block">
+      <div class="angle-block-header">
+        <span class="angle-name">Social Proof</span>
+        <span class="angle-meta">2 creatives across 2 personas</span>
+      </div>
+      <div class="persona-row">
+        <div class="persona-cell empty">
+          <div class="pc-persona-name">Busy Mom</div>
+          <div class="pc-count-row">
+            <div class="pc-count" style="color:var(--text-muted)">0</div>
+          </div>
+        </div>
+        <div class="persona-cell">
+          <div class="pc-persona-name">Health Enthusiast</div>
+          <div class="pc-count-row">
+            <div class="pc-count">1</div>
+            <div class="pc-status"><div class="sdot sdot-approved"></div>Approved</div>
+          </div>
+        </div>
+        <div class="persona-cell">
+          <div class="pc-persona-name">Skeptic</div>
+          <div class="pc-count-row">
+            <div class="pc-count">1</div>
+            <div class="pc-status"><div class="sdot sdot-approved"></div>Approved</div>
+          </div>
+        </div>
+        <div class="persona-cell empty">
+          <div class="pc-persona-name">Value Seeker</div>
+          <div class="pc-count-row">
+            <div class="pc-count" style="color:var(--text-muted)">0</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Fear Appeal -->
+    <div class="angle-block">
+      <div class="angle-block-header">
+        <span class="angle-name">Fear Appeal</span>
+        <span class="angle-meta">1 creative · 3 gaps</span>
+      </div>
+      <div class="persona-row">
+        <div class="persona-cell">
+          <div class="pc-persona-name">Busy Mom</div>
+          <div class="pc-count-row">
+            <div class="pc-count">1</div>
+            <div class="pc-status"><div class="sdot sdot-inprod"></div>In Production</div>
+          </div>
+        </div>
+        <div class="persona-cell empty">
+          <div class="pc-persona-name">Health Enthusiast</div>
+          <div class="pc-count-row">
+            <div class="pc-count" style="color:var(--text-muted)">0</div>
+          </div>
+        </div>
+        <div class="persona-cell empty">
+          <div class="pc-persona-name">Skeptic</div>
+          <div class="pc-count-row">
+            <div class="pc-count" style="color:var(--text-muted)">0</div>
+          </div>
+        </div>
+        <div class="persona-cell empty">
+          <div class="pc-persona-name">Value Seeker</div>
+          <div class="pc-count-row">
+            <div class="pc-count" style="color:var(--text-muted)">0</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Benefits-First -->
+    <div class="angle-block">
+      <div class="angle-block-header">
+        <span class="angle-name">Benefits-First</span>
+        <span class="angle-meta">1 creative · 3 gaps</span>
+      </div>
+      <div class="persona-row">
+        <div class="persona-cell empty">
+          <div class="pc-persona-name">Busy Mom</div>
+          <div class="pc-count-row">
+            <div class="pc-count" style="color:var(--text-muted)">0</div>
+          </div>
+        </div>
+        <div class="persona-cell empty">
+          <div class="pc-persona-name">Health Enthusiast</div>
+          <div class="pc-count-row">
+            <div class="pc-count" style="color:var(--text-muted)">0</div>
+          </div>
+        </div>
+        <div class="persona-cell empty">
+          <div class="pc-persona-name">Skeptic</div>
+          <div class="pc-count-row">
+            <div class="pc-count" style="color:var(--text-muted)">0</div>
+          </div>
+        </div>
+        <div class="persona-cell">
+          <div class="pc-persona-name">Value Seeker</div>
+          <div class="pc-count-row">
+            <div class="pc-count">1</div>
+            <div class="pc-status"><div class="sdot sdot-loser"></div>Loser</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /panel-matrix -->
+
+</div>
+
+<script>
+  function switchTab(id, btn) {
+    document.querySelectorAll('[id^="panel-"]').forEach(el => el.classList.add('hidden'));
+    document.getElementById('panel-' + id).classList.remove('hidden');
+    document.querySelectorAll('.tab-btn').forEach(b => {
+      b.classList.remove('active');
+      b.classList.add('inactive');
+    });
+    btn.classList.remove('inactive');
+    btn.classList.add('active');
+  }
+
+  // Filter toggle (visual only)
+  document.querySelectorAll('.filter-toggle').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.filter-toggle').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+    });
+  });
+</script>
+</body>
+</html>

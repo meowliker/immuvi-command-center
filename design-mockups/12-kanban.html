@@ -1,0 +1,703 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Layout 12 — Kanban by status</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+<style>
+:root {
+  --paper:   #faf9f5;
+  --paper-2: #f3f1e9;
+  --surface: #ffffff;
+  --line:    #e8e5dc;
+  --line-hi: #d6d1c1;
+  --ink:     #1a1814;
+  --ink-2:   #585449;
+  --ink-3:   #8f8a7c;
+  --ink-4:   #b8b3a2;
+  --accent:  #c05336;
+  --accent-soft: #f5e3da;
+  --sage:    #5e7557;
+  --ochre:   #a77c2e;
+  --rust:    #a83b28;
+  --dusk:    #4f6780;
+  --emerald: #35683f;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; background: var(--paper); }
+body {
+  color: var(--ink);
+  font-family: 'Inter', sans-serif;
+  font-size: 13px; line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  display: grid;
+  grid-template-rows: 56px auto 1fr;
+  height: 100vh;
+}
+
+/* Top */
+.top {
+  display: flex; align-items: center; gap: 14px;
+  padding: 0 24px;
+  border-bottom: 1px solid var(--line);
+}
+.brand {
+  font-family: 'Instrument Serif', Georgia, serif;
+  font-style: italic; font-size: 22px;
+}
+.brand em { color: var(--accent); font-style: italic; }
+.sep-v { width: 1px; height: 20px; background: var(--line); }
+.crumb { font-size: 12.5px; color: var(--ink-2); display: flex; gap: 8px; align-items: center; }
+.crumb a { color: var(--ink-2); cursor: pointer; text-decoration: none; padding: 3px 7px; border-radius: 4px; }
+.crumb a:hover { background: var(--paper-2); }
+.crumb .s { color: var(--ink-4); font-size: 10px; }
+.top .right { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+.view-toggle {
+  display: flex; gap: 1px;
+  padding: 2px;
+  background: var(--paper-2);
+  border-radius: 6px;
+  font-size: 11.5px; font-weight: 500;
+}
+.view-toggle span {
+  padding: 5px 11px;
+  border-radius: 4px;
+  cursor: pointer;
+  color: var(--ink-3);
+  font-family: 'JetBrains Mono', monospace;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  font-size: 10.5px;
+}
+.view-toggle span.on { background: var(--surface); color: var(--ink); box-shadow: 0 1px 2px rgba(0,0,0,.05); }
+.btn {
+  height: 30px; padding: 0 12px;
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: 6px; font-family: inherit; font-size: 12.5px; font-weight: 500;
+  color: var(--ink); cursor: pointer;
+  display: inline-flex; align-items: center; gap: 6px;
+}
+.btn-p { background: var(--accent); color: white; border-color: var(--accent); }
+.btn:hover { background: var(--paper-2); }
+
+/* Page head */
+.ph {
+  padding: 20px 24px 16px;
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 14px;
+  border-bottom: 1px solid var(--line);
+}
+.ph h1 {
+  font-family: 'Instrument Serif', serif;
+  font-style: italic; font-weight: 400;
+  font-size: 32px; letter-spacing: -0.02em;
+  line-height: 1;
+}
+.ph .sub {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px; color: var(--ink-3);
+  letter-spacing: 0.06em; text-transform: uppercase;
+}
+.ph .right { margin-left: auto; display: flex; gap: 6px; }
+.fchip {
+  height: 28px; padding: 0 11px;
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: 5px;
+  font-size: 12px; color: var(--ink-2); cursor: pointer;
+  display: inline-flex; align-items: center; gap: 5px;
+}
+.fchip:hover { background: var(--paper-2); }
+.fchip.on { background: var(--ink); color: white; border-color: var(--ink); }
+.fchip .ch { font-size: 9px; color: inherit; opacity: 0.6; }
+
+/* Board */
+.board {
+  overflow-x: auto;
+  padding: 18px 20px;
+  display: flex;
+  gap: 14px;
+  align-items: stretch;
+}
+
+/* Column */
+.col {
+  width: 290px;
+  flex-shrink: 0;
+  display: flex; flex-direction: column;
+  background: var(--paper-2);
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  overflow: hidden;
+}
+.col-head {
+  padding: 12px 14px 10px;
+  display: flex; align-items: center; gap: 8px;
+  border-bottom: 1px solid var(--line);
+  background: var(--paper);
+}
+.col-head .dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  flex-shrink: 0;
+}
+.col.massive .col-head .dot { background: var(--emerald); box-shadow: 0 0 0 3px rgba(53,104,63,0.15); }
+.col.winner  .col-head .dot { background: var(--sage); box-shadow: 0 0 0 3px rgba(94,117,87,0.15); }
+.col.mild    .col-head .dot { background: var(--ochre); box-shadow: 0 0 0 3px rgba(167,124,46,0.15); }
+.col.fatigue .col-head .dot { background: var(--accent); box-shadow: 0 0 0 3px rgba(192,83,54,0.15); }
+.col.testing .col-head .dot { background: var(--dusk); box-shadow: 0 0 0 3px rgba(79,103,128,0.15); }
+.col.loser   .col-head .dot { background: var(--rust); box-shadow: 0 0 0 3px rgba(168,59,40,0.15); }
+
+.col-head .nm { font-weight: 600; font-size: 13px; letter-spacing: -0.005em; color: var(--ink); }
+.col-head .ct {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10.5px; color: var(--ink-3);
+  padding: 1px 6px; background: var(--paper-2);
+  border-radius: 10px; border: 1px solid var(--line);
+}
+.col-head .add { margin-left: auto; color: var(--ink-3); cursor: pointer; padding: 2px 6px; border-radius: 3px; font-size: 14px; }
+.col-head .add:hover { background: var(--paper-2); color: var(--ink); }
+
+.col-sub {
+  padding: 6px 14px 10px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10.5px;
+  color: var(--ink-3);
+  letter-spacing: 0.04em;
+  background: var(--paper);
+  border-bottom: 1px solid var(--line);
+  display: flex; gap: 10px;
+}
+.col-sub strong { color: var(--ink-2); font-weight: 600; }
+.col-sub .sep { color: var(--ink-4); }
+
+/* Cards */
+.cards {
+  padding: 10px;
+  display: flex; flex-direction: column; gap: 8px;
+  overflow-y: auto;
+  flex: 1;
+}
+.card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px 12px;
+  cursor: grab;
+  transition: border-color .12s, box-shadow .12s, transform .12s;
+}
+.card:hover {
+  border-color: var(--line-hi);
+  box-shadow: 0 2px 6px rgba(0,0,0,.04);
+  transform: translateY(-1px);
+}
+.card .top-row {
+  display: flex; align-items: center; gap: 10px;
+  margin-bottom: 8px;
+}
+.card .thumb {
+  width: 32px; height: 32px;
+  border-radius: 5px;
+  background: var(--ink);
+  flex-shrink: 0; position: relative;
+  overflow: hidden;
+  border: 1px solid var(--line-hi);
+}
+.card .thumb::after {
+  content: '▶'; position: absolute; inset: 0;
+  display: grid; place-items: center;
+  color: var(--accent); font-size: 11px;
+}
+.card .thumb.photo { background: var(--paper-2); }
+.card .thumb.photo::after { content: '◈'; color: var(--sage); }
+.card .nm {
+  font-size: 13px; font-weight: 600;
+  color: var(--ink); letter-spacing: -0.005em;
+  line-height: 1.3;
+  min-width: 0;
+  overflow: hidden; text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+.card .id {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10.5px;
+  color: var(--ink-3);
+  letter-spacing: 0.02em;
+}
+.card .tags {
+  display: flex; flex-wrap: wrap; gap: 4px;
+  margin-bottom: 10px;
+}
+.card .tag {
+  font-size: 10.5px;
+  padding: 2px 6px;
+  background: var(--paper-2);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  color: var(--ink-2);
+  font-weight: 500;
+  letter-spacing: -0.005em;
+}
+.card .tag.accent {
+  background: var(--accent-soft);
+  color: var(--accent);
+  border-color: transparent;
+}
+.card .metrics {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+.card .m {
+  display: flex; flex-direction: column; gap: 2px;
+}
+.card .m .l {
+  font-size: 9.5px;
+  color: var(--ink-3);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  font-weight: 500;
+}
+.card .m .v {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+.card .roas-massive { color: var(--emerald); }
+.card .roas-up      { color: var(--sage); }
+.card .roas-mild    { color: var(--ochre); }
+.card .roas-down    { color: var(--accent); }
+.card .roas-loser   { color: var(--rust); }
+.card .roas-dim     { color: var(--ink-4); }
+
+.card .spark {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+.card .spark svg {
+  display: block;
+  width: 100%;
+  height: 24px;
+}
+
+.card .foot {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--line);
+  display: flex; align-items: center; gap: 8px;
+  font-size: 10.5px;
+  color: var(--ink-3);
+}
+.card .foot .dot-sep { color: var(--ink-4); }
+.card .foot .ico {
+  display: inline-flex; gap: 6px; margin-left: auto;
+}
+.card .foot .ico a {
+  color: var(--ink-3); text-decoration: none;
+  font-size: 11px;
+}
+.card .foot .ico a:hover { color: var(--accent); }
+
+/* Empty state */
+.col .empty {
+  padding: 24px 16px;
+  text-align: center;
+  color: var(--ink-4);
+  font-size: 12px;
+  font-style: italic;
+}
+
+/* Add card button inside column */
+.col .add-card {
+  margin: 6px 10px 12px;
+  padding: 8px 10px;
+  border: 1px dashed var(--line-hi);
+  border-radius: 6px;
+  font-size: 11.5px;
+  color: var(--ink-3);
+  text-align: center;
+  cursor: pointer;
+}
+.col .add-card:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+</style>
+</head>
+<body>
+
+<div class="top">
+  <div class="brand"><em>Immuvi.</em></div>
+  <div class="sep-v"></div>
+  <div class="crumb">
+    <a>Art Therapy</a><span class="s">›</span>
+    <a>Creative Tracker</a>
+  </div>
+  <div class="right">
+    <div class="view-toggle">
+      <span>Table</span><span class="on">Board</span><span>Grid</span><span>Matrix</span><span>Timeline</span>
+    </div>
+    <div class="sep-v"></div>
+    <button class="btn">⇡ Push all</button>
+    <button class="btn btn-p">+ Add Creative</button>
+  </div>
+</div>
+
+<div class="ph">
+  <h1>Creative Tracker</h1>
+  <span class="sub">66 · GROUPED BY STATUS</span>
+  <div class="right">
+    <span class="fchip on">Sort: spend ↓ <span class="ch">▾</span></span>
+    <span class="fchip">All Angles <span class="ch">▾</span></span>
+    <span class="fchip">All Personas <span class="ch">▾</span></span>
+    <span class="fchip">7d <span class="ch">▾</span></span>
+  </div>
+</div>
+
+<div class="board">
+
+  <!-- ──── MASSIVE ──── -->
+  <div class="col massive">
+    <div class="col-head">
+      <span class="dot"></span>
+      <span class="nm">Massive Winners</span>
+      <span class="ct">4</span>
+      <span class="add">+</span>
+    </div>
+    <div class="col-sub">
+      <span><strong>$5,280</strong> 7d</span>
+      <span class="sep">·</span>
+      <span><strong>1.78×</strong> avg</span>
+    </div>
+    <div class="cards">
+      <div class="card">
+        <div class="top-row">
+          <div class="thumb"></div>
+          <div class="nm">5773-1 old winner</div>
+        </div>
+        <div class="tags">
+          <span class="tag accent">Art as Therapy</span>
+          <span class="tag">Women 25-45</span>
+          <span class="tag">POV</span>
+        </div>
+        <div class="metrics">
+          <div class="m"><span class="l">ROAS 7d</span><span class="v roas-massive">1.92×</span></div>
+          <div class="m"><span class="l">Spend 7d</span><span class="v">$1,842</span></div>
+        </div>
+        <div class="spark">
+          <svg viewBox="0 0 100 24">
+            <polyline fill="none" stroke="#35683f" stroke-width="1.6" points="0,20 14,16 28,13 42,11 56,8 70,5 85,3 100,2"/>
+          </svg>
+        </div>
+        <div class="foot">
+          <span>AT-11439</span>
+          <span class="dot-sep">·</span>
+          <span>Day 7</span>
+          <span class="ico"><a>↗</a><a>📄</a></span>
+        </div>
+      </div>
+      <div class="card">
+        <div class="top-row">
+          <div class="thumb photo"></div>
+          <div class="nm">11267 photo variant</div>
+        </div>
+        <div class="tags">
+          <span class="tag accent">Art as Therapy</span>
+          <span class="tag">Women 25-45</span>
+          <span class="tag">POV</span>
+        </div>
+        <div class="metrics">
+          <div class="m"><span class="l">ROAS 7d</span><span class="v roas-massive">1.78×</span></div>
+          <div class="m"><span class="l">Spend 7d</span><span class="v">$1,420</span></div>
+        </div>
+        <div class="foot">
+          <span>AT-11267</span>
+          <span class="dot-sep">·</span>
+          <span>Day 4</span>
+          <span class="ico"><a>↗</a><a>📄</a></span>
+        </div>
+      </div>
+      <div class="add-card">+ Promote from Winner</div>
+    </div>
+  </div>
+
+  <!-- ──── WINNER ──── -->
+  <div class="col winner">
+    <div class="col-head">
+      <span class="dot"></span>
+      <span class="nm">Winners</span>
+      <span class="ct">14</span>
+      <span class="add">+</span>
+    </div>
+    <div class="col-sub">
+      <span><strong>$4,420</strong> 7d</span>
+      <span class="sep">·</span>
+      <span><strong>1.48×</strong> avg</span>
+    </div>
+    <div class="cards">
+      <div class="card">
+        <div class="top-row">
+          <div class="thumb photo"></div>
+          <div class="nm">4570-1 old winner</div>
+        </div>
+        <div class="tags">
+          <span class="tag">Emotional Lit.</span>
+          <span class="tag">Women 25-45</span>
+          <span class="tag">Curiosity</span>
+        </div>
+        <div class="metrics">
+          <div class="m"><span class="l">ROAS 7d</span><span class="v roas-up">1.54×</span></div>
+          <div class="m"><span class="l">Spend 7d</span><span class="v">$806</span></div>
+        </div>
+        <div class="foot">
+          <span>AT-10835</span>
+          <span class="dot-sep">·</span>
+          <span>Day 12</span>
+          <span class="ico"><a>↗</a><a>📄</a></span>
+        </div>
+      </div>
+      <div class="card">
+        <div class="top-row">
+          <div class="thumb"></div>
+          <div class="nm">11591 new concept</div>
+        </div>
+        <div class="tags">
+          <span class="tag">Emotional Lit.</span>
+          <span class="tag">Young Adults Grief</span>
+          <span class="tag">Pain</span>
+        </div>
+        <div class="metrics">
+          <div class="m"><span class="l">ROAS 7d</span><span class="v roas-up">1.46×</span></div>
+          <div class="m"><span class="l">Spend 7d</span><span class="v">$624</span></div>
+        </div>
+        <div class="foot">
+          <span>AT-11591</span>
+          <span class="dot-sep">·</span>
+          <span>Day 2</span>
+          <span class="ico"><a>↗</a><a>📄</a></span>
+        </div>
+      </div>
+      <div class="card">
+        <div class="top-row">
+          <div class="thumb photo"></div>
+          <div class="nm">11542 social proof</div>
+        </div>
+        <div class="tags">
+          <span class="tag">Social Proof 18k</span>
+          <span class="tag">Women 25-45</span>
+        </div>
+        <div class="metrics">
+          <div class="m"><span class="l">ROAS 7d</span><span class="v roas-up">1.41×</span></div>
+          <div class="m"><span class="l">Spend 7d</span><span class="v">$488</span></div>
+        </div>
+        <div class="foot">
+          <span>AT-11542</span>
+          <span class="dot-sep">·</span>
+          <span>Day 5</span>
+          <span class="ico"><a>↗</a><a>📄</a></span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ──── MILD ──── -->
+  <div class="col mild">
+    <div class="col-head">
+      <span class="dot"></span>
+      <span class="nm">Mild Winners</span>
+      <span class="ct">11</span>
+      <span class="add">+</span>
+    </div>
+    <div class="col-sub">
+      <span><strong>$2,640</strong> 7d</span>
+      <span class="sep">·</span>
+      <span><strong>1.30×</strong> avg</span>
+    </div>
+    <div class="cards">
+      <div class="card">
+        <div class="top-row">
+          <div class="thumb photo"></div>
+          <div class="nm">4569-2 old winner</div>
+        </div>
+        <div class="tags">
+          <span class="tag">Scarcity</span>
+          <span class="tag">Women 25-45</span>
+          <span class="tag">Pattern Interrupt</span>
+        </div>
+        <div class="metrics">
+          <div class="m"><span class="l">ROAS 7d</span><span class="v roas-mild">1.33×</span></div>
+          <div class="m"><span class="l">Spend 7d</span><span class="v">$412</span></div>
+        </div>
+        <div class="foot">
+          <span>AT-10834</span>
+          <span class="dot-sep">·</span>
+          <span>Day 6</span>
+          <span class="ico"><a>↗</a><a>📄</a></span>
+        </div>
+      </div>
+      <div class="card">
+        <div class="top-row">
+          <div class="thumb photo"></div>
+          <div class="nm">11540 free-bundle static</div>
+        </div>
+        <div class="tags">
+          <span class="tag">Calm / Unwind</span>
+          <span class="tag">Self-Care</span>
+          <span class="tag">Direct Offer</span>
+        </div>
+        <div class="metrics">
+          <div class="m"><span class="l">ROAS 7d</span><span class="v roas-mild">1.28×</span></div>
+          <div class="m"><span class="l">Spend 7d</span><span class="v">$310</span></div>
+        </div>
+        <div class="foot">
+          <span>AT-11540</span>
+          <span class="dot-sep">·</span>
+          <span>Day 4</span>
+          <span class="ico"><a>↗</a><a>📄</a></span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ──── FATIGUE ──── -->
+  <div class="col fatigue">
+    <div class="col-head">
+      <span class="dot"></span>
+      <span class="nm">Fatigued</span>
+      <span class="ct">3</span>
+      <span class="add">+</span>
+    </div>
+    <div class="col-sub">
+      <span><strong>Refresh ⚠</strong></span>
+      <span class="sep">·</span>
+      <span>ROAS ↓ ≥30%</span>
+    </div>
+    <div class="cards">
+      <div class="card">
+        <div class="top-row">
+          <div class="thumb photo"></div>
+          <div class="nm">10785-2 old winner</div>
+        </div>
+        <div class="tags">
+          <span class="tag">Scarcity</span>
+          <span class="tag">Women 25-45</span>
+          <span class="tag">Pattern Interrupt</span>
+        </div>
+        <div class="metrics">
+          <div class="m"><span class="l">ROAS 7d</span><span class="v roas-down">0.98×↓</span></div>
+          <div class="m"><span class="l">Spend 7d</span><span class="v">$1,205</span></div>
+        </div>
+        <div class="spark">
+          <svg viewBox="0 0 100 24">
+            <polyline fill="none" stroke="#c05336" stroke-width="1.6" points="0,6 14,8 28,10 42,12 56,14 70,17 85,19 100,21"/>
+          </svg>
+        </div>
+        <div class="foot">
+          <span>AT-10733</span>
+          <span class="dot-sep">·</span>
+          <span>Day 11 · WoW -42%</span>
+          <span class="ico"><a>↗</a><a>📄</a></span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ──── TESTING ──── -->
+  <div class="col testing">
+    <div class="col-head">
+      <span class="dot"></span>
+      <span class="nm">Testing</span>
+      <span class="ct">31</span>
+      <span class="add">+</span>
+    </div>
+    <div class="col-sub">
+      <span><strong>$430</strong> 7d</span>
+      <span class="sep">·</span>
+      <span>&lt;$50 / creative</span>
+    </div>
+    <div class="cards">
+      <div class="card">
+        <div class="top-row">
+          <div class="thumb photo"></div>
+          <div class="nm">6197-1 old winner</div>
+        </div>
+        <div class="tags">
+          <span class="tag">Scarcity</span>
+          <span class="tag">Women 25-45</span>
+          <span class="tag">Direct Offer</span>
+        </div>
+        <div class="metrics">
+          <div class="m"><span class="l">ROAS 7d</span><span class="v roas-dim">—</span></div>
+          <div class="m"><span class="l">Spend 7d</span><span class="v">$28</span></div>
+        </div>
+        <div class="foot">
+          <span>AT-10612</span>
+          <span class="dot-sep">·</span>
+          <span>Day 1 · Learning</span>
+          <span class="ico"><a>↗</a><a>📄</a></span>
+        </div>
+      </div>
+      <div class="card">
+        <div class="top-row">
+          <div class="thumb"></div>
+          <div class="nm">11590 new concept</div>
+        </div>
+        <div class="tags">
+          <span class="tag">Therapist-Rec</span>
+          <span class="tag">Parents</span>
+          <span class="tag">Social Proof</span>
+        </div>
+        <div class="metrics">
+          <div class="m"><span class="l">ROAS 7d</span><span class="v roas-dim">—</span></div>
+          <div class="m"><span class="l">Spend 7d</span><span class="v">$32</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ──── LOSER ──── -->
+  <div class="col loser">
+    <div class="col-head">
+      <span class="dot"></span>
+      <span class="nm">Losers</span>
+      <span class="ct">2</span>
+      <span class="add">+</span>
+    </div>
+    <div class="col-sub">
+      <span><strong>Kill ⊗</strong></span>
+      <span class="sep">·</span>
+      <span>ROAS &lt; 1.0 @ $100+</span>
+    </div>
+    <div class="cards">
+      <div class="card">
+        <div class="top-row">
+          <div class="thumb"></div>
+          <div class="nm">11436 new concept</div>
+        </div>
+        <div class="tags">
+          <span class="tag">Calm / Unwind</span>
+          <span class="tag">Self-Care</span>
+          <span class="tag">Curiosity</span>
+        </div>
+        <div class="metrics">
+          <div class="m"><span class="l">ROAS 7d</span><span class="v roas-loser">0.42×</span></div>
+          <div class="m"><span class="l">Spend 7d</span><span class="v">$187</span></div>
+        </div>
+        <div class="foot">
+          <span>AT-11436</span>
+          <span class="dot-sep">·</span>
+          <span>Day 8 · Kill?</span>
+          <span class="ico"><a>↗</a><a>📄</a></span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+</body>
+</html>

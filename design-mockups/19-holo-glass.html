@@ -1,0 +1,456 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Layout 19 — Holo Glass</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:           #eef0f8;     /* cool pale */
+  --surface:      rgba(255,255,255,0.7);
+  --surface-hi:   rgba(255,255,255,0.9);
+  --line:         rgba(15,23,42,0.08);
+  --line-hi:      rgba(15,23,42,0.14);
+  --text:         #0f172a;
+  --text-2:       #475569;
+  --text-3:       #94a3b8;
+  --text-4:       #cbd5e1;
+  --cyan:         #0891b2;
+  --cyan-glow:    rgba(8,145,178,0.3);
+  --cyan-soft:    rgba(8,145,178,0.1);
+  --violet:       #7c3aed;
+  --green:        #059669;
+  --amber:        #d97706;
+  --coral:        #dc2626;
+  --rose:         #e11d48;
+  --sky:          #2563eb;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { background: var(--bg); color: var(--text); min-height: 100vh; }
+body {
+  font-family: 'Inter', sans-serif;
+  font-size: 13.5px; line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  font-feature-settings: "cv11","ss01";
+  position: relative;
+  overflow-x: hidden;
+}
+
+/* Background orbs */
+body::before {
+  content: '';
+  position: fixed;
+  top: -20%; left: -10%;
+  width: 60%; height: 70%;
+  background: radial-gradient(circle, rgba(8,145,178,0.35), transparent 60%);
+  z-index: -1;
+  filter: blur(40px);
+  pointer-events: none;
+}
+body::after {
+  content: '';
+  position: fixed;
+  bottom: -30%; right: -20%;
+  width: 60%; height: 70%;
+  background: radial-gradient(circle, rgba(124,58,237,0.3), transparent 60%);
+  z-index: -1;
+  filter: blur(40px);
+  pointer-events: none;
+}
+.orb-3 {
+  position: fixed;
+  top: 40%; right: 30%;
+  width: 300px; height: 300px;
+  background: radial-gradient(circle, rgba(236,72,153,0.25), transparent 60%);
+  z-index: -1;
+  filter: blur(50px);
+  pointer-events: none;
+}
+
+.mono { font-family: 'JetBrains Mono', monospace; }
+
+/* Nav — frosted glass */
+.nav {
+  position: sticky; top: 0; z-index: 50;
+  backdrop-filter: blur(24px) saturate(1.5);
+  -webkit-backdrop-filter: blur(24px) saturate(1.5);
+  background: rgba(238,240,248,0.65);
+  border-bottom: 1px solid var(--line);
+  padding: 14px 32px;
+  display: flex; align-items: center; gap: 18px;
+}
+.logo { display: flex; align-items: center; gap: 9px; font-weight: 700; font-size: 16.5px; letter-spacing: -0.025em; }
+.logo-mark {
+  width: 26px; height: 26px; border-radius: 7px;
+  background: linear-gradient(135deg, var(--cyan), var(--violet));
+  box-shadow: 0 4px 14px var(--cyan-glow), inset 0 1px 0 rgba(255,255,255,0.3);
+}
+.nav-links { display: flex; gap: 2px; margin-left: 20px; }
+.nav-link { padding: 7px 13px; font-size: 13.5px; font-weight: 500; color: var(--text-2); border-radius: 8px; cursor: pointer; }
+.nav-link:hover { background: var(--surface); color: var(--text); }
+.nav-link.active {
+  color: var(--text); font-weight: 600;
+  background: var(--surface-hi);
+  border: 1px solid var(--line);
+  box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+}
+.nav-link .ct { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; color: var(--text-3); margin-left: 6px; background: var(--surface); padding: 1px 6px; border-radius: 3px; border: 1px solid var(--line); }
+.nav-link.active .ct { background: var(--cyan-soft); color: var(--cyan); border-color: transparent; }
+.nav .right { margin-left: auto; display: flex; gap: 10px; align-items: center; }
+
+.live-pill {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 5px 11px; border-radius: 100px;
+  background: rgba(5,150,105,0.1);
+  color: var(--green); font-size: 11.5px; font-weight: 500;
+  border: 1px solid rgba(5,150,105,0.2);
+}
+.live-pill::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: var(--green); animation: pulse 2.2s infinite; box-shadow: 0 0 8px var(--green); }
+@keyframes pulse { 50% { opacity: 0.45; } }
+
+.btn {
+  height: 34px; padding: 0 14px;
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: 8px; color: var(--text);
+  font-family: inherit; font-size: 13px; font-weight: 500;
+  cursor: pointer;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+.btn:hover { background: var(--surface-hi); }
+.btn-primary {
+  background: linear-gradient(180deg, var(--cyan), #0369a1);
+  color: white; border: none; font-weight: 600;
+  box-shadow: 0 0 0 1px rgba(8,145,178,0.4), 0 6px 18px var(--cyan-glow);
+}
+
+/* Hero */
+.hero {
+  max-width: 1280px; margin: 0 auto;
+  padding: 40px 32px 20px;
+}
+.hero h1 {
+  font-size: clamp(36px, 4.5vw, 54px);
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1.05;
+}
+.hero h1 .grad {
+  background: linear-gradient(90deg, var(--cyan), var(--violet) 50%, #ec4899);
+  -webkit-background-clip: text; background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+.hero .sub { margin-top: 12px; color: var(--text-2); font-size: 16px; max-width: 600px; line-height: 1.55; }
+
+/* KPI cards — frosted glass */
+.kpis {
+  max-width: 1280px; margin: 0 auto;
+  padding: 24px 32px;
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 12px;
+}
+.kpi {
+  padding: 16px 18px;
+  border-radius: 14px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  backdrop-filter: blur(20px) saturate(1.5);
+  -webkit-backdrop-filter: blur(20px) saturate(1.5);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.04), 0 10px 30px rgba(0,0,0,0.05);
+  transition: transform .15s, box-shadow .15s;
+}
+.kpi:hover { transform: translateY(-2px); box-shadow: 0 4px 6px rgba(0,0,0,0.05), 0 20px 40px rgba(0,0,0,0.08); }
+.kpi .l {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10.5px; font-weight: 600;
+  color: var(--text-3); letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.kpi .v {
+  font-size: 28px; font-weight: 700;
+  letter-spacing: -0.025em; margin-top: 6px;
+  font-variant-numeric: tabular-nums;
+  background: linear-gradient(180deg, var(--text), var(--text-2));
+  -webkit-background-clip: text; background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+.kpi .v .unit { font-size: 15px; color: var(--text-3); font-weight: 600; -webkit-text-fill-color: var(--text-3); }
+.kpi .d {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11.5px; font-weight: 600;
+  margin-top: 3px;
+}
+.kpi .d.up { color: var(--green); }
+.kpi .d.down { color: var(--coral); }
+
+/* Filter */
+.filter-bar {
+  max-width: 1280px; margin: 0 auto;
+  padding: 0 32px 16px;
+  display: flex; flex-wrap: wrap; gap: 8px;
+  align-items: center;
+}
+.search {
+  flex: 1; min-width: 240px;
+  position: relative;
+}
+.search input {
+  width: 100%; height: 38px;
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: 10px; padding: 0 44px 0 38px;
+  color: var(--text);
+  font-family: inherit; font-size: 13.5px;
+  outline: none;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+.search input:focus { border-color: var(--cyan); box-shadow: 0 0 0 3px var(--cyan-soft); }
+.search::before { content: '⌕'; position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--text-3); font-size: 14px; }
+.chip {
+  height: 34px; padding: 0 12px;
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: 10px; font-size: 12.5px; color: var(--text-2);
+  cursor: pointer;
+  display: inline-flex; align-items: center; gap: 6px;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+.chip.on { background: var(--cyan); color: white; border-color: var(--cyan); }
+.chip .ch { font-size: 10px; opacity: 0.7; }
+
+/* Table card — frosted */
+.main {
+  max-width: 1280px; margin: 0 auto;
+  padding: 0 32px 60px;
+}
+.table-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  overflow: hidden;
+  backdrop-filter: blur(20px) saturate(1.5);
+  -webkit-backdrop-filter: blur(20px) saturate(1.5);
+  box-shadow: 0 4px 10px rgba(0,0,0,0.04), 0 30px 60px rgba(0,0,0,0.06);
+}
+table.t {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+table.t thead th {
+  text-align: left;
+  padding: 13px 16px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10.5px; font-weight: 600;
+  color: var(--text-3);
+  letter-spacing: 0.05em; text-transform: uppercase;
+  background: rgba(255,255,255,0.5);
+  border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+}
+table.t thead th.num { text-align: right; }
+table.t tbody td {
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--line);
+  vertical-align: middle; color: var(--text);
+}
+table.t tbody tr { cursor: pointer; transition: background .12s; }
+table.t tbody tr:hover { background: rgba(255,255,255,0.6); }
+table.t tbody tr:last-child td { border-bottom: none; }
+
+.cc { display: flex; align-items: center; gap: 12px; }
+.thm {
+  width: 40px; height: 40px; border-radius: 8px;
+  flex-shrink: 0;
+  background: linear-gradient(135deg, var(--violet), var(--cyan));
+  position: relative;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.12), inset 0 1px 0 rgba(255,255,255,0.2);
+}
+.thm::after { content: '▶'; position: absolute; inset: 0; display: grid; place-items: center; color: white; font-size: 12px; text-shadow: 0 1px 2px rgba(0,0,0,0.3); }
+.thm.photo { background: linear-gradient(135deg, #f97316, #e11d48); }
+.thm.photo::after { content: '◈'; }
+.cc .name { font-weight: 600; font-size: 14px; letter-spacing: -0.01em; }
+.cc .sub { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--text-3); margin-top: 2px; }
+
+.tg {
+  display: inline-block;
+  padding: 3px 9px; border-radius: 6px;
+  font-size: 11.5px; font-weight: 500;
+  background: rgba(255,255,255,0.6);
+  color: var(--text-2);
+  border: 1px solid var(--line);
+}
+.tg.angle { background: rgba(8,145,178,0.1); color: var(--cyan); border-color: rgba(8,145,178,0.2); }
+.tg.persona { background: rgba(124,58,237,0.1); color: var(--violet); border-color: rgba(124,58,237,0.2); }
+.tg.hook { background: rgba(217,119,6,0.1); color: var(--amber); border-color: rgba(217,119,6,0.2); }
+
+.st {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 4px 10px; border-radius: 7px;
+  font-size: 11.5px; font-weight: 600;
+}
+.st .d { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.st.massive { color: var(--green); background: rgba(5,150,105,0.15); }
+.st.massive .d { box-shadow: 0 0 8px var(--green); }
+.st.winner  { color: var(--green); background: rgba(5,150,105,0.12); }
+.st.mild    { color: var(--amber); background: rgba(217,119,6,0.12); }
+.st.fatigue { color: var(--coral); background: rgba(220,38,38,0.12); }
+.st.testing { color: var(--sky); background: rgba(37,99,235,0.12); }
+.st.loser   { color: var(--rose); background: rgba(225,29,72,0.12); }
+
+.fn { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; font-weight: 700; color: var(--text-2); padding: 2px 7px; background: rgba(255,255,255,0.5); border-radius: 4px; letter-spacing: 0.04em; border: 1px solid var(--line); }
+
+.n { text-align: right; font-family: 'JetBrains Mono', monospace; font-size: 12.5px; font-variant-numeric: tabular-nums; font-weight: 500; color: var(--text); }
+.n.big { font-weight: 600; font-size: 13px; }
+.n.roas { font-weight: 700; font-size: 13.5px; }
+.n.roas.massive { color: var(--green); }
+.n.roas.up      { color: var(--green); }
+.n.roas.mild    { color: var(--amber); }
+.n.roas.down    { color: var(--coral); }
+.n.roas.loser   { color: var(--rose); }
+.n.dim          { color: var(--text-4); }
+.date { color: var(--text-3); font-size: 11.5px; font-family: 'JetBrains Mono', monospace; }
+</style>
+</head>
+<body>
+<div class="orb-3"></div>
+
+<nav class="nav">
+  <div class="logo"><div class="logo-mark"></div>Immuvi</div>
+  <div class="nav-links">
+    <a class="nav-link">Command HQ</a>
+    <a class="nav-link">Angles <span class="ct">7</span></a>
+    <a class="nav-link active">Tracker <span class="ct">66</span></a>
+    <a class="nav-link">Matrix <span class="ct">19/35</span></a>
+  </div>
+  <div class="right">
+    <span class="live-pill">Live · 16s</span>
+    <button class="btn">⇡ Push</button>
+    <button class="btn btn-primary">↻ Sync</button>
+  </div>
+</nav>
+
+<section class="hero">
+  <h1>Creative tracker, <span class="grad">all your winners at a glance.</span></h1>
+  <p class="sub">Every Facebook creative, classified by performance. Live ROAS, fatigue detection, kill list. Your media buyer's control center.</p>
+</section>
+
+<div class="kpis">
+  <div class="kpi"><div class="l">Creatives</div><div class="v">66</div><div class="d up">↑ +3 week</div></div>
+  <div class="kpi"><div class="l">Winners 7d</div><div class="v">18</div><div class="d up">↑ +2</div></div>
+  <div class="kpi"><div class="l">Fatigued</div><div class="v">3</div><div class="d down">↑ +1</div></div>
+  <div class="kpi"><div class="l">Spend 7d</div><div class="v">$12.4<span class="unit">K</span></div><div class="d up">↑ +18%</div></div>
+  <div class="kpi"><div class="l">Blended ROAS</div><div class="v">1.38<span class="unit">×</span></div><div class="d up">↑ +0.04</div></div>
+</div>
+
+<div class="filter-bar">
+  <div class="search"><input placeholder="Search creatives, angles, personas…"></div>
+  <span class="chip on">Winners <span class="ch">▾</span></span>
+  <span class="chip">Angle <span class="ch">▾</span></span>
+  <span class="chip">Persona <span class="ch">▾</span></span>
+  <span class="chip">Hook <span class="ch">▾</span></span>
+  <span class="chip">7D <span class="ch">▾</span></span>
+</div>
+
+<main class="main">
+  <div class="table-card">
+    <table class="t">
+      <thead>
+        <tr>
+          <th>Creative</th>
+          <th>Angle</th>
+          <th>Persona</th>
+          <th>Hook</th>
+          <th>Funnel</th>
+          <th>Status</th>
+          <th class="num">Spend 7d</th>
+          <th class="num">ROAS</th>
+          <th>Created</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><div class="cc"><div class="thm"></div><div><div class="name">5773-1 old winner</div><div class="sub">AT-11439-v1</div></div></div></td>
+          <td><span class="tg angle">Art as Therapy</span></td>
+          <td><span class="tg persona">Women 25-45</span></td>
+          <td><span class="tg hook">POV</span></td>
+          <td><span class="fn">TOF</span></td>
+          <td><span class="st massive"><span class="d"></span>◆ Massive</span></td>
+          <td class="n big">$1,842</td>
+          <td class="n roas massive">1.92×</td>
+          <td class="date">21.04</td>
+        </tr>
+        <tr>
+          <td><div class="cc"><div class="thm photo"></div><div><div class="name">4570-1 old winner</div><div class="sub">AT-10835</div></div></div></td>
+          <td><span class="tg angle">Emotional Lit.</span></td>
+          <td><span class="tg persona">Women 25-45</span></td>
+          <td><span class="tg hook">Curiosity</span></td>
+          <td><span class="fn">TOF</span></td>
+          <td><span class="st winner"><span class="d"></span>Winner</span></td>
+          <td class="n big">$806</td>
+          <td class="n roas up">1.54×</td>
+          <td class="date">19.04</td>
+        </tr>
+        <tr>
+          <td><div class="cc"><div class="thm photo"></div><div><div class="name">4569-2 old winner</div><div class="sub">AT-10834</div></div></div></td>
+          <td><span class="tg angle">Scarcity</span></td>
+          <td><span class="tg persona">Women 25-45</span></td>
+          <td><span class="tg hook">Pattern Interrupt</span></td>
+          <td><span class="fn">TOF</span></td>
+          <td><span class="st mild"><span class="d"></span>Mild</span></td>
+          <td class="n big">$412</td>
+          <td class="n roas mild">1.33×</td>
+          <td class="date">18.04</td>
+        </tr>
+        <tr>
+          <td><div class="cc"><div class="thm photo"></div><div><div class="name">10785-2 old winner</div><div class="sub">AT-10733</div></div></div></td>
+          <td><span class="tg angle">Scarcity</span></td>
+          <td><span class="tg persona">Women 25-45</span></td>
+          <td><span class="tg hook">Pattern Interrupt</span></td>
+          <td><span class="fn">TOF</span></td>
+          <td><span class="st fatigue"><span class="d"></span>Fatigued</span></td>
+          <td class="n big">$1,205</td>
+          <td class="n roas down">0.98× ↓</td>
+          <td class="date">10.04</td>
+        </tr>
+        <tr>
+          <td><div class="cc"><div class="thm photo"></div><div><div class="name">6197-1 old winner</div><div class="sub">AT-10612</div></div></div></td>
+          <td><span class="tg angle">Scarcity</span></td>
+          <td><span class="tg persona">Women 25-45</span></td>
+          <td><span class="tg hook">Direct Offer</span></td>
+          <td><span class="fn">TOF</span></td>
+          <td><span class="st testing"><span class="d"></span>Testing</span></td>
+          <td class="n big dim">$28</td>
+          <td class="n roas dim">—</td>
+          <td class="date">21.04</td>
+        </tr>
+        <tr>
+          <td><div class="cc"><div class="thm"></div><div><div class="name">11591 new concept</div><div class="sub">AT-11591</div></div></div></td>
+          <td><span class="tg angle">Emotional Lit.</span></td>
+          <td><span class="tg persona">Young Adults Grief</span></td>
+          <td><span class="tg hook">Pain</span></td>
+          <td><span class="fn">TOF</span></td>
+          <td><span class="st winner"><span class="d"></span>Winner</span></td>
+          <td class="n big">$624</td>
+          <td class="n roas up">1.46×</td>
+          <td class="date">20.04</td>
+        </tr>
+        <tr>
+          <td><div class="cc"><div class="thm"></div><div><div class="name">11436 new concept</div><div class="sub">AT-11436</div></div></div></td>
+          <td><span class="tg angle">Calm / Unwind</span></td>
+          <td><span class="tg persona">Self-Care Adults</span></td>
+          <td><span class="tg hook">Curiosity</span></td>
+          <td><span class="fn">TOF</span></td>
+          <td><span class="st loser"><span class="d"></span>Loser</span></td>
+          <td class="n big">$187</td>
+          <td class="n roas loser">0.42×</td>
+          <td class="date">14.04</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</main>
+
+</body>
+</html>

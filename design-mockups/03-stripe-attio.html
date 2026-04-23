@@ -1,0 +1,722 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Creative Tracker — Stripe / Attio direction</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:           #fafbfc;
+  --bg-hi:        #f4f5f7;
+  --card:         #ffffff;
+  --border:       #e5e7ec;
+  --border-hi:    #d4d7dd;
+  --text:         #111827;
+  --text-2:       #4b5563;
+  --text-3:       #6b7280;
+  --text-4:       #9ca3af;
+  --accent:       #5b5bd6;
+  --accent-hi:    #4f4cc4;
+  --accent-ghost: #eeecff;
+  --g-massive:    #0f8862;
+  --g-winner:     #0ea06c;
+  --g-mild:       #b37300;
+  --g-fatigue:    #d6520c;
+  --g-testing:    #2563eb;
+  --g-loser:      #c13b3b;
+  --shadow-sm:    0 1px 2px rgba(16,24,40,.04);
+  --shadow-md:    0 4px 12px rgba(16,24,40,.06);
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html,body { height: 100%; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Inter', -apple-system, sans-serif;
+  font-feature-settings: "cv11","ss01";
+  font-size: 13.5px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Top bar */
+.topbar {
+  height: 56px;
+  background: var(--card);
+  border-bottom: 1px solid var(--border);
+  padding: 0 20px;
+  display: flex; align-items: center; gap: 16px;
+  position: sticky; top: 0; z-index: 20;
+}
+.brand {
+  display: flex; align-items: center; gap: 8px;
+  font-weight: 600; font-size: 14.5px;
+  letter-spacing: -0.015em;
+}
+.brand-mark {
+  width: 22px; height: 22px; border-radius: 5px;
+  background: linear-gradient(135deg, var(--accent) 0%, #8e7fea 100%);
+  display: grid; place-items: center;
+  color: white; font-size: 12px; font-weight: 700;
+}
+.topbar .divider { width: 1px; height: 22px; background: var(--border); margin: 0 4px; }
+
+.product-switcher {
+  display: inline-flex; align-items: center; gap: 10px;
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  cursor: pointer; font-size: 13px;
+  background: var(--card);
+  transition: border-color .15s, background .15s;
+}
+.product-switcher:hover { background: var(--bg-hi); }
+.product-switcher .product-mark {
+  width: 16px; height: 16px; border-radius: 4px;
+  background: linear-gradient(135deg, #fde68a 0%, #f59e0b 100%);
+}
+.product-switcher .chev { color: var(--text-4); font-size: 10px; }
+
+.topbar .actions {
+  margin-left: auto;
+  display: flex; align-items: center; gap: 10px;
+}
+.live-pill {
+  display: inline-flex; align-items: center; gap: 7px;
+  height: 28px; padding: 0 11px;
+  background: #e9f8ef;
+  border-radius: 14px;
+  font-size: 12px; font-weight: 500;
+  color: #0f7a4c;
+}
+.live-pill::before {
+  content: ''; width: 6px; height: 6px; border-radius: 50%;
+  background: #16a34a;
+  animation: pulse 2.5s infinite;
+}
+@keyframes pulse { 50% { opacity: .5; } }
+
+.btn {
+  height: 32px; padding: 0 14px;
+  border-radius: 8px;
+  font-weight: 500; font-size: 13px;
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--text);
+  cursor: pointer;
+  display: inline-flex; align-items: center; gap: 7px;
+  box-shadow: var(--shadow-sm);
+  transition: border-color .15s, background .15s;
+}
+.btn:hover { background: var(--bg-hi); border-color: var(--border-hi); }
+.btn-primary {
+  background: var(--accent);
+  color: white;
+  border-color: var(--accent);
+  box-shadow: 0 1px 2px rgba(91,91,214,.2), inset 0 1px 0 rgba(255,255,255,.12);
+}
+.btn-primary:hover { background: var(--accent-hi); border-color: var(--accent-hi); }
+
+/* Nav tabs */
+.tabs {
+  display: flex; padding: 0 20px; gap: 4px;
+  background: var(--card);
+  border-bottom: 1px solid var(--border);
+}
+.tabs a {
+  padding: 12px 14px;
+  font-size: 13px; font-weight: 500;
+  color: var(--text-2);
+  text-decoration: none;
+  border-radius: 6px 6px 0 0;
+  margin-bottom: -1px;
+  border-bottom: 2px solid transparent;
+  display: inline-flex; align-items: center; gap: 8px;
+  cursor: pointer;
+}
+.tabs a:hover { color: var(--text); background: var(--bg-hi); }
+.tabs a.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+  background: transparent;
+}
+.tabs a .num {
+  background: var(--bg-hi);
+  color: var(--text-3);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 10px;
+  line-height: 14px;
+}
+.tabs a.active .num {
+  background: var(--accent-ghost);
+  color: var(--accent);
+}
+
+/* Content container */
+main { padding: 24px 20px 40px; }
+
+.page-header {
+  display: flex; align-items: flex-end; gap: 14px;
+  margin-bottom: 20px;
+}
+.page-header h1 {
+  font-size: 22px; font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--text);
+}
+.page-header .subtitle { font-size: 13px; color: var(--text-3); padding-bottom: 3px; }
+.page-header .spacer { flex: 1; }
+
+/* Summary cards */
+.summary-row {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 10px;
+  margin-bottom: 18px;
+}
+.s-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px 14px;
+  box-shadow: var(--shadow-sm);
+}
+.s-card .label {
+  font-size: 11.5px; color: var(--text-3);
+  font-weight: 500; letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+.s-card .value {
+  font-size: 22px; font-weight: 600;
+  color: var(--text);
+  letter-spacing: -0.02em;
+  margin-top: 4px;
+  font-variant-numeric: tabular-nums;
+  display: flex; align-items: baseline; gap: 6px;
+}
+.s-card .delta {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--g-winner);
+}
+.s-card .delta.down { color: var(--g-loser); }
+
+/* Filter bar */
+.filter-bar {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  padding: 10px;
+  border-radius: 10px 10px 0 0;
+  border-bottom: none;
+}
+.search-field {
+  flex: 1; min-width: 260px;
+  position: relative;
+}
+.search-field input {
+  width: 100%;
+  height: 34px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0 40px 0 34px;
+  background: var(--card);
+  color: var(--text);
+  font-family: inherit; font-size: 13px;
+  transition: border-color .15s, box-shadow .15s;
+}
+.search-field input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-ghost);
+}
+.search-field input::placeholder { color: var(--text-4); }
+.search-field::before {
+  content: '⌕';
+  position: absolute; left: 12px; top: 50%; transform: translateY(-50%);
+  color: var(--text-4); font-size: 14px;
+}
+.search-field .kbd {
+  position: absolute; right: 10px; top: 50%; transform: translateY(-50%);
+  font-family: 'JetBrains Mono', monospace; font-size: 10.5px;
+  color: var(--text-4);
+  border: 1px solid var(--border);
+  padding: 2px 5px;
+  border-radius: 4px;
+  background: var(--bg-hi);
+}
+.pill-filter {
+  height: 30px; padding: 0 12px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 12.5px; font-weight: 500;
+  color: var(--text-2);
+  cursor: pointer;
+  display: inline-flex; align-items: center; gap: 6px;
+  white-space: nowrap;
+}
+.pill-filter:hover { background: var(--bg-hi); border-color: var(--border-hi); }
+.pill-filter.active {
+  background: var(--accent-ghost);
+  color: var(--accent);
+  border-color: rgba(91,91,214,.25);
+}
+.pill-filter .chev { color: inherit; opacity: 0.65; font-size: 10px; }
+.pill-filter .count-badge {
+  background: rgba(91,91,214,.2);
+  color: var(--accent);
+  font-size: 10.5px;
+  font-weight: 600;
+  padding: 0 6px;
+  border-radius: 10px;
+  line-height: 16px;
+  margin-left: 2px;
+}
+
+.filter-bar .divider { width: 1px; height: 18px; background: var(--border); margin: 0 3px; }
+
+/* Table */
+.data-table {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 0 0 10px 10px;
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
+}
+table.dt {
+  width: 100%;
+  border-collapse: separate; border-spacing: 0;
+  font-size: 13px;
+}
+table.dt thead th {
+  text-align: left;
+  padding: 10px 14px;
+  font-size: 11px; font-weight: 600;
+  color: var(--text-3);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  background: var(--bg-hi);
+  border-bottom: 1px solid var(--border);
+  border-top: 1px solid var(--border);
+  white-space: nowrap;
+  position: sticky; top: 0;
+}
+table.dt thead th.num { text-align: right; }
+table.dt thead th.sort::after {
+  content: ' ↓';
+  color: var(--accent);
+  font-weight: 700;
+}
+
+table.dt tbody tr { transition: background .1s; cursor: pointer; }
+table.dt tbody tr:hover { background: #fafbfd; }
+table.dt tbody td {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+  color: var(--text);
+}
+table.dt tbody tr:last-child td { border-bottom: none; }
+
+/* Creative cell */
+.c-cell { display: flex; align-items: center; gap: 12px; }
+.c-thumb {
+  width: 40px; height: 40px; border-radius: 7px;
+  flex-shrink: 0;
+  background: linear-gradient(135deg, #dbeafe 0%, #60a5fa 100%);
+  position: relative;
+  overflow: hidden;
+  border: 1px solid var(--border);
+}
+.c-thumb::after {
+  content: '▶'; position: absolute; inset: 0;
+  display: grid; place-items: center;
+  color: white; font-size: 12px;
+  text-shadow: 0 1px 2px rgba(0,0,0,.25);
+}
+.c-thumb.photo { background: linear-gradient(135deg, #fef3c7 0%, #f59e0b 100%); }
+.c-thumb.photo::after { content: '◈'; }
+.c-info { min-width: 0; }
+.c-info .name {
+  font-weight: 600;
+  color: var(--text);
+  font-size: 13.5px;
+  letter-spacing: -0.01em;
+  line-height: 1.3;
+  display: flex; align-items: center; gap: 6px;
+}
+.c-info .sub {
+  color: var(--text-3);
+  font-size: 11.5px;
+  font-family: 'JetBrains Mono', monospace;
+  margin-top: 2px;
+}
+.c-info .sub a { color: var(--text-3); text-decoration: none; }
+.c-info .sub a:hover { color: var(--accent); }
+
+/* Pill tags */
+.p-tag {
+  display: inline-flex; align-items: center;
+  padding: 3px 9px;
+  border-radius: 6px;
+  font-size: 12px; font-weight: 500;
+  background: var(--bg-hi);
+  color: var(--text-2);
+  border: 1px solid transparent;
+  line-height: 1.3;
+}
+.p-tag.angle {
+  background: #f0ecff;
+  color: #5a48a8;
+}
+.p-tag.persona {
+  background: #e6f9f0;
+  color: #0f6e48;
+}
+.p-tag.hook {
+  background: #fff1e0;
+  color: #a85e19;
+}
+.p-tag.struct {
+  background: #eef2f7;
+  color: #475569;
+}
+
+/* Status badge */
+.status-badge {
+  display: inline-flex; align-items: center; gap: 6px;
+  height: 22px; padding: 0 10px;
+  border-radius: 11px;
+  font-size: 11.5px; font-weight: 600;
+}
+.status-badge .sd {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: currentColor;
+}
+.status-badge.massive { background: #e5f5ee; color: var(--g-massive); }
+.status-badge.winner  { background: #e8f7ef; color: var(--g-winner); }
+.status-badge.mild    { background: #fef4dd; color: var(--g-mild); }
+.status-badge.fatigue { background: #fdece0; color: var(--g-fatigue); }
+.status-badge.testing { background: #e6efff; color: var(--g-testing); }
+.status-badge.loser   { background: #feeaea; color: var(--g-loser); }
+.status-badge.massive::before {
+  content: '◆'; font-size: 9px;
+}
+
+/* Funnel badge */
+.funnel-badge {
+  display: inline-block;
+  font-size: 10.5px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 5px;
+  background: #ede9fe;
+  color: #5a48a8;
+  font-family: 'JetBrains Mono', monospace;
+  letter-spacing: 0.04em;
+}
+.funnel-badge.mof { background: #fff1e0; color: #a85e19; }
+.funnel-badge.bof { background: #e8f7ef; color: var(--g-winner); }
+
+/* Numbers */
+.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12.5px;
+  color: var(--text);
+  font-weight: 500;
+}
+.num-primary {
+  font-weight: 600; color: var(--text);
+  font-size: 13px;
+}
+.roas {
+  font-weight: 600;
+  font-family: 'JetBrains Mono', monospace;
+}
+.roas.up    { color: var(--g-winner); }
+.roas.down  { color: var(--g-fatigue); }
+.roas.loser { color: var(--g-loser); }
+.roas.massive { color: var(--g-massive); }
+
+.date { font-size: 12px; color: var(--text-3); }
+
+/* Link icons */
+.link-set { display: inline-flex; gap: 4px; }
+.link-set a {
+  display: inline-grid; place-items: center;
+  width: 26px; height: 26px;
+  border-radius: 6px;
+  color: var(--text-3);
+  text-decoration: none;
+  transition: all .15s;
+}
+.link-set a:hover {
+  background: var(--accent-ghost);
+  color: var(--accent);
+}
+
+/* Row selection hint on hover */
+table.dt tbody tr:hover .action-hint {
+  opacity: 1;
+}
+.action-hint {
+  opacity: 0;
+  font-size: 11px; color: var(--accent);
+  font-weight: 500;
+  transition: opacity .1s;
+}
+
+/* Footer */
+.table-footer {
+  display: flex; align-items: center;
+  padding: 12px 16px;
+  border-top: 1px solid var(--border);
+  font-size: 12px;
+  color: var(--text-3);
+  background: var(--bg-hi);
+  border-radius: 0 0 10px 10px;
+  margin-top: -1px;
+}
+.table-footer strong { color: var(--text); font-weight: 600; }
+.table-footer .r { margin-left: auto; display: flex; gap: 12px; }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="brand"><div class="brand-mark">I</div>Immuvi</div>
+  <div class="divider"></div>
+  <div class="product-switcher">
+    <div class="product-mark"></div>
+    <span>Art Therapy</span>
+    <span class="chev">▾</span>
+  </div>
+  <div class="actions">
+    <span class="live-pill">Live · 16s ago</span>
+    <button class="btn">↻ Reset</button>
+    <button class="btn btn-primary">↻ Sync ClickUp</button>
+  </div>
+</div>
+
+<nav class="tabs">
+  <a>Command HQ</a>
+  <a>Angles <span class="num">7</span></a>
+  <a>Personas <span class="num">5</span></a>
+  <a class="active">Creative Tracker <span class="num">66</span></a>
+  <a>Creative Matrix <span class="num">19/35</span></a>
+  <a>Action Plan <span class="num">3</span></a>
+  <a>Production <span class="num">3</span></a>
+  <a>Inspiration <span class="num">0</span></a>
+</nav>
+
+<main>
+  <div class="page-header">
+    <h1>Creative Tracker</h1>
+    <span class="subtitle">66 creatives across Art Therapy · 19 winning combinations</span>
+    <span class="spacer"></span>
+    <button class="btn">⇡ Push all to ClickUp</button>
+    <button class="btn btn-primary">+ Add creative</button>
+  </div>
+
+  <div class="summary-row">
+    <div class="s-card">
+      <div class="label">Total creatives</div>
+      <div class="value">66 <span class="delta">+3</span></div>
+    </div>
+    <div class="s-card">
+      <div class="label">Winners (7d)</div>
+      <div class="value">18 <span class="delta">+2</span></div>
+    </div>
+    <div class="s-card">
+      <div class="label">Fatigued</div>
+      <div class="value">3 <span class="delta down">+1</span></div>
+    </div>
+    <div class="s-card">
+      <div class="label">Spend 7d</div>
+      <div class="value">$12.4k</div>
+    </div>
+    <div class="s-card">
+      <div class="label">Blended ROAS</div>
+      <div class="value">1.38× <span class="delta">+0.04</span></div>
+    </div>
+  </div>
+
+  <div class="filter-bar">
+    <div class="search-field">
+      <input placeholder="Search creatives, angles, personas, hooks…">
+      <span class="kbd">⌘K</span>
+    </div>
+    <div class="pill-filter active">Winners <span class="count-badge">18</span> <span class="chev">▾</span></div>
+    <div class="pill-filter">Angle <span class="chev">▾</span></div>
+    <div class="pill-filter">Persona <span class="chev">▾</span></div>
+    <div class="pill-filter">Hook <span class="chev">▾</span></div>
+    <div class="pill-filter">Funnel <span class="chev">▾</span></div>
+    <div class="divider"></div>
+    <div class="pill-filter">Today <span class="chev">▾</span></div>
+  </div>
+
+  <div class="data-table">
+    <table class="dt">
+      <thead>
+        <tr>
+          <th style="width:24%">Creative</th>
+          <th>Angle</th>
+          <th>Persona</th>
+          <th>Structure</th>
+          <th>Hook</th>
+          <th>Funnel</th>
+          <th>Status</th>
+          <th class="num sort">Spend 7d</th>
+          <th class="num">ROAS 7d</th>
+          <th>Links</th>
+          <th>Created</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>
+            <div class="c-cell">
+              <div class="c-thumb"></div>
+              <div class="c-info">
+                <div class="name">5773-1 old winner <span class="action-hint">↗ open</span></div>
+                <div class="sub">AT-11439-v1 · <a href="#">ClickUp</a></div>
+              </div>
+            </div>
+          </td>
+          <td><span class="p-tag angle">Art as Therapy Alt.</span></td>
+          <td><span class="p-tag persona">Stressed Women 25-45</span></td>
+          <td><span class="p-tag struct">UGC</span></td>
+          <td><span class="p-tag hook">POV</span></td>
+          <td><span class="funnel-badge">TOF</span></td>
+          <td><span class="status-badge massive"><span class="sd"></span>Massive</span></td>
+          <td class="num num-primary">$1,842</td>
+          <td class="num roas massive">1.92×</td>
+          <td><div class="link-set"><a>↗</a><a>📄</a></div></td>
+          <td class="date">21 Apr</td>
+        </tr>
+        <tr>
+          <td>
+            <div class="c-cell">
+              <div class="c-thumb photo"></div>
+              <div class="c-info">
+                <div class="name">4570-1 old winner <span class="action-hint">↗ open</span></div>
+                <div class="sub">AT-10835 · <a href="#">ClickUp</a></div>
+              </div>
+            </div>
+          </td>
+          <td><span class="p-tag angle">Emotional Literacy</span></td>
+          <td><span class="p-tag persona">Stressed Women 25-45</span></td>
+          <td><span class="p-tag struct">Static / Photo</span></td>
+          <td><span class="p-tag hook">Curiosity</span></td>
+          <td><span class="funnel-badge">TOF</span></td>
+          <td><span class="status-badge winner"><span class="sd"></span>Winner</span></td>
+          <td class="num num-primary">$806</td>
+          <td class="num roas up">1.54×</td>
+          <td><div class="link-set"><a>↗</a><a>📄</a></div></td>
+          <td class="date">19 Apr</td>
+        </tr>
+        <tr>
+          <td>
+            <div class="c-cell">
+              <div class="c-thumb photo"></div>
+              <div class="c-info">
+                <div class="name">4569-2 old winner</div>
+                <div class="sub">AT-10834 · <a href="#">ClickUp</a></div>
+              </div>
+            </div>
+          </td>
+          <td><span class="p-tag angle">Scarcity</span></td>
+          <td><span class="p-tag persona">Stressed Women 25-45</span></td>
+          <td><span class="p-tag struct">Static / Photo</span></td>
+          <td><span class="p-tag hook">Pattern Interrupt</span></td>
+          <td><span class="funnel-badge">TOF</span></td>
+          <td><span class="status-badge mild"><span class="sd"></span>Mild</span></td>
+          <td class="num num-primary">$412</td>
+          <td class="num roas" style="color: var(--g-mild)">1.33×</td>
+          <td><div class="link-set"><a>↗</a><a>📄</a></div></td>
+          <td class="date">18 Apr</td>
+        </tr>
+        <tr>
+          <td>
+            <div class="c-cell">
+              <div class="c-thumb photo"></div>
+              <div class="c-info">
+                <div class="name">10785-2 old winner</div>
+                <div class="sub">AT-10733 · <a href="#">ClickUp</a></div>
+              </div>
+            </div>
+          </td>
+          <td><span class="p-tag angle">Scarcity</span></td>
+          <td><span class="p-tag persona">Stressed Women 25-45</span></td>
+          <td><span class="p-tag struct">Static / Photo</span></td>
+          <td><span class="p-tag hook">Pattern Interrupt</span></td>
+          <td><span class="funnel-badge">TOF</span></td>
+          <td><span class="status-badge fatigue"><span class="sd"></span>Fatigued</span></td>
+          <td class="num num-primary">$1,205</td>
+          <td class="num roas down">0.98× ↓</td>
+          <td><div class="link-set"><a>↗</a><a>📄</a></div></td>
+          <td class="date">10 Apr</td>
+        </tr>
+        <tr>
+          <td>
+            <div class="c-cell">
+              <div class="c-thumb photo"></div>
+              <div class="c-info">
+                <div class="name">6197-1 old winner</div>
+                <div class="sub">AT-10612 · <a href="#">ClickUp</a></div>
+              </div>
+            </div>
+          </td>
+          <td><span class="p-tag angle">Scarcity</span></td>
+          <td><span class="p-tag persona">Stressed Women 25-45</span></td>
+          <td><span class="p-tag struct">Static / Photo</span></td>
+          <td><span class="p-tag hook">Direct Offer</span></td>
+          <td><span class="funnel-badge">TOF</span></td>
+          <td><span class="status-badge testing"><span class="sd"></span>Testing</span></td>
+          <td class="num num-primary" style="color: var(--text-3)">$28</td>
+          <td class="num roas" style="color: var(--text-4)">—</td>
+          <td><div class="link-set"><a>↗</a><a>📄</a></div></td>
+          <td class="date">21 Apr</td>
+        </tr>
+        <tr>
+          <td>
+            <div class="c-cell">
+              <div class="c-thumb"></div>
+              <div class="c-info">
+                <div class="name">11436 new concept</div>
+                <div class="sub">AT-11436 · <a href="#">ClickUp</a></div>
+              </div>
+            </div>
+          </td>
+          <td><span class="p-tag angle">Calm / Unwind</span></td>
+          <td><span class="p-tag persona">Creative Self-Care</span></td>
+          <td><span class="p-tag struct">Hook + Offer</span></td>
+          <td><span class="p-tag hook">Curiosity</span></td>
+          <td><span class="funnel-badge">TOF</span></td>
+          <td><span class="status-badge loser"><span class="sd"></span>Loser</span></td>
+          <td class="num num-primary">$187</td>
+          <td class="num roas loser">0.42×</td>
+          <td><div class="link-set"><a>↗</a><a>📄</a></div></td>
+          <td class="date">14 Apr</td>
+        </tr>
+      </tbody>
+    </table>
+    <div class="table-footer">
+      Showing <strong>6 of 66</strong> creatives
+      <div class="r">
+        <span>Updated 16s ago</span>
+        <span>↑↓ navigate · ⏎ open · ⌘/ help</span>
+      </div>
+    </div>
+  </div>
+</main>
+
+</body>
+</html>

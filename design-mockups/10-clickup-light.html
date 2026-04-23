@@ -1,0 +1,1109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Creative Tracker — ClickUp-inspired Light</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --canvas:        #ffffff;
+  --sidebar:       #f7f8fa;
+  --sidebar-hi:    #eceff3;
+  --surface:       #ffffff;
+  --surface-2:     #fafbfc;
+  --surface-3:     #f3f5f8;
+  --line:          #e4e7ed;
+  --line-hi:       #d6dae1;
+  --text:          #1d1f23;
+  --text-2:        #545a64;
+  --text-3:        #7d838e;
+  --text-4:        #a3a8b3;
+
+  --primary:       #7b68ee;         /* ClickUp signature purple */
+  --primary-hi:    #6d58e8;
+  --primary-soft:  #f0edfd;
+
+  /* Pill palette — saturated, bright. Each category gets its own hue */
+  --violet:        #8854d0;  --violet-bg:  #efe5ff;  --violet-ink: #4c2a9e;
+  --magenta:       #c436b5;  --magenta-bg: #fbe5f6;  --magenta-ink: #8a1f7e;
+  --rose:          #e64980;  --rose-bg:    #fde4ed;  --rose-ink:   #a6245a;
+  --orange:        #ff7a00;  --orange-bg:  #ffe9d4;  --orange-ink: #b14d00;
+  --amber:         #f4a500;  --amber-bg:   #fff3d4;  --amber-ink:  #8a5f00;
+  --teal:          #14b8a6;  --teal-bg:    #ccf4ee;  --teal-ink:   #086b61;
+  --green:         #22a06b;  --green-bg:   #cef2dd;  --green-ink:  #0f5f3c;
+  --blue:          #3d8bff;  --blue-bg:    #dcebff;  --blue-ink:   #1752ac;
+  --indigo:        #5b5bd6;  --indigo-bg:  #e1e1fb;  --indigo-ink: #2929a5;
+  --slate:         #64748b;  --slate-bg:   #e7eaf0;  --slate-ink:  #344055;
+
+  /* Status per tier */
+  --st-massive:    #0f7d4f;   --st-massive-bg:  #d1f1dd;
+  --st-winner:     #22a06b;   --st-winner-bg:   #d5f2e2;
+  --st-mild:       #d49b00;   --st-mild-bg:     #fdf0cc;
+  --st-fatigue:    #d45a12;   --st-fatigue-bg:  #fde2ce;
+  --st-testing:    #2670d3;   --st-testing-bg:  #d7e6fa;
+  --st-loser:      #c93646;   --st-loser-bg:    #fbdadf;
+
+  --shadow-xs:     0 1px 0 rgba(24,28,36,.04);
+  --shadow-sm:     0 1px 3px rgba(24,28,36,.06), 0 1px 2px rgba(24,28,36,.04);
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; }
+body {
+  background: var(--canvas);
+  color: var(--text);
+  font-family: 'Inter', -apple-system, sans-serif;
+  font-feature-settings: "cv11","ss01";
+  font-size: 13px;
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+  display: grid;
+  grid-template-columns: 240px 1fr;
+  min-height: 100vh;
+}
+.mono { font-family: 'JetBrains Mono', monospace; font-variant-numeric: tabular-nums; }
+
+/* ═════════════ SIDEBAR ═════════════ */
+.sidebar {
+  background: var(--sidebar);
+  border-right: 1px solid var(--line);
+  display: flex; flex-direction: column;
+  position: sticky; top: 0; height: 100vh;
+  overflow-y: auto;
+}
+.sb-head {
+  padding: 12px 14px;
+  display: flex; align-items: center; gap: 10px;
+  border-bottom: 1px solid var(--line);
+  background: var(--sidebar);
+}
+.sb-head .workspace {
+  width: 26px; height: 26px;
+  border-radius: 6px;
+  background: linear-gradient(135deg, var(--primary) 0%, var(--magenta) 100%);
+  color: white;
+  font-weight: 700; font-size: 13px;
+  display: grid; place-items: center;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.2);
+  flex-shrink: 0;
+}
+.sb-head .info { flex: 1; min-width: 0; }
+.sb-head .name { font-weight: 600; font-size: 13.5px; letter-spacing: -0.01em; }
+.sb-head .plan { font-size: 10.5px; color: var(--text-3); margin-top: 1px; display: flex; align-items: center; gap: 4px; }
+.sb-head .plan::before { content: '★'; color: var(--amber); font-size: 11px; }
+.sb-head .chev { color: var(--text-3); font-size: 10px; }
+
+.sb-search {
+  margin: 10px 10px 6px;
+  position: relative;
+}
+.sb-search input {
+  width: 100%; height: 30px;
+  background: var(--canvas);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 0 10px 0 30px;
+  font-family: inherit; font-size: 12.5px;
+  color: var(--text);
+  outline: none;
+}
+.sb-search input:focus { border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-soft); }
+.sb-search::before {
+  content: '⌕'; position: absolute; left: 10px; top: 50%; transform: translateY(-50%);
+  color: var(--text-3); font-size: 13px;
+}
+.sb-search .kbd {
+  position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
+  font-family: 'JetBrains Mono', monospace; font-size: 9.5px;
+  color: var(--text-3);
+  border: 1px solid var(--line);
+  padding: 1px 5px; border-radius: 3px;
+  background: var(--surface-2);
+}
+
+.sb-section { padding: 8px 8px; }
+.sb-section .h {
+  padding: 4px 8px;
+  font-size: 10.5px; font-weight: 600;
+  color: var(--text-3);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  display: flex; align-items: center; gap: 6px;
+}
+.sb-section .h .add {
+  margin-left: auto;
+  color: var(--text-3); cursor: pointer;
+  font-size: 14px; line-height: 1;
+  padding: 2px 4px; border-radius: 3px;
+}
+.sb-section .h .add:hover { background: var(--sidebar-hi); color: var(--text); }
+
+.sb-item {
+  padding: 5px 8px;
+  display: flex; align-items: center; gap: 8px;
+  font-size: 13px;
+  color: var(--text-2);
+  border-radius: 5px;
+  cursor: pointer;
+}
+.sb-item:hover { background: var(--sidebar-hi); color: var(--text); }
+.sb-item.active {
+  background: var(--primary-soft);
+  color: var(--primary-hi);
+  font-weight: 500;
+}
+.sb-item .ic {
+  width: 16px; height: 16px;
+  display: grid; place-items: center;
+  color: inherit;
+  font-size: 12px;
+  opacity: 0.8;
+}
+.sb-item .ct {
+  margin-left: auto;
+  font-size: 10.5px;
+  color: var(--text-3);
+  font-family: 'JetBrains Mono', monospace;
+  background: var(--canvas);
+  border: 1px solid var(--line);
+  padding: 0 5px;
+  border-radius: 10px;
+  line-height: 15px;
+  min-width: 20px; text-align: center;
+}
+.sb-item.active .ct { background: white; color: var(--primary-hi); border-color: transparent; }
+.sb-item .chev { margin-left: auto; color: var(--text-4); font-size: 9px; }
+.sb-item.has-children .ic::before { content: '▸'; font-size: 9px; }
+.sb-item.expanded .ic::before { content: '▾'; font-size: 9px; }
+
+.sb-nested { padding-left: 14px; }
+.sb-nested .sb-item .bullet {
+  width: 6px; height: 6px; border-radius: 2px;
+  flex-shrink: 0;
+}
+
+.sb-item .dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.sb-bottom {
+  margin-top: auto;
+  border-top: 1px solid var(--line);
+  padding: 10px 8px;
+  display: flex; flex-direction: column; gap: 2px;
+}
+.sb-bottom .sb-item { padding: 5px 8px; font-size: 12.5px; }
+.sb-bottom .live {
+  margin: 6px 8px 0;
+  display: flex; align-items: center; gap: 7px;
+  font-size: 11px; color: var(--text-3);
+  padding: 6px 8px;
+  background: var(--sidebar-hi);
+  border-radius: 5px;
+}
+.sb-bottom .live::before {
+  content: ''; width: 6px; height: 6px; border-radius: 50%;
+  background: var(--green);
+  box-shadow: 0 0 6px var(--green);
+  animation: pulse 2.2s infinite;
+}
+@keyframes pulse { 50% { opacity: 0.5; } }
+
+/* ═════════════ MAIN ═════════════ */
+.main { min-width: 0; background: var(--canvas); }
+
+/* Breadcrumb bar */
+.breadcrumb {
+  height: 42px;
+  padding: 0 18px;
+  display: flex; align-items: center; gap: 6px;
+  border-bottom: 1px solid var(--line);
+  font-size: 12.5px;
+  background: var(--canvas);
+  position: sticky; top: 0; z-index: 5;
+}
+.breadcrumb a {
+  color: var(--text-2); text-decoration: none;
+  padding: 4px 8px; border-radius: 5px;
+  display: inline-flex; align-items: center; gap: 6px;
+  cursor: pointer;
+}
+.breadcrumb a:hover { background: var(--surface-3); color: var(--text); }
+.breadcrumb a.active { color: var(--text); font-weight: 500; }
+.breadcrumb .sep { color: var(--text-4); font-size: 10px; }
+.breadcrumb .right { margin-left: auto; display: flex; align-items: center; gap: 6px; }
+.breadcrumb .icon-btn {
+  width: 30px; height: 30px;
+  display: grid; place-items: center;
+  border-radius: 5px;
+  color: var(--text-3);
+  cursor: pointer; font-size: 14px;
+  border: 1px solid transparent;
+}
+.breadcrumb .icon-btn:hover { background: var(--surface-3); color: var(--text); }
+
+/* View/tab strip */
+.view-strip {
+  padding: 8px 18px;
+  display: flex; align-items: center; gap: 2px;
+  border-bottom: 1px solid var(--line);
+  background: var(--canvas);
+  overflow-x: auto;
+}
+.view-tab {
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 12.5px; font-weight: 500;
+  color: var(--text-2);
+  cursor: pointer;
+  white-space: nowrap;
+  display: inline-flex; align-items: center; gap: 7px;
+  border: 1px solid transparent;
+  transition: all .12s;
+}
+.view-tab:hover { background: var(--surface-3); color: var(--text); }
+.view-tab.active {
+  background: var(--surface);
+  color: var(--text);
+  border-color: var(--line);
+  box-shadow: var(--shadow-xs);
+  font-weight: 600;
+}
+.view-tab .ct {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10.5px;
+  color: var(--text-3);
+  background: var(--surface-3);
+  padding: 1px 5px;
+  border-radius: 3px;
+}
+.view-tab.active .ct { background: var(--primary-soft); color: var(--primary-hi); }
+.view-tab .dot {
+  width: 6px; height: 6px; border-radius: 50%;
+}
+.view-strip .add-view {
+  padding: 6px 10px;
+  color: var(--text-3); cursor: pointer;
+  border-radius: 5px;
+  font-size: 12.5px;
+  display: inline-flex; align-items: center; gap: 4px;
+}
+.view-strip .add-view:hover { background: var(--surface-3); color: var(--text); }
+
+.view-strip .right {
+  margin-left: auto;
+  display: flex; align-items: center; gap: 4px;
+}
+
+/* Toolbar — filters / sort / group */
+.toolbar {
+  padding: 8px 18px;
+  display: flex; flex-wrap: wrap; gap: 6px; align-items: center;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface-2);
+}
+.tb-btn {
+  padding: 5px 10px;
+  height: 28px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  color: var(--text-2);
+  font-family: inherit; font-size: 12px; font-weight: 500;
+  cursor: pointer;
+  display: inline-flex; align-items: center; gap: 5px;
+}
+.tb-btn:hover { background: var(--canvas); color: var(--text); border-color: var(--line); }
+.tb-btn.on {
+  background: var(--primary-soft);
+  color: var(--primary-hi);
+  border-color: transparent;
+  font-weight: 500;
+}
+.tb-btn .ic { font-size: 13px; }
+.tb-btn .ch { color: var(--text-4); font-size: 9px; }
+.tb-btn .count-num {
+  background: var(--primary);
+  color: white;
+  font-size: 10px; font-weight: 600;
+  padding: 0 5px;
+  border-radius: 7px;
+  line-height: 14px;
+  min-width: 14px; text-align: center;
+}
+
+.toolbar .sep { width: 1px; height: 16px; background: var(--line); margin: 0 3px; }
+.toolbar .right {
+  margin-left: auto;
+  display: flex; align-items: center; gap: 6px;
+}
+
+.search-inline {
+  position: relative;
+  width: 220px;
+}
+.search-inline input {
+  width: 100%; height: 28px;
+  background: var(--canvas);
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  padding: 0 10px 0 28px;
+  font-family: inherit; font-size: 12px;
+  color: var(--text); outline: none;
+}
+.search-inline::before {
+  content: '⌕'; position: absolute; left: 9px; top: 50%; transform: translateY(-50%);
+  color: var(--text-3); font-size: 12px;
+}
+.search-inline input:focus { border-color: var(--primary); box-shadow: 0 0 0 2px var(--primary-soft); }
+
+/* Banner */
+.banner {
+  margin: 8px 18px 0;
+  padding: 10px 14px;
+  background: linear-gradient(90deg, #fff3e8 0%, #fee4f4 100%);
+  border: 1px solid #ffd9b0;
+  border-radius: 8px;
+  display: flex; align-items: center; gap: 10px;
+  font-size: 12.5px;
+  color: #8a4400;
+}
+.banner::before {
+  content: '✦';
+  color: var(--orange);
+  font-size: 14px;
+}
+.banner strong { color: #6b3300; }
+.banner .close {
+  margin-left: auto;
+  color: var(--text-3);
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 3px;
+}
+.banner .close:hover { background: rgba(0,0,0,.05); }
+
+/* ═════════════ TABLE ═════════════ */
+.table-area {
+  padding: 8px 0 0;
+  overflow: auto;
+}
+table.cu {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 13px;
+}
+table.cu thead th {
+  text-align: left;
+  padding: 8px 12px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-3);
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  background: var(--canvas);
+  border-bottom: 1px solid var(--line);
+  border-top: 1px solid var(--line);
+  white-space: nowrap;
+  position: sticky; top: 0; z-index: 2;
+}
+table.cu thead th.num { text-align: right; }
+table.cu thead th.sort {
+  background: var(--primary-soft);
+  color: var(--primary-hi);
+}
+table.cu thead th .hdr-ic {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 16px; height: 16px;
+  border-radius: 3px;
+  background: var(--surface-3);
+  color: var(--text-3);
+  font-weight: 700;
+  font-size: 10px;
+  margin-right: 5px;
+  vertical-align: -1px;
+}
+table.cu thead th.sort .hdr-ic { background: var(--primary); color: white; }
+
+table.cu thead th:first-child {
+  padding-left: 18px;
+}
+table.cu tbody td {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--line);
+  vertical-align: middle;
+  white-space: nowrap;
+}
+table.cu tbody td:first-child {
+  padding-left: 18px;
+}
+table.cu tbody tr {
+  transition: background .08s;
+  cursor: pointer;
+}
+table.cu tbody tr:hover { background: var(--surface-2); }
+table.cu tbody tr:hover .row-actions { opacity: 1; }
+
+/* Row leader: checkbox + name */
+.row-leader {
+  display: flex; align-items: center; gap: 10px;
+}
+.cb {
+  width: 16px; height: 16px;
+  border: 1.5px solid var(--line-hi);
+  border-radius: 4px;
+  background: var(--surface);
+  flex-shrink: 0;
+  cursor: pointer;
+  transition: all .12s;
+}
+tr:hover .cb { border-color: var(--text-3); }
+.cb.checked {
+  background: var(--primary);
+  border-color: var(--primary);
+  position: relative;
+}
+.cb.checked::after {
+  content: '✓';
+  position: absolute; inset: 0;
+  display: grid; place-items: center;
+  color: white; font-size: 11px; font-weight: 700;
+}
+
+.task-name {
+  display: flex; align-items: center; gap: 10px;
+  min-width: 0;
+}
+.tn-thumb {
+  width: 22px; height: 22px; border-radius: 4px;
+  flex-shrink: 0;
+  background: linear-gradient(135deg, var(--primary) 0%, var(--magenta) 100%);
+  color: white;
+  display: grid; place-items: center;
+  font-size: 10px;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.15);
+}
+.tn-thumb.photo { background: linear-gradient(135deg, var(--orange) 0%, var(--rose) 100%); }
+.task-name .nm {
+  font-weight: 500;
+  font-size: 13.5px;
+  color: var(--text);
+  letter-spacing: -0.005em;
+  overflow: hidden; text-overflow: ellipsis;
+}
+.task-name .id-chip {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10.5px;
+  color: var(--text-3);
+  background: var(--surface-3);
+  padding: 1px 6px;
+  border-radius: 3px;
+  border: 1px solid var(--line);
+}
+.task-name .sub-ct {
+  color: var(--text-3); font-size: 11.5px;
+  margin-left: 4px;
+}
+.task-name .sub-ct::before { content: '+'; margin-right: 2px; }
+
+.row-actions {
+  opacity: 0;
+  display: inline-flex; gap: 2px;
+  margin-left: auto;
+  transition: opacity .12s;
+}
+.row-actions a {
+  width: 22px; height: 22px;
+  border-radius: 4px;
+  color: var(--text-3);
+  display: grid; place-items: center;
+  text-decoration: none;
+  font-size: 12px;
+}
+.row-actions a:hover { background: var(--surface-3); color: var(--primary); }
+
+/* ═════════════ CLICKUP-STYLE PILLS ═════════════ */
+/* Tag pill — bright, saturated, with colored bar on left (like ClickUp dropdown) */
+.pill {
+  display: inline-flex; align-items: center;
+  padding: 4px 9px;
+  border-radius: 4px;
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--text);
+  background: var(--surface-3);
+  letter-spacing: -0.005em;
+  max-width: 100%;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.pill::before {
+  content: '';
+  width: 3px; height: 11px;
+  border-radius: 2px;
+  background: currentColor;
+  margin-right: 7px;
+  flex-shrink: 0;
+}
+
+/* Saturated solid-color pills (like in your ClickUp screenshot) */
+.chip-solid {
+  display: inline-flex; align-items: center;
+  padding: 3px 10px;
+  border-radius: 4px;
+  font-size: 11.5px;
+  font-weight: 500;
+  color: white;
+  letter-spacing: -0.005em;
+  max-width: 100%;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.chip-solid.violet   { background: var(--violet); }
+.chip-solid.magenta  { background: var(--magenta); }
+.chip-solid.rose     { background: var(--rose); }
+.chip-solid.orange   { background: var(--orange); }
+.chip-solid.amber    { background: var(--amber); color: #3d2a00; }
+.chip-solid.teal     { background: var(--teal); }
+.chip-solid.green    { background: var(--green); }
+.chip-solid.blue     { background: var(--blue); }
+.chip-solid.indigo   { background: var(--indigo); }
+.chip-solid.slate    { background: var(--slate); }
+
+/* Soft chips — colored bg + colored text (lighter for denser tables) */
+.chip-soft {
+  display: inline-flex; align-items: center;
+  padding: 3px 9px;
+  border-radius: 4px;
+  font-size: 11.5px;
+  font-weight: 500;
+  letter-spacing: -0.005em;
+  max-width: 100%;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.chip-soft.violet   { background: var(--violet-bg);  color: var(--violet-ink); }
+.chip-soft.magenta  { background: var(--magenta-bg); color: var(--magenta-ink); }
+.chip-soft.rose     { background: var(--rose-bg);    color: var(--rose-ink); }
+.chip-soft.orange   { background: var(--orange-bg);  color: var(--orange-ink); }
+.chip-soft.amber    { background: var(--amber-bg);   color: var(--amber-ink); }
+.chip-soft.teal     { background: var(--teal-bg);    color: var(--teal-ink); }
+.chip-soft.green    { background: var(--green-bg);   color: var(--green-ink); }
+.chip-soft.blue     { background: var(--blue-bg);    color: var(--blue-ink); }
+.chip-soft.indigo   { background: var(--indigo-bg);  color: var(--indigo-ink); }
+.chip-soft.slate    { background: var(--slate-bg);   color: var(--slate-ink); }
+
+/* Status pill (solid — more assertive for status column) */
+.status-pill {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 3px 9px 3px 8px;
+  border-radius: 4px;
+  font-size: 11.5px; font-weight: 600;
+  letter-spacing: -0.005em;
+}
+.status-pill::before {
+  content: ''; width: 6px; height: 6px; border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 20%, transparent);
+}
+.status-pill.massive { background: var(--st-massive-bg); color: var(--st-massive); }
+.status-pill.winner  { background: var(--st-winner-bg);  color: var(--st-winner); }
+.status-pill.mild    { background: var(--st-mild-bg);    color: var(--st-mild); }
+.status-pill.fatigue { background: var(--st-fatigue-bg); color: var(--st-fatigue); }
+.status-pill.testing { background: var(--st-testing-bg); color: var(--st-testing); }
+.status-pill.loser   { background: var(--st-loser-bg);   color: var(--st-loser); }
+
+/* Status pill with diamond for massive */
+.status-pill.massive::after { content: '◆'; font-size: 9px; margin-left: 2px; }
+
+/* Funnel — small pill */
+.funnel-pill {
+  display: inline-block;
+  padding: 2px 7px;
+  font-size: 10.5px; font-weight: 700;
+  font-family: 'JetBrains Mono', monospace;
+  letter-spacing: 0.04em;
+  border-radius: 3px;
+  background: var(--indigo-bg);
+  color: var(--indigo-ink);
+}
+.funnel-pill.mof { background: var(--amber-bg); color: var(--amber-ink); }
+.funnel-pill.bof { background: var(--green-bg); color: var(--green-ink); }
+
+/* Number cells */
+.n {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12.5px;
+  color: var(--text);
+}
+.n.big { font-weight: 600; color: var(--text); font-size: 13px; }
+.n.roas { font-weight: 700; font-size: 13px; }
+.n.roas.massive { color: var(--st-massive); }
+.n.roas.up      { color: var(--st-winner); }
+.n.roas.mild    { color: var(--st-mild); }
+.n.roas.down    { color: var(--st-fatigue); }
+.n.roas.loser   { color: var(--st-loser); }
+.n.dim { color: var(--text-4); }
+
+.row-spark {
+  display: block;
+}
+
+.date-cell {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11.5px;
+  color: var(--text-3);
+}
+
+/* Link icons */
+.link-set { display: inline-flex; gap: 2px; }
+.link-set a {
+  width: 26px; height: 26px;
+  display: grid; place-items: center;
+  color: var(--text-3);
+  border-radius: 5px;
+  text-decoration: none;
+  font-size: 13px;
+  transition: all .12s;
+}
+.link-set a:hover { background: var(--primary-soft); color: var(--primary-hi); }
+
+/* Add row */
+.add-row {
+  padding: 10px 18px;
+  color: var(--text-3);
+  font-size: 12.5px;
+  cursor: pointer;
+  display: flex; align-items: center; gap: 8px;
+  border-bottom: 1px solid var(--line);
+}
+.add-row:hover { background: var(--surface-2); color: var(--primary-hi); }
+.add-row::before { content: '+'; font-size: 15px; line-height: 1; }
+
+/* Bottom bar — footer like ClickUp */
+.footer {
+  height: 36px;
+  padding: 0 18px;
+  display: flex; align-items: center; gap: 14px;
+  border-top: 1px solid var(--line);
+  background: var(--surface-2);
+  font-size: 11.5px;
+  color: var(--text-3);
+  position: sticky; bottom: 0;
+}
+.footer strong { color: var(--text); font-weight: 600; }
+.footer .sep { width: 1px; height: 14px; background: var(--line); }
+.footer .right { margin-left: auto; display: flex; gap: 12px; align-items: center; }
+.footer .btn-chip {
+  padding: 3px 9px;
+  background: var(--canvas);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  font-size: 11px;
+  color: var(--text-2);
+  cursor: pointer;
+  display: inline-flex; align-items: center; gap: 5px;
+}
+.footer .btn-chip:hover { background: var(--surface-3); color: var(--text); border-color: var(--line-hi); }
+</style>
+</head>
+<body>
+
+<!-- ═════════════ SIDEBAR ═════════════ -->
+<aside class="sidebar">
+  <div class="sb-head">
+    <div class="workspace">I</div>
+    <div class="info">
+      <div class="name">Immuvi Workspace</div>
+      <div class="plan">Art Therapy · Live</div>
+    </div>
+    <div class="chev">▾</div>
+  </div>
+
+  <div class="sb-search">
+    <input placeholder="Search…">
+    <span class="kbd">⌘K</span>
+  </div>
+
+  <div class="sb-section">
+    <div class="h">Favorites <span class="add">+</span></div>
+    <div class="sb-item"><span class="ic">★</span>Creative Tracker <span class="ct">66</span></div>
+    <div class="sb-item"><span class="ic">★</span>Creative Matrix</div>
+  </div>
+
+  <div class="sb-section">
+    <div class="h">Products <span class="add">+</span></div>
+    <div class="sb-item expanded">
+      <span class="ic">▾</span>
+      <span class="dot" style="background: linear-gradient(135deg, #ff7a00, #e64980);"></span>
+      Art Therapy
+      <span class="ct">66</span>
+    </div>
+    <div class="sb-nested">
+      <div class="sb-item"><span class="bullet" style="background: var(--primary);"></span>Command HQ</div>
+      <div class="sb-item"><span class="bullet" style="background: var(--violet);"></span>Angles <span class="ct">7</span></div>
+      <div class="sb-item"><span class="bullet" style="background: var(--blue);"></span>Personas <span class="ct">5</span></div>
+      <div class="sb-item active"><span class="bullet" style="background: var(--primary-hi);"></span>Creative Tracker <span class="ct">66</span></div>
+      <div class="sb-item"><span class="bullet" style="background: var(--teal);"></span>Creative Matrix <span class="ct">19/35</span></div>
+      <div class="sb-item"><span class="bullet" style="background: var(--amber);"></span>Action Plan <span class="ct">3</span></div>
+      <div class="sb-item"><span class="bullet" style="background: var(--green);"></span>Production <span class="ct">3</span></div>
+      <div class="sb-item"><span class="bullet" style="background: var(--rose);"></span>Inspiration <span class="ct">0</span></div>
+    </div>
+    <div class="sb-item">
+      <span class="ic">▸</span>
+      <span class="dot" style="background: linear-gradient(135deg, #8854d0, #3d8bff);"></span>
+      Kids Life Skill
+      <span class="ct">54</span>
+    </div>
+    <div class="sb-item">
+      <span class="ic">▸</span>
+      <span class="dot" style="background: linear-gradient(135deg, #14b8a6, #22a06b);"></span>
+      KMH
+      <span class="ct">128</span>
+    </div>
+  </div>
+
+  <div class="sb-section">
+    <div class="h">Insights</div>
+    <div class="sb-item"><span class="ic">⚡</span>Daily Movers</div>
+    <div class="sb-item"><span class="ic">◉</span>Winners Feed</div>
+  </div>
+
+  <div class="sb-bottom">
+    <div class="sb-item"><span class="ic">⚙</span>Settings</div>
+    <div class="sb-item"><span class="ic">?</span>Help & Docs</div>
+    <div class="live">Synced 16s ago</div>
+  </div>
+</aside>
+
+<!-- ═════════════ MAIN ═════════════ -->
+<div class="main">
+
+  <div class="breadcrumb">
+    <a>◉ Command HQ</a>
+    <span class="sep">›</span>
+    <a>Art Therapy</a>
+    <span class="sep">›</span>
+    <a class="active">Creative Tracker</a>
+    <div class="right">
+      <span class="icon-btn" title="Share">⤴</span>
+      <span class="icon-btn" title="Automations">⚡</span>
+      <span class="icon-btn" title="Notifications">🔔</span>
+      <span class="icon-btn" title="More">⋯</span>
+    </div>
+  </div>
+
+  <div class="view-strip">
+    <div class="view-tab active"><span class="dot" style="background: var(--primary);"></span>Creative Tracker <span class="ct">66</span></div>
+    <div class="view-tab"><span class="dot" style="background: var(--teal);"></span>By Angle <span class="ct">7</span></div>
+    <div class="view-tab"><span class="dot" style="background: var(--orange);"></span>By Persona <span class="ct">5</span></div>
+    <div class="view-tab"><span class="dot" style="background: var(--green);"></span>Winners only <span class="ct">18</span></div>
+    <div class="view-tab"><span class="dot" style="background: var(--rose);"></span>Kill list <span class="ct">2</span></div>
+    <span class="add-view">+ View</span>
+    <div class="right">
+      <div class="search-inline"><input placeholder="Search creatives…"></div>
+    </div>
+  </div>
+
+  <div class="toolbar">
+    <button class="tb-btn on"><span class="ic">⚐</span>Filter <span class="count-num">3</span></button>
+    <button class="tb-btn"><span class="ic">⇅</span>Sort <span class="ch">▾</span></button>
+    <button class="tb-btn"><span class="ic">◆</span>Group by Angle <span class="ch">▾</span></button>
+    <button class="tb-btn"><span class="ic">◐</span>Show closed <span class="ch">▾</span></button>
+    <button class="tb-btn"><span class="ic">⊞</span>4 hidden <span class="ch">▾</span></button>
+    <span class="sep"></span>
+    <button class="tb-btn">Subtasks <span class="ch">▾</span></button>
+
+    <div class="right">
+      <button class="tb-btn"><span class="ic">⇡</span>Push all</button>
+      <button class="tb-btn" style="background: var(--primary); color: white; border-color: var(--primary);"><span class="ic">+</span>Add Creative</button>
+    </div>
+  </div>
+
+  <div class="banner">
+    <span>Meta Ads isn't connected yet — live CPM/CTR/ROAS will appear here after connecting. <strong>Connect Meta →</strong></span>
+    <span class="close">×</span>
+  </div>
+
+  <!-- TABLE -->
+  <div class="table-area">
+  <table class="cu">
+    <thead>
+      <tr>
+        <th style="width: 28%;"><span class="hdr-ic">A</span>Creative</th>
+        <th><span class="hdr-ic">∆</span>Angle</th>
+        <th><span class="hdr-ic">◔</span>Persona</th>
+        <th><span class="hdr-ic">⚡</span>Hook</th>
+        <th><span class="hdr-ic">▦</span>Structure</th>
+        <th><span class="hdr-ic">∇</span>Funnel</th>
+        <th><span class="hdr-ic">●</span>Status</th>
+        <th class="num sort"><span class="hdr-ic">$</span>Spend 7d</th>
+        <th class="num"><span class="hdr-ic">×</span>ROAS</th>
+        <th><span class="hdr-ic">~</span>Trend</th>
+        <th><span class="hdr-ic">⎋</span>Links</th>
+        <th><span class="hdr-ic">⌚</span>Created</th>
+      </tr>
+    </thead>
+    <tbody>
+
+      <tr>
+        <td>
+          <div class="row-leader">
+            <div class="cb checked"></div>
+            <div class="task-name">
+              <div class="tn-thumb">▶</div>
+              <span class="nm">5773-1 old winner</span>
+              <span class="id-chip">AT-11439-v1</span>
+            </div>
+            <div class="row-actions"><a>↗</a><a>💬</a><a>⋯</a></div>
+          </div>
+        </td>
+        <td><span class="chip-solid violet">Art as Therapy</span></td>
+        <td><span class="chip-solid orange">Women 25-45</span></td>
+        <td><span class="chip-soft amber">POV</span></td>
+        <td><span class="chip-soft slate">UGC</span></td>
+        <td><span class="funnel-pill">TOF</span></td>
+        <td><span class="status-pill massive">Massive</span></td>
+        <td class="n big">$1,842</td>
+        <td class="n roas massive">1.92×</td>
+        <td>
+          <svg class="row-spark" width="74" height="22" viewBox="0 0 74 22">
+            <polyline fill="none" stroke="#0f7d4f" stroke-width="1.6" points="0,18 10,15 20,12 30,11 40,8 50,6 60,4 74,2"/>
+          </svg>
+        </td>
+        <td><div class="link-set"><a>↗</a><a>📄</a></div></td>
+        <td class="date-cell">21 Apr</td>
+      </tr>
+
+      <tr>
+        <td>
+          <div class="row-leader">
+            <div class="cb"></div>
+            <div class="task-name">
+              <div class="tn-thumb photo">◈</div>
+              <span class="nm">4570-1 old winner</span>
+              <span class="id-chip">AT-10835</span>
+            </div>
+            <div class="row-actions"><a>↗</a><a>💬</a><a>⋯</a></div>
+          </div>
+        </td>
+        <td><span class="chip-solid rose">Emotional Literacy</span></td>
+        <td><span class="chip-solid orange">Women 25-45</span></td>
+        <td><span class="chip-soft amber">Curiosity</span></td>
+        <td><span class="chip-soft slate">Static / Photo</span></td>
+        <td><span class="funnel-pill">TOF</span></td>
+        <td><span class="status-pill winner">Winner</span></td>
+        <td class="n big">$806</td>
+        <td class="n roas up">1.54×</td>
+        <td>
+          <svg class="row-spark" width="74" height="22" viewBox="0 0 74 22">
+            <polyline fill="none" stroke="#22a06b" stroke-width="1.6" points="0,14 10,13 20,11 30,12 40,10 50,9 60,8 74,7"/>
+          </svg>
+        </td>
+        <td><div class="link-set"><a>↗</a><a>📄</a></div></td>
+        <td class="date-cell">19 Apr</td>
+      </tr>
+
+      <tr>
+        <td>
+          <div class="row-leader">
+            <div class="cb"></div>
+            <div class="task-name">
+              <div class="tn-thumb photo">◈</div>
+              <span class="nm">4569-2 old winner</span>
+              <span class="id-chip">AT-10834</span>
+            </div>
+            <div class="row-actions"><a>↗</a><a>💬</a><a>⋯</a></div>
+          </div>
+        </td>
+        <td><span class="chip-solid magenta">Scarcity / Limited-Time</span></td>
+        <td><span class="chip-solid orange">Women 25-45</span></td>
+        <td><span class="chip-soft amber">Pattern Interrupt</span></td>
+        <td><span class="chip-soft slate">Static / Photo</span></td>
+        <td><span class="funnel-pill">TOF</span></td>
+        <td><span class="status-pill mild">Mild Winner</span></td>
+        <td class="n big">$412</td>
+        <td class="n roas mild">1.33×</td>
+        <td>
+          <svg class="row-spark" width="74" height="22" viewBox="0 0 74 22">
+            <polyline fill="none" stroke="#d49b00" stroke-width="1.6" points="0,12 10,13 20,11 30,12 40,13 50,11 60,12 74,11"/>
+          </svg>
+        </td>
+        <td><div class="link-set"><a>↗</a><a>📄</a></div></td>
+        <td class="date-cell">18 Apr</td>
+      </tr>
+
+      <tr>
+        <td>
+          <div class="row-leader">
+            <div class="cb"></div>
+            <div class="task-name">
+              <div class="tn-thumb photo">◈</div>
+              <span class="nm">10785-2 old winner</span>
+              <span class="id-chip">AT-10733</span>
+            </div>
+            <div class="row-actions"><a>↗</a><a>💬</a><a>⋯</a></div>
+          </div>
+        </td>
+        <td><span class="chip-solid magenta">Scarcity / Limited-Time</span></td>
+        <td><span class="chip-solid orange">Women 25-45</span></td>
+        <td><span class="chip-soft amber">Pattern Interrupt</span></td>
+        <td><span class="chip-soft slate">Static / Photo</span></td>
+        <td><span class="funnel-pill">TOF</span></td>
+        <td><span class="status-pill fatigue">Fatigued</span></td>
+        <td class="n big">$1,205</td>
+        <td class="n roas down">0.98× ↓</td>
+        <td>
+          <svg class="row-spark" width="74" height="22" viewBox="0 0 74 22">
+            <polyline fill="none" stroke="#d45a12" stroke-width="1.6" points="0,6 10,7 20,8 30,10 40,12 50,14 60,16 74,19"/>
+          </svg>
+        </td>
+        <td><div class="link-set"><a>↗</a><a>📄</a></div></td>
+        <td class="date-cell">10 Apr</td>
+      </tr>
+
+      <tr>
+        <td>
+          <div class="row-leader">
+            <div class="cb"></div>
+            <div class="task-name">
+              <div class="tn-thumb photo">◈</div>
+              <span class="nm">6197-1 old winner</span>
+              <span class="id-chip">AT-10612</span>
+            </div>
+            <div class="row-actions"><a>↗</a><a>💬</a><a>⋯</a></div>
+          </div>
+        </td>
+        <td><span class="chip-solid magenta">Scarcity / Limited-Time</span></td>
+        <td><span class="chip-solid orange">Women 25-45</span></td>
+        <td><span class="chip-soft amber">Direct Offer</span></td>
+        <td><span class="chip-soft slate">Static / Photo</span></td>
+        <td><span class="funnel-pill">TOF</span></td>
+        <td><span class="status-pill testing">Testing</span></td>
+        <td class="n big dim">$28</td>
+        <td class="n roas dim">—</td>
+        <td>
+          <svg class="row-spark" width="74" height="22" viewBox="0 0 74 22">
+            <polyline fill="none" stroke="#a3a8b3" stroke-width="1.4" stroke-dasharray="3 2" points="0,11 74,11"/>
+          </svg>
+        </td>
+        <td><div class="link-set"><a>↗</a><a>📄</a></div></td>
+        <td class="date-cell">21 Apr</td>
+      </tr>
+
+      <tr>
+        <td>
+          <div class="row-leader">
+            <div class="cb"></div>
+            <div class="task-name">
+              <div class="tn-thumb">▶</div>
+              <span class="nm">11591 new concept (AI VO)</span>
+              <span class="id-chip">AT-11591</span>
+            </div>
+            <div class="row-actions"><a>↗</a><a>💬</a><a>⋯</a></div>
+          </div>
+        </td>
+        <td><span class="chip-solid rose">Emotional Literacy</span></td>
+        <td><span class="chip-solid teal">Young Adults · Grief</span></td>
+        <td><span class="chip-soft amber">Pain / Problem</span></td>
+        <td><span class="chip-soft slate">Story / Narrative</span></td>
+        <td><span class="funnel-pill">TOF</span></td>
+        <td><span class="status-pill winner">Winner</span></td>
+        <td class="n big">$624</td>
+        <td class="n roas up">1.46×</td>
+        <td>
+          <svg class="row-spark" width="74" height="22" viewBox="0 0 74 22">
+            <polyline fill="none" stroke="#22a06b" stroke-width="1.6" points="0,17 10,15 20,13 30,12 40,11 50,9 60,8 74,7"/>
+          </svg>
+        </td>
+        <td><div class="link-set"><a>↗</a><a>📄</a></div></td>
+        <td class="date-cell">20 Apr</td>
+      </tr>
+
+      <tr>
+        <td>
+          <div class="row-leader">
+            <div class="cb"></div>
+            <div class="task-name">
+              <div class="tn-thumb photo">◈</div>
+              <span class="nm">11542 social proof photo</span>
+              <span class="id-chip">AT-11542</span>
+            </div>
+            <div class="row-actions"><a>↗</a><a>💬</a><a>⋯</a></div>
+          </div>
+        </td>
+        <td><span class="chip-solid green">Social Proof — 18K Healing</span></td>
+        <td><span class="chip-solid orange">Women 25-45</span></td>
+        <td><span class="chip-soft amber">Social Proof</span></td>
+        <td><span class="chip-soft slate">Static / Photo</span></td>
+        <td><span class="funnel-pill">TOF</span></td>
+        <td><span class="status-pill winner">Winner</span></td>
+        <td class="n big">$488</td>
+        <td class="n roas up">1.41×</td>
+        <td>
+          <svg class="row-spark" width="74" height="22" viewBox="0 0 74 22">
+            <polyline fill="none" stroke="#22a06b" stroke-width="1.6" points="0,15 10,14 20,13 30,11 40,10 50,10 60,9 74,8"/>
+          </svg>
+        </td>
+        <td><div class="link-set"><a>↗</a><a>📄</a></div></td>
+        <td class="date-cell">17 Apr</td>
+      </tr>
+
+      <tr>
+        <td>
+          <div class="row-leader">
+            <div class="cb"></div>
+            <div class="task-name">
+              <div class="tn-thumb">▶</div>
+              <span class="nm">11436 new concept</span>
+              <span class="id-chip">AT-11436</span>
+            </div>
+            <div class="row-actions"><a>↗</a><a>💬</a><a>⋯</a></div>
+          </div>
+        </td>
+        <td><span class="chip-solid teal">Calm / Unwind Ritual</span></td>
+        <td><span class="chip-solid violet">Creative Self-Care Adults</span></td>
+        <td><span class="chip-soft amber">Curiosity</span></td>
+        <td><span class="chip-soft slate">Hook + Offer</span></td>
+        <td><span class="funnel-pill">TOF</span></td>
+        <td><span class="status-pill loser">Loser</span></td>
+        <td class="n big">$187</td>
+        <td class="n roas loser">0.42×</td>
+        <td>
+          <svg class="row-spark" width="74" height="22" viewBox="0 0 74 22">
+            <polyline fill="none" stroke="#c93646" stroke-width="1.6" points="0,8 10,10 20,12 30,14 40,15 50,17 60,18 74,20"/>
+          </svg>
+        </td>
+        <td><div class="link-set"><a>↗</a><a>📄</a></div></td>
+        <td class="date-cell">14 Apr</td>
+      </tr>
+
+    </tbody>
+  </table>
+  </div>
+
+  <div class="add-row">Add creative</div>
+
+  <div class="footer">
+    <span><strong>8 of 66</strong> creatives</span>
+    <span class="sep"></span>
+    <span><strong>18</strong> winners</span>
+    <span class="sep"></span>
+    <span><strong>3</strong> fatigued</span>
+    <span class="sep"></span>
+    <span>$12,418 spend 7d</span>
+    <span class="sep"></span>
+    <span>1.38× blended ROAS</span>
+    <div class="right">
+      <button class="btn-chip">⤴ Share</button>
+      <button class="btn-chip">⇣ Export</button>
+      <button class="btn-chip">⊞ Fullscreen</button>
+    </div>
+  </div>
+
+</div>
+
+</body>
+</html>

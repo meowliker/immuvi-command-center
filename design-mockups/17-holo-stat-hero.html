@@ -1,0 +1,648 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Layout 17 — Holo Stat Hero</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:           #080b18;
+  --bg-2:         #0d1124;
+  --surface:      #141832;
+  --surface-hi:   #1a1f3d;
+  --line:         rgba(255,255,255,0.08);
+  --line-hi:      rgba(255,255,255,0.14);
+  --text:         #f4f7fc;
+  --text-2:       #a8b0c9;
+  --text-3:       #6d7595;
+  --text-4:       #454c6c;
+  --cyan:         #00d4ff;
+  --cyan-deep:    #0099cc;
+  --cyan-soft:    rgba(0,212,255,0.1);
+  --cyan-glow:    rgba(0,212,255,0.25);
+  --violet:       #8b5cf6;
+  --violet-soft:  rgba(139,92,246,0.12);
+  --lime:         #a3e635;
+  --green:        #22d383;
+  --amber:        #fbbf24;
+  --coral:        #ff7b57;
+  --rose:         #ff5788;
+  --sky:          #4da3ff;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { background: var(--bg); color: var(--text); min-height: 100vh; }
+body {
+  font-family: 'Inter', sans-serif;
+  font-size: 14px; line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  font-feature-settings: "cv11","ss01","ss02";
+  background-image:
+    radial-gradient(ellipse 100% 60% at 50% -10%, var(--cyan-glow) 0%, transparent 50%),
+    radial-gradient(circle at 85% 30%, var(--violet-soft), transparent 40%);
+  background-attachment: fixed;
+  background-repeat: no-repeat;
+}
+.mono { font-family: 'JetBrains Mono', monospace; }
+
+/* Nav */
+.nav {
+  position: sticky; top: 0; z-index: 50;
+  backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+  background: rgba(8,11,24,0.7);
+  border-bottom: 1px solid var(--line);
+  padding: 14px 32px;
+  display: flex; align-items: center; gap: 18px;
+}
+.logo {
+  display: flex; align-items: center; gap: 9px;
+  font-weight: 700; font-size: 16.5px;
+  letter-spacing: -0.025em;
+}
+.logo-mark {
+  width: 26px; height: 26px;
+  border-radius: 7px;
+  background: radial-gradient(circle at 30% 30%, var(--cyan), var(--cyan-deep) 55%, #006688);
+  box-shadow: 0 0 0 1px rgba(255,255,255,.06), 0 4px 16px var(--cyan-glow);
+}
+.nav-links { display: flex; gap: 2px; margin-left: 20px; }
+.nav-link {
+  padding: 7px 13px; font-size: 13.5px; font-weight: 500;
+  color: var(--text-2); border-radius: 7px; cursor: pointer;
+}
+.nav-link:hover { background: var(--surface); color: var(--text); }
+.nav-link.active { background: var(--surface); color: var(--text); box-shadow: inset 0 0 0 1px var(--line-hi); }
+.nav-link .ct {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10.5px; color: var(--text-3);
+  margin-left: 6px; background: var(--surface-hi);
+  padding: 1px 6px; border-radius: 3px;
+}
+.nav-link.active .ct { background: var(--cyan-soft); color: var(--cyan); }
+.nav .right { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+.btn { height: 34px; padding: 0 14px; background: var(--surface); border: 1px solid var(--line-hi); border-radius: 8px; color: var(--text); font-family: inherit; font-size: 13px; font-weight: 500; cursor: pointer; }
+.btn:hover { background: var(--surface-hi); }
+.btn-primary {
+  background: linear-gradient(180deg, var(--cyan), var(--cyan-deep));
+  color: #001622; border: none; font-weight: 600;
+  box-shadow: 0 0 0 1px rgba(0,212,255,.4), 0 6px 20px var(--cyan-glow);
+}
+
+/* ═══════ HERO WITH MONSTER STATS ═══════ */
+.hero-section {
+  max-width: 1280px; margin: 0 auto;
+  padding: 60px 32px 40px;
+  text-align: center;
+}
+.kicker {
+  display: inline-flex; align-items: center; gap: 10px;
+  padding: 5px 14px 5px 5px;
+  border-radius: 100px;
+  background: var(--surface);
+  border: 1px solid var(--line-hi);
+  font-size: 12px; color: var(--text-2);
+  margin-bottom: 20px;
+}
+.kicker .pill {
+  padding: 2px 10px;
+  background: var(--cyan-soft);
+  color: var(--cyan);
+  border-radius: 100px;
+  font-size: 10.5px;
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.hero-section h1 {
+  font-size: clamp(44px, 5.5vw, 68px);
+  font-weight: 700;
+  letter-spacing: -0.035em;
+  line-height: 1.02;
+  margin-bottom: 18px;
+}
+.hero-section h1 .grad {
+  background: linear-gradient(90deg, var(--cyan) 0%, var(--violet) 100%);
+  -webkit-background-clip: text; background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+.hero-section .sub {
+  font-size: 17px;
+  color: var(--text-2);
+  max-width: 580px;
+  margin: 0 auto 28px;
+  line-height: 1.55;
+}
+
+/* Big stat row */
+.big-stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1px;
+  background: var(--line);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  overflow: hidden;
+  margin-top: 44px;
+  box-shadow: 0 20px 60px rgba(0,0,0,.3);
+}
+.big-stat {
+  background: var(--bg);
+  padding: 32px 28px;
+  text-align: center;
+  transition: background .15s;
+}
+.big-stat:hover { background: var(--bg-2); }
+.big-stat .l {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px; font-weight: 600;
+  color: var(--text-3); letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin-bottom: 10px;
+}
+.big-stat .v {
+  font-size: 64px; font-weight: 800;
+  letter-spacing: -0.045em;
+  line-height: 0.95;
+  font-variant-numeric: tabular-nums;
+  background: linear-gradient(180deg, #ffffff 0%, #8b93b3 100%);
+  -webkit-background-clip: text; background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+.big-stat .v .unit { font-size: 30px; color: var(--text-3); font-weight: 700; -webkit-text-fill-color: var(--text-3); }
+.big-stat .d {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px; font-weight: 600;
+  margin-top: 8px;
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 3px 10px; border-radius: 100px;
+}
+.big-stat .d.up { background: rgba(34,211,131,0.1); color: var(--green); }
+.big-stat .d.down { background: rgba(255,123,87,0.1); color: var(--coral); }
+
+/* ═══════ TIER SECTIONS ═══════ */
+.tiers {
+  max-width: 1280px; margin: 0 auto;
+  padding: 60px 32px 40px;
+}
+
+.section-label {
+  display: flex; align-items: center; gap: 14px;
+  margin-bottom: 18px;
+}
+.section-label .num {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px; font-weight: 700;
+  color: var(--cyan);
+  background: var(--cyan-soft);
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: 1px solid rgba(0,212,255,0.2);
+}
+.section-label h2 {
+  font-size: 26px; font-weight: 700;
+  letter-spacing: -0.025em;
+}
+.section-label .hint {
+  margin-left: auto;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px; color: var(--text-3);
+  letter-spacing: 0.04em;
+}
+
+/* Tier list */
+.tier-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+  margin-bottom: 40px;
+}
+.tier-row {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 18px 22px;
+  display: grid;
+  grid-template-columns: auto 1fr auto auto auto auto;
+  gap: 22px;
+  align-items: center;
+  transition: border-color .12s, transform .12s, box-shadow .12s;
+  cursor: pointer;
+  position: relative;
+}
+.tier-row:hover {
+  border-color: var(--line-hi);
+  transform: translateX(3px);
+  box-shadow: -8px 0 0 -3px var(--cyan);
+}
+.tier-row .thumb {
+  width: 52px; height: 52px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, var(--violet), var(--cyan));
+  position: relative;
+  box-shadow: 0 2px 8px rgba(0,0,0,.3), inset 0 1px 0 rgba(255,255,255,.15);
+}
+.tier-row .thumb::after {
+  content: '▶'; position: absolute; inset: 0;
+  display: grid; place-items: center;
+  color: white; font-size: 14px;
+  text-shadow: 0 1px 2px rgba(0,0,0,.4);
+}
+.tier-row .thumb.photo { background: linear-gradient(135deg, var(--coral), var(--amber)); }
+.tier-row .thumb.photo::after { content: '◈'; }
+
+.tier-row .info { min-width: 0; }
+.tier-row .info .nm {
+  font-size: 17px; font-weight: 600;
+  letter-spacing: -0.015em;
+  margin-bottom: 6px;
+}
+.tier-row .info .tags {
+  display: flex; flex-wrap: wrap; gap: 5px;
+}
+.tier-row .info .tag {
+  padding: 2px 8px; border-radius: 5px;
+  font-size: 11px; font-weight: 500;
+  background: var(--surface-hi);
+  color: var(--text-2);
+  letter-spacing: -0.005em;
+}
+.tier-row .info .tag.accent { background: var(--cyan-soft); color: var(--cyan); }
+
+.tier-row .metric {
+  text-align: right;
+  min-width: 70px;
+}
+.tier-row .metric .l {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 9.5px; font-weight: 600;
+  color: var(--text-3); letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin-bottom: 3px;
+}
+.tier-row .metric .v {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 16px; font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+.tier-row .metric .v.roas-massive { color: var(--lime); font-size: 20px; }
+.tier-row .metric .v.roas-up      { color: var(--green); font-size: 20px; }
+.tier-row .metric .v.roas-mild    { color: var(--amber); font-size: 20px; }
+.tier-row .metric .v.roas-down    { color: var(--coral); font-size: 20px; }
+.tier-row .metric .v.roas-loser   { color: var(--rose); font-size: 20px; }
+.tier-row .metric .v.dim          { color: var(--text-4); }
+
+.tier-row .spark svg { display: block; width: 90px; }
+
+/* Tier chapter header */
+.tier-chapter {
+  display: flex; align-items: center; gap: 16px;
+  margin: 36px 0 18px;
+  padding: 14px 20px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+.tier-chapter .n {
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 800;
+  font-size: 28px;
+  color: var(--text-4);
+  letter-spacing: -0.02em;
+}
+.tier-chapter h3 {
+  font-size: 20px; font-weight: 700;
+  letter-spacing: -0.02em;
+}
+.tier-chapter .summary {
+  margin-left: auto;
+  display: flex; gap: 20px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  color: var(--text-3);
+}
+.tier-chapter .summary strong { color: var(--text); font-weight: 600; }
+
+.tier-chapter.massive .n { color: var(--lime); }
+.tier-chapter.winner  .n { color: var(--green); }
+.tier-chapter.mild    .n { color: var(--amber); }
+.tier-chapter.fatigue .n { color: var(--coral); }
+.tier-chapter.testing .n { color: var(--sky); }
+.tier-chapter.loser   .n { color: var(--rose); }
+
+/* Status pill */
+.st {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 11.5px; font-weight: 600;
+}
+.st .d { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.st.massive { color: var(--lime); background: rgba(163,230,53,0.1); }
+.st.massive .d { box-shadow: 0 0 8px var(--lime); }
+.st.winner  { color: var(--green); background: rgba(34,211,131,0.1); }
+.st.mild    { color: var(--amber); background: rgba(251,191,36,0.1); }
+.st.fatigue { color: var(--coral); background: rgba(255,123,87,0.1); }
+.st.testing { color: var(--sky); background: rgba(77,163,255,0.1); }
+.st.loser   { color: var(--rose); background: rgba(255,87,136,0.1); }
+
+.fn {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10.5px; font-weight: 700;
+  color: var(--text-2);
+  padding: 2px 7px;
+  background: var(--surface-hi);
+  border-radius: 4px;
+  letter-spacing: 0.04em;
+}
+</style>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="logo"><div class="logo-mark"></div>Immuvi</div>
+  <div class="nav-links">
+    <a class="nav-link">Command HQ</a>
+    <a class="nav-link">Angles <span class="ct">7</span></a>
+    <a class="nav-link active">Tracker <span class="ct">66</span></a>
+    <a class="nav-link">Matrix <span class="ct">19/35</span></a>
+  </div>
+  <div class="right">
+    <button class="btn">⇡ Push</button>
+    <button class="btn btn-primary">↻ Sync</button>
+  </div>
+</nav>
+
+<section class="hero-section">
+  <div class="kicker">
+    <span class="pill">Art Therapy</span>
+    <span>Live telemetry · synced 16s ago</span>
+  </div>
+  <h1>Every creative,<br><span class="grad">auto-classified.</span></h1>
+  <p class="sub">66 Facebook creatives. Live Meta performance. Winners promoted, losers flagged, and the ones going stale caught before they burn budget.</p>
+
+  <div class="big-stats">
+    <div class="big-stat">
+      <div class="l">Creatives</div>
+      <div class="v">66</div>
+      <div class="d up">↑ +3 this week</div>
+    </div>
+    <div class="big-stat">
+      <div class="l">Winners 7d</div>
+      <div class="v">18</div>
+      <div class="d up">↑ +2 promoted</div>
+    </div>
+    <div class="big-stat">
+      <div class="l">Spend 7d</div>
+      <div class="v">$12.4<span class="unit">K</span></div>
+      <div class="d up">↑ +18%</div>
+    </div>
+    <div class="big-stat">
+      <div class="l">Blended ROAS</div>
+      <div class="v">1.38<span class="unit">×</span></div>
+      <div class="d up">↑ +0.04 WoW</div>
+    </div>
+  </div>
+</section>
+
+<section class="tiers">
+
+  <!-- TIER 01 MASSIVE -->
+  <div class="tier-chapter massive">
+    <div class="n">01</div>
+    <div>
+      <h3>Massive Winners</h3>
+      <div style="font-size: 12.5px; color: var(--text-3); margin-top: 2px; font-family: 'JetBrains Mono', monospace;">ROAS ≥ 1.7× at $500+ spend · ready to scale aggressively</div>
+    </div>
+    <div class="summary">
+      <span><strong>4</strong> creatives</span>
+      <span><strong>$5,280</strong> spend 7d</span>
+      <span><strong>1.78×</strong> avg ROAS</span>
+    </div>
+  </div>
+
+  <div class="tier-grid">
+    <div class="tier-row">
+      <div class="thumb"></div>
+      <div class="info">
+        <div class="nm">5773-1 old winner</div>
+        <div class="tags">
+          <span class="tag accent">Art as Therapy Alternative</span>
+          <span class="tag">Women 25-45</span>
+          <span class="tag">POV</span>
+          <span class="tag">UGC</span>
+          <span class="tag">AT-11439</span>
+        </div>
+      </div>
+      <div class="metric"><div class="l">Spend 7d</div><div class="v">$1,842</div></div>
+      <div class="metric"><div class="l">ROAS</div><div class="v roas-massive">1.92×</div></div>
+      <div class="spark">
+        <svg width="90" height="28" viewBox="0 0 90 28">
+          <polyline fill="none" stroke="#a3e635" stroke-width="1.8" points="0,22 13,18 26,16 39,14 52,10 65,7 78,4 90,2"/>
+        </svg>
+      </div>
+      <span class="st massive"><span class="d"></span>Massive</span>
+    </div>
+  </div>
+
+  <!-- TIER 02 WINNER -->
+  <div class="tier-chapter winner">
+    <div class="n">02</div>
+    <div>
+      <h3>Winners</h3>
+      <div style="font-size: 12.5px; color: var(--text-3); margin-top: 2px; font-family: 'JetBrains Mono', monospace;">ROAS ≥ 1.4× at $300+ spend · scale 20% per day</div>
+    </div>
+    <div class="summary">
+      <span><strong>14</strong> creatives</span>
+      <span><strong>$4,420</strong> spend 7d</span>
+      <span><strong>1.48×</strong> avg ROAS</span>
+    </div>
+  </div>
+
+  <div class="tier-grid">
+    <div class="tier-row">
+      <div class="thumb photo"></div>
+      <div class="info">
+        <div class="nm">4570-1 old winner</div>
+        <div class="tags">
+          <span class="tag accent">Emotional Literacy</span>
+          <span class="tag">Women 25-45</span>
+          <span class="tag">Curiosity</span>
+          <span class="tag">Static / Photo</span>
+          <span class="tag">AT-10835</span>
+        </div>
+      </div>
+      <div class="metric"><div class="l">Spend 7d</div><div class="v">$806</div></div>
+      <div class="metric"><div class="l">ROAS</div><div class="v roas-up">1.54×</div></div>
+      <div class="spark"><svg width="90" height="28" viewBox="0 0 90 28"><polyline fill="none" stroke="#22d383" stroke-width="1.8" points="0,18 13,17 26,15 39,16 52,13 65,11 78,9 90,8"/></svg></div>
+      <span class="st winner"><span class="d"></span>Winner</span>
+    </div>
+
+    <div class="tier-row">
+      <div class="thumb"></div>
+      <div class="info">
+        <div class="nm">11591 new concept (AI VO)</div>
+        <div class="tags">
+          <span class="tag accent">Emotional Literacy</span>
+          <span class="tag">Young Adults Grief</span>
+          <span class="tag">Pain / Problem</span>
+          <span class="tag">Story</span>
+          <span class="tag">AT-11591</span>
+        </div>
+      </div>
+      <div class="metric"><div class="l">Spend 7d</div><div class="v">$624</div></div>
+      <div class="metric"><div class="l">ROAS</div><div class="v roas-up">1.46×</div></div>
+      <div class="spark"><svg width="90" height="28" viewBox="0 0 90 28"><polyline fill="none" stroke="#22d383" stroke-width="1.8" points="0,22 13,20 26,18 39,16 52,14 65,11 78,9 90,7"/></svg></div>
+      <span class="st winner"><span class="d"></span>Winner</span>
+    </div>
+
+    <div class="tier-row">
+      <div class="thumb photo"></div>
+      <div class="info">
+        <div class="nm">11542 social proof</div>
+        <div class="tags">
+          <span class="tag accent">Social Proof — 18K</span>
+          <span class="tag">Women 25-45</span>
+          <span class="tag">Testimonial</span>
+          <span class="tag">AT-11542</span>
+        </div>
+      </div>
+      <div class="metric"><div class="l">Spend 7d</div><div class="v">$488</div></div>
+      <div class="metric"><div class="l">ROAS</div><div class="v roas-up">1.41×</div></div>
+      <div class="spark"><svg width="90" height="28" viewBox="0 0 90 28"><polyline fill="none" stroke="#22d383" stroke-width="1.8" points="0,17 13,16 26,15 39,14 52,13 65,12 78,10 90,9"/></svg></div>
+      <span class="st winner"><span class="d"></span>Winner</span>
+    </div>
+  </div>
+
+  <!-- TIER 03 MILD -->
+  <div class="tier-chapter mild">
+    <div class="n">03</div>
+    <div>
+      <h3>Mild Winners</h3>
+      <div style="font-size: 12.5px; color: var(--text-3); margin-top: 2px; font-family: 'JetBrains Mono', monospace;">ROAS 1.3× – 1.39× · hold budget, use for variant testing</div>
+    </div>
+    <div class="summary">
+      <span><strong>11</strong> creatives</span>
+      <span><strong>$2,640</strong> spend</span>
+    </div>
+  </div>
+
+  <div class="tier-grid">
+    <div class="tier-row">
+      <div class="thumb photo"></div>
+      <div class="info">
+        <div class="nm">4569-2 old winner</div>
+        <div class="tags">
+          <span class="tag accent">Scarcity</span>
+          <span class="tag">Women 25-45</span>
+          <span class="tag">Pattern Interrupt</span>
+          <span class="tag">AT-10834</span>
+        </div>
+      </div>
+      <div class="metric"><div class="l">Spend 7d</div><div class="v">$412</div></div>
+      <div class="metric"><div class="l">ROAS</div><div class="v roas-mild">1.33×</div></div>
+      <div class="spark"><svg width="90" height="28" viewBox="0 0 90 28"><polyline fill="none" stroke="#fbbf24" stroke-width="1.8" points="0,14 13,15 26,13 39,14 52,15 65,13 78,14 90,13"/></svg></div>
+      <span class="st mild"><span class="d"></span>Mild</span>
+    </div>
+  </div>
+
+  <!-- TIER 04 FATIGUE -->
+  <div class="tier-chapter fatigue">
+    <div class="n">04</div>
+    <div>
+      <h3>Fatigued</h3>
+      <div style="font-size: 12.5px; color: var(--text-3); margin-top: 2px; font-family: 'JetBrains Mono', monospace;">WoW ROAS dropped ≥ 30% · refresh or kill</div>
+    </div>
+    <div class="summary">
+      <span><strong>3</strong> creatives</span>
+      <span style="color: var(--coral);"><strong>⚠ Action needed</strong></span>
+    </div>
+  </div>
+
+  <div class="tier-grid">
+    <div class="tier-row">
+      <div class="thumb photo"></div>
+      <div class="info">
+        <div class="nm">10785-2 old winner <span style="font-weight: 400; color: var(--coral); font-size: 12px; margin-left: 8px;">WoW -42%</span></div>
+        <div class="tags">
+          <span class="tag accent">Scarcity</span>
+          <span class="tag">Women 25-45</span>
+          <span class="tag">Pattern Interrupt</span>
+          <span class="tag">AT-10733</span>
+        </div>
+      </div>
+      <div class="metric"><div class="l">Spend 7d</div><div class="v">$1,205</div></div>
+      <div class="metric"><div class="l">ROAS</div><div class="v roas-down">0.98×</div></div>
+      <div class="spark"><svg width="90" height="28" viewBox="0 0 90 28"><polyline fill="none" stroke="#ff7b57" stroke-width="1.8" points="0,6 13,8 26,10 39,12 52,15 65,18 78,20 90,22"/></svg></div>
+      <span class="st fatigue"><span class="d"></span>Fatigued</span>
+    </div>
+  </div>
+
+  <!-- TIER 05 TESTING -->
+  <div class="tier-chapter testing">
+    <div class="n">05</div>
+    <div>
+      <h3>Testing</h3>
+      <div style="font-size: 12.5px; color: var(--text-3); margin-top: 2px; font-family: 'JetBrains Mono', monospace;">&lt; $50 spend · too early to judge, let it cook</div>
+    </div>
+    <div class="summary">
+      <span><strong>31</strong> creatives</span>
+    </div>
+  </div>
+
+  <div class="tier-grid">
+    <div class="tier-row">
+      <div class="thumb photo"></div>
+      <div class="info">
+        <div class="nm">6197-1 old winner</div>
+        <div class="tags">
+          <span class="tag accent">Scarcity</span>
+          <span class="tag">Women 25-45</span>
+          <span class="tag">Direct Offer</span>
+          <span class="tag">AT-10612</span>
+        </div>
+      </div>
+      <div class="metric"><div class="l">Spend 7d</div><div class="v">$28</div></div>
+      <div class="metric"><div class="l">ROAS</div><div class="v dim">—</div></div>
+      <div class="spark"><svg width="90" height="28" viewBox="0 0 90 28"><polyline fill="none" stroke="#454c6c" stroke-width="1.2" stroke-dasharray="3 2" points="0,14 90,14"/></svg></div>
+      <span class="st testing"><span class="d"></span>Testing</span>
+    </div>
+  </div>
+
+  <!-- TIER 06 LOSER -->
+  <div class="tier-chapter loser">
+    <div class="n">06</div>
+    <div>
+      <h3>Losers</h3>
+      <div style="font-size: 12.5px; color: var(--text-3); margin-top: 2px; font-family: 'JetBrains Mono', monospace;">ROAS &lt; 1.0× at $100+ spend · kill, revive later</div>
+    </div>
+    <div class="summary">
+      <span><strong>2</strong> creatives</span>
+      <span style="color: var(--rose);"><strong>⊗ Kill list</strong></span>
+    </div>
+  </div>
+
+  <div class="tier-grid">
+    <div class="tier-row">
+      <div class="thumb"></div>
+      <div class="info">
+        <div class="nm">11436 new concept</div>
+        <div class="tags">
+          <span class="tag accent">Calm / Unwind</span>
+          <span class="tag">Self-Care Adults</span>
+          <span class="tag">Curiosity</span>
+          <span class="tag">AT-11436</span>
+        </div>
+      </div>
+      <div class="metric"><div class="l">Spend 7d</div><div class="v">$187</div></div>
+      <div class="metric"><div class="l">ROAS</div><div class="v roas-loser">0.42×</div></div>
+      <div class="spark"><svg width="90" height="28" viewBox="0 0 90 28"><polyline fill="none" stroke="#ff5788" stroke-width="1.8" points="0,8 13,10 26,12 39,14 52,16 65,18 78,20 90,22"/></svg></div>
+      <span class="st loser"><span class="d"></span>Loser</span>
+    </div>
+  </div>
+
+</section>
+
+</body>
+</html>

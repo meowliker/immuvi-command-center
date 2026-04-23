@@ -1,0 +1,739 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Immuvi Command Center — Spatial Canvas</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0f0f23;
+    --surface: #16163a;
+    --panel: #1a1a3e;
+    --border: #2a2a5a;
+    --border-light: #222248;
+    --text-primary: #f0f0ff;
+    --text-secondary: #8888bb;
+    --text-muted: #4a4a7a;
+    --accent: #6366f1;
+
+    --winner:  #10b981;
+    --loser:   #ef4444;
+    --testing: #3b82f6;
+    --approved:#8b5cf6;
+    --inprod:  #f59e0b;
+    --empty:   #1f1f4a;
+  }
+
+  body {
+    font-family: 'Inter', sans-serif;
+    background: var(--bg);
+    color: var(--text-primary);
+    font-size: 13px;
+    line-height: 1.5;
+    min-height: 100vh;
+  }
+
+  /* ── TOP NAV ── */
+  .nav {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 28px;
+    height: 56px;
+    background: var(--panel);
+    border-bottom: 1px solid var(--border);
+  }
+  .nav-brand {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .nav-logo {
+    width: 30px; height: 30px;
+    background: linear-gradient(135deg, #6366f1, #8b5cf6);
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    color: white;
+    font-weight: 700;
+    font-size: 12px;
+    letter-spacing: -0.5px;
+  }
+  .nav-title {
+    font-weight: 600;
+    font-size: 15px;
+    color: var(--text-primary);
+    letter-spacing: -0.3px;
+  }
+  .nav-badge {
+    font-size: 10px;
+    font-weight: 500;
+    padding: 2px 8px;
+    border-radius: 20px;
+    background: rgba(99,102,241,0.2);
+    color: #a5b4fc;
+    border: 1px solid rgba(99,102,241,0.3);
+  }
+  .nav-stats {
+    display: flex;
+    gap: 20px;
+    align-items: center;
+  }
+  .nav-stat {
+    font-size: 12px;
+    color: var(--text-secondary);
+    display: flex;
+    align-items: center;
+    gap: 5px;
+  }
+  .nav-stat .dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--winner);
+  }
+  .nav-stat strong {
+    color: var(--text-primary);
+  }
+
+  /* ── SEGMENTED TABS ── */
+  .tab-bar {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 14px 28px;
+    background: var(--panel);
+    border-bottom: 1px solid var(--border);
+  }
+  .seg-tabs {
+    display: flex;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 3px;
+    gap: 2px;
+  }
+  .seg-tab {
+    padding: 8px 20px;
+    border-radius: 7px;
+    border: none;
+    cursor: pointer;
+    font-family: 'Inter', sans-serif;
+    font-size: 13px;
+    font-weight: 500;
+    transition: all 0.15s;
+    letter-spacing: -0.1px;
+  }
+  .seg-tab.active {
+    background: var(--accent);
+    color: #ffffff;
+    box-shadow: 0 2px 8px rgba(99,102,241,0.4);
+  }
+  .seg-tab.inactive {
+    background: transparent;
+    color: var(--text-secondary);
+  }
+  .seg-tab.inactive:hover {
+    background: var(--border-light);
+    color: var(--text-primary);
+  }
+
+  /* ── MAIN ── */
+  .main {
+    padding: 24px 28px 48px;
+  }
+
+  /* ── MATRIX PERSONA FILTER ── */
+  .persona-filters {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 20px;
+    align-items: center;
+  }
+  .persona-label {
+    font-size: 11px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-right: 4px;
+  }
+  .persona-btn {
+    padding: 6px 14px;
+    border-radius: 20px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text-secondary);
+    font-family: 'Inter', sans-serif;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.12s;
+  }
+  .persona-btn.active {
+    border-color: var(--accent);
+    background: rgba(99,102,241,0.15);
+    color: #a5b4fc;
+  }
+  .persona-btn:hover:not(.active) {
+    border-color: var(--text-muted);
+    color: var(--text-primary);
+  }
+
+  /* ── MATRIX GRID ── */
+  .matrix-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .matrix-row {
+    display: grid;
+    grid-template-columns: 200px repeat(4, 1fr);
+    gap: 10px;
+    align-items: stretch;
+  }
+  .matrix-row-label {
+    display: flex;
+    align-items: center;
+    padding: 0 4px;
+    font-weight: 600;
+    font-size: 13px;
+    color: var(--text-primary);
+    line-height: 1.3;
+  }
+  .matrix-col-headers {
+    display: grid;
+    grid-template-columns: 200px repeat(4, 1fr);
+    gap: 10px;
+    margin-bottom: 4px;
+  }
+  .col-header {
+    text-align: center;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    padding: 6px 0;
+  }
+  .col-header-empty { /* spacer for angle label column */ }
+
+  /* MATRIX CELLS */
+  .m-cell {
+    min-height: 90px;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    padding: 14px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    position: relative;
+    overflow: hidden;
+    transition: transform 0.12s, border-color 0.12s;
+    cursor: pointer;
+  }
+  .m-cell:hover {
+    transform: translateY(-1px);
+    border-color: var(--text-muted);
+  }
+  .m-cell.empty {
+    border-style: dashed;
+    border-color: var(--border-light);
+    background: var(--empty);
+    cursor: default;
+  }
+  .m-cell.empty:hover {
+    transform: none;
+    border-color: var(--border-light);
+  }
+  .m-cell::before {
+    content: '';
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    width: 3px;
+    border-radius: 10px 0 0 10px;
+  }
+  .m-cell.status-winner::before  { background: var(--winner); }
+  .m-cell.status-testing::before { background: var(--testing); }
+  .m-cell.status-approved::before{ background: var(--approved); }
+  .m-cell.status-inprod::before  { background: var(--inprod); }
+  .m-cell.status-loser::before   { background: var(--loser); }
+
+  .m-cell-top {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+  }
+  .m-count {
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--text-primary);
+    line-height: 1;
+  }
+  .m-count.empty { color: var(--text-muted); font-size: 18px; }
+  .m-status-badge {
+    font-size: 10px;
+    font-weight: 600;
+    padding: 3px 8px;
+    border-radius: 10px;
+    letter-spacing: 0.02em;
+  }
+  .badge-winner  { background: rgba(16,185,129,0.15); color: var(--winner); }
+  .badge-testing { background: rgba(59,130,246,0.15); color: var(--testing); }
+  .badge-approved{ background: rgba(139,92,246,0.15); color: var(--approved); }
+  .badge-inprod  { background: rgba(245,158,11,0.15); color: var(--inprod); }
+  .badge-loser   { background: rgba(239,68,68,0.15);  color: var(--loser); }
+
+  .m-cell-footer {
+    font-size: 10px;
+    color: var(--text-muted);
+    display: flex;
+    align-items: center;
+    gap: 5px;
+  }
+  .m-cell-footer .dot {
+    width: 4px; height: 4px;
+    border-radius: 50%;
+    background: var(--text-muted);
+    flex-shrink: 0;
+  }
+  .m-empty-label {
+    font-size: 11px;
+    color: var(--text-muted);
+    text-align: center;
+    padding: 20px 0;
+  }
+
+  /* ── LEGEND ── */
+  .legend-bar {
+    display: flex;
+    gap: 18px;
+    margin-top: 20px;
+    padding: 12px 18px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    flex-wrap: wrap;
+  }
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    font-size: 11px;
+    color: var(--text-secondary);
+  }
+  .legend-swatch {
+    width: 10px; height: 10px;
+    border-radius: 3px;
+    flex-shrink: 0;
+  }
+
+  /* ── TRACKER TABLE (dark) ── */
+  .tracker-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 16px;
+  }
+  .dark-search {
+    position: relative;
+    flex: 0 0 260px;
+  }
+  .dark-search-icon {
+    position: absolute;
+    left: 11px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--text-muted);
+    font-size: 14px;
+  }
+  .dark-search input {
+    width: 100%;
+    padding: 8px 12px 8px 32px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    font-family: 'Inter', sans-serif;
+    font-size: 13px;
+    color: var(--text-primary);
+    outline: none;
+    transition: border-color 0.12s;
+  }
+  .dark-search input::placeholder { color: var(--text-muted); }
+  .dark-search input:focus { border-color: var(--accent); }
+
+  .dark-chip {
+    padding: 6px 13px;
+    border-radius: 20px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text-secondary);
+    font-family: 'Inter', sans-serif;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.12s;
+  }
+  .dark-chip.active {
+    border-color: var(--accent);
+    background: rgba(99,102,241,0.15);
+    color: #a5b4fc;
+  }
+
+  .dark-table-wrap {
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+  }
+  .dark-table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+  .dark-table thead th {
+    padding: 10px 16px;
+    text-align: left;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    background: var(--panel);
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+  }
+  .dark-table tbody tr {
+    border-bottom: 1px solid var(--border-light);
+    transition: background 0.1s;
+  }
+  .dark-table tbody tr:last-child { border-bottom: none; }
+  .dark-table tbody tr:hover td { background: rgba(99,102,241,0.05); }
+  .dark-table tbody td {
+    padding: 11px 16px;
+    font-size: 13px;
+    color: var(--text-secondary);
+    vertical-align: middle;
+  }
+  .dark-table tbody td.td-name {
+    font-weight: 500;
+    color: var(--text-primary);
+    white-space: nowrap;
+  }
+  .dark-table tbody td.td-name .tid {
+    color: var(--text-muted);
+    font-weight: 400;
+    font-size: 11px;
+    margin-right: 4px;
+  }
+  .v-status-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 3px 9px;
+    border-radius: 10px;
+  }
+  .v-winner  { background: rgba(16,185,129,0.15); color: var(--winner); }
+  .v-loser   { background: rgba(239,68,68,0.15);  color: var(--loser); }
+  .v-testing { background: rgba(59,130,246,0.15); color: var(--testing); }
+  .v-approved{ background: rgba(139,92,246,0.15); color: var(--approved); }
+  .v-inprod  { background: rgba(245,158,11,0.15); color: var(--inprod); }
+  .v-untested{ background: rgba(74,74,122,0.2);   color: var(--text-muted); }
+
+  .hidden { display: none; }
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav class="nav">
+  <div class="nav-brand">
+    <div class="nav-logo">IC</div>
+    <span class="nav-title">Immuvi Command Center</span>
+    <span class="nav-badge">Creative Ops</span>
+  </div>
+  <div class="nav-stats">
+    <div class="nav-stat"><div class="dot"></div> <strong>2 Winners</strong></div>
+    <div class="nav-stat">6 creatives &nbsp;·&nbsp; 5 angles &nbsp;·&nbsp; 4 personas</div>
+    <div class="nav-stat">Last sync: <strong>2m ago</strong></div>
+  </div>
+</nav>
+
+<!-- TAB BAR -->
+<div class="tab-bar">
+  <div class="seg-tabs">
+    <button class="seg-tab active" onclick="switchTab('matrix', this)">Creative Matrix</button>
+    <button class="seg-tab inactive" onclick="switchTab('tracker', this)">Creative Tracker</button>
+  </div>
+</div>
+
+<!-- MAIN -->
+<div class="main">
+
+  <!-- ── MATRIX PANEL ── -->
+  <div id="panel-matrix">
+    <div class="persona-filters">
+      <span class="persona-label">Show</span>
+      <button class="persona-btn active">All Personas</button>
+      <button class="persona-btn active">Busy Mom</button>
+      <button class="persona-btn active">Health Enthusiast</button>
+      <button class="persona-btn active">Skeptic</button>
+      <button class="persona-btn active">Value Seeker</button>
+    </div>
+
+    <div class="matrix-col-headers">
+      <div class="col-header col-header-empty"></div>
+      <div class="col-header">Busy Mom</div>
+      <div class="col-header">Health Enthusiast</div>
+      <div class="col-header">Skeptic</div>
+      <div class="col-header">Value Seeker</div>
+    </div>
+
+    <div class="matrix-grid">
+
+      <!-- Pain Agitate Solution -->
+      <div class="matrix-row">
+        <div class="matrix-row-label">Pain Agitate Solution</div>
+        <div class="m-cell status-winner">
+          <div class="m-cell-top">
+            <div class="m-count">2</div>
+            <span class="m-status-badge badge-winner">Winner</span>
+          </div>
+          <div class="m-cell-footer"><div class="dot"></div>Story Loop 30s · Fear Hook Cut</div>
+        </div>
+        <div class="m-cell empty">
+          <div class="m-empty-label">No creatives yet</div>
+        </div>
+        <div class="m-cell status-testing">
+          <div class="m-cell-top">
+            <div class="m-count">1</div>
+            <span class="m-status-badge badge-testing">Testing</span>
+          </div>
+          <div class="m-cell-footer"><div class="dot"></div>Story Loop 30s variant</div>
+        </div>
+        <div class="m-cell empty">
+          <div class="m-empty-label">No creatives yet</div>
+        </div>
+      </div>
+
+      <!-- Before/After -->
+      <div class="matrix-row">
+        <div class="matrix-row-label">Before / After</div>
+        <div class="m-cell status-approved">
+          <div class="m-cell-top">
+            <div class="m-count">1</div>
+            <span class="m-status-badge badge-approved">Approved</span>
+          </div>
+          <div class="m-cell-footer"><div class="dot"></div>Transformation 15s</div>
+        </div>
+        <div class="m-cell status-testing">
+          <div class="m-cell-top">
+            <div class="m-count">1</div>
+            <span class="m-status-badge badge-testing">Testing</span>
+          </div>
+          <div class="m-cell-footer"><div class="dot"></div>Transformation 15s</div>
+        </div>
+        <div class="m-cell empty">
+          <div class="m-empty-label">No creatives yet</div>
+        </div>
+        <div class="m-cell status-winner">
+          <div class="m-cell-top">
+            <div class="m-count">2</div>
+            <span class="m-status-badge badge-winner">Winner</span>
+          </div>
+          <div class="m-cell-footer"><div class="dot"></div>Before/After series</div>
+        </div>
+      </div>
+
+      <!-- Social Proof -->
+      <div class="matrix-row">
+        <div class="matrix-row-label">Social Proof</div>
+        <div class="m-cell empty">
+          <div class="m-empty-label">No creatives yet</div>
+        </div>
+        <div class="m-cell status-approved">
+          <div class="m-cell-top">
+            <div class="m-count">1</div>
+            <span class="m-status-badge badge-approved">Approved</span>
+          </div>
+          <div class="m-cell-footer"><div class="dot"></div>Authority Doc</div>
+        </div>
+        <div class="m-cell status-approved">
+          <div class="m-cell-top">
+            <div class="m-count">1</div>
+            <span class="m-status-badge badge-approved">Approved</span>
+          </div>
+          <div class="m-cell-footer"><div class="dot"></div>Testimonial Reel</div>
+        </div>
+        <div class="m-cell empty">
+          <div class="m-empty-label">No creatives yet</div>
+        </div>
+      </div>
+
+      <!-- Fear Appeal -->
+      <div class="matrix-row">
+        <div class="matrix-row-label">Fear Appeal</div>
+        <div class="m-cell status-inprod">
+          <div class="m-cell-top">
+            <div class="m-count">1</div>
+            <span class="m-status-badge badge-inprod">In Production</span>
+          </div>
+          <div class="m-cell-footer"><div class="dot"></div>Fear Hook Cut</div>
+        </div>
+        <div class="m-cell empty">
+          <div class="m-empty-label">No creatives yet</div>
+        </div>
+        <div class="m-cell empty">
+          <div class="m-empty-label">No creatives yet</div>
+        </div>
+        <div class="m-cell empty">
+          <div class="m-empty-label">No creatives yet</div>
+        </div>
+      </div>
+
+      <!-- Benefits-First -->
+      <div class="matrix-row">
+        <div class="matrix-row-label">Benefits-First</div>
+        <div class="m-cell empty">
+          <div class="m-empty-label">No creatives yet</div>
+        </div>
+        <div class="m-cell empty">
+          <div class="m-empty-label">No creatives yet</div>
+        </div>
+        <div class="m-cell empty">
+          <div class="m-empty-label">No creatives yet</div>
+        </div>
+        <div class="m-cell status-loser">
+          <div class="m-cell-top">
+            <div class="m-count">1</div>
+            <span class="m-status-badge badge-loser">Loser</span>
+          </div>
+          <div class="m-cell-footer"><div class="dot"></div>Value Stack 60s</div>
+        </div>
+      </div>
+
+    </div><!-- /matrix-grid -->
+
+    <div class="legend-bar">
+      <div class="legend-item"><div class="legend-swatch" style="background:var(--winner)"></div>Winner</div>
+      <div class="legend-item"><div class="legend-swatch" style="background:var(--testing)"></div>Testing</div>
+      <div class="legend-item"><div class="legend-swatch" style="background:var(--approved)"></div>Approved</div>
+      <div class="legend-item"><div class="legend-swatch" style="background:var(--inprod)"></div>In Production</div>
+      <div class="legend-item"><div class="legend-swatch" style="background:var(--loser)"></div>Loser</div>
+      <div class="legend-item"><div class="legend-swatch" style="border: 1px dashed #4a4a7a; background:transparent"></div>Empty — no creatives</div>
+    </div>
+  </div>
+
+  <!-- ── TRACKER PANEL ── -->
+  <div id="panel-tracker" class="hidden">
+    <div class="tracker-toolbar">
+      <div class="dark-search">
+        <span class="dark-search-icon">⌕</span>
+        <input type="text" placeholder="Search creatives…">
+      </div>
+      <button class="dark-chip active">All Statuses</button>
+      <button class="dark-chip active">All Funnels</button>
+      <button class="dark-chip">UGC</button>
+      <button class="dark-chip">Winners only</button>
+    </div>
+
+    <div class="dark-table-wrap">
+      <table class="dark-table">
+        <thead>
+          <tr>
+            <th>Format Name</th>
+            <th>Angle</th>
+            <th>Persona</th>
+            <th>Structure</th>
+            <th>Hook</th>
+            <th>Production</th>
+            <th>Funnel</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="td-name"><span class="tid">AT-001 ·</span>Story Loop 30s</td>
+            <td>Pain Agitate Solution</td>
+            <td>Busy Mom</td>
+            <td>Problem-Solution</td>
+            <td>Question</td>
+            <td>UGC</td>
+            <td>TOF</td>
+            <td><span class="v-status-pill v-winner">Winner</span></td>
+          </tr>
+          <tr>
+            <td class="td-name"><span class="tid">AT-002 ·</span>Transformation 15s</td>
+            <td>Before/After</td>
+            <td>Health Enthusiast</td>
+            <td>Contrast</td>
+            <td>Stat</td>
+            <td>Motion</td>
+            <td>MOF</td>
+            <td><span class="v-status-pill v-testing">Testing</span></td>
+          </tr>
+          <tr>
+            <td class="td-name"><span class="tid">AT-003 ·</span>Testimonial Reel</td>
+            <td>Social Proof</td>
+            <td>Skeptic</td>
+            <td>Authority</td>
+            <td>Quote</td>
+            <td>Studio</td>
+            <td>BOF</td>
+            <td><span class="v-status-pill v-approved">Approved</span></td>
+          </tr>
+          <tr>
+            <td class="td-name"><span class="tid">AT-004 ·</span>Value Stack 60s</td>
+            <td>Benefits-First</td>
+            <td>Value Seeker</td>
+            <td>List</td>
+            <td>Statement</td>
+            <td>Voiceover</td>
+            <td>TOF</td>
+            <td><span class="v-status-pill v-loser">Loser</span></td>
+          </tr>
+          <tr>
+            <td class="td-name"><span class="tid">AT-005 ·</span>Fear Hook Cut</td>
+            <td>Fear Appeal</td>
+            <td>Busy Mom</td>
+            <td>Problem</td>
+            <td>Fear</td>
+            <td>UGC</td>
+            <td>TOF</td>
+            <td><span class="v-status-pill v-inprod">In Production</span></td>
+          </tr>
+          <tr>
+            <td class="td-name"><span class="tid">AT-006 ·</span>Authority Doc</td>
+            <td>Social Proof</td>
+            <td>Health Enthusiast</td>
+            <td>Authority</td>
+            <td>Stat</td>
+            <td>Documentary</td>
+            <td>MOF</td>
+            <td><span class="v-status-pill v-untested">Untested</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  function switchTab(id, btn) {
+    document.querySelectorAll('[id^="panel-"]').forEach(el => el.classList.add('hidden'));
+    document.getElementById('panel-' + id).classList.remove('hidden');
+    document.querySelectorAll('.seg-tab').forEach(b => {
+      b.classList.remove('active');
+      b.classList.add('inactive');
+    });
+    btn.classList.remove('inactive');
+    btn.classList.add('active');
+  }
+
+  document.querySelectorAll('.persona-btn, .dark-chip').forEach(btn => {
+    btn.addEventListener('click', () => btn.classList.toggle('active'));
+  });
+</script>
+</body>
+</html>

@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Creative Matrix · Stagger Reveal</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --canvas:#faf9f5; --surface:#ffffff; --surface-2:#f3f1e9;
+  --line:#e8e5dc; --line-hi:#d6d1c1;
+  --ink:#1a1814; --ink-2:#585449; --ink-3:#8f8a7c; --ink-4:#b8b3a2;
+  --accent:#c05336; --accent-soft:#f5e3da;
+  --cyan:#00a3b8;
+  --sage:#5e7557; --ochre:#a77c2e; --coral:#c14400; --rust:#a83b28;
+  --dusk:#4f6780; --emerald:#35683f;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:var(--canvas);color:var(--ink);font-family:'Inter',sans-serif;font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased}
+body{min-height:400vh}
+.mono{font-family:'JetBrains Mono',monospace;font-variant-numeric:tabular-nums}
+.serif{font-family:'Instrument Serif',serif;font-style:italic;font-weight:400}
+
+/* ---------- NAV ---------- */
+.nav{position:sticky;top:0;z-index:50;background:rgba(250,249,245,.82);backdrop-filter:saturate(140%) blur(12px);-webkit-backdrop-filter:saturate(140%) blur(12px);border-bottom:1px solid var(--line)}
+.nav-inner{max-width:1320px;margin:0 auto;padding:14px 32px;display:flex;align-items:center;gap:32px}
+.brand{display:flex;align-items:center;gap:10px;font-weight:700;font-size:14px;letter-spacing:-.01em}
+.brand .dot{width:10px;height:10px;border-radius:3px;background:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.nav-links{display:flex;gap:4px;margin-left:24px}
+.nav-link{padding:7px 12px;border-radius:8px;color:var(--ink-2);font-size:13px;font-weight:500;text-decoration:none;cursor:pointer}
+.nav-link:hover{background:var(--surface-2);color:var(--ink)}
+.nav-link.active{background:var(--ink);color:var(--canvas)}
+.nav-right{margin-left:auto;display:flex;align-items:center;gap:12px;font-size:12px;color:var(--ink-3)}
+.nav-badge{display:inline-flex;align-items:center;gap:6px;padding:4px 9px;border:1px solid var(--line-hi);border-radius:999px;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--ink-2)}
+.nav-badge .pulse{width:6px;height:6px;border-radius:50%;background:var(--sage);box-shadow:0 0 0 0 rgba(94,117,87,.6);animation:pulse 2s infinite}
+@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(94,117,87,.6)}70%{box-shadow:0 0 0 8px rgba(94,117,87,0)}100%{box-shadow:0 0 0 0 rgba(94,117,87,0)}}
+
+/* ---------- HERO ---------- */
+.hero{max-width:1320px;margin:0 auto;padding:140px 32px 80px}
+.eyebrow{display:inline-flex;align-items:center;gap:8px;padding:6px 12px;border:1px solid var(--line-hi);border-radius:999px;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--ink-2);text-transform:uppercase;letter-spacing:.12em;margin-bottom:28px;background:var(--surface)}
+.eyebrow .sq{width:8px;height:8px;background:var(--accent);border-radius:2px}
+.hero h1{font-family:'Instrument Serif',serif;font-style:italic;font-weight:400;font-size:clamp(56px,9vw,132px);line-height:.92;letter-spacing:-.03em;color:var(--ink);margin-bottom:28px}
+.hero h1 .pop{color:var(--accent)}
+.hero p{max-width:640px;font-size:19px;color:var(--ink-2);line-height:1.55}
+.hero-meta{display:flex;gap:48px;margin-top:64px;padding-top:32px;border-top:1px solid var(--line)}
+.hero-meta .m{display:flex;flex-direction:column;gap:4px}
+.hero-meta .m .v{font-family:'JetBrains Mono',monospace;font-size:28px;font-weight:500;color:var(--ink);letter-spacing:-.02em}
+.hero-meta .m .l{font-size:11px;text-transform:uppercase;letter-spacing:.1em;color:var(--ink-3);font-weight:500}
+.scroll-hint{margin-top:72px;display:flex;align-items:center;gap:10px;color:var(--ink-3);font-family:'JetBrains Mono',monospace;font-size:11px;text-transform:uppercase;letter-spacing:.14em}
+.scroll-hint .ln{width:32px;height:1px;background:var(--ink-4)}
+.scroll-hint .arr{animation:bob 1.8s infinite ease-in-out}
+@keyframes bob{0%,100%{transform:translateY(0)}50%{transform:translateY(4px)}}
+
+/* ---------- SECTION ---------- */
+.section{max-width:1320px;margin:0 auto;padding:80px 32px}
+.section-head{display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:40px;gap:32px}
+.section-head h2{font-family:'Instrument Serif',serif;font-style:italic;font-weight:400;font-size:56px;line-height:1;letter-spacing:-.02em}
+.section-head .sub{color:var(--ink-3);font-size:13px;max-width:360px;text-align:right}
+
+/* ---------- MATRIX ---------- */
+.matrix-wrap{background:var(--surface);border:1px solid var(--line);border-radius:24px;padding:28px;box-shadow:0 1px 0 var(--line);overflow:hidden}
+.matrix-bar{display:flex;align-items:center;justify-content:space-between;padding-bottom:24px;border-bottom:1px solid var(--line);margin-bottom:24px}
+.matrix-bar .t{display:flex;align-items:center;gap:14px}
+.matrix-bar .t strong{font-size:15px;letter-spacing:-.01em}
+.matrix-bar .t .badge{font-family:'JetBrains Mono',monospace;font-size:10px;padding:3px 8px;border-radius:999px;background:var(--accent-soft);color:var(--accent);text-transform:uppercase;letter-spacing:.1em}
+.matrix-bar .legend{display:flex;gap:14px;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--ink-2)}
+.matrix-bar .legend span{display:inline-flex;align-items:center;gap:6px}
+.matrix-bar .legend i{width:10px;height:10px;border-radius:3px;display:inline-block}
+.lg-massive{background:linear-gradient(135deg,#35683f,#5e7557)}
+.lg-winner{background:#5e7557}
+.lg-mild{background:#a77c2e}
+.lg-fatigue{background:#c14400}
+.lg-loser{background:#a83b28}
+.lg-testing{background:#4f6780}
+.lg-empty{background:repeating-linear-gradient(45deg,#e8e5dc,#e8e5dc 3px,#f3f1e9 3px,#f3f1e9 6px)}
+
+.matrix{display:grid;grid-template-columns:240px repeat(5,1fr);gap:8px}
+.m-col-head,.m-row-head,.m-cell{min-height:120px;padding:16px;border-radius:14px;position:relative;opacity:0;filter:blur(10px);transform:translateY(12px) scale(.96);transition:opacity .9s cubic-bezier(.2,.8,.2,1),filter .9s cubic-bezier(.2,.8,.2,1),transform .9s cubic-bezier(.2,.8,.2,1)}
+.matrix.revealed .m-col-head,.matrix.revealed .m-row-head,.matrix.revealed .m-cell{opacity:1;filter:blur(0);transform:translateY(0) scale(1)}
+.m-corner{min-height:120px;opacity:0;transition:opacity .6s ease}
+.matrix.revealed .m-corner{opacity:1}
+
+.m-col-head{min-height:88px;background:var(--surface-2);border:1px solid var(--line);display:flex;flex-direction:column;justify-content:flex-end;gap:4px}
+.m-col-head .nm{font-weight:600;font-size:12px;letter-spacing:-.01em;line-height:1.3;color:var(--ink)}
+.m-col-head .ct{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--ink-3);text-transform:uppercase;letter-spacing:.08em}
+
+.m-row-head{background:var(--surface-2);border:1px solid var(--line);display:flex;flex-direction:column;justify-content:center;gap:6px;padding:18px 16px}
+.m-row-head .nm{font-family:'Instrument Serif',serif;font-style:italic;font-size:22px;line-height:1.1;color:var(--ink);letter-spacing:-.01em}
+.m-row-head .ct{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--ink-3);text-transform:uppercase;letter-spacing:.08em;display:flex;gap:8px;align-items:center}
+.m-row-head .ct .roas{color:var(--ink-2);font-weight:500}
+
+.m-cell{border:1px solid var(--line);background:var(--surface)}
+.m-cell .roas{font-family:'JetBrains Mono',monospace;font-size:24px;font-weight:500;letter-spacing:-.02em;line-height:1}
+.m-cell .tier{font-family:'JetBrains Mono',monospace;font-size:10px;text-transform:uppercase;letter-spacing:.12em;margin-bottom:10px;font-weight:500}
+.m-cell .foot{position:absolute;bottom:14px;left:16px;right:16px;display:flex;justify-content:space-between;align-items:center;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--ink-3)}
+.m-cell .foot .sp{color:var(--ink-2);font-weight:500}
+.m-cell .thumbs{position:absolute;top:14px;right:14px;display:flex;gap:-4px}
+.m-cell .thumbs .th{width:18px;height:18px;border-radius:4px;border:1.5px solid var(--surface);margin-left:-6px;background:var(--ink-4)}
+
+.c-massive{background:linear-gradient(135deg,#eef2ea 0%,#dfe6d7 100%);border-color:#c3d0b8}
+.c-massive .roas,.c-massive .tier{color:#35683f}
+.c-winner{background:linear-gradient(135deg,#f1f3ed 0%,#e4e9dc 100%);border-color:#c8d0bc}
+.c-winner .roas,.c-winner .tier{color:#5e7557}
+.c-mild{background:linear-gradient(135deg,#f6efe0 0%,#ecdfc4 100%);border-color:#d9c898}
+.c-mild .roas,.c-mild .tier{color:#a77c2e}
+.c-fatigue{background:linear-gradient(135deg,#f7e4d8 0%,#efcbb5 100%);border-color:#e0b299}
+.c-fatigue .roas,.c-fatigue .tier{color:#c14400}
+.c-loser{background:linear-gradient(135deg,#f1dcd6 0%,#e7c0b7 100%);border-color:#d5a498}
+.c-loser .roas,.c-loser .tier{color:#a83b28}
+.c-testing{background:linear-gradient(135deg,#e6ecf2 0%,#cfd9e4 100%);border-color:#b4c1d0}
+.c-testing .roas,.c-testing .tier{color:#4f6780}
+.c-empty{background:repeating-linear-gradient(135deg,transparent,transparent 8px,rgba(184,179,162,.12) 8px,rgba(184,179,162,.12) 9px),var(--surface);border:1px dashed var(--line-hi)}
+.c-empty .note{color:var(--ink-4);font-size:11px;font-style:italic;font-family:'Instrument Serif',serif;position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);white-space:nowrap}
+
+.wow{display:inline-block;padding:2px 7px;border-radius:999px;background:rgba(193,68,0,.12);color:var(--coral);font-family:'JetBrains Mono',monospace;font-size:9px;font-weight:500;margin-left:6px}
+
+/* outro */
+.outro{max-width:1320px;margin:0 auto;padding:120px 32px 160px;text-align:center}
+.outro h3{font-family:'Instrument Serif',serif;font-style:italic;font-weight:400;font-size:72px;line-height:1;letter-spacing:-.02em;margin-bottom:24px}
+.outro p{color:var(--ink-2);font-size:17px;max-width:540px;margin:0 auto}
+.cta{display:inline-flex;align-items:center;gap:10px;margin-top:40px;padding:16px 28px;background:var(--accent);color:var(--canvas);border-radius:999px;font-weight:600;font-size:14px;cursor:pointer;transition:transform .2s}
+.cta:hover{transform:translateY(-2px)}
+
+.stage-sentinel{height:1px;width:1px}
+
+</style>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="nav-inner">
+    <div class="brand"><span class="dot"></span><span>Immuvi Command Center</span></div>
+    <div class="nav-links">
+      <a class="nav-link">Command HQ</a>
+      <a class="nav-link">Angles</a>
+      <a class="nav-link">Personas</a>
+      <a class="nav-link">Creative Tracker</a>
+      <a class="nav-link active">Creative Matrix</a>
+    </div>
+    <div class="nav-right">
+      <span class="nav-badge"><span class="pulse"></span>Live · 42 creatives</span>
+      <span>Last 28 days</span>
+    </div>
+  </div>
+</nav>
+
+<section class="hero">
+  <div class="eyebrow"><span class="sq"></span>Creative Matrix · v2 · 35 possible cells</div>
+  <h1>Your creative portfolio,<br><span class="pop">mapped.</span></h1>
+  <p>Seven angles. Five personas. Thirty-five possible combinations. Nineteen active, sixteen still untested. The matrix tells you where the money lives — and where it hasn't looked yet.</p>
+
+  <div class="hero-meta">
+    <div class="m"><div class="v">42</div><div class="l">classified</div></div>
+    <div class="m"><div class="v">19 / 35</div><div class="l">active cells</div></div>
+    <div class="m"><div class="v">1.38×</div><div class="l">blended roas</div></div>
+    <div class="m"><div class="v">$12.4k</div><div class="l">spend · 28d</div></div>
+  </div>
+
+  <div class="scroll-hint"><span class="ln"></span><span class="arr">↓</span><span>Scroll to reveal the matrix</span></div>
+</section>
+
+<section class="section" id="matrix-section">
+  <div class="section-head">
+    <h2>The grid, cell by cell.</h2>
+    <div class="sub">Each cell fades in on its own beat — a staggered reveal traces the rhythm of what you've built. Watch where the map lights up, and where it stays dark.</div>
+  </div>
+
+  <div class="matrix-wrap">
+    <div class="matrix-bar">
+      <div class="t">
+        <strong>Angle × Persona</strong>
+        <span class="badge">19 active · 16 empty</span>
+      </div>
+      <div class="legend">
+        <span><i class="lg-massive"></i>Massive</span>
+        <span><i class="lg-winner"></i>Winner</span>
+        <span><i class="lg-mild"></i>Mild</span>
+        <span><i class="lg-fatigue"></i>Fatigue</span>
+        <span><i class="lg-loser"></i>Loser</span>
+        <span><i class="lg-testing"></i>Testing</span>
+        <span><i class="lg-empty"></i>Empty</span>
+      </div>
+    </div>
+
+    <div class="matrix" id="theMatrix">
+      <!-- row 0: headers -->
+      <div class="m-corner"></div>
+      <div class="m-col-head" data-idx="1"><div class="nm">Stressed Women 25-45</div><div class="ct">24 creatives</div></div>
+      <div class="m-col-head" data-idx="2"><div class="nm">Creative Self-Care Adults</div><div class="ct">10 creatives</div></div>
+      <div class="m-col-head" data-idx="3"><div class="nm">Parents of Emotional Kids</div><div class="ct">6 creatives</div></div>
+      <div class="m-col-head" data-idx="4"><div class="nm">Silently Scrolling Adults</div><div class="ct">1 creative</div></div>
+      <div class="m-col-head" data-idx="5"><div class="nm">Young Adults · Grief</div><div class="ct">1 creative</div></div>
+
+      <!-- row 1: Art as Therapy -->
+      <div class="m-row-head" data-idx="6"><div class="nm">Art as Therapy</div><div class="ct">18 creatives<span class="roas">· 1.58×</span></div></div>
+      <div class="m-cell c-massive" data-idx="7"><div class="tier">◆ Massive</div><div class="roas">1.78×</div><div class="thumbs"><div class="th"></div><div class="th"></div><div class="th"></div></div><div class="foot"><span>12 creatives</span><span class="sp">$4,920</span></div></div>
+      <div class="m-cell c-winner" data-idx="8"><div class="tier">Winner</div><div class="roas">1.48×</div><div class="thumbs"><div class="th"></div><div class="th"></div></div><div class="foot"><span>4 creatives</span><span class="sp">$1,240</span></div></div>
+      <div class="m-cell c-mild" data-idx="9"><div class="tier">Mild</div><div class="roas">1.32×</div><div class="thumbs"><div class="th"></div></div><div class="foot"><span>2 creatives</span><span class="sp">$620</span></div></div>
+      <div class="m-cell c-empty" data-idx="10"><div class="note">not yet tested</div></div>
+      <div class="m-cell c-empty" data-idx="11"><div class="note">not yet tested</div></div>
+
+      <!-- row 2: Calm / Unwind -->
+      <div class="m-row-head" data-idx="12"><div class="nm">Calm / Unwind</div><div class="ct">9 creatives<span class="roas">· 1.12×</span></div></div>
+      <div class="m-cell c-winner" data-idx="13"><div class="tier">Winner</div><div class="roas">1.41×</div><div class="thumbs"><div class="th"></div><div class="th"></div></div><div class="foot"><span>4 creatives</span><span class="sp">$1,420</span></div></div>
+      <div class="m-cell c-mild" data-idx="14"><div class="tier">Mild</div><div class="roas">1.22×</div><div class="thumbs"><div class="th"></div></div><div class="foot"><span>3 creatives</span><span class="sp">$580</span></div></div>
+      <div class="m-cell c-loser" data-idx="15"><div class="tier">Loser</div><div class="roas">0.58×</div><div class="thumbs"><div class="th"></div></div><div class="foot"><span>2 creatives</span><span class="sp">$340</span></div></div>
+      <div class="m-cell c-empty" data-idx="16"><div class="note">not yet tested</div></div>
+      <div class="m-cell c-empty" data-idx="17"><div class="note">not yet tested</div></div>
+
+      <!-- row 3: Scarcity -->
+      <div class="m-row-head" data-idx="18"><div class="nm">Scarcity</div><div class="ct">5 creatives<span class="roas">· 0.98×</span></div></div>
+      <div class="m-cell c-fatigue" data-idx="19"><div class="tier">Fatigued</div><div class="roas">0.98×<span class="wow">WoW -42%</span></div><div class="thumbs"><div class="th"></div><div class="th"></div></div><div class="foot"><span>4 creatives</span><span class="sp">$1,850</span></div></div>
+      <div class="m-cell c-mild" data-idx="20"><div class="tier">Mild</div><div class="roas">1.28×</div><div class="thumbs"><div class="th"></div></div><div class="foot"><span>1 creative</span><span class="sp">$310</span></div></div>
+      <div class="m-cell c-empty" data-idx="21"><div class="note">not yet tested</div></div>
+      <div class="m-cell c-empty" data-idx="22"><div class="note">not yet tested</div></div>
+      <div class="m-cell c-empty" data-idx="23"><div class="note">not yet tested</div></div>
+
+      <!-- row 4: Therapist-Rec -->
+      <div class="m-row-head" data-idx="24"><div class="nm">Therapist-Rec</div><div class="ct">5 creatives<span class="roas">· 1.38×</span></div></div>
+      <div class="m-cell c-winner" data-idx="25"><div class="tier">Winner</div><div class="roas">1.44×</div><div class="thumbs"><div class="th"></div></div><div class="foot"><span>2 creatives</span><span class="sp">$560</span></div></div>
+      <div class="m-cell c-mild" data-idx="26"><div class="tier">Mild</div><div class="roas">1.30×</div><div class="thumbs"><div class="th"></div></div><div class="foot"><span>2 creatives</span><span class="sp">$360</span></div></div>
+      <div class="m-cell c-testing" data-idx="27"><div class="tier">Testing</div><div class="roas">—</div><div class="thumbs"><div class="th"></div></div><div class="foot"><span>1 creative</span><span class="sp">$32</span></div></div>
+      <div class="m-cell c-empty" data-idx="28"><div class="note">not yet tested</div></div>
+      <div class="m-cell c-empty" data-idx="29"><div class="note">not yet tested</div></div>
+
+      <!-- row 5: Emotional Lit -->
+      <div class="m-row-head" data-idx="30"><div class="nm">Emotional Lit</div><div class="ct">3 creatives<span class="roas">· 1.50×</span></div></div>
+      <div class="m-cell c-winner" data-idx="31"><div class="tier">Winner</div><div class="roas">1.54×</div><div class="thumbs"><div class="th"></div></div><div class="foot"><span>1 creative</span><span class="sp">$806</span></div></div>
+      <div class="m-cell c-empty" data-idx="32"><div class="note">not yet tested</div></div>
+      <div class="m-cell c-empty" data-idx="33"><div class="note">not yet tested</div></div>
+      <div class="m-cell c-empty" data-idx="34"><div class="note">not yet tested</div></div>
+      <div class="m-cell c-winner" data-idx="35"><div class="tier">Winner</div><div class="roas">1.46×</div><div class="thumbs"><div class="th"></div></div><div class="foot"><span>1 creative</span><span class="sp">$624</span></div></div>
+
+      <!-- row 6: Pattern Interrupt -->
+      <div class="m-row-head" data-idx="36"><div class="nm">Pattern Interrupt</div><div class="ct">2 creatives<span class="roas">· 1.22×</span></div></div>
+      <div class="m-cell c-empty" data-idx="37"><div class="note">not yet tested</div></div>
+      <div class="m-cell c-empty" data-idx="38"><div class="note">not yet tested</div></div>
+      <div class="m-cell c-empty" data-idx="39"><div class="note">not yet tested</div></div>
+      <div class="m-cell c-mild" data-idx="40"><div class="tier">Mild</div><div class="roas">1.22×</div><div class="thumbs"><div class="th"></div></div><div class="foot"><span>2 creatives</span><span class="sp">$284</span></div></div>
+      <div class="m-cell c-empty" data-idx="41"><div class="note">not yet tested</div></div>
+
+      <!-- row 7: Social Proof -->
+      <div class="m-row-head" data-idx="42"><div class="nm">Social Proof</div><div class="ct">1 creative<span class="roas">· 1.41×</span></div></div>
+      <div class="m-cell c-winner" data-idx="43"><div class="tier">Winner</div><div class="roas">1.41×</div><div class="thumbs"><div class="th"></div></div><div class="foot"><span>1 creative</span><span class="sp">$488</span></div></div>
+      <div class="m-cell c-empty" data-idx="44"><div class="note">not yet tested</div></div>
+      <div class="m-cell c-empty" data-idx="45"><div class="note">not yet tested</div></div>
+      <div class="m-cell c-empty" data-idx="46"><div class="note">not yet tested</div></div>
+      <div class="m-cell c-empty" data-idx="47"><div class="note">not yet tested</div></div>
+    </div>
+  </div>
+</section>
+
+<section class="outro">
+  <h3>Map what's tested.<br>Plan what's next.</h3>
+  <p>Sixteen empty cells are not gaps — they're the shape of the work still to do. Which one is worth your next shoot?</p>
+  <a class="cta">Open the planning queue →</a>
+</section>
+
+<script>
+  // staggered reveal: once matrix enters viewport, set delays per data-idx
+  const matrix = document.getElementById('theMatrix');
+  const cells  = matrix.querySelectorAll('[data-idx]');
+  cells.forEach(c=>{
+    const i = parseInt(c.dataset.idx,10) || 0;
+    c.style.transitionDelay = (i * 38) + 'ms';
+  });
+  const io = new IntersectionObserver((entries)=>{
+    entries.forEach(e=>{
+      if(e.isIntersecting){ matrix.classList.add('revealed'); io.disconnect(); }
+    });
+  },{threshold:0.12});
+  io.observe(matrix);
+</script>
+</body>
+</html>

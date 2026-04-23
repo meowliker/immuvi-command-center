@@ -1,0 +1,330 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Creative Tracker · Tier Chapters</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --canvas:#faf9f5;--surface:#ffffff;--surface-2:#f3f1e9;--line:#e8e5dc;--line-hi:#d6d1c1;
+  --ink:#1a1814;--ink-2:#585449;--ink-3:#8f8a7c;--ink-4:#b8b3a2;
+  --accent:#c05336;--accent-soft:#f5e3da;--cyan:#00a3b8;--sage:#5e7557;--ochre:#a77c2e;
+  --coral:#c14400;--rust:#a83b28;--dusk:#4f6780;--emerald:#35683f;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-snap-type:y mandatory;scroll-behavior:smooth}
+body{background:var(--canvas);color:var(--ink);font-family:'Inter',system-ui,sans-serif;-webkit-font-smoothing:antialiased;overflow-x:hidden}
+.mono{font-family:'JetBrains Mono',monospace}
+.serif{font-family:'Instrument Serif',serif;font-style:italic}
+
+.nav{position:fixed;top:0;left:0;right:0;z-index:100;display:flex;align-items:center;justify-content:space-between;padding:14px 32px;backdrop-filter:blur(12px);background:rgba(250,249,245,.8);border-bottom:1px solid var(--line)}
+.nav-brand{display:flex;align-items:center;gap:10px}
+.nav-logo{width:22px;height:22px;border-radius:6px;background:linear-gradient(135deg,var(--accent),#e27a5c);display:grid;place-items:center;color:#fff;font-weight:700;font-size:11px}
+.nav-tabs{display:flex;gap:4px;background:var(--surface-2);padding:4px;border-radius:10px;border:1px solid var(--line)}
+.nav-tab{padding:7px 14px;font-size:12.5px;font-weight:500;color:var(--ink-2);border-radius:7px;cursor:pointer}
+.nav-tab.active{background:#fff;color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.08)}
+.nav-user{display:flex;align-items:center;gap:10px;color:var(--ink-2);font-size:12px}
+.nav-avatar{width:28px;height:28px;border-radius:50%;background:linear-gradient(135deg,var(--cyan),#4ac6d4);display:grid;place-items:center;font-weight:700;font-size:12px;color:#fff}
+
+/* Chapter progress rail (left) */
+.rail{position:fixed;top:50%;left:28px;transform:translateY(-50%);z-index:60;display:flex;flex-direction:column;gap:14px}
+.rail-dot{width:8px;height:8px;border-radius:50%;background:var(--ink-4);transition:all .3s;cursor:pointer}
+.rail-dot.active{background:var(--accent);box-shadow:0 0 0 4px var(--accent-soft);transform:scale(1.3)}
+.rail-label{position:absolute;left:18px;top:50%;transform:translateY(-50%);font-size:10px;letter-spacing:.15em;text-transform:uppercase;color:var(--ink-3);font-family:'JetBrains Mono',monospace;opacity:0;pointer-events:none;transition:opacity .2s;white-space:nowrap}
+.rail-dot.active .rail-label{opacity:1}
+
+/* Scroll hint top-right */
+.scrolly{position:fixed;right:28px;bottom:28px;z-index:60;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--ink-3);letter-spacing:.18em;text-transform:uppercase;display:flex;gap:8px;align-items:center;background:var(--surface);border:1px solid var(--line);padding:8px 14px;border-radius:999px;box-shadow:0 2px 8px rgba(0,0,0,.04)}
+.scrolly-num{color:var(--ink);font-weight:600}
+
+/* Intro section */
+.intro{height:100vh;scroll-snap-align:start;display:grid;place-items:center;padding:0 80px;position:relative}
+.intro-inner{max-width:1200px;width:100%}
+.intro-kicker{font-size:11px;letter-spacing:.25em;text-transform:uppercase;color:var(--ink-3);margin-bottom:28px;font-family:'JetBrains Mono',monospace}
+.intro-kicker .dot{display:inline-block;width:6px;height:6px;background:var(--accent);border-radius:50%;vertical-align:middle;margin-right:10px}
+.intro-title{font-family:'Instrument Serif',serif;font-style:italic;font-size:clamp(72px,11vw,168px);line-height:.92;letter-spacing:-.03em;margin-bottom:40px}
+.intro-title em{color:var(--accent)}
+.intro-sub{font-size:18px;color:var(--ink-2);max-width:640px;line-height:1.55;margin-bottom:32px}
+.intro-meta{display:flex;gap:32px;margin-top:40px}
+.intro-m{display:flex;flex-direction:column;gap:4px}
+.intro-m-k{font-size:11px;text-transform:uppercase;letter-spacing:.2em;color:var(--ink-3);font-family:'JetBrains Mono',monospace}
+.intro-m-v{font-family:'Instrument Serif',serif;font-style:italic;font-size:42px;line-height:1;color:var(--ink)}
+
+/* Chapter (tier) section */
+.chapter{height:100vh;scroll-snap-align:start;position:relative;display:grid;grid-template-columns:1fr 1.1fr;gap:40px;padding:120px 80px 80px;align-items:center;overflow:hidden}
+.chapter::before{content:'';position:absolute;inset:0;z-index:0;pointer-events:none;opacity:.4}
+.c-massive::before{background:radial-gradient(ellipse at 20% 50%,rgba(53,104,63,.12),transparent 70%)}
+.c-winner::before{background:radial-gradient(ellipse at 20% 50%,rgba(94,117,87,.1),transparent 70%)}
+.c-mild::before{background:radial-gradient(ellipse at 20% 50%,rgba(167,124,46,.1),transparent 70%)}
+.c-fatigued::before{background:radial-gradient(ellipse at 20% 50%,rgba(193,68,0,.1),transparent 70%)}
+.c-testing::before{background:radial-gradient(ellipse at 20% 50%,rgba(79,103,128,.1),transparent 70%)}
+.c-loser::before{background:radial-gradient(ellipse at 20% 50%,rgba(168,59,40,.1),transparent 70%)}
+
+.c-left{position:relative;z-index:2}
+.c-num{font-family:'JetBrains Mono',monospace;font-size:13px;letter-spacing:.22em;text-transform:uppercase;color:var(--ink-3);margin-bottom:18px}
+.c-title{font-family:'Instrument Serif',serif;font-style:italic;font-size:clamp(90px,10vw,140px);line-height:.9;letter-spacing:-.03em;margin-bottom:28px}
+.c-massive .c-title{color:var(--emerald)}
+.c-winner .c-title{color:var(--sage)}
+.c-mild .c-title{color:var(--ochre)}
+.c-fatigued .c-title{color:var(--coral)}
+.c-testing .c-title{color:var(--dusk)}
+.c-loser .c-title{color:var(--rust)}
+.c-desc{font-size:15px;color:var(--ink-2);line-height:1.6;max-width:420px;margin-bottom:24px}
+.c-stats{display:flex;gap:36px;margin-top:30px}
+.c-stat{font-family:'JetBrains Mono',monospace}
+.c-stat-k{font-size:10px;text-transform:uppercase;letter-spacing:.2em;color:var(--ink-3);margin-bottom:6px}
+.c-stat-v{font-family:'Instrument Serif',serif;font-style:italic;font-size:34px;color:var(--ink);line-height:1}
+
+.c-right{position:relative;z-index:2;display:flex;flex-direction:column;gap:14px}
+.c-card{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:22px 26px;display:grid;grid-template-columns:56px 1fr auto;gap:18px;align-items:center;box-shadow:0 1px 2px rgba(0,0,0,.03);transition:transform .3s}
+.c-card:hover{transform:translateX(-4px);border-color:var(--line-hi)}
+.c-thumb{width:56px;height:56px;border-radius:12px}
+.ct-1{background:linear-gradient(135deg,#c05336,#e27a5c)}
+.ct-2{background:linear-gradient(135deg,#5e7557,#8aaa81)}
+.ct-3{background:linear-gradient(135deg,#a77c2e,#d2a554)}
+.ct-4{background:linear-gradient(135deg,#c14400,#e8734c)}
+.ct-5{background:linear-gradient(135deg,#4f6780,#7d95af)}
+.ct-6{background:linear-gradient(135deg,#35683f,#68a575)}
+.ct-7{background:linear-gradient(135deg,#00a3b8,#4ac6d4)}
+.ct-8{background:linear-gradient(135deg,#a83b28,#d1604c)}
+.c-info-nm{font-weight:600;font-size:15px;margin-bottom:4px;color:var(--ink)}
+.c-info-mt{font-size:12px;color:var(--ink-3);font-family:'JetBrains Mono',monospace;display:flex;gap:8px;flex-wrap:wrap}
+.c-info-mt span{padding:2px 8px;background:var(--surface-2);border-radius:999px}
+.c-roas{text-align:right}
+.c-roas-v{font-family:'Instrument Serif',serif;font-style:italic;font-size:48px;line-height:1}
+.c-roas-l{font-size:10px;text-transform:uppercase;letter-spacing:.2em;color:var(--ink-3);margin-top:4px;font-family:'JetBrains Mono',monospace}
+.c-roas-s{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--ink-3);margin-top:6px}
+.c-massive .c-roas-v{color:var(--emerald)}
+.c-winner .c-roas-v{color:var(--sage)}
+.c-mild .c-roas-v{color:var(--ochre)}
+.c-fatigued .c-roas-v{color:var(--coral)}
+.c-testing .c-roas-v{color:var(--dusk)}
+.c-loser .c-roas-v{color:var(--rust)}
+
+/* Outro */
+.outro{height:100vh;scroll-snap-align:start;display:grid;place-items:center;padding:0 80px;background:linear-gradient(to bottom,var(--canvas),var(--surface-2))}
+.outro-inner{text-align:center;max-width:800px}
+.outro-title{font-family:'Instrument Serif',serif;font-style:italic;font-size:clamp(56px,8vw,120px);line-height:.95;margin-bottom:30px}
+.outro-btn{display:inline-flex;gap:10px;padding:16px 28px;background:var(--ink);color:#fff;border-radius:999px;font-weight:600;font-size:14px;margin-top:20px}
+</style>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="nav-brand">
+    <div class="nav-logo">I</div>
+    <span style="font-weight:600;letter-spacing:-.01em">Immuvi</span>
+    <span style="opacity:.5;font-size:12px;margin-left:4px">Command Center</span>
+  </div>
+  <div class="nav-tabs">
+    <div class="nav-tab">Command HQ</div>
+    <div class="nav-tab">Angles</div>
+    <div class="nav-tab">Personas</div>
+    <div class="nav-tab active">Creative Tracker</div>
+    <div class="nav-tab">Creative Matrix</div>
+  </div>
+  <div class="nav-user">
+    <span class="mono" style="font-size:12px">⌘K</span>
+    <div class="nav-avatar">GP</div>
+  </div>
+</nav>
+
+<div class="rail" id="rail">
+  <div class="rail-dot" data-idx="0"></div>
+  <div class="rail-dot" data-idx="1"></div>
+  <div class="rail-dot" data-idx="2"></div>
+  <div class="rail-dot" data-idx="3"></div>
+  <div class="rail-dot" data-idx="4"></div>
+  <div class="rail-dot" data-idx="5"></div>
+  <div class="rail-dot" data-idx="6"></div>
+</div>
+<div class="scrolly">Scroll <span class="scrolly-num" id="chapterNum">00</span> / 06</div>
+
+<!-- INTRO -->
+<section class="intro" data-idx="0" data-label="Overview">
+  <div class="intro-inner">
+    <div class="intro-kicker"><span class="dot"></span>Creative Tracker · 66 ads · 6 tiers</div>
+    <h1 class="intro-title">Six tiers.<br>One <em>scroll.</em></h1>
+    <p class="intro-sub">Every ad in the account, sorted top to bottom by performance tier. Each chapter is a tier. Each row is a creative earning its place. Scroll down to tour them.</p>
+    <div class="intro-meta">
+      <div class="intro-m"><div class="intro-m-k">Creatives</div><div class="intro-m-v">66</div></div>
+      <div class="intro-m"><div class="intro-m-k">Spend 7d</div><div class="intro-m-v">$12.4k</div></div>
+      <div class="intro-m"><div class="intro-m-k">Blended ROAS</div><div class="intro-m-v">1.38×</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- 01 MASSIVE -->
+<section class="chapter c-massive" data-idx="1" data-label="Massive">
+  <div class="c-left">
+    <div class="c-num">Chapter 01</div>
+    <h2 class="c-title">Massive.</h2>
+    <p class="c-desc">The ROAS outliers. Ads spending hundreds a day and returning two dollars for every one. Don't touch them — scale them.</p>
+    <div class="c-stats">
+      <div class="c-stat"><div class="c-stat-k">Count</div><div class="c-stat-v">1</div></div>
+      <div class="c-stat"><div class="c-stat-k">Spend</div><div class="c-stat-v">$1.8k</div></div>
+      <div class="c-stat"><div class="c-stat-k">Avg ROAS</div><div class="c-stat-v">1.92×</div></div>
+    </div>
+  </div>
+  <div class="c-right">
+    <div class="c-card">
+      <div class="c-thumb ct-1"></div>
+      <div><div class="c-info-nm">5773-1 old winner</div><div class="c-info-mt"><span>AT-11439-v1</span><span>Art as Therapy</span><span>POV</span><span>UGC · TOF</span></div></div>
+      <div class="c-roas"><div class="c-roas-v">1.92×</div><div class="c-roas-l">ROAS 7d</div><div class="c-roas-s">$1,842 spend</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- 02 WINNER -->
+<section class="chapter c-winner" data-idx="2" data-label="Winner">
+  <div class="c-left">
+    <div class="c-num">Chapter 02</div>
+    <h2 class="c-title">Winners.</h2>
+    <p class="c-desc">Solid performers above blended. Keep them funded and find their siblings — similar angle, similar persona, variations ready.</p>
+    <div class="c-stats">
+      <div class="c-stat"><div class="c-stat-k">Count</div><div class="c-stat-v">18</div></div>
+      <div class="c-stat"><div class="c-stat-k">Spend</div><div class="c-stat-v">$4.1k</div></div>
+      <div class="c-stat"><div class="c-stat-k">Avg ROAS</div><div class="c-stat-v">1.47×</div></div>
+    </div>
+  </div>
+  <div class="c-right">
+    <div class="c-card">
+      <div class="c-thumb ct-2"></div>
+      <div><div class="c-info-nm">4570-1 old winner</div><div class="c-info-mt"><span>AT-10835</span><span>Emotional Literacy</span><span>Curiosity</span><span>Static · TOF</span></div></div>
+      <div class="c-roas"><div class="c-roas-v">1.54×</div><div class="c-roas-l">ROAS 7d</div><div class="c-roas-s">$806 spend</div></div>
+    </div>
+    <div class="c-card">
+      <div class="c-thumb ct-6"></div>
+      <div><div class="c-info-nm">11591 new concept</div><div class="c-info-mt"><span>AT-11591</span><span>Emotional Literacy</span><span>Pain</span><span>Story · TOF</span></div></div>
+      <div class="c-roas"><div class="c-roas-v">1.46×</div><div class="c-roas-l">ROAS 7d</div><div class="c-roas-s">$624 spend</div></div>
+    </div>
+    <div class="c-card">
+      <div class="c-thumb ct-7"></div>
+      <div><div class="c-info-nm">11542 social proof</div><div class="c-info-mt"><span>AT-11542</span><span>Social Proof 18K</span><span>Testimonial</span><span>UGC · TOF</span></div></div>
+      <div class="c-roas"><div class="c-roas-v">1.41×</div><div class="c-roas-l">ROAS 7d</div><div class="c-roas-s">$488 spend</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- 03 MILD -->
+<section class="chapter c-mild" data-idx="3" data-label="Mild">
+  <div class="c-left">
+    <div class="c-num">Chapter 03</div>
+    <h2 class="c-title">Mild.</h2>
+    <p class="c-desc">Near blended, not below. Worth testing small budget variations before retiring. These are the coin-flips.</p>
+    <div class="c-stats">
+      <div class="c-stat"><div class="c-stat-k">Count</div><div class="c-stat-v">12</div></div>
+      <div class="c-stat"><div class="c-stat-k">Spend</div><div class="c-stat-v">$2.2k</div></div>
+      <div class="c-stat"><div class="c-stat-k">Avg ROAS</div><div class="c-stat-v">1.28×</div></div>
+    </div>
+  </div>
+  <div class="c-right">
+    <div class="c-card">
+      <div class="c-thumb ct-3"></div>
+      <div><div class="c-info-nm">4569-2 old winner</div><div class="c-info-mt"><span>AT-10834</span><span>Scarcity</span><span>Pattern Interrupt</span><span>Static · TOF</span></div></div>
+      <div class="c-roas"><div class="c-roas-v">1.33×</div><div class="c-roas-l">ROAS 7d</div><div class="c-roas-s">$412 spend</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- 04 FATIGUED -->
+<section class="chapter c-fatigued" data-idx="4" data-label="Fatigued">
+  <div class="c-left">
+    <div class="c-num">Chapter 04</div>
+    <h2 class="c-title">Fatigued.</h2>
+    <p class="c-desc">Previously a winner. ROAS fading week-over-week. Rotate out, save the learning, greenlight variations on the winning angle.</p>
+    <div class="c-stats">
+      <div class="c-stat"><div class="c-stat-k">Count</div><div class="c-stat-v">3</div></div>
+      <div class="c-stat"><div class="c-stat-k">Spend</div><div class="c-stat-v">$1.8k</div></div>
+      <div class="c-stat"><div class="c-stat-k">WoW</div><div class="c-stat-v">-38%</div></div>
+    </div>
+  </div>
+  <div class="c-right">
+    <div class="c-card">
+      <div class="c-thumb ct-4"></div>
+      <div><div class="c-info-nm">10785-2 old winner</div><div class="c-info-mt"><span>AT-10733</span><span>Scarcity</span><span>Pattern Interrupt</span><span>Static · TOF</span></div></div>
+      <div class="c-roas"><div class="c-roas-v">0.98×</div><div class="c-roas-l">ROAS 7d · -42% WoW</div><div class="c-roas-s">$1,205 spend</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- 05 TESTING -->
+<section class="chapter c-testing" data-idx="5" data-label="Testing">
+  <div class="c-left">
+    <div class="c-num">Chapter 05</div>
+    <h2 class="c-title">Testing.</h2>
+    <p class="c-desc">Less than $50 spend or under 48 hours live. Not enough signal yet — give them air and check back tomorrow.</p>
+    <div class="c-stats">
+      <div class="c-stat"><div class="c-stat-k">Count</div><div class="c-stat-v">9</div></div>
+      <div class="c-stat"><div class="c-stat-k">Spend</div><div class="c-stat-v">$180</div></div>
+      <div class="c-stat"><div class="c-stat-k">Live</div><div class="c-stat-v">&lt;48h</div></div>
+    </div>
+  </div>
+  <div class="c-right">
+    <div class="c-card">
+      <div class="c-thumb ct-5"></div>
+      <div><div class="c-info-nm">6197-1 old winner</div><div class="c-info-mt"><span>AT-10612</span><span>Scarcity</span><span>Direct Offer</span><span>Static · TOF</span></div></div>
+      <div class="c-roas"><div class="c-roas-v" style="font-size:38px">—</div><div class="c-roas-l">Insufficient data</div><div class="c-roas-s">$28 spend · 19h live</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- 06 LOSER -->
+<section class="chapter c-loser" data-idx="6" data-label="Loser">
+  <div class="c-left">
+    <div class="c-num">Chapter 06</div>
+    <h2 class="c-title">Losers.</h2>
+    <p class="c-desc">Below 0.6× with enough data to call it. Kill, note the failure pattern in the matrix, save the production budget.</p>
+    <div class="c-stats">
+      <div class="c-stat"><div class="c-stat-k">Count</div><div class="c-stat-v">23</div></div>
+      <div class="c-stat"><div class="c-stat-k">Spend</div><div class="c-stat-v">$2.1k</div></div>
+      <div class="c-stat"><div class="c-stat-k">Avg ROAS</div><div class="c-stat-v">0.48×</div></div>
+    </div>
+  </div>
+  <div class="c-right">
+    <div class="c-card">
+      <div class="c-thumb ct-8"></div>
+      <div><div class="c-info-nm">11436 new concept</div><div class="c-info-mt"><span>AT-11436</span><span>Calm / Unwind</span><span>Curiosity</span><span>Hook+Offer · TOF</span></div></div>
+      <div class="c-roas"><div class="c-roas-v">0.42×</div><div class="c-roas-l">ROAS 7d</div><div class="c-roas-s">$187 spend</div></div>
+    </div>
+  </div>
+</section>
+
+<section class="outro">
+  <div class="outro-inner">
+    <h2 class="outro-title">That's <em class="serif">66</em>.<br>Back to the top?</h2>
+    <p style="color:var(--ink-2);font-size:16px;margin-top:16px">Six chapters, one scroll. Refresh in 4 hours — Meta attribution updates at the top of every window.</p>
+    <a class="outro-btn" href="#" onclick="window.scrollTo({top:0,behavior:'smooth'});return false">↑ Top of the tracker</a>
+  </div>
+</section>
+
+<script>
+const dots = document.querySelectorAll('.rail-dot');
+const sections = document.querySelectorAll('[data-idx]');
+const chNum = document.getElementById('chapterNum');
+const labels = ['Overview','Massive','Winner','Mild','Fatigued','Testing','Loser'];
+const io = new IntersectionObserver((entries) => {
+  entries.forEach(e => {
+    if (e.isIntersecting && e.intersectionRatio > 0.5) {
+      const idx = parseInt(e.target.dataset.idx);
+      dots.forEach(d => d.classList.toggle('active', parseInt(d.dataset.idx) === idx));
+      chNum.textContent = String(idx).padStart(2,'0');
+    }
+  });
+}, { threshold: [0.5] });
+sections.forEach(s => io.observe(s));
+dots.forEach(d => {
+  const lbl = document.createElement('span');
+  lbl.className = 'rail-label';
+  lbl.textContent = labels[parseInt(d.dataset.idx)];
+  d.appendChild(lbl);
+  d.addEventListener('click', () => {
+    sections[parseInt(d.dataset.idx)].scrollIntoView({behavior:'smooth'});
+  });
+});
+</script>
+</body>
+</html>

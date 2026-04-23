@@ -1,0 +1,656 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Layout 13 — Gallery grid</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+<style>
+:root {
+  --paper:   #faf9f5;
+  --paper-2: #f3f1e9;
+  --surface: #ffffff;
+  --line:    #e8e5dc;
+  --line-hi: #d6d1c1;
+  --ink:     #1a1814;
+  --ink-2:   #585449;
+  --ink-3:   #8f8a7c;
+  --ink-4:   #b8b3a2;
+  --accent:  #c05336;
+  --sage:    #5e7557;
+  --ochre:   #a77c2e;
+  --rust:    #a83b28;
+  --dusk:    #4f6780;
+  --emerald: #35683f;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { background: var(--paper); color: var(--ink); min-height: 100vh; }
+body {
+  font-family: 'Inter', sans-serif;
+  font-size: 13px; line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Top */
+.top {
+  height: 54px; padding: 0 24px;
+  display: flex; align-items: center; gap: 14px;
+  border-bottom: 1px solid var(--line);
+  background: var(--paper);
+  position: sticky; top: 0; z-index: 10;
+}
+.brand { font-family: 'Instrument Serif', serif; font-style: italic; font-size: 22px; }
+.brand em { color: var(--accent); }
+.sep-v { width: 1px; height: 20px; background: var(--line); }
+.crumb { font-size: 12.5px; color: var(--ink-2); display: flex; gap: 8px; align-items: center; }
+.crumb a { color: var(--ink-2); padding: 3px 7px; border-radius: 4px; cursor: pointer; text-decoration: none; }
+.crumb a:hover { background: var(--paper-2); }
+.crumb .s { color: var(--ink-4); font-size: 10px; }
+.top .right { margin-left: auto; display: flex; gap: 10px; align-items: center; }
+.view-toggle { display: flex; gap: 1px; padding: 2px; background: var(--paper-2); border-radius: 6px; }
+.view-toggle span {
+  padding: 5px 11px; border-radius: 4px; cursor: pointer; color: var(--ink-3);
+  font-family: 'JetBrains Mono', monospace; font-size: 10.5px; font-weight: 500;
+  letter-spacing: 0.04em; text-transform: uppercase;
+}
+.view-toggle span.on { background: var(--surface); color: var(--ink); box-shadow: 0 1px 2px rgba(0,0,0,.05); }
+
+.btn {
+  height: 30px; padding: 0 12px;
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: 6px; font-family: inherit; font-size: 12.5px; font-weight: 500;
+  color: var(--ink); cursor: pointer;
+  display: inline-flex; align-items: center; gap: 6px;
+}
+.btn:hover { background: var(--paper-2); }
+.btn-p { background: var(--accent); color: white; border-color: var(--accent); }
+
+/* Page head */
+.ph {
+  padding: 28px 32px 20px;
+  display: flex; flex-wrap: wrap; align-items: flex-end; gap: 20px;
+  border-bottom: 1px solid var(--line);
+}
+.ph h1 {
+  font-family: 'Instrument Serif', serif;
+  font-style: italic; font-weight: 400;
+  font-size: 44px; letter-spacing: -0.025em;
+  line-height: 1;
+}
+.ph .meta {
+  font-size: 13px; color: var(--ink-3);
+  padding-bottom: 4px;
+}
+
+/* Filter row */
+.filters {
+  padding: 14px 32px;
+  display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+  border-bottom: 1px solid var(--line);
+  background: var(--paper);
+  position: sticky; top: 54px; z-index: 5;
+}
+.search {
+  flex: 1; min-width: 220px; position: relative;
+}
+.search input {
+  width: 100%; height: 32px;
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: 6px; padding: 0 12px 0 32px;
+  font-family: inherit; font-size: 12.5px; color: var(--ink);
+  outline: none;
+}
+.search::before {
+  content: '⌕'; position: absolute; left: 11px; top: 50%; transform: translateY(-50%);
+  color: var(--ink-4);
+}
+.search input:focus { border-color: var(--accent); }
+
+.fchip {
+  height: 30px; padding: 0 11px;
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: 5px;
+  font-size: 12px; color: var(--ink-2); cursor: pointer;
+  display: inline-flex; align-items: center; gap: 5px;
+}
+.fchip:hover { background: var(--paper-2); }
+.fchip.on { background: var(--ink); color: white; border-color: var(--ink); }
+.fchip .ch { font-size: 9px; color: inherit; opacity: 0.6; }
+
+.sort-dd {
+  margin-left: auto;
+  height: 30px; padding: 0 11px;
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: 5px; font-size: 12px;
+  display: inline-flex; align-items: center; gap: 6px;
+  color: var(--ink-2); cursor: pointer;
+}
+
+.size-toggle {
+  display: flex; gap: 1px;
+  padding: 2px; background: var(--paper-2); border-radius: 5px;
+}
+.size-toggle span {
+  padding: 4px 9px; font-size: 11px;
+  color: var(--ink-3); cursor: pointer;
+  border-radius: 3px;
+  font-family: 'JetBrains Mono', monospace;
+  letter-spacing: 0.04em;
+}
+.size-toggle span.on { background: var(--surface); color: var(--ink); box-shadow: 0 1px 1px rgba(0,0,0,.05); }
+
+/* Gallery grid */
+.gallery {
+  padding: 24px 32px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 20px;
+}
+
+.g-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  overflow: hidden;
+  transition: transform .15s, box-shadow .15s, border-color .15s;
+  cursor: pointer;
+  display: flex; flex-direction: column;
+}
+.g-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 10px 28px rgba(26,24,20,.08);
+  border-color: var(--line-hi);
+}
+
+/* Thumb — 4:5 vertical ratio like FB reels */
+.g-thumb {
+  aspect-ratio: 9 / 10;
+  position: relative;
+  overflow: hidden;
+  background: var(--ink);
+  border-bottom: 1px solid var(--line);
+}
+.g-thumb::before {
+  content: ''; position: absolute; inset: 0;
+  background:
+    radial-gradient(ellipse 70% 50% at 50% 40%, rgba(192,83,54,0.4), transparent),
+    radial-gradient(ellipse 60% 40% at 80% 70%, rgba(94,117,87,0.3), transparent);
+}
+.g-thumb::after {
+  content: '▶'; position: absolute; inset: 0;
+  display: grid; place-items: center;
+  color: rgba(255,255,255,.8); font-size: 28px;
+  text-shadow: 0 1px 4px rgba(0,0,0,.3);
+}
+.g-thumb.photo { background: var(--paper-2); }
+.g-thumb.photo::before {
+  background:
+    radial-gradient(ellipse 70% 50% at 30% 40%, rgba(94,117,87,0.25), transparent),
+    radial-gradient(ellipse 60% 40% at 80% 70%, rgba(167,124,46,0.2), transparent);
+}
+.g-thumb.photo::after { content: '◈'; color: var(--sage); text-shadow: none; }
+
+.g-thumb.ai::before {
+  background: repeating-linear-gradient(135deg, rgba(192,83,54,0.15) 0 4px, transparent 4px 8px),
+              radial-gradient(ellipse 60% 40% at 50% 50%, rgba(79,103,128,0.3), transparent);
+}
+
+/* Status badge overlay */
+.g-status {
+  position: absolute; top: 12px; left: 12px;
+  padding: 4px 10px;
+  background: var(--surface);
+  border-radius: 5px;
+  font-size: 11px; font-weight: 600;
+  letter-spacing: -0.005em;
+  display: inline-flex; align-items: center; gap: 6px;
+  box-shadow: 0 1px 3px rgba(0,0,0,.12);
+}
+.g-status .d { width: 6px; height: 6px; border-radius: 50%; }
+.g-status.massive { color: var(--emerald); } .g-status.massive .d { background: var(--emerald); }
+.g-status.winner  { color: var(--sage); } .g-status.winner .d { background: var(--sage); }
+.g-status.mild    { color: var(--ochre); } .g-status.mild .d { background: var(--ochre); }
+.g-status.fatigue { color: var(--accent); } .g-status.fatigue .d { background: var(--accent); }
+.g-status.testing { color: var(--dusk); } .g-status.testing .d { background: var(--dusk); }
+.g-status.loser   { color: var(--rust); } .g-status.loser .d { background: var(--rust); }
+.g-status.massive::after { content: '◆'; font-size: 9px; margin-left: 1px; }
+
+/* ROAS overlay (top right) */
+.g-roas {
+  position: absolute; top: 12px; right: 12px;
+  padding: 6px 10px 5px;
+  background: rgba(26, 24, 20, 0.75);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  border-radius: 6px;
+  color: white;
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 700;
+  font-size: 13.5px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  letter-spacing: -0.01em;
+}
+.g-roas .sub {
+  display: block;
+  font-size: 9px;
+  font-weight: 500;
+  color: rgba(255,255,255,.65);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  margin-top: 2px;
+}
+.g-roas.massive { background: rgba(53,104,63,0.85); }
+.g-roas.winner  { background: rgba(94,117,87,0.85); }
+.g-roas.mild    { background: rgba(167,124,46,0.85); }
+.g-roas.fatigue { background: rgba(192,83,54,0.85); }
+.g-roas.loser   { background: rgba(168,59,40,0.85); }
+
+/* Spend ticker bottom */
+.g-ticker {
+  position: absolute;
+  left: 12px; right: 12px; bottom: 12px;
+  display: flex; align-items: center; gap: 8px;
+  padding: 5px 9px 4px;
+  background: rgba(255,255,255,0.92);
+  backdrop-filter: blur(8px);
+  border-radius: 5px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10.5px;
+  color: var(--ink);
+}
+.g-ticker .spend {
+  font-weight: 700; color: var(--ink);
+  font-size: 11.5px;
+}
+.g-ticker .days {
+  margin-left: auto;
+  color: var(--ink-3);
+}
+.g-ticker .spark { flex: 1; height: 16px; }
+
+/* Info */
+.g-info { padding: 14px 16px 16px; flex: 1; display: flex; flex-direction: column; gap: 8px; }
+.g-nm {
+  font-weight: 600; font-size: 14.5px;
+  color: var(--ink); letter-spacing: -0.01em;
+  line-height: 1.3;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+.g-id {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10.5px; color: var(--ink-3);
+  letter-spacing: 0.02em;
+}
+.g-tags {
+  display: flex; flex-wrap: wrap; gap: 4px;
+  margin-top: 4px;
+}
+.g-tag {
+  font-size: 10.5px;
+  padding: 2px 7px;
+  background: var(--paper-2);
+  border-radius: 3px;
+  color: var(--ink-2);
+  font-weight: 500;
+  letter-spacing: -0.005em;
+}
+.g-tag.accent { background: rgba(192,83,54,0.1); color: var(--accent); }
+.g-tag.sage   { background: rgba(94,117,87,0.12); color: var(--sage); }
+.g-tag.dusk   { background: rgba(79,103,128,0.12); color: var(--dusk); }
+
+.g-foot {
+  padding-top: 10px;
+  margin-top: auto;
+  border-top: 1px solid var(--line);
+  display: flex; align-items: center; gap: 6px;
+  font-size: 11px;
+  color: var(--ink-3);
+  font-family: 'JetBrains Mono', monospace;
+}
+.g-foot a {
+  color: var(--ink-3); text-decoration: none;
+  padding: 3px 5px; border-radius: 3px;
+  display: inline-flex; align-items: center;
+}
+.g-foot a:hover { background: var(--paper-2); color: var(--accent); }
+.g-foot .date { margin-left: auto; }
+
+/* Summary bar (sticky top) — optional stats strip */
+.stats-bar {
+  display: flex;
+  gap: 36px;
+  padding: 16px 32px;
+  background: var(--paper);
+  border-bottom: 1px solid var(--line);
+  align-items: baseline;
+}
+.stat .l {
+  font-size: 10.5px; color: var(--ink-3);
+  letter-spacing: 0.08em; text-transform: uppercase;
+  font-weight: 500;
+}
+.stat .v {
+  font-family: 'Instrument Serif', serif;
+  font-style: italic; font-weight: 400;
+  font-size: 26px; letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  margin-top: 2px;
+}
+.stat .d {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10.5px; color: var(--sage);
+  margin-left: 6px;
+}
+.stat .d.down { color: var(--accent); }
+</style>
+</head>
+<body>
+
+<div class="top">
+  <div class="brand"><em>Immuvi.</em></div>
+  <div class="sep-v"></div>
+  <div class="crumb">
+    <a>Art Therapy</a><span class="s">›</span>
+    <a>Creative Tracker</a>
+  </div>
+  <div class="right">
+    <div class="view-toggle">
+      <span>Table</span><span>Board</span><span class="on">Gallery</span><span>Matrix</span><span>Timeline</span>
+    </div>
+    <div class="sep-v"></div>
+    <button class="btn">⇡ Push</button>
+    <button class="btn btn-p">+ Add Creative</button>
+  </div>
+</div>
+
+<div class="ph">
+  <h1><em>Creative</em> Gallery</h1>
+  <div class="meta">66 creatives · visual-first browse · live metrics from Meta</div>
+</div>
+
+<div class="stats-bar">
+  <div class="stat">
+    <div class="l">Creatives</div>
+    <div class="v">66 <span class="d">+3</span></div>
+  </div>
+  <div class="stat">
+    <div class="l">Winners</div>
+    <div class="v">18 <span class="d">+2</span></div>
+  </div>
+  <div class="stat">
+    <div class="l">Fatigued</div>
+    <div class="v">3 <span class="d down">+1</span></div>
+  </div>
+  <div class="stat">
+    <div class="l">Spend 7d</div>
+    <div class="v">$12.4k <span class="d">+18%</span></div>
+  </div>
+  <div class="stat">
+    <div class="l">ROAS</div>
+    <div class="v">1.38× <span class="d">+0.04</span></div>
+  </div>
+</div>
+
+<div class="filters">
+  <div class="search"><input placeholder="Search creatives…"></div>
+  <span class="fchip on">Winners <span class="ch">▾</span></span>
+  <span class="fchip">All Angles <span class="ch">▾</span></span>
+  <span class="fchip">All Personas <span class="ch">▾</span></span>
+  <span class="fchip">Video <span class="ch">▾</span></span>
+  <span class="fchip">Photo <span class="ch">▾</span></span>
+  <div class="sort-dd">Sort: Spend ↓ <span class="ch">▾</span></div>
+  <div class="size-toggle"><span>S</span><span class="on">M</span><span>L</span></div>
+</div>
+
+<div class="gallery">
+
+  <div class="g-card">
+    <div class="g-thumb">
+      <span class="g-status massive"><span class="d"></span>Massive</span>
+      <span class="g-roas massive">1.92×<span class="sub">ROAS 7d</span></span>
+      <div class="g-ticker">
+        <span class="spend">$1,842</span>
+        <svg class="spark" viewBox="0 0 100 16" preserveAspectRatio="none">
+          <polyline fill="none" stroke="#35683f" stroke-width="1.6" points="0,13 14,10 28,8 42,7 56,5 70,3 85,2 100,1"/>
+        </svg>
+        <span class="days">7d</span>
+      </div>
+    </div>
+    <div class="g-info">
+      <div>
+        <div class="g-nm">5773-1 old winner</div>
+        <div class="g-id">AT-11439-v1</div>
+      </div>
+      <div class="g-tags">
+        <span class="g-tag accent">Art as Therapy</span>
+        <span class="g-tag">Women 25-45</span>
+        <span class="g-tag">POV</span>
+        <span class="g-tag">UGC</span>
+      </div>
+      <div class="g-foot">
+        <a>↗ CU</a>
+        <a>📄 Brief</a>
+        <a>Drive</a>
+        <span class="date">21 Apr</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="g-card">
+    <div class="g-thumb photo">
+      <span class="g-status winner"><span class="d"></span>Winner</span>
+      <span class="g-roas winner">1.54×<span class="sub">ROAS 7d</span></span>
+      <div class="g-ticker">
+        <span class="spend">$806</span>
+        <svg class="spark" viewBox="0 0 100 16" preserveAspectRatio="none">
+          <polyline fill="none" stroke="#5e7557" stroke-width="1.6" points="0,11 14,10 28,9 42,10 56,8 70,7 85,6 100,5"/>
+        </svg>
+        <span class="days">7d</span>
+      </div>
+    </div>
+    <div class="g-info">
+      <div>
+        <div class="g-nm">4570-1 old winner</div>
+        <div class="g-id">AT-10835</div>
+      </div>
+      <div class="g-tags">
+        <span class="g-tag accent">Emotional Literacy</span>
+        <span class="g-tag">Women 25-45</span>
+        <span class="g-tag">Curiosity</span>
+      </div>
+      <div class="g-foot">
+        <a>↗ CU</a>
+        <a>📄 Brief</a>
+        <span class="date">19 Apr</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="g-card">
+    <div class="g-thumb photo">
+      <span class="g-status mild"><span class="d"></span>Mild</span>
+      <span class="g-roas mild">1.33×<span class="sub">ROAS 7d</span></span>
+      <div class="g-ticker">
+        <span class="spend">$412</span>
+        <svg class="spark" viewBox="0 0 100 16" preserveAspectRatio="none">
+          <polyline fill="none" stroke="#a77c2e" stroke-width="1.6" points="0,9 14,10 28,8 42,9 56,10 70,8 85,9 100,8"/>
+        </svg>
+        <span class="days">7d</span>
+      </div>
+    </div>
+    <div class="g-info">
+      <div>
+        <div class="g-nm">4569-2 old winner</div>
+        <div class="g-id">AT-10834</div>
+      </div>
+      <div class="g-tags">
+        <span class="g-tag accent">Scarcity</span>
+        <span class="g-tag">Women 25-45</span>
+        <span class="g-tag">Pattern Interrupt</span>
+      </div>
+      <div class="g-foot">
+        <a>↗ CU</a>
+        <a>📄 Brief</a>
+        <span class="date">18 Apr</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="g-card">
+    <div class="g-thumb photo">
+      <span class="g-status fatigue"><span class="d"></span>Fatigued</span>
+      <span class="g-roas fatigue">0.98×<span class="sub">WoW -42%</span></span>
+      <div class="g-ticker">
+        <span class="spend">$1,205</span>
+        <svg class="spark" viewBox="0 0 100 16" preserveAspectRatio="none">
+          <polyline fill="none" stroke="#c05336" stroke-width="1.6" points="0,4 14,5 28,7 42,8 56,10 70,11 85,13 100,14"/>
+        </svg>
+        <span class="days">7d</span>
+      </div>
+    </div>
+    <div class="g-info">
+      <div>
+        <div class="g-nm">10785-2 old winner</div>
+        <div class="g-id">AT-10733</div>
+      </div>
+      <div class="g-tags">
+        <span class="g-tag accent">Scarcity</span>
+        <span class="g-tag">Women 25-45</span>
+        <span class="g-tag">Pattern Interrupt</span>
+      </div>
+      <div class="g-foot">
+        <a>↗ CU</a>
+        <a>📄 Brief</a>
+        <span class="date">10 Apr</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="g-card">
+    <div class="g-thumb photo">
+      <span class="g-status testing"><span class="d"></span>Testing</span>
+      <span class="g-roas" style="background: rgba(79,103,128,0.85);">—<span class="sub">building data</span></span>
+      <div class="g-ticker">
+        <span class="spend">$28</span>
+        <svg class="spark" viewBox="0 0 100 16" preserveAspectRatio="none">
+          <polyline fill="none" stroke="#b8b3a2" stroke-width="1.2" stroke-dasharray="3 2" points="0,8 100,8"/>
+        </svg>
+        <span class="days">day 1</span>
+      </div>
+    </div>
+    <div class="g-info">
+      <div>
+        <div class="g-nm">6197-1 old winner</div>
+        <div class="g-id">AT-10612</div>
+      </div>
+      <div class="g-tags">
+        <span class="g-tag accent">Scarcity</span>
+        <span class="g-tag">Women 25-45</span>
+        <span class="g-tag">Direct Offer</span>
+      </div>
+      <div class="g-foot">
+        <a>↗ CU</a>
+        <a>📄 Brief</a>
+        <span class="date">21 Apr</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="g-card">
+    <div class="g-thumb ai">
+      <span class="g-status winner"><span class="d"></span>Winner</span>
+      <span class="g-roas winner">1.46×<span class="sub">ROAS 7d</span></span>
+      <div class="g-ticker">
+        <span class="spend">$624</span>
+        <svg class="spark" viewBox="0 0 100 16" preserveAspectRatio="none">
+          <polyline fill="none" stroke="#5e7557" stroke-width="1.6" points="0,12 14,11 28,10 42,9 56,8 70,6 85,5 100,4"/>
+        </svg>
+        <span class="days">7d</span>
+      </div>
+    </div>
+    <div class="g-info">
+      <div>
+        <div class="g-nm">11591 new concept (AI VO)</div>
+        <div class="g-id">AT-11591</div>
+      </div>
+      <div class="g-tags">
+        <span class="g-tag accent">Emotional Lit.</span>
+        <span class="g-tag dusk">Young Adults Grief</span>
+        <span class="g-tag">Pain / Problem</span>
+        <span class="g-tag">Story</span>
+      </div>
+      <div class="g-foot">
+        <a>↗ CU</a>
+        <a>📄 Brief</a>
+        <span class="date">20 Apr</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="g-card">
+    <div class="g-thumb photo">
+      <span class="g-status winner"><span class="d"></span>Winner</span>
+      <span class="g-roas winner">1.41×<span class="sub">ROAS 7d</span></span>
+      <div class="g-ticker">
+        <span class="spend">$488</span>
+        <svg class="spark" viewBox="0 0 100 16" preserveAspectRatio="none">
+          <polyline fill="none" stroke="#5e7557" stroke-width="1.6" points="0,11 14,10 28,9 42,9 56,8 70,7 85,7 100,6"/>
+        </svg>
+        <span class="days">7d</span>
+      </div>
+    </div>
+    <div class="g-info">
+      <div>
+        <div class="g-nm">11542 social proof photo</div>
+        <div class="g-id">AT-11542</div>
+      </div>
+      <div class="g-tags">
+        <span class="g-tag sage">Social Proof — 18K</span>
+        <span class="g-tag">Women 25-45</span>
+        <span class="g-tag">Testimonial</span>
+      </div>
+      <div class="g-foot">
+        <a>↗ CU</a>
+        <a>📄 Brief</a>
+        <span class="date">17 Apr</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="g-card">
+    <div class="g-thumb">
+      <span class="g-status loser"><span class="d"></span>Loser</span>
+      <span class="g-roas loser">0.42×<span class="sub">ROAS 7d</span></span>
+      <div class="g-ticker">
+        <span class="spend">$187</span>
+        <svg class="spark" viewBox="0 0 100 16" preserveAspectRatio="none">
+          <polyline fill="none" stroke="#a83b28" stroke-width="1.6" points="0,5 14,7 28,9 42,11 56,12 70,13 85,14 100,15"/>
+        </svg>
+        <span class="days">7d</span>
+      </div>
+    </div>
+    <div class="g-info">
+      <div>
+        <div class="g-nm">11436 new concept</div>
+        <div class="g-id">AT-11436</div>
+      </div>
+      <div class="g-tags">
+        <span class="g-tag accent">Calm / Unwind</span>
+        <span class="g-tag">Self-Care Adults</span>
+        <span class="g-tag">Curiosity</span>
+      </div>
+      <div class="g-foot">
+        <a>↗ CU</a>
+        <a>📄 Brief</a>
+        <span class="date">14 Apr</span>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+</body>
+</html>

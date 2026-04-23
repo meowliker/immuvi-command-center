@@ -1,0 +1,676 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Creative Tracker — Geist direction</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:           #0a0a0a;
+  --bg-2:         #111111;
+  --surface:      #181818;
+  --surface-hi:   #222222;
+  --line:         #262626;
+  --line-hi:      #363636;
+  --text:         #fafafa;
+  --text-2:       #a3a3a3;
+  --text-3:       #737373;
+  --text-4:       #525252;
+  --blue:         #0070f3;
+  --blue-ghost:   rgba(0,112,243,.14);
+  /* status — muted per Geist's aggressive-reduction rule */
+  --massive:      #34d399;
+  --winner:       #10b981;
+  --mild:         #eab308;
+  --fatigue:      #f97316;
+  --testing:      #3b82f6;
+  --loser:        #ef4444;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; background: var(--bg); }
+body {
+  color: var(--text);
+  font-family: 'Geist', 'Inter', -apple-system, sans-serif;
+  font-feature-settings: "cv11","ss01","ss02","ss03";
+  font-size: 13px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  min-height: 100vh;
+}
+.mono { font-family: 'Geist Mono', ui-monospace, monospace; }
+
+/* Sidebar */
+.sidebar {
+  background: var(--bg);
+  border-right: 1px solid var(--line);
+  padding: 14px 10px;
+  display: flex; flex-direction: column;
+  gap: 18px;
+  position: sticky; top: 0;
+  height: 100vh;
+}
+.brand {
+  padding: 0 10px;
+  display: flex; align-items: center; gap: 9px;
+  font-size: 14.5px; font-weight: 600;
+  letter-spacing: -0.015em;
+}
+.brand .mk {
+  width: 22px; height: 22px;
+  background: var(--text); color: var(--bg);
+  border-radius: 5px;
+  display: grid; place-items: center;
+  font-family: 'Geist Mono', monospace;
+  font-weight: 700;
+  font-size: 11px;
+}
+.picker {
+  margin: 0 4px;
+  height: 34px; padding: 0 10px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: flex; align-items: center; gap: 8px;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.picker:hover { background: var(--surface-hi); }
+.picker .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--blue); }
+.picker .chev { margin-left: auto; color: var(--text-4); }
+
+.nav-group { display: flex; flex-direction: column; gap: 1px; }
+.nav-group .h {
+  padding: 0 10px 6px;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--text-4);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.nav {
+  padding: 6px 10px;
+  font-size: 13px;
+  color: var(--text-2);
+  border-radius: 6px;
+  cursor: pointer;
+  display: flex; align-items: center;
+  height: 32px;
+  gap: 10px;
+  transition: background .1s;
+}
+.nav:hover { background: var(--surface); color: var(--text); }
+.nav.active { background: var(--surface); color: var(--text); font-weight: 500; }
+.nav.active::before {
+  content: ''; width: 3px; height: 14px; border-radius: 2px;
+  background: var(--blue);
+  margin-left: -10px;
+  margin-right: 7px;
+}
+.nav .ct {
+  margin-left: auto;
+  font-family: 'Geist Mono', monospace;
+  font-size: 10.5px;
+  color: var(--text-4);
+}
+.nav.active .ct { color: var(--text-2); }
+
+.sidebar .foot {
+  margin-top: auto;
+  padding: 10px;
+  border-top: 1px solid var(--line);
+  display: flex; align-items: center; gap: 8px;
+  font-family: 'Geist Mono', monospace;
+  font-size: 10.5px;
+  color: var(--text-3);
+}
+.sidebar .foot::before {
+  content: ''; width: 6px; height: 6px; border-radius: 50%;
+  background: var(--winner);
+  box-shadow: 0 0 6px var(--winner);
+}
+
+/* Main */
+main { min-width: 0; padding: 28px 32px 60px; }
+
+.page-head { display: flex; align-items: center; gap: 14px; margin-bottom: 22px; }
+.page-head h1 {
+  font-size: 28px; font-weight: 700;
+  letter-spacing: -0.025em;
+}
+.page-head .cnt {
+  font-family: 'Geist Mono', monospace;
+  font-size: 13px;
+  color: var(--text-3);
+  background: var(--surface);
+  padding: 3px 9px;
+  border-radius: 5px;
+  border: 1px solid var(--line);
+}
+.page-head .spacer { flex: 1; }
+.page-head .meta {
+  font-family: 'Geist Mono', monospace;
+  font-size: 11.5px;
+  color: var(--text-3);
+}
+
+.btn {
+  height: 32px; padding: 0 12px;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--text);
+  font-family: inherit; font-size: 12.5px; font-weight: 500;
+  cursor: pointer;
+  display: inline-flex; align-items: center; gap: 7px;
+  transition: background .1s, border-color .1s;
+}
+.btn:hover { background: var(--surface); border-color: var(--line-hi); }
+.btn-primary {
+  background: var(--blue); color: white;
+  border-color: var(--blue);
+}
+.btn-primary:hover { background: #0058c9; border-color: #0058c9; }
+
+/* KPI strip (stripe style) */
+.kpis {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 1px;
+  background: var(--line);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  margin-bottom: 24px;
+  overflow: hidden;
+}
+.kpi {
+  background: var(--bg);
+  padding: 14px 16px;
+}
+.kpi .l {
+  font-family: 'Geist Mono', monospace;
+  font-size: 11px;
+  color: var(--text-3);
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  margin-bottom: 6px;
+}
+.kpi .v {
+  font-size: 26px; font-weight: 700;
+  letter-spacing: -0.03em;
+  font-feature-settings: "tnum";
+  font-variant-numeric: tabular-nums;
+  display: flex; align-items: baseline; gap: 6px;
+}
+.kpi .unit { font-size: 13px; color: var(--text-3); font-weight: 500; }
+.kpi .d {
+  font-family: 'Geist Mono', monospace;
+  font-size: 11.5px;
+  color: var(--winner);
+  margin-top: 2px;
+}
+.kpi .d.down { color: var(--loser); }
+.kpi .d.flat { color: var(--text-3); }
+
+/* Filter bar */
+.filters {
+  display: flex; flex-wrap: wrap; gap: 6px; align-items: center;
+  margin-bottom: 16px;
+}
+.search {
+  flex: 1; min-width: 240px;
+  position: relative;
+}
+.search input {
+  width: 100%; height: 32px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 0 40px 0 32px;
+  color: var(--text);
+  font-family: inherit; font-size: 13px;
+  outline: none;
+}
+.search input::placeholder { color: var(--text-4); }
+.search input:focus {
+  border-color: var(--blue);
+  background: var(--bg);
+  box-shadow: 0 0 0 3px var(--blue-ghost);
+}
+.search::before {
+  content: '⌕'; position: absolute; left: 11px; top: 50%; transform: translateY(-50%);
+  color: var(--text-4); font-size: 13px;
+}
+.search .kbd {
+  position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
+  font-family: 'Geist Mono', monospace; font-size: 10px;
+  color: var(--text-4);
+  border: 1px solid var(--line);
+  padding: 1px 5px; border-radius: 3px;
+  background: var(--surface-hi);
+}
+.chip {
+  height: 30px; padding: 0 10px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font-size: 12px;
+  color: var(--text-2);
+  cursor: pointer;
+  display: inline-flex; align-items: center; gap: 5px;
+  white-space: nowrap;
+}
+.chip:hover { background: var(--surface-hi); color: var(--text); }
+.chip.active {
+  color: var(--blue);
+  background: var(--blue-ghost);
+  border-color: transparent;
+}
+.chip .ch { color: var(--text-4); font-size: 9px; }
+
+/* Table */
+.t-wrap { border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+table.t {
+  width: 100%;
+  border-collapse: separate; border-spacing: 0;
+  font-size: 12.5px;
+}
+table.t thead th {
+  text-align: left;
+  padding: 10px 14px;
+  font-family: 'Geist Mono', monospace;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--text-3);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  background: var(--bg-2);
+  border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+}
+table.t thead th.num { text-align: right; }
+table.t tbody td {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--line);
+  color: var(--text);
+  vertical-align: middle;
+  white-space: nowrap;
+}
+table.t tbody tr { cursor: pointer; transition: background .1s; }
+table.t tbody tr:hover { background: var(--bg-2); }
+table.t tbody tr:last-child td { border-bottom: none; }
+
+/* Creative cell */
+.cc { display: flex; align-items: center; gap: 12px; }
+.thm {
+  width: 36px; height: 36px;
+  border-radius: 5px;
+  flex-shrink: 0;
+  background: var(--surface-hi);
+  position: relative;
+  overflow: hidden;
+  border: 1px solid var(--line-hi);
+}
+.thm::after {
+  content: '▶'; position: absolute; inset: 0;
+  display: grid; place-items: center;
+  color: var(--text-2); font-size: 11px;
+}
+.thm.photo::after { content: '◈'; color: var(--text-2); }
+.cc .name {
+  font-weight: 500; color: var(--text);
+  font-size: 13px; letter-spacing: -0.005em;
+}
+.cc .sub {
+  font-family: 'Geist Mono', monospace;
+  font-size: 11px;
+  color: var(--text-3);
+  margin-top: 2px;
+}
+.cc .sub a { color: var(--text-3); text-decoration: none; }
+.cc .sub a:hover { color: var(--blue); }
+
+/* Tags — geist style: uppercase labels, no colors unless meaningful */
+.tag {
+  display: inline-block;
+  padding: 2px 7px;
+  font-size: 11px;
+  font-weight: 500;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  color: var(--text-2);
+  letter-spacing: -0.005em;
+}
+
+/* Status — dot + label, no heavy backgrounds (geist style) */
+.st {
+  display: inline-flex; align-items: center; gap: 7px;
+  font-size: 12px; font-weight: 500;
+}
+.st .d {
+  width: 6px; height: 6px; border-radius: 50%;
+}
+.st.massive { color: var(--massive); }
+.st.massive .d { background: var(--massive); box-shadow: 0 0 8px rgba(52,211,153,.4); }
+.st.winner  { color: var(--winner); }
+.st.winner  .d { background: var(--winner); }
+.st.mild    { color: var(--mild); }
+.st.mild    .d { background: var(--mild); }
+.st.fatigue { color: var(--fatigue); }
+.st.fatigue .d { background: var(--fatigue); }
+.st.testing { color: var(--testing); }
+.st.testing .d { background: var(--testing); }
+.st.loser   { color: var(--loser); }
+.st.loser   .d { background: var(--loser); }
+
+.funnel {
+  font-family: 'Geist Mono', monospace;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--text-2);
+  letter-spacing: 0.04em;
+  padding: 1px 5px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+}
+
+/* Numbers */
+.n {
+  text-align: right;
+  font-family: 'Geist Mono', monospace;
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+  color: var(--text);
+  font-weight: 500;
+}
+.n.roas { font-weight: 600; }
+.n.roas.up { color: var(--winner); }
+.n.roas.massive { color: var(--massive); }
+.n.roas.mild { color: var(--mild); }
+.n.roas.down { color: var(--fatigue); }
+.n.roas.loser { color: var(--loser); }
+.n.dim { color: var(--text-4); }
+
+.spark-cell { width: 80px; }
+.spark-cell svg { display: block; }
+
+.date {
+  font-family: 'Geist Mono', monospace;
+  font-size: 11px;
+  color: var(--text-3);
+}
+
+.links { display: inline-flex; gap: 2px; }
+.links a {
+  width: 26px; height: 26px;
+  display: grid; place-items: center;
+  border-radius: 5px;
+  color: var(--text-3);
+  text-decoration: none;
+  font-size: 12px;
+  transition: color .12s, background .12s;
+}
+.links a:hover { background: var(--surface); color: var(--blue); }
+</style>
+</head>
+<body>
+
+<aside class="sidebar">
+  <div class="brand">
+    <div class="mk">I</div>
+    immuvi
+  </div>
+  <div class="picker">
+    <span class="dot"></span>
+    Art Therapy
+    <span class="chev">▾</span>
+  </div>
+
+  <div class="nav-group">
+    <div class="h">Overview</div>
+    <div class="nav">Command HQ</div>
+  </div>
+  <div class="nav-group">
+    <div class="h">Taxonomy</div>
+    <div class="nav">Angles <span class="ct">7</span></div>
+    <div class="nav">Personas <span class="ct">5</span></div>
+  </div>
+  <div class="nav-group">
+    <div class="h">Creatives</div>
+    <div class="nav active">Creative Tracker <span class="ct">66</span></div>
+    <div class="nav">Creative Matrix <span class="ct">19/35</span></div>
+    <div class="nav">Inspiration <span class="ct">0</span></div>
+  </div>
+  <div class="nav-group">
+    <div class="h">Operations</div>
+    <div class="nav">Action Plan <span class="ct">3</span></div>
+    <div class="nav">Production <span class="ct">3</span></div>
+  </div>
+
+  <div class="foot">live · 16s</div>
+</aside>
+
+<main>
+  <div class="page-head">
+    <h1>Creative Tracker</h1>
+    <span class="cnt mono">66</span>
+    <span class="spacer"></span>
+    <span class="meta">Synced 16s ago · Art Therapy</span>
+    <button class="btn">⇡ Push</button>
+    <button class="btn btn-primary">+ Add</button>
+  </div>
+
+  <div class="kpis">
+    <div class="kpi">
+      <div class="l">Creatives</div>
+      <div class="v">66</div>
+      <div class="d">+3 week</div>
+    </div>
+    <div class="kpi">
+      <div class="l">Winners 7d</div>
+      <div class="v">18</div>
+      <div class="d">+2</div>
+    </div>
+    <div class="kpi">
+      <div class="l">Fatigued</div>
+      <div class="v">3</div>
+      <div class="d down">+1</div>
+    </div>
+    <div class="kpi">
+      <div class="l">Spend 7d</div>
+      <div class="v">$12,418 <span class="unit">USD</span></div>
+      <div class="d">+18%</div>
+    </div>
+    <div class="kpi">
+      <div class="l">Blended ROAS</div>
+      <div class="v">1.38<span class="unit">×</span></div>
+      <div class="d">+0.04</div>
+    </div>
+  </div>
+
+  <div class="filters">
+    <div class="search">
+      <input placeholder="Filter creatives…">
+      <span class="kbd">⌘K</span>
+    </div>
+    <div class="chip active">status: winners <span class="ch">▾</span></div>
+    <div class="chip">angle <span class="ch">▾</span></div>
+    <div class="chip">persona <span class="ch">▾</span></div>
+    <div class="chip">hook <span class="ch">▾</span></div>
+    <div class="chip">funnel <span class="ch">▾</span></div>
+    <div class="chip">7d <span class="ch">▾</span></div>
+  </div>
+
+  <div class="t-wrap">
+    <table class="t">
+      <thead>
+        <tr>
+          <th>Creative</th>
+          <th>Angle</th>
+          <th>Persona</th>
+          <th>Hook</th>
+          <th>Funnel</th>
+          <th>Status</th>
+          <th class="num">Spend 7d</th>
+          <th class="num">ROAS 7d</th>
+          <th>Trend</th>
+          <th>Created</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>
+            <div class="cc">
+              <div class="thm"></div>
+              <div>
+                <div class="name">5773-1 old winner</div>
+                <div class="sub">AT-11439-v1 <a href="#">· CU</a></div>
+              </div>
+            </div>
+          </td>
+          <td><span class="tag">Art as Therapy</span></td>
+          <td><span class="tag">Women 25-45</span></td>
+          <td><span class="tag">POV</span></td>
+          <td><span class="funnel">TOF</span></td>
+          <td><span class="st massive"><span class="d"></span>Massive</span></td>
+          <td class="n">$1,842</td>
+          <td class="n roas massive">1.92×</td>
+          <td class="spark-cell">
+            <svg width="80" height="22" viewBox="0 0 80 22">
+              <polyline fill="none" stroke="#34d399" stroke-width="1.5" points="0,18 11,15 22,13 33,11 44,8 55,6 66,4 80,2"/>
+            </svg>
+          </td>
+          <td class="date">21.04</td>
+        </tr>
+        <tr>
+          <td>
+            <div class="cc">
+              <div class="thm photo"></div>
+              <div>
+                <div class="name">4570-1 old winner</div>
+                <div class="sub">AT-10835 <a href="#">· CU</a></div>
+              </div>
+            </div>
+          </td>
+          <td><span class="tag">Emotional Lit.</span></td>
+          <td><span class="tag">Women 25-45</span></td>
+          <td><span class="tag">Curiosity</span></td>
+          <td><span class="funnel">TOF</span></td>
+          <td><span class="st winner"><span class="d"></span>Winner</span></td>
+          <td class="n">$806</td>
+          <td class="n roas up">1.54×</td>
+          <td class="spark-cell">
+            <svg width="80" height="22" viewBox="0 0 80 22">
+              <polyline fill="none" stroke="#10b981" stroke-width="1.5" points="0,14 11,13 22,11 33,12 44,10 55,9 66,8 80,7"/>
+            </svg>
+          </td>
+          <td class="date">19.04</td>
+        </tr>
+        <tr>
+          <td>
+            <div class="cc">
+              <div class="thm photo"></div>
+              <div>
+                <div class="name">4569-2 old winner</div>
+                <div class="sub">AT-10834 <a href="#">· CU</a></div>
+              </div>
+            </div>
+          </td>
+          <td><span class="tag">Scarcity</span></td>
+          <td><span class="tag">Women 25-45</span></td>
+          <td><span class="tag">Pattern Interrupt</span></td>
+          <td><span class="funnel">TOF</span></td>
+          <td><span class="st mild"><span class="d"></span>Mild</span></td>
+          <td class="n">$412</td>
+          <td class="n roas mild">1.33×</td>
+          <td class="spark-cell">
+            <svg width="80" height="22" viewBox="0 0 80 22">
+              <polyline fill="none" stroke="#eab308" stroke-width="1.5" points="0,12 11,13 22,11 33,12 44,13 55,11 66,12 80,11"/>
+            </svg>
+          </td>
+          <td class="date">18.04</td>
+        </tr>
+        <tr>
+          <td>
+            <div class="cc">
+              <div class="thm photo"></div>
+              <div>
+                <div class="name">10785-2 old winner</div>
+                <div class="sub">AT-10733 <a href="#">· CU</a></div>
+              </div>
+            </div>
+          </td>
+          <td><span class="tag">Scarcity</span></td>
+          <td><span class="tag">Women 25-45</span></td>
+          <td><span class="tag">Pattern Interrupt</span></td>
+          <td><span class="funnel">TOF</span></td>
+          <td><span class="st fatigue"><span class="d"></span>Fatigued</span></td>
+          <td class="n">$1,205</td>
+          <td class="n roas down">0.98× ↓</td>
+          <td class="spark-cell">
+            <svg width="80" height="22" viewBox="0 0 80 22">
+              <polyline fill="none" stroke="#f97316" stroke-width="1.5" points="0,6 11,7 22,8 33,10 44,12 55,14 66,16 80,19"/>
+            </svg>
+          </td>
+          <td class="date">10.04</td>
+        </tr>
+        <tr>
+          <td>
+            <div class="cc">
+              <div class="thm photo"></div>
+              <div>
+                <div class="name">6197-1 old winner</div>
+                <div class="sub">AT-10612 <a href="#">· CU</a></div>
+              </div>
+            </div>
+          </td>
+          <td><span class="tag">Scarcity</span></td>
+          <td><span class="tag">Women 25-45</span></td>
+          <td><span class="tag">Direct Offer</span></td>
+          <td><span class="funnel">TOF</span></td>
+          <td><span class="st testing"><span class="d"></span>Testing</span></td>
+          <td class="n dim">$28</td>
+          <td class="n roas dim">—</td>
+          <td class="spark-cell">
+            <svg width="80" height="22" viewBox="0 0 80 22">
+              <polyline fill="none" stroke="#525252" stroke-width="1.2" stroke-dasharray="3 2" points="0,11 80,11"/>
+            </svg>
+          </td>
+          <td class="date">21.04</td>
+        </tr>
+        <tr>
+          <td>
+            <div class="cc">
+              <div class="thm"></div>
+              <div>
+                <div class="name">11436 new concept</div>
+                <div class="sub">AT-11436 <a href="#">· CU</a></div>
+              </div>
+            </div>
+          </td>
+          <td><span class="tag">Calm / Unwind</span></td>
+          <td><span class="tag">Self-Care Adults</span></td>
+          <td><span class="tag">Curiosity</span></td>
+          <td><span class="funnel">TOF</span></td>
+          <td><span class="st loser"><span class="d"></span>Loser</span></td>
+          <td class="n">$187</td>
+          <td class="n roas loser">0.42×</td>
+          <td class="spark-cell">
+            <svg width="80" height="22" viewBox="0 0 80 22">
+              <polyline fill="none" stroke="#ef4444" stroke-width="1.5" points="0,8 11,10 22,12 33,14 44,15 55,17 66,18 80,20"/>
+            </svg>
+          </td>
+          <td class="date">14.04</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</main>
+
+</body>
+</html>

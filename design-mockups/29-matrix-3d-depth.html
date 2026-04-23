@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Creative Matrix · 3D Depth</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --canvas:#faf9f5; --surface:#ffffff; --surface-2:#f3f1e9;
+  --line:#e8e5dc; --line-hi:#d6d1c1;
+  --ink:#1a1814; --ink-2:#585449; --ink-3:#8f8a7c; --ink-4:#b8b3a2;
+  --accent:#c05336; --accent-soft:#f5e3da;
+  --cyan:#00a3b8;
+  --sage:#5e7557; --ochre:#a77c2e; --coral:#c14400; --rust:#a83b28;
+  --dusk:#4f6780; --emerald:#35683f;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:var(--canvas);color:var(--ink);font-family:'Inter',sans-serif;font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased;overflow-x:hidden}
+body{min-height:440vh;position:relative}
+.mono{font-family:'JetBrains Mono',monospace;font-variant-numeric:tabular-nums}
+
+/* Parallax orbs */
+.orb{position:fixed;border-radius:50%;filter:blur(120px);pointer-events:none;z-index:1;will-change:transform}
+.orb.a{width:720px;height:720px;background:var(--accent);top:-180px;right:-180px;opacity:.22}
+.orb.b{width:520px;height:520px;background:var(--cyan);top:40%;left:-160px;opacity:.14}
+.orb.c{width:620px;height:620px;background:#5e7557;bottom:-200px;right:30%;opacity:.12}
+
+/* nav */
+.nav{position:sticky;top:0;z-index:50;background:rgba(250,249,245,.82);backdrop-filter:saturate(140%) blur(14px);-webkit-backdrop-filter:saturate(140%) blur(14px);border-bottom:1px solid var(--line)}
+.nav-inner{max-width:1320px;margin:0 auto;padding:14px 32px;display:flex;align-items:center;gap:32px}
+.brand{display:flex;align-items:center;gap:10px;font-weight:700;font-size:14px}
+.brand .dot{width:10px;height:10px;border-radius:3px;background:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.nav-links{display:flex;gap:4px;margin-left:24px}
+.nav-link{padding:7px 12px;border-radius:8px;color:var(--ink-2);font-size:13px;font-weight:500;cursor:pointer}
+.nav-link:hover{background:var(--surface-2);color:var(--ink)}
+.nav-link.active{background:var(--ink);color:var(--canvas)}
+.nav-right{margin-left:auto;display:flex;gap:12px;font-size:12px;color:var(--ink-3)}
+.nav-badge{display:inline-flex;align-items:center;gap:6px;padding:4px 9px;border:1px solid var(--line-hi);border-radius:999px;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--ink-2)}
+.nav-badge .pulse{width:6px;height:6px;border-radius:50%;background:var(--sage);animation:pulse 2s infinite}
+@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(94,117,87,.6)}70%{box-shadow:0 0 0 8px rgba(94,117,87,0)}}
+
+/* hero */
+.hero{position:relative;z-index:2;max-width:1320px;margin:0 auto;padding:100px 32px 60px}
+.eyebrow{display:inline-flex;align-items:center;gap:8px;padding:6px 12px;border:1px solid var(--line-hi);border-radius:999px;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--ink-2);text-transform:uppercase;letter-spacing:.12em;background:var(--surface);margin-bottom:28px}
+.eyebrow .sq{width:8px;height:8px;background:var(--accent);border-radius:2px}
+.hero h1{font-family:'Instrument Serif',serif;font-style:italic;font-weight:400;font-size:clamp(64px,10vw,148px);line-height:.9;letter-spacing:-.03em;max-width:1100px}
+.hero h1 .pop{color:var(--accent)}
+.hero p{max-width:620px;font-size:18px;color:var(--ink-2);line-height:1.55;margin-top:28px}
+.hero .kpis{display:flex;gap:48px;margin-top:52px;padding-top:28px;border-top:1px solid var(--line)}
+.hero .kpis .k{display:flex;flex-direction:column;gap:3px}
+.hero .kpis .v{font-family:'JetBrains Mono',monospace;font-size:28px;font-weight:500;letter-spacing:-.02em}
+.hero .kpis .l{font-size:11px;text-transform:uppercase;letter-spacing:.1em;color:var(--ink-3);font-weight:500}
+
+/* 3D MATRIX — the headline */
+.stage{position:relative;z-index:2;max-width:1440px;margin:0 auto;padding:100px 40px 180px;perspective:1400px;perspective-origin:50% 20%}
+.stage-head{margin-bottom:36px;display:flex;align-items:flex-end;justify-content:space-between;gap:32px}
+.stage-head h2{font-family:'Instrument Serif',serif;font-style:italic;font-weight:400;font-size:56px;line-height:1;letter-spacing:-.02em}
+.stage-head .hint{color:var(--ink-3);font-size:13px;max-width:380px;text-align:right;font-family:'JetBrains Mono',monospace;font-size:11px;text-transform:uppercase;letter-spacing:.1em}
+
+.matrix-3d-wrap{position:relative;transform-style:preserve-3d}
+.matrix-3d{background:var(--surface);border:1px solid var(--line);border-radius:24px;padding:28px;box-shadow:0 40px 80px -40px rgba(26,24,20,.25), 0 10px 24px -10px rgba(26,24,20,.08);transform:rotateX(12deg);transform-origin:50% 100%;transform-style:preserve-3d;transition:transform 1s cubic-bezier(.2,.7,.2,1);will-change:transform}
+.mbar{display:flex;align-items:center;justify-content:space-between;padding-bottom:20px;border-bottom:1px solid var(--line);margin-bottom:20px}
+.mbar strong{font-size:15px}
+.mbar .legend{display:flex;gap:12px;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--ink-2)}
+.mbar .legend span{display:inline-flex;align-items:center;gap:5px}
+.mbar .legend i{width:9px;height:9px;border-radius:2px}
+
+.m3{display:grid;grid-template-columns:200px repeat(5,1fr);gap:8px;transform-style:preserve-3d}
+.mch{min-height:72px;padding:12px;background:var(--surface-2);border:1px solid var(--line);border-radius:10px;display:flex;flex-direction:column;justify-content:flex-end;gap:3px;transform:translateZ(10px)}
+.mch .n{font-size:11px;font-weight:600;letter-spacing:-.01em;line-height:1.3}
+.mch .c{font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--ink-3);text-transform:uppercase;letter-spacing:.08em}
+.mrh{min-height:84px;padding:12px;background:var(--surface-2);border:1px solid var(--line);border-radius:10px;display:flex;flex-direction:column;justify-content:center;gap:4px;transform:translateZ(10px)}
+.mrh .n{font-family:'Instrument Serif',serif;font-style:italic;font-size:19px;line-height:1.1}
+.mrh .c{font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--ink-3);text-transform:uppercase;letter-spacing:.08em}
+.mcorner{transform:translateZ(10px)}
+
+.cell{min-height:84px;padding:12px;border:1px solid var(--line);border-radius:10px;position:relative;display:flex;flex-direction:column;gap:3px;transition:transform .4s cubic-bezier(.2,.7,.2,1),box-shadow .4s;will-change:transform;transform-style:preserve-3d}
+.cell:hover{transform:translateZ(var(--zhov)) translateY(-4px) !important;box-shadow:0 30px 50px -25px rgba(26,24,20,.35)}
+.cell .tr{font-family:'JetBrains Mono',monospace;font-size:9px;text-transform:uppercase;letter-spacing:.1em;font-weight:500}
+.cell .r{font-family:'JetBrains Mono',monospace;font-size:22px;font-weight:500;letter-spacing:-.02em;line-height:1}
+.cell .ft{position:absolute;bottom:10px;left:12px;right:12px;display:flex;justify-content:space-between;font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--ink-3)}
+.cell .ft .sp{color:var(--ink-2);font-weight:500}
+
+.c-massive{background:linear-gradient(135deg,#eef2ea,#dfe6d7);border-color:#c3d0b8;transform:translateZ(80px);box-shadow:0 30px 50px -20px rgba(53,104,63,.28);--zhov:92px}
+.c-massive .r,.c-massive .tr{color:#35683f}
+.c-winner{background:linear-gradient(135deg,#f1f3ed,#e4e9dc);border-color:#c8d0bc;transform:translateZ(52px);box-shadow:0 20px 36px -16px rgba(94,117,87,.22);--zhov:66px}
+.c-winner .r,.c-winner .tr{color:#5e7557}
+.c-mild{background:linear-gradient(135deg,#f6efe0,#ecdfc4);border-color:#d9c898;transform:translateZ(32px);box-shadow:0 14px 28px -12px rgba(167,124,46,.22);--zhov:44px}
+.c-mild .r,.c-mild .tr{color:#a77c2e}
+.c-fatigue{background:linear-gradient(135deg,#f7e4d8,#efcbb5);border-color:#e0b299;transform:translateZ(18px);box-shadow:0 12px 22px -10px rgba(193,68,0,.26);--zhov:30px}
+.c-fatigue .r,.c-fatigue .tr{color:#c14400}
+.c-loser{background:linear-gradient(135deg,#f1dcd6,#e7c0b7);border-color:#d5a498;transform:translateZ(6px);box-shadow:0 8px 16px -8px rgba(168,59,40,.22);--zhov:18px}
+.c-loser .r,.c-loser .tr{color:#a83b28}
+.c-testing{background:linear-gradient(135deg,#e6ecf2,#cfd9e4);border-color:#b4c1d0;transform:translateZ(22px);box-shadow:0 10px 20px -10px rgba(79,103,128,.24);--zhov:34px}
+.c-testing .r,.c-testing .tr{color:#4f6780}
+.c-empty{background:repeating-linear-gradient(135deg,transparent,transparent 6px,rgba(184,179,162,.1) 6px,rgba(184,179,162,.1) 7px);border:1px dashed var(--line-hi);transform:translateZ(-12px);opacity:.7;display:flex;align-items:center;justify-content:center;--zhov:-4px}
+.c-empty .em{font-family:'Instrument Serif',serif;font-style:italic;color:var(--ink-4);font-size:11px}
+
+.wow{display:inline-block;padding:1px 5px;border-radius:999px;background:rgba(193,68,0,.14);color:var(--coral);font-family:'JetBrains Mono',monospace;font-size:8px;font-weight:500;margin-left:4px;vertical-align:middle}
+
+/* depth legend */
+.depth-key{position:relative;z-index:2;max-width:1320px;margin:-80px auto 0;padding:0 32px 40px;display:grid;grid-template-columns:1fr 1fr;gap:32px;align-items:center}
+.depth-key .side{background:var(--surface);border:1px solid var(--line);border-radius:20px;padding:28px}
+.depth-key .side h3{font-family:'Instrument Serif',serif;font-style:italic;font-weight:400;font-size:38px;line-height:1;margin-bottom:14px;letter-spacing:-.02em}
+.depth-key .side p{color:var(--ink-2);font-size:14px;line-height:1.6}
+.depth-scale{display:flex;flex-direction:column;gap:8px;margin-top:20px}
+.depth-scale .row{display:flex;align-items:center;gap:12px;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--ink-2);text-transform:uppercase;letter-spacing:.1em}
+.depth-scale .row i{width:100px;height:10px;border-radius:3px}
+.depth-scale .lb{flex:1}
+.depth-scale .z{color:var(--ink-4);font-size:10px}
+
+.section{max-width:1320px;margin:0 auto;padding:80px 32px;position:relative;z-index:2}
+.end{text-align:center;padding:80px 32px 160px;position:relative;z-index:2}
+.end h3{font-family:'Instrument Serif',serif;font-style:italic;font-weight:400;font-size:80px;line-height:1;letter-spacing:-.02em;margin-bottom:20px}
+.end p{color:var(--ink-2);font-size:17px;max-width:540px;margin:0 auto}
+.cta{display:inline-flex;align-items:center;gap:10px;margin-top:32px;padding:18px 32px;background:var(--accent);color:var(--canvas);border-radius:999px;font-weight:600;font-size:14px;cursor:pointer}
+
+</style>
+</head>
+<body>
+
+<div class="orb a" id="orbA"></div>
+<div class="orb b" id="orbB"></div>
+<div class="orb c" id="orbC"></div>
+
+<nav class="nav">
+  <div class="nav-inner">
+    <div class="brand"><span class="dot"></span><span>Immuvi Command Center</span></div>
+    <div class="nav-links">
+      <a class="nav-link">Command HQ</a>
+      <a class="nav-link">Angles</a>
+      <a class="nav-link">Personas</a>
+      <a class="nav-link">Creative Tracker</a>
+      <a class="nav-link active">Creative Matrix</a>
+    </div>
+    <div class="nav-right">
+      <span class="nav-badge"><span class="pulse"></span>Live · 42 creatives</span>
+      <span>Last 28 days</span>
+    </div>
+  </div>
+</nav>
+
+<section class="hero">
+  <div class="eyebrow"><span class="sq"></span>Depth · where your money lives, literally</div>
+  <h1>The cells that earn<br>sit <span class="pop">closer to you.</span></h1>
+  <p>Tier becomes altitude. Massive cells rise out of the page, empty ones fall beneath the surface. Scroll to bring the grid level — or lean in to a single cell to pull it forward.</p>
+  <div class="kpis">
+    <div class="k"><div class="v">42</div><div class="l">creatives</div></div>
+    <div class="k"><div class="v">1.38×</div><div class="l">blended roas</div></div>
+    <div class="k"><div class="v">19/35</div><div class="l">active</div></div>
+    <div class="k"><div class="v">$12.4k</div><div class="l">spend · 28d</div></div>
+  </div>
+</section>
+
+<section class="stage">
+  <div class="stage-head">
+    <h2>The grid, at altitude.</h2>
+    <div class="hint">Depth = tier · Hover any cell to bring it forward</div>
+  </div>
+
+  <div class="matrix-3d-wrap">
+    <div class="matrix-3d" id="matrix3d">
+      <div class="mbar">
+        <strong>Angle × Persona · Z-axis = performance tier</strong>
+        <div class="legend">
+          <span><i style="background:linear-gradient(135deg,#35683f,#5e7557)"></i>Massive · +80z</span>
+          <span><i style="background:#5e7557"></i>Winner · +52z</span>
+          <span><i style="background:#a77c2e"></i>Mild · +32z</span>
+          <span><i style="background:#c14400"></i>Fatigue · +18z</span>
+          <span><i style="background:#a83b28"></i>Loser · +6z</span>
+          <span><i style="background:#4f6780"></i>Testing · +22z</span>
+        </div>
+      </div>
+
+      <div class="m3">
+        <div class="mcorner"></div>
+        <div class="mch"><div class="n">Stressed Women 25-45</div><div class="c">24 creatives</div></div>
+        <div class="mch"><div class="n">Creative Self-Care Adults</div><div class="c">10 creatives</div></div>
+        <div class="mch"><div class="n">Parents of Emotional Kids</div><div class="c">6 creatives</div></div>
+        <div class="mch"><div class="n">Silently Scrolling Adults</div><div class="c">1 creative</div></div>
+        <div class="mch"><div class="n">Young Adults · Grief</div><div class="c">1 creative</div></div>
+
+        <div class="mrh"><div class="n">Art as Therapy</div><div class="c">18 · 1.58×</div></div>
+        <div class="cell c-massive"><div class="tr">◆ Massive</div><div class="r">1.78×</div><div class="ft"><span>12</span><span class="sp">$4,920</span></div></div>
+        <div class="cell c-winner"><div class="tr">Winner</div><div class="r">1.48×</div><div class="ft"><span>4</span><span class="sp">$1,240</span></div></div>
+        <div class="cell c-mild"><div class="tr">Mild</div><div class="r">1.32×</div><div class="ft"><span>2</span><span class="sp">$620</span></div></div>
+        <div class="cell c-empty"><span class="em">not tested</span></div>
+        <div class="cell c-empty"><span class="em">not tested</span></div>
+
+        <div class="mrh"><div class="n">Calm / Unwind</div><div class="c">9 · 1.12×</div></div>
+        <div class="cell c-winner"><div class="tr">Winner</div><div class="r">1.41×</div><div class="ft"><span>4</span><span class="sp">$1,420</span></div></div>
+        <div class="cell c-mild"><div class="tr">Mild</div><div class="r">1.22×</div><div class="ft"><span>3</span><span class="sp">$580</span></div></div>
+        <div class="cell c-loser"><div class="tr">Loser</div><div class="r">0.58×</div><div class="ft"><span>2</span><span class="sp">$340</span></div></div>
+        <div class="cell c-empty"><span class="em">not tested</span></div>
+        <div class="cell c-empty"><span class="em">not tested</span></div>
+
+        <div class="mrh"><div class="n">Scarcity</div><div class="c">5 · 0.98×</div></div>
+        <div class="cell c-fatigue"><div class="tr">Fatigued</div><div class="r">0.98×<span class="wow">-42%</span></div><div class="ft"><span>4</span><span class="sp">$1,850</span></div></div>
+        <div class="cell c-mild"><div class="tr">Mild</div><div class="r">1.28×</div><div class="ft"><span>1</span><span class="sp">$310</span></div></div>
+        <div class="cell c-empty"><span class="em">not tested</span></div>
+        <div class="cell c-empty"><span class="em">not tested</span></div>
+        <div class="cell c-empty"><span class="em">not tested</span></div>
+
+        <div class="mrh"><div class="n">Therapist-Rec</div><div class="c">5 · 1.38×</div></div>
+        <div class="cell c-winner"><div class="tr">Winner</div><div class="r">1.44×</div><div class="ft"><span>2</span><span class="sp">$560</span></div></div>
+        <div class="cell c-mild"><div class="tr">Mild</div><div class="r">1.30×</div><div class="ft"><span>2</span><span class="sp">$360</span></div></div>
+        <div class="cell c-testing"><div class="tr">Testing</div><div class="r">—</div><div class="ft"><span>1</span><span class="sp">$32</span></div></div>
+        <div class="cell c-empty"><span class="em">not tested</span></div>
+        <div class="cell c-empty"><span class="em">not tested</span></div>
+
+        <div class="mrh"><div class="n">Emotional Lit</div><div class="c">3 · 1.50×</div></div>
+        <div class="cell c-winner"><div class="tr">Winner</div><div class="r">1.54×</div><div class="ft"><span>1</span><span class="sp">$806</span></div></div>
+        <div class="cell c-empty"><span class="em">not tested</span></div>
+        <div class="cell c-empty"><span class="em">not tested</span></div>
+        <div class="cell c-empty"><span class="em">not tested</span></div>
+        <div class="cell c-winner"><div class="tr">Winner</div><div class="r">1.46×</div><div class="ft"><span>1</span><span class="sp">$624</span></div></div>
+
+        <div class="mrh"><div class="n">Pattern Interrupt</div><div class="c">2 · 1.22×</div></div>
+        <div class="cell c-empty"><span class="em">not tested</span></div>
+        <div class="cell c-empty"><span class="em">not tested</span></div>
+        <div class="cell c-empty"><span class="em">not tested</span></div>
+        <div class="cell c-mild"><div class="tr">Mild</div><div class="r">1.22×</div><div class="ft"><span>2</span><span class="sp">$284</span></div></div>
+        <div class="cell c-empty"><span class="em">not tested</span></div>
+
+        <div class="mrh"><div class="n">Social Proof · 18K</div><div class="c">1 · 1.41×</div></div>
+        <div class="cell c-winner"><div class="tr">Winner</div><div class="r">1.41×</div><div class="ft"><span>1</span><span class="sp">$488</span></div></div>
+        <div class="cell c-empty"><span class="em">not tested</span></div>
+        <div class="cell c-empty"><span class="em">not tested</span></div>
+        <div class="cell c-empty"><span class="em">not tested</span></div>
+        <div class="cell c-empty"><span class="em">not tested</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="depth-key">
+  <div class="side">
+    <h3>Altitude = performance.</h3>
+    <p>We map each tier to a Z-translation so your best-earning cells physically rise off the page. Massive is closest to you. Empty cells sit below the plane, inviting a test.</p>
+  </div>
+  <div class="side">
+    <div class="depth-scale">
+      <div class="row"><i style="background:linear-gradient(135deg,#35683f,#5e7557)"></i><span class="lb">Massive</span><span class="z">+80z</span></div>
+      <div class="row"><i style="background:#5e7557"></i><span class="lb">Winner</span><span class="z">+52z</span></div>
+      <div class="row"><i style="background:#a77c2e"></i><span class="lb">Mild</span><span class="z">+32z</span></div>
+      <div class="row"><i style="background:#4f6780"></i><span class="lb">Testing</span><span class="z">+22z</span></div>
+      <div class="row"><i style="background:#c14400"></i><span class="lb">Fatigue</span><span class="z">+18z</span></div>
+      <div class="row"><i style="background:#a83b28"></i><span class="lb">Loser</span><span class="z">+6z</span></div>
+      <div class="row"><i style="background:repeating-linear-gradient(45deg,#e8e5dc,#e8e5dc 3px,#f3f1e9 3px,#f3f1e9 6px)"></i><span class="lb">Empty</span><span class="z">-12z</span></div>
+    </div>
+  </div>
+</section>
+
+<section class="end">
+  <h3>Flat on a screen.<br>Layered in the mind.</h3>
+  <p>The depth isn't decoration — it's the same signal the pixel map tries to compress into color. Where altitude agrees with color, it's working twice as hard.</p>
+  <a class="cta">View creatives →</a>
+</section>
+
+<script>
+  // scroll-driven: flatten the matrix as it enters viewport
+  const m3d = document.getElementById('matrix3d');
+  const orbA = document.getElementById('orbA');
+  const orbB = document.getElementById('orbB');
+  const orbC = document.getElementById('orbC');
+  const stage = document.querySelector('.stage');
+
+  function tick(){
+    const rect = stage.getBoundingClientRect();
+    const vh = window.innerHeight;
+    // progress: 0 when stage is entering bottom, 1 when stage center passes viewport center
+    const entered = Math.max(0, Math.min(1, (vh - rect.top) / (vh + rect.height * 0.5)));
+    // start rotated 12deg, flatten to 0
+    const rot = 12 * (1 - entered);
+    m3d.style.transform = `rotateX(${rot}deg)`;
+
+    // parallax orbs
+    const sy = window.scrollY;
+    orbA.style.transform = `translate3d(0, ${sy*-0.15}px, 0)`;
+    orbB.style.transform = `translate3d(${sy*0.08}px, ${sy*-0.22}px, 0)`;
+    orbC.style.transform = `translate3d(${sy*-0.06}px, ${sy*-0.1}px, 0)`;
+
+    requestAnimationFrame(tick);
+  }
+  requestAnimationFrame(tick);
+</script>
+</body>
+</html>

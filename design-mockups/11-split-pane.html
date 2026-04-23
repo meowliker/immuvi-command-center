@@ -1,0 +1,668 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Layout 11 — Split-pane (list + detail)</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+<style>
+:root {
+  --paper:   #faf9f5;
+  --paper-2: #f3f1e9;
+  --surface: #ffffff;
+  --line:    #e8e5dc;
+  --line-hi: #d6d1c1;
+  --ink:     #1a1814;
+  --ink-2:   #585449;
+  --ink-3:   #8f8a7c;
+  --ink-4:   #b8b3a2;
+  --accent:  #c05336;     /* single terracotta */
+  --accent-soft: #f5e3da;
+  --sage:    #5e7557;
+  --ochre:   #a77c2e;
+  --rust:    #a83b28;
+  --dusk:    #4f6780;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; }
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: 'Inter', sans-serif;
+  font-size: 13px; line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  display: grid;
+  grid-template-rows: 48px 1fr;
+  height: 100vh;
+}
+
+/* Top strip */
+.top {
+  display: flex; align-items: center; gap: 14px;
+  padding: 0 18px;
+  border-bottom: 1px solid var(--line);
+  background: var(--paper);
+}
+.brand {
+  font-family: 'Instrument Serif', Georgia, serif;
+  font-style: italic; font-size: 20px;
+  letter-spacing: -0.01em;
+}
+.brand .acc { color: var(--accent); }
+.sep { width: 1px; height: 18px; background: var(--line); }
+.crumb {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 12.5px; color: var(--ink-2);
+}
+.crumb a { color: var(--ink-2); text-decoration: none; cursor: pointer; padding: 3px 7px; border-radius: 4px; }
+.crumb a:hover { background: var(--paper-2); color: var(--ink); }
+.crumb .s { color: var(--ink-4); font-size: 10px; }
+.top .right { margin-left: auto; display: flex; align-items: center; gap: 8px; font-size: 11.5px; color: var(--ink-3); }
+.live::before {
+  content: ''; width: 6px; height: 6px; border-radius: 50%;
+  background: var(--sage); display: inline-block; margin-right: 6px;
+  box-shadow: 0 0 6px var(--sage);
+  animation: pulse 2.5s infinite;
+  vertical-align: middle;
+}
+@keyframes pulse { 50% { opacity: 0.4; } }
+
+/* Split layout */
+.split { display: grid; grid-template-columns: 440px 1fr; overflow: hidden; }
+
+/* Left pane: list */
+.list-pane {
+  border-right: 1px solid var(--line);
+  display: grid; grid-template-rows: auto auto 1fr;
+  background: var(--paper);
+  overflow: hidden;
+}
+.list-head {
+  padding: 14px 18px 10px;
+  border-bottom: 1px solid var(--line);
+}
+.list-head h1 {
+  font-family: 'Instrument Serif', Georgia, serif;
+  font-style: italic; font-weight: 400;
+  font-size: 26px; letter-spacing: -0.01em;
+  line-height: 1.1;
+}
+.list-head .sub {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10.5px; color: var(--ink-3);
+  text-transform: uppercase; letter-spacing: 0.08em;
+  margin-top: 4px;
+}
+.list-filters {
+  padding: 10px 14px;
+  display: flex; flex-wrap: wrap; gap: 6px; align-items: center;
+  border-bottom: 1px solid var(--line);
+  background: var(--paper-2);
+}
+.search {
+  flex: 1; position: relative; min-width: 120px;
+}
+.search input {
+  width: 100%; height: 28px;
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: 5px; padding: 0 10px 0 28px;
+  font-family: inherit; font-size: 12px; color: var(--ink);
+  outline: none;
+}
+.search::before {
+  content: '⌕'; position: absolute; left: 10px; top: 50%; transform: translateY(-50%);
+  color: var(--ink-4); font-size: 12px;
+}
+.search input:focus { border-color: var(--accent); }
+.fchip {
+  height: 26px; padding: 0 9px;
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: 4px;
+  font-size: 11.5px; color: var(--ink-2); cursor: pointer;
+  display: inline-flex; align-items: center; gap: 4px;
+  white-space: nowrap;
+}
+.fchip.on { background: var(--accent); color: white; border-color: var(--accent); }
+.fchip .ch { color: var(--ink-4); font-size: 9px; }
+.fchip.on .ch { color: rgba(255,255,255,.7); }
+
+/* List rows */
+.list-rows { overflow-y: auto; }
+.row {
+  padding: 12px 18px;
+  border-bottom: 1px solid var(--line);
+  cursor: pointer;
+  display: grid;
+  grid-template-columns: 44px 1fr auto;
+  gap: 14px;
+  align-items: center;
+  transition: background .08s;
+  position: relative;
+}
+.row:hover { background: var(--paper-2); }
+.row.selected {
+  background: var(--accent-soft);
+}
+.row.selected::before {
+  content: ''; position: absolute; left: 0; top: 0; bottom: 0;
+  width: 3px; background: var(--accent);
+}
+.thumb {
+  width: 44px; height: 44px; border-radius: 6px;
+  flex-shrink: 0;
+  background: var(--ink);
+  position: relative;
+  overflow: hidden;
+  border: 1px solid var(--line-hi);
+}
+.thumb::after {
+  content: '▶'; position: absolute; inset: 0;
+  display: grid; place-items: center;
+  color: var(--accent); font-size: 12px;
+}
+.thumb.photo { background: var(--paper-2); }
+.thumb.photo::after { content: '◈'; color: var(--sage); }
+.row .meta { min-width: 0; }
+.row .nm {
+  font-weight: 600; font-size: 13px;
+  color: var(--ink); letter-spacing: -0.005em;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.row .tags {
+  font-size: 11px; color: var(--ink-3);
+  margin-top: 2px;
+  font-family: 'JetBrains Mono', monospace;
+  letter-spacing: 0.02em;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.row .tags span.dot {
+  display: inline-block;
+  width: 5px; height: 5px; border-radius: 50%;
+  background: var(--ink-4);
+  margin: 0 6px;
+  vertical-align: middle;
+}
+.row .right-col {
+  display: flex; flex-direction: column; align-items: flex-end;
+  gap: 3px;
+  font-family: 'JetBrains Mono', monospace;
+}
+.row .roas {
+  font-weight: 700; font-size: 14px;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+.row.massive .roas { color: var(--sage); }
+.row.winner .roas  { color: var(--sage); }
+.row.mild .roas    { color: var(--ochre); }
+.row.fatigue .roas { color: var(--accent); }
+.row.testing .roas { color: var(--ink-3); }
+.row.loser .roas   { color: var(--rust); }
+.row .spend {
+  font-size: 11px; color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+.status-tok {
+  display: inline-block;
+  padding: 0 6px;
+  font-size: 10px; font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  border-radius: 3px;
+  margin-top: 2px;
+  line-height: 15px;
+}
+.status-tok.massive { background: rgba(94,117,87,0.15); color: var(--sage); }
+.status-tok.winner  { background: rgba(94,117,87,0.12); color: var(--sage); }
+.status-tok.mild    { background: rgba(167,124,46,0.12); color: var(--ochre); }
+.status-tok.fatigue { background: rgba(192,83,54,0.12); color: var(--accent); }
+.status-tok.testing { background: rgba(79,103,128,0.12); color: var(--dusk); }
+.status-tok.loser   { background: rgba(168,59,40,0.12); color: var(--rust); }
+
+/* Detail pane */
+.detail-pane {
+  overflow-y: auto;
+  background: var(--surface);
+}
+.detail-head {
+  padding: 28px 40px 22px;
+  border-bottom: 1px solid var(--line);
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 22px;
+  align-items: flex-start;
+}
+.detail-thumb {
+  width: 92px; height: 92px;
+  border-radius: 10px;
+  background: var(--ink);
+  position: relative;
+  overflow: hidden;
+}
+.detail-thumb::after {
+  content: '▶'; position: absolute; inset: 0;
+  display: grid; place-items: center;
+  color: var(--accent); font-size: 24px;
+}
+.detail-title h2 {
+  font-family: 'Instrument Serif', Georgia, serif;
+  font-style: italic; font-weight: 400;
+  font-size: 38px; line-height: 1.05;
+  letter-spacing: -0.02em;
+}
+.detail-title .id {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px; color: var(--ink-3);
+  margin-top: 6px;
+  display: flex; gap: 10px; align-items: center;
+}
+.detail-title .id a {
+  color: var(--ink-3); text-decoration: underline;
+  text-underline-offset: 2px; cursor: pointer;
+}
+.detail-title .id a:hover { color: var(--accent); }
+.detail-head .actions {
+  display: flex; flex-direction: column; gap: 8px;
+  align-items: flex-end;
+}
+.btn {
+  height: 32px; padding: 0 14px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font-family: inherit; font-size: 12.5px; font-weight: 500;
+  color: var(--ink); cursor: pointer;
+  display: inline-flex; align-items: center; gap: 6px;
+}
+.btn:hover { background: var(--paper-2); }
+.btn-primary { background: var(--accent); color: white; border-color: var(--accent); }
+.btn-primary:hover { background: #a44229; border-color: #a44229; }
+
+.pill-row {
+  display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap;
+}
+.pill {
+  padding: 3px 9px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 500;
+  background: var(--paper-2);
+  border: 1px solid var(--line);
+  color: var(--ink-2);
+  letter-spacing: -0.005em;
+}
+.pill.accent { background: var(--accent-soft); color: var(--accent); border-color: transparent; }
+
+/* Metrics band */
+.metrics {
+  padding: 20px 40px;
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 24px;
+  border-bottom: 1px solid var(--line);
+}
+.metric { }
+.metric .l {
+  font-size: 10.5px; color: var(--ink-3);
+  letter-spacing: 0.08em; text-transform: uppercase;
+  font-weight: 500;
+}
+.metric .v {
+  font-family: 'Instrument Serif', serif;
+  font-style: italic;
+  font-size: 32px; font-weight: 400;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+  margin-top: 4px;
+  font-variant-numeric: tabular-nums;
+}
+.metric .d {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px; color: var(--ink-3);
+  margin-top: 2px;
+}
+.metric .d.up { color: var(--sage); }
+.metric .d.down { color: var(--accent); }
+
+/* Chart section */
+.chart-card {
+  margin: 20px 40px;
+  padding: 22px 24px;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+.chart-card h3 {
+  font-size: 14px; font-weight: 600;
+  letter-spacing: -0.01em;
+  display: flex; align-items: baseline; gap: 10px;
+}
+.chart-card h3 .sub {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px; color: var(--ink-3);
+  font-weight: 400;
+  letter-spacing: 0;
+}
+.chart-card .range-picker {
+  margin-left: auto; display: flex; gap: 2px;
+}
+.chart-card .range-picker span {
+  padding: 2px 8px; font-size: 10.5px;
+  color: var(--ink-3); cursor: pointer;
+  border-radius: 3px;
+  font-family: 'JetBrains Mono', monospace;
+  letter-spacing: 0.03em;
+}
+.chart-card .range-picker span.on { background: var(--ink); color: white; }
+.chart-card svg { display: block; width: 100%; height: 180px; margin-top: 16px; }
+
+/* Brief section */
+.brief {
+  padding: 0 40px 40px;
+}
+.brief h3 {
+  font-family: 'Instrument Serif', serif;
+  font-style: italic;
+  font-size: 22px; font-weight: 400;
+  margin-bottom: 12px;
+  letter-spacing: -0.01em;
+}
+.brief .hypothesis {
+  font-size: 15px; line-height: 1.65;
+  color: var(--ink-2);
+  margin-bottom: 20px;
+  font-family: 'Instrument Serif', serif;
+  font-style: italic;
+  padding-left: 18px;
+  border-left: 2px solid var(--accent);
+}
+.brief .section {
+  margin-top: 20px;
+  padding-top: 18px;
+  border-top: 1px solid var(--line);
+}
+.brief .section-label {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10.5px; color: var(--ink-3);
+  letter-spacing: 0.1em; text-transform: uppercase;
+  margin-bottom: 10px;
+}
+.brief .section p {
+  font-size: 13.5px; color: var(--ink-2);
+  line-height: 1.7;
+}
+.brief ul { list-style: none; padding: 0; }
+.brief ul li {
+  padding: 7px 0;
+  font-size: 13px; color: var(--ink-2);
+  display: flex; gap: 12px;
+  align-items: baseline;
+}
+.brief ul li::before {
+  content: '—'; color: var(--accent); font-weight: 600;
+  flex-shrink: 0;
+}
+</style>
+</head>
+<body>
+
+<div class="top">
+  <div class="brand"><em>Immuvi</em></div>
+  <div class="sep"></div>
+  <div class="crumb">
+    <a>Art Therapy</a>
+    <span class="s">›</span>
+    <a>Creative Tracker</a>
+  </div>
+  <div class="right">
+    <span class="live">Synced 16s ago</span>
+    <div class="sep"></div>
+    <span>66 creatives</span>
+  </div>
+</div>
+
+<div class="split">
+
+  <!-- LIST -->
+  <div class="list-pane">
+    <div class="list-head">
+      <h1>Creative Tracker</h1>
+      <div class="sub">66 CREATIVES · 18 WINNERS · 3 FATIGUED</div>
+    </div>
+
+    <div class="list-filters">
+      <div class="search"><input placeholder="Search…"></div>
+      <span class="fchip on">Winners <span class="ch">▾</span></span>
+      <span class="fchip">All Angles <span class="ch">▾</span></span>
+      <span class="fchip">⇅</span>
+    </div>
+
+    <div class="list-rows">
+
+      <div class="row selected massive">
+        <div class="thumb"></div>
+        <div class="meta">
+          <div class="nm">5773-1 old winner</div>
+          <div class="tags">Art as Therapy<span class="dot"></span>Women 25-45<span class="dot"></span>POV</div>
+          <span class="status-tok massive">◆ Massive</span>
+        </div>
+        <div class="right-col">
+          <div class="roas">1.92×</div>
+          <div class="spend">$1,842</div>
+        </div>
+      </div>
+
+      <div class="row winner">
+        <div class="thumb photo"></div>
+        <div class="meta">
+          <div class="nm">4570-1 old winner</div>
+          <div class="tags">Emotional Lit.<span class="dot"></span>Women 25-45<span class="dot"></span>Curiosity</div>
+          <span class="status-tok winner">Winner</span>
+        </div>
+        <div class="right-col">
+          <div class="roas">1.54×</div>
+          <div class="spend">$806</div>
+        </div>
+      </div>
+
+      <div class="row mild">
+        <div class="thumb photo"></div>
+        <div class="meta">
+          <div class="nm">4569-2 old winner</div>
+          <div class="tags">Scarcity<span class="dot"></span>Women 25-45<span class="dot"></span>Pattern Interrupt</div>
+          <span class="status-tok mild">Mild Winner</span>
+        </div>
+        <div class="right-col">
+          <div class="roas">1.33×</div>
+          <div class="spend">$412</div>
+        </div>
+      </div>
+
+      <div class="row fatigue">
+        <div class="thumb photo"></div>
+        <div class="meta">
+          <div class="nm">10785-2 old winner</div>
+          <div class="tags">Scarcity<span class="dot"></span>Women 25-45<span class="dot"></span>Pattern Interrupt</div>
+          <span class="status-tok fatigue">Fatigued</span>
+        </div>
+        <div class="right-col">
+          <div class="roas">0.98×</div>
+          <div class="spend">$1,205</div>
+        </div>
+      </div>
+
+      <div class="row testing">
+        <div class="thumb photo"></div>
+        <div class="meta">
+          <div class="nm">6197-1 old winner</div>
+          <div class="tags">Scarcity<span class="dot"></span>Women 25-45<span class="dot"></span>Direct Offer</div>
+          <span class="status-tok testing">Testing</span>
+        </div>
+        <div class="right-col">
+          <div class="roas" style="color: var(--ink-4)">—</div>
+          <div class="spend">$28</div>
+        </div>
+      </div>
+
+      <div class="row winner">
+        <div class="thumb"></div>
+        <div class="meta">
+          <div class="nm">11591 new concept</div>
+          <div class="tags">Emotional Lit.<span class="dot"></span>Young Adults Grief<span class="dot"></span>Pain/Problem</div>
+          <span class="status-tok winner">Winner</span>
+        </div>
+        <div class="right-col">
+          <div class="roas">1.46×</div>
+          <div class="spend">$624</div>
+        </div>
+      </div>
+
+      <div class="row loser">
+        <div class="thumb"></div>
+        <div class="meta">
+          <div class="nm">11436 new concept</div>
+          <div class="tags">Calm / Unwind<span class="dot"></span>Self-Care Adults<span class="dot"></span>Curiosity</div>
+          <span class="status-tok loser">Loser</span>
+        </div>
+        <div class="right-col">
+          <div class="roas">0.42×</div>
+          <div class="spend">$187</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- DETAIL -->
+  <div class="detail-pane">
+
+    <div class="detail-head">
+      <div class="detail-thumb"></div>
+      <div class="detail-title">
+        <h2>5773-1 <em style="color: var(--ink-3);">old winner</em></h2>
+        <div class="id">
+          <span>AT-11439-v1</span>
+          <a>ClickUp ↗</a>
+          <a>Drive ↗</a>
+          <a>Meta Ads Manager ↗</a>
+        </div>
+        <div class="pill-row">
+          <span class="pill accent">◆ Massive Winner</span>
+          <span class="pill">Art as Therapy Alternative</span>
+          <span class="pill">Stressed Women 25-45</span>
+          <span class="pill">POV</span>
+          <span class="pill">UGC</span>
+          <span class="pill">Organic Raw UGC</span>
+          <span class="pill">TOF</span>
+        </div>
+      </div>
+      <div class="actions">
+        <button class="btn-primary btn">Scale budget +30%</button>
+        <button class="btn">Duplicate & test</button>
+      </div>
+    </div>
+
+    <div class="metrics">
+      <div class="metric">
+        <div class="l">Spend 7d</div>
+        <div class="v">$1,842</div>
+        <div class="d up">+24% vs prev 7d</div>
+      </div>
+      <div class="metric">
+        <div class="l">ROAS 7d</div>
+        <div class="v">1.92×</div>
+        <div class="d up">+0.18 WoW</div>
+      </div>
+      <div class="metric">
+        <div class="l">CTR</div>
+        <div class="v">3.28%</div>
+        <div class="d up">+0.4pp</div>
+      </div>
+      <div class="metric">
+        <div class="l">CPA</div>
+        <div class="v">$12.40</div>
+        <div class="d up">-$1.80</div>
+      </div>
+      <div class="metric">
+        <div class="l">Frequency</div>
+        <div class="v">2.1</div>
+        <div class="d">safe · &lt;3.5</div>
+      </div>
+    </div>
+
+    <div class="chart-card">
+      <h3>
+        ROAS · Spend · CTR
+        <span class="sub">14-day daily</span>
+        <div class="range-picker">
+          <span>7d</span><span class="on">14d</span><span>30d</span>
+        </div>
+      </h3>
+      <svg viewBox="0 0 800 180" preserveAspectRatio="none">
+        <!-- gridlines -->
+        <line x1="0" y1="40"  x2="800" y2="40"  stroke="#e8e5dc" stroke-dasharray="2 3"/>
+        <line x1="0" y1="90"  x2="800" y2="90"  stroke="#e8e5dc" stroke-dasharray="2 3"/>
+        <line x1="0" y1="140" x2="800" y2="140" stroke="#e8e5dc" stroke-dasharray="2 3"/>
+        <!-- Spend area (ink) -->
+        <defs>
+          <linearGradient id="spendG" x1="0" x2="0" y1="0" y2="1">
+            <stop offset="0%" stop-color="#1a1814" stop-opacity="0.18"/>
+            <stop offset="100%" stop-color="#1a1814" stop-opacity="0"/>
+          </linearGradient>
+        </defs>
+        <path d="M0,150 L60,140 120,135 180,128 240,120 300,110 360,100 420,92 480,80 540,68 600,55 660,42 720,32 800,22 L800,180 L0,180 Z" fill="url(#spendG)"/>
+        <polyline fill="none" stroke="#1a1814" stroke-width="1.5"
+          points="0,150 60,140 120,135 180,128 240,120 300,110 360,100 420,92 480,80 540,68 600,55 660,42 720,32 800,22"/>
+        <!-- ROAS line (terracotta) -->
+        <polyline fill="none" stroke="#c05336" stroke-width="2.2"
+          points="0,100 60,95 120,90 180,88 240,82 300,78 360,72 420,68 480,62 540,56 600,50 660,44 720,38 800,32"/>
+        <!-- dots on roas end -->
+        <circle cx="800" cy="32" r="4" fill="#c05336"/>
+        <!-- x-axis labels -->
+        <text x="0"   y="176" font-family="JetBrains Mono" font-size="9" fill="#8f8a7c">07</text>
+        <text x="400" y="176" font-family="JetBrains Mono" font-size="9" fill="#8f8a7c" text-anchor="middle">14 Apr</text>
+        <text x="800" y="176" font-family="JetBrains Mono" font-size="9" fill="#8f8a7c" text-anchor="end">21</text>
+      </svg>
+      <div style="display: flex; gap: 24px; margin-top: 12px; font-size: 11px; color: var(--ink-3); font-family: 'JetBrains Mono', monospace;">
+        <span style="display: inline-flex; align-items: center; gap: 6px;"><span style="width: 10px; height: 2px; background: #1a1814; display: inline-block;"></span>Spend</span>
+        <span style="display: inline-flex; align-items: center; gap: 6px;"><span style="width: 10px; height: 2px; background: #c05336; display: inline-block;"></span>ROAS</span>
+        <span style="margin-left: auto; color: var(--sage);">↑ No fatigue signal · frequency stable at 2.1</span>
+      </div>
+    </div>
+
+    <div class="brief">
+      <h3><em>Why this ad works.</em></h3>
+      <div class="hypothesis">
+        "A shocking before-and-after brain-fog visual paired with a free science-backed worksheet bundle converts stressed adults who are seeking a fast, non-talk therapy alternative to calm their mind."
+      </div>
+
+      <div class="section">
+        <div class="section-label">Creative breakdown · 0—29s</div>
+        <ul>
+          <li><strong>0–5s</strong> — POV craft hook, hand coloring rainbow hearts on turquoise paper. Warm natural light, roses in background.</li>
+          <li><strong>5–13s</strong> — Product cover reveal + page flip through 6 worksheets (Anger Volcano, Feelings Check-In, Positivi-TEA).</li>
+          <li><strong>13–26s</strong> — Child's hand demos 3 worksheets with colored pencils.</li>
+          <li><strong>26–29s</strong> — Final flip + "Get this now, plus it's free" CTA.</li>
+        </ul>
+      </div>
+
+      <div class="section">
+        <div class="section-label">Locked elements · don't change if scaling</div>
+        <ul>
+          <li>ElevenLabs "warm conversational" VO voice character</li>
+          <li>29-second duration, 9:16 vertical, 30fps</li>
+          <li>Caption style — white pill, bottom-third, 3-5 words per beat</li>
+          <li>End card — mindingart.com (NOT printableswithlily.com)</li>
+        </ul>
+      </div>
+
+      <div class="section">
+        <div class="section-label">Recommended next action</div>
+        <p>Scale budget 30% daily until CPA drift. Clone into Set-1 variant test with quilling / watercolor / mandala hook swaps under the same VO. See Creative Brief doc for the 4×3 test matrix.</p>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+</body>
+</html>

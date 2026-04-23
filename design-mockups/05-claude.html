@@ -1,0 +1,752 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Creative Tracker — Claude direction</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Tiempos+Headline&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+<style>
+:root {
+  --cream:         #faf6ee;       /* claude bg */
+  --cream-deep:    #f3ede0;
+  --paper:         #ffffff;
+  --ink:           #1a1612;       /* warm almost-black */
+  --ink-2:         #5a4f42;
+  --ink-3:         #8a7d6d;
+  --ink-4:         #b5a991;
+  --line:          #e8e0ce;
+  --line-hi:       #d8ccb5;
+  --terra:         #c15f3c;       /* terracotta — the claude accent */
+  --terra-deep:    #a34d2d;
+  --terra-soft:    #f6e4da;
+  --sage:          #6b7f5e;       /* winner */
+  --sage-soft:     #e7ecdf;
+  --mustard:       #c18f33;       /* mild */
+  --mustard-soft:  #f4ead2;
+  --coral:         #d46a3e;       /* fatigue */
+  --coral-soft:    #f7e2d2;
+  --dusk:          #5c7490;       /* testing */
+  --dusk-soft:     #e1e8f0;
+  --rust:          #a83d34;       /* loser */
+  --rust-soft:     #f1dcd8;
+  --emerald:       #3d6e54;       /* massive */
+  --emerald-soft:  #dce9e1;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; }
+body {
+  background: var(--cream);
+  color: var(--ink);
+  font-family: 'Inter', -apple-system, sans-serif;
+  font-size: 14px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+  display: grid;
+  grid-template-columns: 240px 1fr;
+  min-height: 100vh;
+}
+
+/* ── Sidebar ─────────────────────────────────────────────────────── */
+.sidebar {
+  background: var(--cream);
+  border-right: 1px solid var(--line);
+  padding: 20px 12px;
+  display: flex; flex-direction: column; gap: 22px;
+  position: sticky; top: 0;
+  height: 100vh;
+  overflow-y: auto;
+}
+.brand {
+  display: flex; align-items: center; gap: 10px;
+  padding: 0 10px;
+  font-family: 'Instrument Serif', Georgia, serif;
+  font-size: 22px; font-weight: 400;
+  font-style: italic;
+  color: var(--ink);
+  letter-spacing: -0.01em;
+}
+.brand .mark {
+  width: 28px; height: 28px;
+  background: var(--terra);
+  border-radius: 6px;
+  display: grid; place-items: center;
+  color: var(--cream);
+  font-family: 'Inter', sans-serif;
+  font-weight: 700;
+  font-style: normal;
+  font-size: 14px;
+  letter-spacing: -0.02em;
+}
+
+.product-picker {
+  margin: 0 4px;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px 12px;
+  cursor: pointer;
+  display: flex; align-items: center; gap: 10px;
+  transition: border-color .15s;
+}
+.product-picker:hover { border-color: var(--line-hi); }
+.product-picker .swatch {
+  width: 24px; height: 24px; border-radius: 5px;
+  background: linear-gradient(135deg, var(--terra), #e89770);
+  flex-shrink: 0;
+}
+.product-picker .info { flex: 1; min-width: 0; }
+.product-picker .name { font-size: 13.5px; font-weight: 600; color: var(--ink); }
+.product-picker .sub {
+  font-size: 11px; color: var(--ink-3);
+  font-family: 'JetBrains Mono', monospace;
+  letter-spacing: 0.02em;
+}
+.product-picker .chev { color: var(--ink-3); font-size: 10px; }
+
+.nav-section { display: flex; flex-direction: column; gap: 1px; }
+.nav-section .heading {
+  font-size: 10.5px; font-weight: 600;
+  color: var(--ink-3);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 0 10px 6px;
+}
+.nav-item {
+  padding: 7px 10px;
+  border-radius: 8px;
+  display: flex; align-items: center; gap: 10px;
+  font-size: 13.5px;
+  color: var(--ink-2);
+  cursor: pointer;
+  transition: background .1s;
+}
+.nav-item:hover { background: var(--cream-deep); color: var(--ink); }
+.nav-item.active {
+  background: var(--terra-soft);
+  color: var(--terra-deep);
+  font-weight: 500;
+}
+.nav-item .ico {
+  width: 16px; height: 16px;
+  display: grid; place-items: center;
+  opacity: 0.7;
+}
+.nav-item.active .ico { opacity: 1; }
+.nav-item .ct {
+  margin-left: auto;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  color: var(--ink-4);
+}
+.nav-item.active .ct { color: var(--terra); }
+
+.sidebar .bottom {
+  margin-top: auto;
+  padding: 12px 10px;
+  border-top: 1px solid var(--line);
+  font-size: 11.5px;
+  color: var(--ink-3);
+  display: flex; align-items: center; gap: 8px;
+}
+.sidebar .bottom::before {
+  content: ''; width: 7px; height: 7px; border-radius: 50%;
+  background: var(--sage);
+  box-shadow: 0 0 6px var(--sage);
+  animation: pulse 2.4s infinite;
+}
+@keyframes pulse { 50% { opacity: 0.4; } }
+
+/* ── Main ────────────────────────────────────────────────────────── */
+main { padding: 28px 36px 60px; min-width: 0; }
+
+.page-head {
+  display: flex; align-items: flex-end; gap: 16px;
+  margin-bottom: 18px;
+}
+.page-head h1 {
+  font-family: 'Instrument Serif', Georgia, serif;
+  font-size: 38px; font-weight: 400;
+  font-style: italic;
+  letter-spacing: -0.015em;
+  line-height: 1;
+}
+.page-head h1 em { font-style: italic; color: var(--terra); }
+.page-head .meta {
+  font-size: 13px;
+  color: var(--ink-3);
+  padding-bottom: 6px;
+  line-height: 1.5;
+}
+.page-head .spacer { flex: 1; }
+
+.btn {
+  height: 34px; padding: 0 14px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--paper);
+  font-family: inherit; font-size: 13px; font-weight: 500;
+  color: var(--ink);
+  cursor: pointer;
+  display: inline-flex; align-items: center; gap: 8px;
+  transition: background .12s, border-color .12s;
+}
+.btn:hover { background: var(--cream-deep); }
+.btn-primary {
+  background: var(--terra); color: var(--cream);
+  border-color: var(--terra);
+}
+.btn-primary:hover { background: var(--terra-deep); border-color: var(--terra-deep); }
+
+/* KPI row */
+.kpis {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 12px;
+  margin-bottom: 20px;
+}
+.kpi {
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 14px 16px;
+  position: relative;
+  overflow: hidden;
+}
+.kpi .label {
+  font-size: 11.5px;
+  color: var(--ink-3);
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+.kpi .val {
+  font-family: 'Instrument Serif', Georgia, serif;
+  font-weight: 400;
+  font-style: italic;
+  font-size: 30px;
+  color: var(--ink);
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+  margin-top: 6px;
+  font-variant-numeric: tabular-nums;
+}
+.kpi .delta {
+  font-size: 12px;
+  font-weight: 500;
+  margin-top: 4px;
+  color: var(--sage);
+  font-family: 'JetBrains Mono', monospace;
+}
+.kpi .delta.down { color: var(--coral); }
+.kpi .spark {
+  position: absolute; right: 14px; bottom: 14px;
+  width: 60px; height: 22px;
+  opacity: 0.8;
+}
+
+/* Filter area */
+.filter-group {
+  display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+  margin-bottom: 18px;
+}
+.search {
+  flex: 1; min-width: 240px; position: relative;
+}
+.search input {
+  width: 100%; height: 36px;
+  background: var(--paper); border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 0 40px 0 36px;
+  font-family: inherit; font-size: 13.5px;
+  color: var(--ink);
+  outline: none;
+  transition: border-color .15s, box-shadow .15s;
+}
+.search input::placeholder { color: var(--ink-4); font-style: italic; }
+.search input:focus {
+  border-color: var(--terra);
+  box-shadow: 0 0 0 3px var(--terra-soft);
+}
+.search::before {
+  content: '⌕'; position: absolute; left: 14px; top: 50%; transform: translateY(-50%);
+  color: var(--ink-4); font-size: 15px;
+}
+.search .kbd {
+  position: absolute; right: 10px; top: 50%; transform: translateY(-50%);
+  font-family: 'JetBrains Mono', monospace; font-size: 10.5px;
+  color: var(--ink-3);
+  background: var(--cream-deep);
+  padding: 2px 6px; border-radius: 4px;
+}
+.f-pill {
+  display: inline-flex; align-items: center; gap: 6px;
+  height: 32px; padding: 0 12px;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font-size: 12.5px; font-weight: 500;
+  color: var(--ink-2);
+  cursor: pointer; white-space: nowrap;
+  transition: all .12s;
+}
+.f-pill:hover { background: var(--cream-deep); color: var(--ink); }
+.f-pill.active {
+  background: var(--terra-soft);
+  border-color: transparent;
+  color: var(--terra-deep);
+}
+.f-pill .chev { font-size: 10px; color: inherit; opacity: 0.6; }
+
+/* Table */
+.table-card {
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  overflow: hidden;
+}
+table.tbl {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+table.tbl thead th {
+  text-align: left;
+  padding: 11px 14px;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--ink-3);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  background: var(--cream);
+  border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+}
+table.tbl thead th.num { text-align: right; }
+table.tbl tbody td {
+  padding: 14px;
+  vertical-align: middle;
+  border-bottom: 1px solid var(--line);
+  color: var(--ink);
+  white-space: nowrap;
+}
+table.tbl tbody tr { transition: background .12s; cursor: pointer; }
+table.tbl tbody tr:hover { background: var(--cream); }
+table.tbl tbody tr:last-child td { border-bottom: none; }
+
+/* Creative cell */
+.c-cell { display: flex; align-items: center; gap: 12px; }
+.thumb {
+  width: 42px; height: 42px; border-radius: 8px;
+  flex-shrink: 0;
+  background: linear-gradient(135deg, #e89770 0%, var(--terra) 100%);
+  position: relative; overflow: hidden;
+  box-shadow: 0 1px 3px rgba(26,22,18,.08);
+}
+.thumb::after {
+  content: '▶'; position: absolute; inset: 0;
+  display: grid; place-items: center;
+  color: rgba(255,255,255,.9); font-size: 12px;
+  text-shadow: 0 1px 2px rgba(0,0,0,.2);
+}
+.thumb.photo { background: linear-gradient(135deg, #a4c089 0%, var(--sage) 100%); }
+.thumb.photo::after { content: '◈'; }
+.c-title .name {
+  font-family: 'Instrument Serif', Georgia, serif;
+  font-size: 17px;
+  font-weight: 400;
+  color: var(--ink);
+  letter-spacing: -0.01em;
+  line-height: 1.2;
+}
+.c-title .name em { color: var(--ink-3); font-style: italic; }
+.c-title .sub {
+  font-size: 11.5px; color: var(--ink-3);
+  font-family: 'JetBrains Mono', monospace;
+  margin-top: 2px;
+  letter-spacing: 0.02em;
+}
+.c-title .sub a { color: var(--ink-3); text-decoration: none; }
+.c-title .sub a:hover { color: var(--terra); }
+
+/* Tags */
+.tg {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 5px;
+  font-size: 12px;
+  font-weight: 500;
+  background: var(--cream);
+  border: 1px solid var(--line);
+  color: var(--ink-2);
+}
+.tg.angle   { background: var(--terra-soft); color: var(--terra-deep); border-color: transparent; }
+.tg.persona { background: var(--sage-soft); color: var(--sage); border-color: transparent; }
+.tg.hook    { background: var(--mustard-soft); color: var(--mustard); border-color: transparent; }
+
+/* Status */
+.status {
+  display: inline-flex; align-items: center; gap: 7px;
+  font-weight: 500; font-size: 12.5px;
+}
+.status .dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  flex-shrink: 0;
+}
+.status.massive { color: var(--emerald); }
+.status.massive .dot { background: var(--emerald); box-shadow: 0 0 0 3px var(--emerald-soft); }
+.status.winner  { color: var(--sage); }
+.status.winner .dot { background: var(--sage); box-shadow: 0 0 0 3px var(--sage-soft); }
+.status.mild    { color: var(--mustard); }
+.status.mild .dot { background: var(--mustard); box-shadow: 0 0 0 3px var(--mustard-soft); }
+.status.fatigue { color: var(--coral); }
+.status.fatigue .dot { background: var(--coral); box-shadow: 0 0 0 3px var(--coral-soft); }
+.status.testing { color: var(--dusk); }
+.status.testing .dot { background: var(--dusk); box-shadow: 0 0 0 3px var(--dusk-soft); }
+.status.loser   { color: var(--rust); }
+.status.loser .dot { background: var(--rust); box-shadow: 0 0 0 3px var(--rust-soft); }
+
+/* Funnel */
+.fn {
+  display: inline-block;
+  font-family: 'Instrument Serif', serif;
+  font-style: italic;
+  font-size: 15px;
+  color: var(--ink-2);
+}
+
+/* Numbers */
+.num { text-align: right; font-variant-numeric: tabular-nums; }
+.num-big {
+  font-size: 14px; font-weight: 600;
+  color: var(--ink);
+  font-family: 'JetBrains Mono', monospace;
+}
+.num-roas {
+  font-family: 'Instrument Serif', Georgia, serif;
+  font-style: italic;
+  font-size: 20px;
+  font-weight: 400;
+}
+.num-roas.massive { color: var(--emerald); }
+.num-roas.up      { color: var(--sage); }
+.num-roas.mild    { color: var(--mustard); }
+.num-roas.down    { color: var(--coral); }
+.num-roas.loser   { color: var(--rust); }
+.num-roas.dim     { color: var(--ink-4); }
+
+/* Sparkline in row */
+.row-spark {
+  display: block;
+  width: 70px; height: 22px;
+  margin-left: auto;
+}
+
+/* Links */
+.lnk { display: inline-flex; gap: 4px; }
+.lnk a {
+  width: 28px; height: 28px;
+  display: grid; place-items: center;
+  border-radius: 6px;
+  color: var(--ink-3);
+  text-decoration: none;
+  font-size: 13px;
+  transition: all .12s;
+}
+.lnk a:hover { background: var(--terra-soft); color: var(--terra-deep); }
+
+.date { color: var(--ink-3); font-size: 12.5px; font-family: 'JetBrains Mono', monospace; }
+</style>
+</head>
+<body>
+
+<aside class="sidebar">
+  <div class="brand">
+    <div class="mark">I</div>
+    Immuvi
+  </div>
+
+  <div class="product-picker">
+    <div class="swatch"></div>
+    <div class="info">
+      <div class="name">Art Therapy</div>
+      <div class="sub">901613534733</div>
+    </div>
+    <div class="chev">▾</div>
+  </div>
+
+  <div class="nav-section">
+    <div class="heading">Overview</div>
+    <div class="nav-item"><span class="ico">◉</span> Command HQ</div>
+  </div>
+
+  <div class="nav-section">
+    <div class="heading">Taxonomy</div>
+    <div class="nav-item"><span class="ico">◇</span> Angles <span class="ct">7</span></div>
+    <div class="nav-item"><span class="ico">◔</span> Personas <span class="ct">5</span></div>
+  </div>
+
+  <div class="nav-section">
+    <div class="heading">Creatives</div>
+    <div class="nav-item active"><span class="ico">❑</span> Creative Tracker <span class="ct">66</span></div>
+    <div class="nav-item"><span class="ico">▦</span> Creative Matrix <span class="ct">19/35</span></div>
+    <div class="nav-item"><span class="ico">⌔</span> Inspiration <span class="ct">0</span></div>
+  </div>
+
+  <div class="nav-section">
+    <div class="heading">Operations</div>
+    <div class="nav-item"><span class="ico">►</span> Action Plan <span class="ct">3</span></div>
+    <div class="nav-item"><span class="ico">⚒</span> Production <span class="ct">3</span></div>
+  </div>
+
+  <div class="bottom">Live · synced 16s ago</div>
+</aside>
+
+<main>
+  <div class="page-head">
+    <h1>Creative <em>Tracker.</em></h1>
+    <div class="meta">
+      Sixty-six creatives across Art Therapy.<br>
+      <span style="color: var(--ink-4);">Last synced 16 seconds ago</span>
+    </div>
+    <div class="spacer"></div>
+    <button class="btn">↻ Reset</button>
+    <button class="btn">⇡ Push all</button>
+    <button class="btn btn-primary">+ Add creative</button>
+  </div>
+
+  <div class="kpis">
+    <div class="kpi">
+      <div class="label">Creatives</div>
+      <div class="val">66</div>
+      <div class="delta">+3 this week</div>
+      <svg class="spark" viewBox="0 0 60 22">
+        <polyline fill="none" stroke="#c15f3c" stroke-width="1.4"
+          points="0,18 10,14 20,15 30,10 40,8 50,6 60,4"/>
+      </svg>
+    </div>
+    <div class="kpi">
+      <div class="label">Winners 7d</div>
+      <div class="val">18</div>
+      <div class="delta">+2</div>
+      <svg class="spark" viewBox="0 0 60 22">
+        <polyline fill="none" stroke="#6b7f5e" stroke-width="1.4"
+          points="0,16 10,14 20,13 30,12 40,10 50,9 60,6"/>
+      </svg>
+    </div>
+    <div class="kpi">
+      <div class="label">Fatigued</div>
+      <div class="val">3</div>
+      <div class="delta down">+1</div>
+      <svg class="spark" viewBox="0 0 60 22">
+        <polyline fill="none" stroke="#d46a3e" stroke-width="1.4"
+          points="0,12 10,13 20,12 30,14 40,15 50,17 60,18"/>
+      </svg>
+    </div>
+    <div class="kpi">
+      <div class="label">Spend 7d</div>
+      <div class="val">$12.4k</div>
+      <div class="delta">+18%</div>
+      <svg class="spark" viewBox="0 0 60 22">
+        <polyline fill="none" stroke="#1a1612" stroke-width="1.4"
+          points="0,18 10,16 20,14 30,12 40,10 50,7 60,5"/>
+      </svg>
+    </div>
+    <div class="kpi">
+      <div class="label">Blended ROAS</div>
+      <div class="val">1.38×</div>
+      <div class="delta">+0.04</div>
+      <svg class="spark" viewBox="0 0 60 22">
+        <polyline fill="none" stroke="#3d6e54" stroke-width="1.4"
+          points="0,12 10,14 20,11 30,13 40,10 50,9 60,8"/>
+      </svg>
+    </div>
+  </div>
+
+  <div class="filter-group">
+    <div class="search">
+      <input placeholder="Search creatives, angles, personas…">
+      <span class="kbd">⌘K</span>
+    </div>
+    <div class="f-pill active">Winners <span class="chev">▾</span></div>
+    <div class="f-pill">Angle <span class="chev">▾</span></div>
+    <div class="f-pill">Persona <span class="chev">▾</span></div>
+    <div class="f-pill">Hook <span class="chev">▾</span></div>
+    <div class="f-pill">Funnel <span class="chev">▾</span></div>
+    <div class="f-pill">Today <span class="chev">▾</span></div>
+  </div>
+
+  <div class="table-card">
+    <table class="tbl">
+      <thead>
+        <tr>
+          <th>Creative</th>
+          <th>Angle</th>
+          <th>Persona</th>
+          <th>Hook</th>
+          <th>Funnel</th>
+          <th>Status</th>
+          <th class="num">Spend 7d</th>
+          <th class="num">ROAS 7d</th>
+          <th>Trend</th>
+          <th>Created</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>
+            <div class="c-cell">
+              <div class="thumb"></div>
+              <div class="c-title">
+                <div class="name">5773-1 <em>old winner</em></div>
+                <div class="sub">AT-11439-v1 · <a href="#">ClickUp</a></div>
+              </div>
+            </div>
+          </td>
+          <td><span class="tg angle">Art as Therapy</span></td>
+          <td><span class="tg persona">Women 25-45</span></td>
+          <td><span class="tg hook">POV</span></td>
+          <td><span class="fn">TOF</span></td>
+          <td><span class="status massive"><span class="dot"></span>Massive</span></td>
+          <td class="num num-big">$1,842</td>
+          <td class="num num-roas massive">1.92×</td>
+          <td>
+            <svg class="row-spark" viewBox="0 0 70 22">
+              <polyline fill="none" stroke="#3d6e54" stroke-width="1.6"
+                points="0,18 10,14 20,12 30,11 40,8 50,6 60,4 70,3"/>
+            </svg>
+          </td>
+          <td class="date">21 Apr</td>
+        </tr>
+        <tr>
+          <td>
+            <div class="c-cell">
+              <div class="thumb photo"></div>
+              <div class="c-title">
+                <div class="name">4570-1 <em>old winner</em></div>
+                <div class="sub">AT-10835 · <a href="#">ClickUp</a></div>
+              </div>
+            </div>
+          </td>
+          <td><span class="tg angle">Emotional Lit.</span></td>
+          <td><span class="tg persona">Women 25-45</span></td>
+          <td><span class="tg hook">Curiosity</span></td>
+          <td><span class="fn">TOF</span></td>
+          <td><span class="status winner"><span class="dot"></span>Winner</span></td>
+          <td class="num num-big">$806</td>
+          <td class="num num-roas up">1.54×</td>
+          <td>
+            <svg class="row-spark" viewBox="0 0 70 22">
+              <polyline fill="none" stroke="#6b7f5e" stroke-width="1.6"
+                points="0,14 10,13 20,11 30,12 40,10 50,9 60,8 70,7"/>
+            </svg>
+          </td>
+          <td class="date">19 Apr</td>
+        </tr>
+        <tr>
+          <td>
+            <div class="c-cell">
+              <div class="thumb photo"></div>
+              <div class="c-title">
+                <div class="name">4569-2 <em>old winner</em></div>
+                <div class="sub">AT-10834 · <a href="#">ClickUp</a></div>
+              </div>
+            </div>
+          </td>
+          <td><span class="tg angle">Scarcity</span></td>
+          <td><span class="tg persona">Women 25-45</span></td>
+          <td><span class="tg hook">Pattern Intr.</span></td>
+          <td><span class="fn">TOF</span></td>
+          <td><span class="status mild"><span class="dot"></span>Mild</span></td>
+          <td class="num num-big">$412</td>
+          <td class="num num-roas mild">1.33×</td>
+          <td>
+            <svg class="row-spark" viewBox="0 0 70 22">
+              <polyline fill="none" stroke="#c18f33" stroke-width="1.6"
+                points="0,12 10,13 20,11 30,12 40,13 50,11 60,12 70,11"/>
+            </svg>
+          </td>
+          <td class="date">18 Apr</td>
+        </tr>
+        <tr>
+          <td>
+            <div class="c-cell">
+              <div class="thumb photo"></div>
+              <div class="c-title">
+                <div class="name">10785-2 <em>old winner</em></div>
+                <div class="sub">AT-10733 · <a href="#">ClickUp</a></div>
+              </div>
+            </div>
+          </td>
+          <td><span class="tg angle">Scarcity</span></td>
+          <td><span class="tg persona">Women 25-45</span></td>
+          <td><span class="tg hook">Pattern Intr.</span></td>
+          <td><span class="fn">TOF</span></td>
+          <td><span class="status fatigue"><span class="dot"></span>Fatigued</span></td>
+          <td class="num num-big">$1,205</td>
+          <td class="num num-roas down">0.98× ↓</td>
+          <td>
+            <svg class="row-spark" viewBox="0 0 70 22">
+              <polyline fill="none" stroke="#d46a3e" stroke-width="1.6"
+                points="0,6 10,7 20,8 30,10 40,12 50,14 60,16 70,18"/>
+            </svg>
+          </td>
+          <td class="date">10 Apr</td>
+        </tr>
+        <tr>
+          <td>
+            <div class="c-cell">
+              <div class="thumb photo"></div>
+              <div class="c-title">
+                <div class="name">6197-1 <em>old winner</em></div>
+                <div class="sub">AT-10612 · <a href="#">ClickUp</a></div>
+              </div>
+            </div>
+          </td>
+          <td><span class="tg angle">Scarcity</span></td>
+          <td><span class="tg persona">Women 25-45</span></td>
+          <td><span class="tg hook">Direct Offer</span></td>
+          <td><span class="fn">TOF</span></td>
+          <td><span class="status testing"><span class="dot"></span>Testing</span></td>
+          <td class="num num-big" style="color: var(--ink-3)">$28</td>
+          <td class="num num-roas dim">—</td>
+          <td>
+            <svg class="row-spark" viewBox="0 0 70 22">
+              <polyline fill="none" stroke="#b5a991" stroke-width="1.4" stroke-dasharray="2 2"
+                points="0,11 70,11"/>
+            </svg>
+          </td>
+          <td class="date">21 Apr</td>
+        </tr>
+        <tr>
+          <td>
+            <div class="c-cell">
+              <div class="thumb"></div>
+              <div class="c-title">
+                <div class="name">11436 <em>new concept</em></div>
+                <div class="sub">AT-11436 · <a href="#">ClickUp</a></div>
+              </div>
+            </div>
+          </td>
+          <td><span class="tg angle">Calm / Unwind</span></td>
+          <td><span class="tg persona">Self-Care Adults</span></td>
+          <td><span class="tg hook">Curiosity</span></td>
+          <td><span class="fn">TOF</span></td>
+          <td><span class="status loser"><span class="dot"></span>Loser</span></td>
+          <td class="num num-big">$187</td>
+          <td class="num num-roas loser">0.42×</td>
+          <td>
+            <svg class="row-spark" viewBox="0 0 70 22">
+              <polyline fill="none" stroke="#a83d34" stroke-width="1.6"
+                points="0,8 10,10 20,12 30,14 40,15 50,17 60,18 70,20"/>
+            </svg>
+          </td>
+          <td class="date">14 Apr</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</main>
+
+</body>
+</html>

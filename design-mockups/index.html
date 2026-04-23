@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Creative Tracker — Design Directions</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: 'Inter', sans-serif;
+  background: #fafaf7;
+  color: #1c1916;
+  padding: 48px 32px 80px;
+  -webkit-font-smoothing: antialiased;
+}
+.wrap { max-width: 1320px; margin: 0 auto; }
+
+header { margin-bottom: 30px; }
+header .kicker {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #c15f3c;
+  font-weight: 600;
+  margin-bottom: 12px;
+}
+header h1 {
+  font-family: 'Instrument Serif', Georgia, serif;
+  font-size: 52px;
+  font-style: italic;
+  font-weight: 400;
+  letter-spacing: -0.02em;
+  line-height: 1.05;
+  margin-bottom: 14px;
+}
+header h1 .count {
+  font-style: normal; font-family: 'JetBrains Mono', monospace;
+  font-size: 42px;
+  color: #c15f3c;
+}
+header p {
+  color: #5a554e;
+  font-size: 15px;
+  max-width: 720px;
+  line-height: 1.65;
+}
+
+.round-head {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #8f8a80;
+  font-weight: 600;
+  margin: 40px 0 12px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #e5e0d4;
+  display: flex; align-items: baseline; gap: 10px;
+}
+.round-head .sub {
+  font-family: 'Inter', sans-serif;
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 400;
+  color: #8f8a80;
+  font-size: 13px;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px;
+}
+
+.card {
+  background: white;
+  border: 1px solid #e5e0d4;
+  border-radius: 12px;
+  overflow: hidden;
+  display: flex; flex-direction: column;
+  transition: transform .2s ease, box-shadow .2s ease, border-color .2s;
+  cursor: pointer;
+  text-decoration: none; color: inherit;
+}
+.card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 12px 32px rgba(0,0,0,.08);
+  border-color: #d8ccb5;
+}
+
+.preview {
+  height: 260px;
+  position: relative;
+  overflow: hidden;
+  border-bottom: 1px solid #e5e0d4;
+  background: #f7f4ed;
+}
+.preview iframe {
+  width: 1440px; height: 900px;
+  border: none;
+  transform: scale(0.31);
+  transform-origin: top left;
+  pointer-events: none;
+}
+
+.body { padding: 20px 22px; }
+.body .row {
+  display: flex; align-items: baseline; gap: 10px;
+  margin-bottom: 8px;
+}
+.body .num {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
+  font-weight: 700;
+  color: #c15f3c;
+  letter-spacing: 0.02em;
+}
+.body .label {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #8f8a80;
+  font-weight: 600;
+}
+.body h2 {
+  font-family: 'Instrument Serif', Georgia, serif;
+  font-size: 26px;
+  font-weight: 400;
+  line-height: 1.15;
+  margin-bottom: 10px;
+}
+.body h2 em { font-style: italic; color: #3f5c3a; }
+.body p {
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: #5a554e;
+  margin-bottom: 14px;
+}
+.tagbar {
+  display: flex; flex-wrap: wrap; gap: 6px;
+  font-size: 11px;
+}
+.tagbar span {
+  padding: 3px 8px;
+  background: #f7f4ed;
+  border: 1px solid #e5e0d4;
+  border-radius: 4px;
+  color: #5a554e;
+  font-weight: 500;
+}
+.tagbar .inspiration {
+  background: #fff4ea;
+  border-color: #f3dcc2;
+  color: #a34d2d;
+}
+
+.section-intro {
+  background: white;
+  border: 1px solid #e5e0d4;
+  border-radius: 12px;
+  padding: 24px 28px;
+  margin-bottom: 30px;
+}
+.section-intro h3 {
+  font-family: 'Instrument Serif', serif;
+  font-style: italic;
+  font-size: 24px;
+  font-weight: 400;
+  color: #3f5c3a;
+  margin-bottom: 12px;
+}
+.section-intro .axes {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px 30px;
+  font-size: 13.5px;
+  color: #5a554e;
+  line-height: 1.6;
+}
+.section-intro .axes li { list-style: none; }
+.section-intro .axes li::before {
+  content: '— '; color: #c15f3c; font-weight: 700;
+}
+
+footer {
+  margin-top: 50px;
+  padding-top: 24px;
+  border-top: 1px solid #e5e0d4;
+  font-size: 12px;
+  color: #8f8a80;
+  text-align: center;
+  line-height: 1.7;
+}
+footer code {
+  background: white;
+  padding: 2px 7px;
+  border: 1px solid #e5e0d4;
+  border-radius: 4px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  color: #5a554e;
+}
+footer .refs {
+  margin-top: 10px;
+  display: flex; justify-content: center; gap: 14px; flex-wrap: wrap;
+}
+footer .refs a {
+  color: #c15f3c;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <div class="kicker">Immuvi Command Center · Creative Tracker</div>
+  <h1><em>Nine directions.</em> <span class="count">09</span></h1>
+  <p>Nine distinct design philosophies for the same sheet. Same sample data across all of them (6 creatives spanning Massive&nbsp;Winner → Loser) so you can compare fairly. Round&nbsp;1 explored foundational options. Round&nbsp;2 incorporates current industry references — Anthropic Claude, Vercel Geist, PostHog data-viz, Raycast, and Swiss editorial.</p>
+</header>
+
+<section class="section-intro">
+  <h3>How to choose</h3>
+  <ul class="axes">
+    <li><strong>Density</strong> — Linear / Geist / Terminal / Data-viz are tight; Claude / Editorial / Swiss give breathing room</li>
+    <li><strong>Mode</strong> — Dark: Linear, Terminal, Geist, Raycast · Light: Editorial, Stripe, Claude, Data-viz, Swiss</li>
+    <li><strong>Accent philosophy</strong> — One color (Geist, Swiss), warm (Claude, Editorial), colorful (Raycast, Stripe)</li>
+    <li><strong>Hero element</strong> — Typography (Claude, Swiss) vs data (Data-viz, Terminal) vs hierarchy (Linear, Stripe)</li>
+    <li><strong>Navigation</strong> — Sidebar pattern in 05-Claude and 06-Geist (matches 2026 Vercel redesign standard)</li>
+    <li><strong>Pick hybrid</strong> — Most real choices combine directions (e.g. Claude sidebar + Data-viz charts + Geist table)</li>
+  </ul>
+</section>
+
+<div class="round-head">Round 01 <span class="sub">Foundational directions</span></div>
+
+<div class="grid">
+
+  <a class="card" href="01-linear.html" target="_blank">
+    <div class="preview"><iframe src="01-linear.html"></iframe></div>
+    <div class="body">
+      <div class="row"><span class="num">01</span><span class="label">Dark · Dense · Engineered</span></div>
+      <h2><em>Linear.</em> Dark monochrome.</h2>
+      <p>Near-black, single purple accent, 32px tight rows, JetBrains Mono IDs. For the buyer who lives in the dashboard.</p>
+      <div class="tagbar"><span>Dark</span><span>Inter + Mono</span><span>Single purple</span><span>Linear/Attio</span></div>
+    </div>
+  </a>
+
+  <a class="card" href="02-editorial.html" target="_blank">
+    <div class="preview"><iframe src="02-editorial.html"></iframe></div>
+    <div class="body">
+      <div class="row"><span class="num">02</span><span class="label">Light · Serif · Crafted</span></div>
+      <h2><em>Editorial.</em> Warm, typographic.</h2>
+      <p>Off-white paper, Instrument Serif italic headers, forest-green accent, muted earth tones. For strategists.</p>
+      <div class="tagbar"><span>Light</span><span>Serif-led</span><span>Forest green</span><span>Notion-Pitch</span></div>
+    </div>
+  </a>
+
+  <a class="card" href="03-stripe-attio.html" target="_blank">
+    <div class="preview"><iframe src="03-stripe-attio.html"></iframe></div>
+    <div class="body">
+      <div class="row"><span class="num">03</span><span class="label">Light · Balanced · Polished</span></div>
+      <h2><em>Stripe / Attio.</em> Professional.</h2>
+      <p>Clean light mode, violet accent, KPI cards, status pills, keyboard shortcuts visible. The safe/demo-ready direction.</p>
+      <div class="tagbar"><span>Light</span><span>Inter</span><span>Violet</span><span>Stripe/Attio</span></div>
+    </div>
+  </a>
+
+  <a class="card" href="04-terminal.html" target="_blank">
+    <div class="preview"><iframe src="04-terminal.html"></iframe></div>
+    <div class="body">
+      <div class="row"><span class="num">04</span><span class="label">Dark · Ultra-dense · Numerical</span></div>
+      <h2><em>Terminal.</em> Trader desk.</h2>
+      <p>Pure black, orange accent, monospace everywhere, live ticker + status bar. For buyers juggling 7+ accounts.</p>
+      <div class="tagbar"><span>Dark</span><span>Mono-heavy</span><span>Orange</span><span>Bloomberg</span></div>
+    </div>
+  </a>
+
+</div>
+
+<div class="round-head">Round 02 <span class="sub">New references — Claude Design, Vercel Geist, PostHog, Raycast, Swiss</span></div>
+
+<div class="grid">
+
+  <a class="card" href="05-claude.html" target="_blank">
+    <div class="preview"><iframe src="05-claude.html"></iframe></div>
+    <div class="body">
+      <div class="row"><span class="num">05</span><span class="label">Light · Warm · Thoughtful</span></div>
+      <h2><em>Anthropic Claude.</em> Cream & terracotta.</h2>
+      <p>Warm cream canvas, terracotta accent, Instrument Serif italic headlines, sidebar navigation, sparklines embedded in KPIs and rows. Direct reference to Claude Design's visual language — "feels like talking with something thoughtful."</p>
+      <div class="tagbar"><span class="inspiration">Claude Design</span><span>Cream + Terracotta</span><span>Serif + Sans</span><span>Sidebar nav</span><span>Sparklines</span></div>
+    </div>
+  </a>
+
+  <a class="card" href="06-geist.html" target="_blank">
+    <div class="preview"><iframe src="06-geist.html"></iframe></div>
+    <div class="body">
+      <div class="row"><span class="num">06</span><span class="label">Dark · Minimal · Reduced</span></div>
+      <h2><em>Vercel Geist 2026.</em> Aggressive reduction.</h2>
+      <p>Pure black/white/gray with <code>#0070F3</code> blue ONLY on primary actions — zero warm undertones, no decorative color. Geist Sans + Geist Mono throughout. Sidebar navigation. Matches Vercel's Feb 2026 dashboard redesign.</p>
+      <div class="tagbar"><span class="inspiration">Vercel Geist</span><span>Pure neutrals</span><span>Geist font</span><span>Sidebar</span><span>One accent</span></div>
+    </div>
+  </a>
+
+  <a class="card" href="07-dataviz.html" target="_blank">
+    <div class="preview"><iframe src="07-dataviz.html"></iframe></div>
+    <div class="body">
+      <div class="row"><span class="num">07</span><span class="label">Light · Data-heavy · Analytical</span></div>
+      <h2><em>Data-Viz Command.</em> Charts everywhere.</h2>
+      <p>Every row has a spend distribution bar chart, a 14-day ROAS sparkline, WoW trend badges. KPI band at top has full area-charts. Spend shown as inline progress bars. Numbers are the hero. PostHog-inspired.</p>
+      <div class="tagbar"><span class="inspiration">PostHog</span><span>Inline charts</span><span>Sparklines</span><span>Bar-per-row</span><span>Trend deltas</span></div>
+    </div>
+  </a>
+
+  <a class="card" href="08-raycast.html" target="_blank">
+    <div class="preview"><iframe src="08-raycast.html"></iframe></div>
+    <div class="body">
+      <div class="row"><span class="num">08</span><span class="label">Dark · Premium · Depth</span></div>
+      <h2><em>Raycast Premium.</em> Depth + gradient.</h2>
+      <p>Dark with subtle radial gradients, glass/blur top bar, gradient-lit status pills with glow, conic-gradient brand mark, layered shadows for depth. Feels like a premium professional tool rather than a spreadsheet.</p>
+      <div class="tagbar"><span class="inspiration">Raycast</span><span>Gradients</span><span>Glassmorphism</span><span>Glow</span><span>Depth layers</span></div>
+    </div>
+  </a>
+
+  <a class="card" href="09-swiss.html" target="_blank" style="grid-column: span 2;">
+    <div class="preview" style="height: 320px;"><iframe src="09-swiss.html"></iframe></div>
+    <div class="body">
+      <div class="row"><span class="num">09</span><span class="label">Light · Editorial · Brutalist</span></div>
+      <h2><em>Swiss Editorial.</em> Magazine-grade hierarchy.</h2>
+      <p>Huge headline typography (84px h1), thick black rules as dividers, one electric-orange accent used surgically, newspaper-style numeric band, JetBrains Mono for all metadata. Status cells are bordered blocks — no soft pills. The most distinctive direction — will look nothing like any other app in your stack.</p>
+      <div class="tagbar"><span class="inspiration">Swiss design</span><span class="inspiration">basement.studio</span><span>Massive type</span><span>Editorial rules</span><span>#FF4800 electric orange</span><span>Brutalist blocks</span></div>
+    </div>
+  </a>
+
+</div>
+
+<div class="round-head">Round 06 <span class="sub">Skill-powered — interface-design + ui-ux-pro-max + ux-designer · Tracker + Matrix tabs</span></div>
+
+<div class="grid">
+
+  <a class="card" href="27-operator-dark.html" target="_blank">
+    <div class="preview"><iframe src="27-operator-dark.html"></iframe></div>
+    <div class="body">
+      <div class="row"><span class="num">27</span><span class="label">Dark · Dense · Terminal</span></div>
+      <h2><em>Operator Dark.</em> Bloomberg meets Vercel.</h2>
+      <p>Pitch-black #09090b canvas, JetBrains Mono throughout, 32px compact rows, status as colored text (no pills). Matrix is a true heatmap — tinted cells per status with glow on hover. Zero rounded corners. For power users who live in this tab all day.</p>
+      <div class="tagbar"><span class="inspiration">Bloomberg Terminal</span><span class="inspiration">Vercel Dashboard</span><span>Monospace-first</span><span>Heatmap matrix</span><span>Operator density</span></div>
+    </div>
+  </a>
+
+  <a class="card" href="28-intelligence-brief.html" target="_blank">
+    <div class="preview"><iframe src="28-intelligence-brief.html"></iframe></div>
+    <div class="body">
+      <div class="row"><span class="num">28</span><span class="label">Warm · Editorial · Serif</span></div>
+      <h2><em>Intelligence Brief.</em> The Economist meets creative ops.</h2>
+      <p>Warm parchment #f5f0e8, Playfair Display italic headings, Space Grotesk body. Matrix labeled "Coverage Map" — empty cells show "— uncovered —" in muted serif italic. Tracker has a 4px amber left-rule hover accent. Stamped ALL-CAPS status chips. Magazine-grade hierarchy.</p>
+      <div class="tagbar"><span class="inspiration">The Economist</span><span class="inspiration">Intelligence briefing</span><span>Playfair Display</span><span>Warm parchment</span><span>Coverage map</span></div>
+    </div>
+  </a>
+
+  <a class="card" href="29-pivot-pro.html" target="_blank">
+    <div class="preview"><iframe src="29-pivot-pro.html"></iframe></div>
+    <div class="body">
+      <div class="row"><span class="num">29</span><span class="label">Light · Grouped · Database</span></div>
+      <h2><em>Pivot Pro.</em> Airtable meets Notion.</h2>
+      <p>Clean white, Inter, indigo #4f46e5 accent. Tracker rows grouped by Angle with collapsible group headers. Pastel status pills. Matrix as a proper pivot table with 3px color bars at cell bottom and count circles. Sticky search + filter chip toolbar. Familiar for ops users.</p>
+      <div class="tagbar"><span class="inspiration">Airtable</span><span class="inspiration">Notion</span><span>Grouped rows</span><span>Pivot table</span><span>Pastel pills</span></div>
+    </div>
+  </a>
+
+  <a class="card" href="30-spatial-canvas.html" target="_blank">
+    <div class="preview"><iframe src="30-spatial-canvas.html"></iframe></div>
+    <div class="body">
+      <div class="row"><span class="num">30</span><span class="label">Dark · Spatial · Canvas-first</span></div>
+      <h2><em>Spatial Canvas.</em> Figma meets creative ops.</h2>
+      <p>Deep indigo #0f0f23, Matrix is the hero — large card cells with vivid status accent borders. Persona filter toggles at top. Status legend bar. Tracker is a dark-themed table with same vivid palette. For creative directors who think spatially about their ad landscape.</p>
+      <div class="tagbar"><span class="inspiration">Figma</span><span class="inspiration">Miro</span><span>Matrix-first</span><span>Vivid status</span><span>Spatial layout</span></div>
+    </div>
+  </a>
+
+  <a class="card" href="31-nordic-minimal.html" target="_blank" style="grid-column: span 2;">
+    <div class="preview"><iframe src="31-nordic-minimal.html"></iframe></div>
+    <div class="body">
+      <div class="row"><span class="num">31</span><span class="label">White · Minimal · Typography-first</span></div>
+      <h2><em>Nordic Minimal.</em> Linear meets Superhuman.</h2>
+      <p>#fafafa background, barely-visible #f0f0f0 borders. Status shown as a single 8px colored dot — no pills, no backgrounds. Tracker has hairline rows, small-caps letter-spaced headers. Matrix: each angle is its own card block with bold header + 4-column persona grid inside. ⌘K hint in corner. No color except the status dots.</p>
+      <div class="tagbar"><span class="inspiration">Linear</span><span class="inspiration">Superhuman</span><span>Dot-only status</span><span>Hairline borders</span><span>Typography-first</span></div>
+    </div>
+  </a>
+
+</div>
+
+<div class="round-head">Round 07 <span class="sub">DESIGN.md-driven full app redesign — Satoshi + high-end-visual-design + stitch-design-taste · All 8 tabs</span></div>
+
+<div class="grid">
+  <a class="card" href="35-full-redesign.html" target="_blank" style="grid-column: span 2;">
+    <div class="preview" style="height:380px"><iframe src="35-full-redesign.html"></iframe></div>
+    <div class="body">
+      <div class="row"><span class="num">35</span><span class="label">Full App · All 8 tabs · DESIGN.md-driven</span></div>
+      <h2><em>Full Redesign.</em> Satoshi + Double-Bezel + Operator precision.</h2>
+      <p>All 8 tabs in one file. Satoshi replaces Inter throughout. Dashboard uses Double-Bezel KPI cards with JetBrains Mono numbers. Creative Tracker has two-tier collapsible filter bar, 36px compact rows, all 16 columns. Creative Matrix has 5×4 cells with time tracking, status proportion bars, hover action bars, and a 380px drawer with By Status/Funnel/Type view toggle inside. All transitions use cubic-bezier(0.32,0.72,0,1). DESIGN.md spec generated and committed.</p>
+      <div class="tagbar"><span class="inspiration">DESIGN.md</span><span class="inspiration">stitch-design-taste</span><span class="inspiration">high-end-visual-design</span><span>Satoshi font</span><span>Double-Bezel cards</span><span>Two-tier filters</span><span>Matrix drawer</span><span>All 8 tabs</span></div>
+    </div>
+  </a>
+</div>
+
+<footer>
+  Open each mockup in its own tab for full experience · served at <code>http://localhost:3000/design-mockups/{NN}-{name}.html</code><br>
+  Pure preview assets — none of this code touches the production <code>immuvi-command-center.html</code>.<br>
+  <div class="refs">
+    <a href="https://claude.com/plugins/design" target="_blank">Claude Design</a>
+    <a href="https://vercel.com/geist/introduction" target="_blank">Vercel Geist</a>
+    <a href="https://posthog.com/templates/advertising-dashboard" target="_blank">PostHog Advertising</a>
+    <a href="https://vercel.com/try/new-dashboard" target="_blank">Vercel new dashboard (Feb 2026)</a>
+    <a href="https://basement.studio/post/the-birth-of-geist-a-typeface-crafted-for-the-web" target="_blank">Birth of Geist</a>
+  </div>
+</footer>
+
+</div>
+</body>
+</html>

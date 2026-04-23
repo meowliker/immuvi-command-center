@@ -1,0 +1,2228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Immuvi Command Center — Full Redesign</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Instrument+Serif:ital@1&display=swap" rel="stylesheet">
+<link href="https://api.fontshare.com/v2/css?f[]=satoshi@400,500,600,700&display=swap" rel="stylesheet">
+<style>
+/* ─── RESET ─────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+button { font: inherit; cursor: pointer; background: none; border: none; }
+a { color: inherit; text-decoration: none; }
+table { border-collapse: collapse; width: 100%; }
+th, td { text-align: left; vertical-align: middle; }
+
+/* ─── DESIGN TOKENS ─────────────────────────────────── */
+:root {
+  --canvas: #faf9f5;
+  --paper: #ffffff;
+  --paper-2: #f3f1e9;
+  --paper-3: #ede9dc;
+  --line: #e8e5dc;
+  --line-hi: #d6d1c1;
+  --ink: #1a1814;
+  --ink-2: #585449;
+  --ink-3: #8f8a7c;
+  --ink-4: #b8b3a2;
+  --accent: #c05336;
+  --accent-deep: #a4401f;
+  --accent-soft: #f5e3da;
+
+  --s-scale: #35683f;      --s-scale-soft: #dcecd8;
+  --s-winner: #5e7557;     --s-winner-soft: #e4ebdc;
+  --s-testing: #4f6780;    --s-testing-soft: #dde4ec;
+  --s-approved: #7c5c2e;   --s-approved-soft: #f0e4cc;
+  --s-ready: #3a6b8a;      --s-ready-soft: #d4e8f0;
+  --s-production: #c14400; --s-production-soft: #fbe0d0;
+  --s-loser: #a83b28;      --s-loser-soft: #f2dad6;
+  --s-untested: #8f8a7c;   --s-untested-soft: #f3f1e9;
+
+  --ease: cubic-bezier(0.32,0.72,0,1);
+  --t-fast: all 160ms cubic-bezier(0.32,0.72,0,1);
+  --t-panel: all 280ms cubic-bezier(0.32,0.72,0,1);
+}
+
+/* ─── KEYFRAMES ─────────────────────────────────────── */
+@keyframes fadeUp    { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:translateY(0); } }
+@keyframes shimmer   { from { background-position:-200% 0; } to { background-position:200% 0; } }
+@keyframes pulse     { 0%,100% { opacity:1; } 50% { opacity:0.4; } }
+@keyframes livePulse {
+  0%   { box-shadow:0 0 0 0 rgba(53,180,80,0.6); }
+  70%  { box-shadow:0 0 0 6px rgba(53,180,80,0); }
+  100% { box-shadow:0 0 0 0 rgba(53,180,80,0); }
+}
+@keyframes staggerIn { from { opacity:0; transform:translateY(5px); } to { opacity:1; transform:translateY(0); } }
+@keyframes tabIn     { from { opacity:0; transform:translateY(4px); } to { opacity:1; transform:translateY(0); } }
+
+/* ─── BASE ───────────────────────────────────────────── */
+html { font-size: 14px; }
+body {
+  font-family: 'Satoshi', system-ui, sans-serif;
+  background: var(--canvas);
+  color: var(--ink);
+  line-height: 1.5;
+  min-height: 100vh;
+}
+.mono { font-family: 'JetBrains Mono', monospace; }
+.serif-italic { font-family: 'Instrument Serif', serif; font-style: italic; }
+
+/* ─── MASTHEAD ───────────────────────────────────────── */
+.masthead {
+  height: 44px;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  background: rgba(250,249,245,0.92);
+  backdrop-filter: blur(16px) saturate(1.4);
+  -webkit-backdrop-filter: blur(16px) saturate(1.4);
+  border-bottom: 1px solid var(--line);
+}
+.masthead::after {
+  content: '';
+  position: absolute;
+  bottom: -1px;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--accent) 30%, var(--accent) 70%, transparent);
+  opacity: 0.28;
+}
+.masthead-inner {
+  max-width: 1440px;
+  margin: 0 auto;
+  padding: 0 24px;
+  display: flex;
+  align-items: center;
+  height: 100%;
+  gap: 0;
+}
+
+/* Brand */
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.brand-mark {
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  background: linear-gradient(135deg, var(--accent), var(--accent-deep));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-size: 10px;
+  font-weight: 700;
+  font-family: 'Satoshi', sans-serif;
+}
+.brand-name {
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+}
+.masthead-sep {
+  width: 1px;
+  height: 16px;
+  background: var(--line);
+  margin: 0 12px;
+  flex-shrink: 0;
+}
+.product-pill {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--paper-2);
+  border: 1px solid var(--line);
+  border-radius: 100px;
+  padding: 3px 10px 3px 7px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: var(--t-fast);
+}
+.product-pill:hover { background: var(--paper-3); }
+.product-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+  flex-shrink: 0;
+}
+.product-chevron { color: var(--ink-3); font-size: 10px; margin-left: 2px; }
+
+/* Tab Nav */
+.tab-nav {
+  display: flex;
+  align-items: stretch;
+  flex: 1;
+  margin-left: 4px;
+  height: 44px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.tab-nav::-webkit-scrollbar { display: none; }
+.tab-btn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  height: 44px;
+  padding: 0 14px;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--ink-3);
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  white-space: nowrap;
+  transition: var(--t-fast);
+  flex-shrink: 0;
+}
+.tab-btn:hover { color: var(--ink-2); }
+.tab-btn.active {
+  color: var(--ink);
+  font-weight: 600;
+  border-bottom-color: var(--accent);
+}
+.tab-count {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  background: var(--paper-2);
+  padding: 1px 5px;
+  border-radius: 8px;
+  color: var(--ink-3);
+}
+.tab-btn.active .tab-count { background: var(--accent-soft); color: var(--accent); }
+
+/* Right side */
+.masthead-right { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.live-pill {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 100px;
+  padding: 4px 10px;
+}
+.live-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #35b450;
+  animation: livePulse 2.4s infinite;
+}
+.live-text {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  color: var(--ink-2);
+}
+
+/* ─── TAB PANELS ─────────────────────────────────────── */
+.tab-panel {
+  display: none;
+  animation: tabIn 200ms cubic-bezier(0.32,0.72,0,1) both;
+}
+.tab-panel.active { display: block; }
+
+/* ─── SECTION LABEL ─────────────────────────────────── */
+.section-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--ink-3);
+}
+
+/* ─── BUTTONS ────────────────────────────────────────── */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0 12px;
+  height: 30px;
+  border-radius: 6px;
+  font-size: 12.5px;
+  font-weight: 600;
+  transition: var(--t-fast);
+  cursor: pointer;
+}
+.btn-accent {
+  background: var(--accent);
+  color: white;
+  border: 1px solid var(--accent-deep);
+}
+.btn-accent:hover { background: var(--accent-deep); }
+.btn-ghost {
+  background: transparent;
+  color: var(--ink-2);
+  border: 1px solid var(--line);
+}
+.btn-ghost:hover { background: var(--paper-2); border-color: var(--line-hi); }
+
+/* ─── FILTER CHIP ────────────────────────────────────── */
+.filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 28px;
+  padding: 0 10px;
+  border-radius: 14px;
+  font-size: 12px;
+  font-weight: 500;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  color: var(--ink-2);
+  cursor: pointer;
+  transition: var(--t-fast);
+  white-space: nowrap;
+}
+.filter-chip:hover { border-color: var(--line-hi); background: var(--paper-2); }
+.filter-chip.active {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* ─── STATUS PILL ────────────────────────────────────── */
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+.sp-scale     { background: var(--s-scale-soft);      color: var(--s-scale); }
+.sp-winner    { background: var(--s-winner-soft);     color: var(--s-winner); }
+.sp-testing   { background: var(--s-testing-soft);    color: var(--s-testing); }
+.sp-approved  { background: var(--s-approved-soft);   color: var(--s-approved); }
+.sp-ready     { background: var(--s-ready-soft);      color: var(--s-ready); }
+.sp-production{ background: var(--s-production-soft); color: var(--s-production); }
+.sp-loser     { background: var(--s-loser-soft);      color: var(--s-loser); }
+.sp-untested  { background: var(--s-untested-soft);   color: var(--s-untested); }
+
+/* ─── FUNNEL BADGE ───────────────────────────────────── */
+.funnel-badge {
+  display: inline-flex;
+  align-items: center;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: 3px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.fb-tof { background: #fef3c7; color: #92400e; }
+.fb-mof { background: var(--s-testing-soft); color: var(--s-testing); }
+.fb-bof { background: var(--s-winner-soft); color: var(--s-winner); }
+
+/* ─── STATUS DOT ─────────────────────────────────────── */
+.status-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.sd-scale      { background: var(--s-scale); }
+.sd-winner     { background: var(--s-winner); }
+.sd-testing    { background: var(--s-testing); }
+.sd-approved   { background: var(--s-approved); }
+.sd-ready      { background: var(--s-ready); }
+.sd-production { background: var(--s-production); }
+.sd-loser      { background: var(--s-loser); }
+.sd-untested   { background: var(--s-untested); }
+
+/* ────────────────────────────────────────────────────── */
+/* TAB 1: DASHBOARD                                       */
+/* ────────────────────────────────────────────────────── */
+#tab-dashboard { padding: 20px 24px; }
+
+/* KPI Strip */
+.kpi-strip {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 10px;
+  margin-bottom: 24px;
+}
+.kpi-outer {
+  background: var(--paper-2);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 3px;
+}
+.kpi-inner {
+  background: var(--paper);
+  border-radius: 8px;
+  padding: 16px 20px;
+}
+.kpi-value {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 30px;
+  font-weight: 700;
+  line-height: 1;
+  margin-bottom: 4px;
+}
+.kpi-label {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink-3);
+  margin-bottom: 6px;
+}
+.kpi-delta {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+}
+.kpi-delta.up { color: var(--s-scale); }
+.kpi-delta.neutral { color: var(--ink-4); }
+
+/* Dashboard grid */
+.dash-grid {
+  display: grid;
+  grid-template-columns: 60% 40%;
+  gap: 16px;
+}
+
+/* Section card */
+.section-card {
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.section-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px 10px;
+  border-bottom: 1px solid var(--line);
+}
+.view-all {
+  font-size: 12px;
+  color: var(--accent);
+  font-weight: 500;
+  cursor: pointer;
+  transition: var(--t-fast);
+}
+.view-all:hover { color: var(--accent-deep); }
+
+/* Activity feed */
+.activity-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 16px;
+  border-bottom: 1px solid var(--line);
+  transition: var(--t-fast);
+}
+.activity-row:last-child { border-bottom: none; }
+.activity-row:hover { background: #f9f7f1; }
+.activity-name { font-size: 13px; font-weight: 500; flex: 1; min-width: 0; }
+.activity-status { font-size: 12px; color: var(--ink-3); }
+.activity-time {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  color: var(--ink-4);
+  white-space: nowrap;
+}
+
+/* Coverage */
+.coverage-row {
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--line);
+}
+.coverage-row:last-child { border-bottom: none; }
+.coverage-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 5px;
+}
+.coverage-name { font-size: 12.5px; font-weight: 500; }
+.coverage-stat { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--ink-3); }
+.progress-track {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--line);
+  overflow: hidden;
+}
+.progress-fill {
+  height: 100%;
+  border-radius: 2px;
+  background: var(--accent);
+  transition: var(--t-panel);
+}
+
+/* Needs attention */
+.attention-item {
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px 14px;
+  margin: 0 16px 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  transition: var(--t-fast);
+}
+.attention-item:hover { border-color: var(--line-hi); }
+.attention-text { font-size: 12.5px; color: var(--ink-2); }
+.attention-action { font-size: 12px; color: var(--accent); font-weight: 500; white-space: nowrap; cursor: pointer; }
+.attention-action:hover { color: var(--accent-deep); }
+.needs-head { padding: 14px 16px 10px; }
+
+/* ────────────────────────────────────────────────────── */
+/* TAB 2 & 3: ANGLES / PERSONAS                          */
+/* ────────────────────────────────────────────────────── */
+.simple-tab-panel { padding: 20px 24px; }
+.simple-tab-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+.simple-tab-title {
+  font-family: 'Instrument Serif', serif;
+  font-style: italic;
+  font-size: 22px;
+  color: var(--ink);
+}
+
+.data-table {
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.data-table th {
+  font-size: 10.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--ink-3);
+  padding: 0 14px;
+  height: 34px;
+  background: var(--paper-2);
+  border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+}
+.data-table td {
+  padding: 0 14px;
+  height: 36px;
+  font-size: 13px;
+  border-bottom: 1px solid var(--line);
+}
+.data-table tr:last-child td { border-bottom: none; }
+.data-table tbody tr { transition: var(--t-fast); }
+.data-table tbody tr:hover td { background: #f9f7f1; }
+
+.tbl-actions { display: flex; gap: 4px; }
+.icon-btn {
+  width: 24px; height: 24px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 4px;
+  font-size: 13px;
+  color: var(--ink-3);
+  cursor: pointer;
+  transition: var(--t-fast);
+}
+.icon-btn:hover { background: var(--paper-2); color: var(--ink); }
+
+/* ────────────────────────────────────────────────────── */
+/* TAB 4: CREATIVE TRACKER                               */
+/* ────────────────────────────────────────────────────── */
+.tracker-header {
+  position: sticky;
+  top: 44px;
+  z-index: 90;
+  background: var(--paper);
+  border-bottom: 1px solid var(--line);
+  padding: 12px 20px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.tracker-title {
+  font-family: 'Instrument Serif', serif;
+  font-style: italic;
+  font-size: 22px;
+  color: var(--ink);
+}
+.count-badge {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  background: var(--paper-2);
+  border: 1px solid var(--line);
+  border-radius: 100px;
+  padding: 2px 8px;
+  color: var(--ink-3);
+}
+.tracker-header-right {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Filter bar */
+.filter-bar {
+  position: sticky;
+  top: 88px;
+  z-index: 89;
+  background: var(--paper);
+  border-bottom: 1px solid var(--line);
+}
+.filter-bar-primary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 20px;
+  flex-wrap: wrap;
+}
+.filter-sep { width: 1px; height: 18px; background: var(--line); margin: 0 2px; }
+.filter-search {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 8px;
+  height: 28px;
+  font-size: 12px;
+  color: var(--ink-3);
+  width: 180px;
+}
+.filter-bar-secondary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 20px;
+  overflow: hidden;
+  max-height: 0;
+  transition: all 220ms cubic-bezier(0.32,0.72,0,1);
+}
+.filter-bar-secondary.open {
+  max-height: 50px;
+  padding: 6px 20px;
+}
+.clear-link {
+  font-size: 12px;
+  color: var(--accent);
+  cursor: pointer;
+  margin-left: 4px;
+  font-weight: 500;
+}
+.clear-link:hover { color: var(--accent-deep); }
+
+/* Tracker table wrapper */
+.tracker-content { padding: 0 20px; overflow-x: auto; }
+.tracker-table { min-width: 1400px; }
+.tracker-table th {
+  font-size: 10.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--ink-3);
+  padding: 0 10px;
+  height: 34px;
+  background: var(--paper);
+  border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+  position: sticky;
+  top: 136px;
+  z-index: 10;
+}
+.tracker-table td {
+  padding: 0 10px;
+  height: 36px;
+  font-size: 12.5px;
+  border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+}
+.tracker-table tbody tr {
+  animation: staggerIn 260ms cubic-bezier(0.32,0.72,0,1) both;
+  transition: var(--t-fast);
+}
+.tracker-table tbody tr:hover td { background: #f9f7f1; }
+
+.creative-id { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--ink-4); }
+.creative-name { font-weight: 500; }
+.hypo-cell {
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-style: italic;
+  color: var(--ink-3);
+  font-size: 12px;
+}
+.link-cell { font-size: 11px; color: var(--accent); }
+.link-cell.absent { color: var(--ink-4); }
+.var-cell { font-family: 'JetBrains Mono', monospace; color: var(--accent); font-size: 12px; }
+.var-cell.none { color: var(--ink-4); }
+.matrix-cell { font-size: 12px; color: var(--ink-3); }
+.matrix-cell.none { color: var(--ink-4); }
+
+/* ────────────────────────────────────────────────────── */
+/* TAB 5: CREATIVE MATRIX                                */
+/* ────────────────────────────────────────────────────── */
+.matrix-header {
+  position: sticky;
+  top: 44px;
+  z-index: 90;
+  background: var(--paper);
+  border-bottom: 1px solid var(--line);
+  padding: 12px 20px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.matrix-header-right {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.date-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 26px;
+  padding: 0 10px;
+  border-radius: 13px;
+  font-size: 12px;
+  font-weight: 500;
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--ink-3);
+  cursor: pointer;
+  transition: var(--t-fast);
+}
+.date-chip:hover { color: var(--ink-2); }
+.date-chip.active {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.matrix-toolbar {
+  padding: 6px 20px 10px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.matrix-wrap { padding: 0 20px 40px; overflow-x: auto; }
+.matrix-grid {
+  display: grid;
+  grid-template-columns: 140px repeat(4, 1fr);
+  gap: 1px;
+  background: var(--line);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow: hidden;
+  min-width: 700px;
+}
+
+.matrix-corner {
+  background: var(--paper-2);
+  padding: 10px 12px;
+  font-size: 10px;
+  color: var(--ink-4);
+  display: flex;
+  align-items: flex-end;
+}
+.matrix-persona-hd {
+  background: var(--paper-2);
+  padding: 10px 12px;
+}
+.persona-hd-name { font-size: 12.5px; font-weight: 600; color: var(--ink); }
+.persona-hd-count { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--ink-3); margin-top: 2px; }
+
+.matrix-angle-hd {
+  background: var(--paper-2);
+  padding: 12px 14px;
+}
+.angle-hd-name { font-size: 12px; font-weight: 600; color: var(--ink); line-height: 1.3; }
+.angle-hd-count { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--ink-3); margin-top: 4px; }
+
+/* Matrix content cell */
+.matrix-cell-content {
+  background: var(--paper);
+  padding: 12px;
+  min-height: 130px;
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+  transition: background 160ms cubic-bezier(0.32,0.72,0,1);
+}
+.matrix-cell-content:hover { background: #fefcf9; }
+.matrix-cell-content:hover .cell-hover-bar { opacity: 1; transform: translateY(0); }
+
+.matrix-cell-empty {
+  background: var(--paper-2);
+  padding: 12px;
+  min-height: 130px;
+  cursor: pointer;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: var(--t-fast);
+}
+.matrix-cell-empty:hover { background: var(--paper-3); }
+.matrix-cell-empty:hover .empty-create { opacity: 1; }
+.empty-label {
+  font-size: 11px;
+  font-style: italic;
+  color: var(--ink-4);
+}
+.empty-create {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  color: var(--accent);
+  font-weight: 500;
+  opacity: 0;
+  transition: var(--t-fast);
+  background: rgba(243,241,233,0.7);
+}
+
+.cell-count-row { display: flex; align-items: baseline; gap: 8px; margin-bottom: 6px; }
+.cell-big-count {
+  font-family: 'Instrument Serif', serif;
+  font-style: italic;
+  font-size: 28px;
+  color: var(--ink);
+  line-height: 1;
+}
+.cell-dots { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.cell-dot-item { display: flex; align-items: center; gap: 3px; }
+.cell-dot-sm {
+  width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0;
+}
+.cell-dot-label { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--ink-3); }
+
+.cell-bar-track {
+  height: 4px; border-radius: 2px;
+  background: var(--line);
+  overflow: hidden;
+  display: flex;
+  margin-bottom: 6px;
+}
+.cell-bar-seg { height: 100%; }
+
+.cell-time {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  color: var(--ink-3);
+  line-height: 1.3;
+}
+
+.cell-hover-bar {
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  height: 28px;
+  border-top: 1px solid var(--line);
+  background: var(--paper);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 8px;
+  opacity: 0;
+  transform: translateY(4px);
+  transition: all 160ms cubic-bezier(0.32,0.72,0,1);
+}
+.hover-action {
+  font-size: 11px;
+  color: var(--ink-3);
+  cursor: pointer;
+  font-weight: 500;
+  transition: var(--t-fast);
+}
+.hover-action:hover { color: var(--accent); }
+
+/* ─── DRAWER ─────────────────────────────────────────── */
+.drawer-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(26,24,20,0.12);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+  z-index: 200;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 280ms cubic-bezier(0.32,0.72,0,1);
+}
+.drawer-backdrop.open { opacity: 1; pointer-events: all; }
+
+.drawer {
+  position: fixed;
+  top: 0; right: 0;
+  height: 100%;
+  width: 380px;
+  background: var(--paper);
+  border-left: 1px solid var(--line);
+  z-index: 201;
+  transform: translateX(100%);
+  transition: transform 280ms cubic-bezier(0.32,0.72,0,1);
+  display: flex;
+  flex-direction: column;
+}
+.drawer.open { transform: translateX(0); }
+
+.drawer-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 16px;
+  height: 48px;
+  border-bottom: 1px solid var(--line);
+  flex-shrink: 0;
+}
+.drawer-title {
+  font-family: 'Instrument Serif', serif;
+  font-style: italic;
+  font-size: 16px;
+  color: var(--ink);
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.drawer-count { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--ink-3); }
+.drawer-close {
+  width: 24px; height: 24px;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 5px;
+  font-size: 16px; color: var(--ink-3);
+  cursor: pointer;
+  transition: var(--t-fast);
+}
+.drawer-close:hover { background: var(--paper-2); color: var(--ink); }
+
+.drawer-toggle {
+  display: flex;
+  align-items: center;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--line);
+  flex-shrink: 0;
+}
+.seg-control {
+  display: flex;
+  background: var(--paper-2);
+  border-radius: 6px;
+  padding: 3px;
+  gap: 2px;
+}
+.seg-btn {
+  height: 26px;
+  padding: 0 10px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--ink-3);
+  cursor: pointer;
+  transition: var(--t-fast);
+}
+.seg-btn.active {
+  background: var(--paper);
+  box-shadow: 0 1px 3px rgba(26,24,20,0.08);
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.drawer-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px 16px 0;
+}
+.drawer-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line);
+}
+.drawer-row:last-child { border-bottom: none; }
+.drawer-row-left { flex: 1; min-width: 0; }
+.drawer-row-id { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--ink-4); margin-bottom: 2px; }
+.drawer-row-name { font-size: 12.5px; font-weight: 500; }
+.drawer-row-time { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--ink-3); margin-top: 2px; }
+
+.drawer-breakdown {
+  padding: 12px 0;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 4px;
+}
+.breakdown-label { font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.07em; color: var(--ink-3); margin-bottom: 8px; }
+.breakdown-row { display: flex; align-items: center; gap: 8px; padding: 4px 0; }
+.breakdown-name { font-size: 12px; color: var(--ink-2); flex: 1; }
+.breakdown-count { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--ink-3); }
+
+.drawer-actions {
+  padding: 12px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* ────────────────────────────────────────────────────── */
+/* TAB 6,7,8: PLACEHOLDERS                               */
+/* ────────────────────────────────────────────────────── */
+.placeholder-panel { padding: 32px 24px; }
+.placeholder-title {
+  font-family: 'Instrument Serif', serif;
+  font-style: italic;
+  font-size: 24px;
+  color: var(--ink);
+  margin-bottom: 16px;
+}
+.placeholder-empty {
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 40px 24px;
+  text-align: center;
+  color: var(--ink-3);
+  font-size: 13px;
+}
+
+/* Kanban */
+.kanban-board {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin-top: 16px;
+}
+.kanban-col {
+  background: var(--paper-2);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.kanban-col-head {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--line);
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ink-3);
+  background: var(--paper-3);
+}
+.kanban-col-body { padding: 10px; min-height: 120px; }
+.kanban-card {
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 12.5px;
+}
+.kanban-card-id { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--ink-4); margin-bottom: 3px; }
+.kanban-card-name { font-weight: 500; margin-bottom: 6px; }
+.kanban-card-tags { display: flex; gap: 5px; flex-wrap: wrap; }
+
+/* ─── SCROLLBAR ─────────────────────────────────────── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--line); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--line-hi); }
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════════════ -->
+<!-- MASTHEAD                                            -->
+<!-- ═══════════════════════════════════════════════════ -->
+<header class="masthead">
+  <div class="masthead-inner">
+
+    <!-- Brand -->
+    <div class="brand">
+      <div class="brand-mark">I</div>
+      <span class="brand-name">Immuvi</span>
+    </div>
+
+    <div class="masthead-sep"></div>
+
+    <button class="product-pill">
+      <span class="product-dot"></span>
+      Art Therapy
+      <span class="product-chevron">▾</span>
+    </button>
+
+    <div class="masthead-sep"></div>
+
+    <!-- Tab nav -->
+    <nav class="tab-nav">
+      <button class="tab-btn active" data-tab="dashboard">Dashboard</button>
+      <button class="tab-btn" data-tab="angles">Angles <span class="tab-count">5</span></button>
+      <button class="tab-btn" data-tab="personas">Personas <span class="tab-count">4</span></button>
+      <button class="tab-btn" data-tab="tracker">Creative Tracker <span class="tab-count">8</span></button>
+      <button class="tab-btn" data-tab="matrix">Creative Matrix <span class="tab-count">20</span></button>
+      <button class="tab-btn" data-tab="action">Action Plan</button>
+      <button class="tab-btn" data-tab="production">Production</button>
+      <button class="tab-btn" data-tab="inspiration">Inspiration</button>
+    </nav>
+
+    <!-- Right -->
+    <div class="masthead-right">
+      <div class="live-pill">
+        <div class="live-dot"></div>
+        <span class="live-text">Live</span>
+      </div>
+    </div>
+
+  </div>
+</header>
+
+<!-- ═══════════════════════════════════════════════════ -->
+<!-- TAB 1: DASHBOARD                                   -->
+<!-- ═══════════════════════════════════════════════════ -->
+<section id="tab-dashboard" class="tab-panel active">
+
+  <!-- KPI Strip -->
+  <div class="kpi-strip">
+    <div class="kpi-outer">
+      <div class="kpi-inner">
+        <div class="kpi-label">Total Creatives</div>
+        <div class="kpi-value">43</div>
+        <div class="kpi-delta up mono">↑ 3 this week</div>
+      </div>
+    </div>
+    <div class="kpi-outer">
+      <div class="kpi-inner">
+        <div class="kpi-label">Winners &amp; Scale</div>
+        <div class="kpi-value" style="color:var(--s-scale)">9</div>
+        <div class="kpi-delta up mono">↑ 2 this week</div>
+      </div>
+    </div>
+    <div class="kpi-outer">
+      <div class="kpi-inner">
+        <div class="kpi-label">In Testing</div>
+        <div class="kpi-value" style="color:var(--s-testing)">7</div>
+        <div class="kpi-delta neutral mono">→ steady</div>
+      </div>
+    </div>
+    <div class="kpi-outer">
+      <div class="kpi-inner">
+        <div class="kpi-label">Win Rate</div>
+        <div class="kpi-value" style="color:var(--accent)">20.9%</div>
+        <div class="kpi-delta up mono">↑ 1.2% vs last mo</div>
+      </div>
+    </div>
+    <div class="kpi-outer">
+      <div class="kpi-inner">
+        <div class="kpi-label">Untested</div>
+        <div class="kpi-value" style="color:var(--ink-3)">14</div>
+        <div class="kpi-delta neutral mono">→ steady</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Dashboard grid -->
+  <div class="dash-grid">
+
+    <!-- Left: Recent Activity -->
+    <div class="section-card">
+      <div class="section-card-head">
+        <span class="section-label">Recent Activity</span>
+        <span class="view-all">View all →</span>
+      </div>
+      <div class="activity-row">
+        <div class="status-dot sd-winner"></div>
+        <span class="activity-name">Story Loop 30s</span>
+        <span class="activity-status">→ Winner</span>
+        <span class="activity-time">2h ago</span>
+      </div>
+      <div class="activity-row">
+        <div class="status-dot sd-scale"></div>
+        <span class="activity-name">UGC Raw Clip</span>
+        <span class="activity-status">→ Scale</span>
+        <span class="activity-time">5h ago</span>
+      </div>
+      <div class="activity-row">
+        <div class="status-dot sd-approved"></div>
+        <span class="activity-name">Testimonial Reel</span>
+        <span class="activity-status">→ Approved</span>
+        <span class="activity-time">Yesterday</span>
+      </div>
+      <div class="activity-row">
+        <div class="status-dot sd-production"></div>
+        <span class="activity-name">Fear Hook Cut</span>
+        <span class="activity-status">→ In Production</span>
+        <span class="activity-time">Yesterday</span>
+      </div>
+      <div class="activity-row">
+        <div class="status-dot sd-testing"></div>
+        <span class="activity-name">Transformation 15s</span>
+        <span class="activity-status">→ Testing</span>
+        <span class="activity-time">3 days ago</span>
+      </div>
+      <div class="activity-row">
+        <div class="status-dot sd-loser"></div>
+        <span class="activity-name">Value Stack 60s</span>
+        <span class="activity-status">→ Loser</span>
+        <span class="activity-time">5 days ago</span>
+      </div>
+    </div>
+
+    <!-- Right column -->
+    <div style="display:flex;flex-direction:column;gap:16px;">
+
+      <!-- Coverage Status -->
+      <div class="section-card">
+        <div class="section-card-head">
+          <span class="section-label">Coverage Status</span>
+        </div>
+        <div class="coverage-row">
+          <div class="coverage-head">
+            <span class="coverage-name">Pain Agitate Solution</span>
+            <span class="coverage-stat mono">2/4 personas</span>
+          </div>
+          <div class="progress-track"><div class="progress-fill" style="width:50%"></div></div>
+        </div>
+        <div class="coverage-row">
+          <div class="coverage-head">
+            <span class="coverage-name">Before/After</span>
+            <span class="coverage-stat mono">3/4 personas</span>
+          </div>
+          <div class="progress-track"><div class="progress-fill" style="width:75%"></div></div>
+        </div>
+        <div class="coverage-row">
+          <div class="coverage-head">
+            <span class="coverage-name">Social Proof</span>
+            <span class="coverage-stat mono">2/4 personas</span>
+          </div>
+          <div class="progress-track"><div class="progress-fill" style="width:50%"></div></div>
+        </div>
+        <div class="coverage-row">
+          <div class="coverage-head">
+            <span class="coverage-name">Fear Appeal</span>
+            <span class="coverage-stat mono">1/4 personas</span>
+          </div>
+          <div class="progress-track"><div class="progress-fill" style="width:25%"></div></div>
+        </div>
+        <div class="coverage-row">
+          <div class="coverage-head">
+            <span class="coverage-name">Benefits-First</span>
+            <span class="coverage-stat mono">1/4 personas</span>
+          </div>
+          <div class="progress-track"><div class="progress-fill" style="width:25%"></div></div>
+        </div>
+      </div>
+
+      <!-- Needs Attention -->
+      <div class="section-card">
+        <div class="needs-head">
+          <span class="section-label">Needs Attention</span>
+        </div>
+        <div style="padding-bottom:12px;">
+          <div class="attention-item">
+            <span class="attention-text">⊙ 16 empty angle-persona combinations</span>
+            <span class="attention-action">→ View Matrix</span>
+          </div>
+          <div class="attention-item">
+            <span class="attention-text">⊙ 7 creatives in testing for 10+ days</span>
+            <span class="attention-action">→ Review</span>
+          </div>
+          <div class="attention-item">
+            <span class="attention-text">⊙ 4 ready-to-launch queued 5+ days</span>
+            <span class="attention-action">→ Push</span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════ -->
+<!-- TAB 2: ANGLES                                      -->
+<!-- ═══════════════════════════════════════════════════ -->
+<section id="tab-angles" class="tab-panel simple-tab-panel">
+  <div class="simple-tab-head">
+    <h1 class="simple-tab-title">Angles</h1>
+    <button class="btn btn-accent">+ Add Angle</button>
+  </div>
+  <div class="data-table">
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Creatives</th>
+          <th>Coverage</th>
+          <th>Status</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td style="font-weight:500">Pain Agitate Solution</td>
+          <td><span class="mono">8</span></td>
+          <td><div style="display:flex;align-items:center;gap:8px;"><div class="progress-track" style="width:80px"><div class="progress-fill" style="width:50%"></div></div><span class="mono" style="font-size:11px;color:var(--ink-3)">50%</span></div></td>
+          <td><span class="status-pill sp-scale">Active</span></td>
+          <td><div class="tbl-actions"><button class="icon-btn">✏</button><button class="icon-btn">↗</button><button class="icon-btn">✕</button></div></td>
+        </tr>
+        <tr>
+          <td style="font-weight:500">Before/After</td>
+          <td><span class="mono">4</span></td>
+          <td><div style="display:flex;align-items:center;gap:8px;"><div class="progress-track" style="width:80px"><div class="progress-fill" style="width:75%"></div></div><span class="mono" style="font-size:11px;color:var(--ink-3)">75%</span></div></td>
+          <td><span class="status-pill sp-scale">Active</span></td>
+          <td><div class="tbl-actions"><button class="icon-btn">✏</button><button class="icon-btn">↗</button><button class="icon-btn">✕</button></div></td>
+        </tr>
+        <tr>
+          <td style="font-weight:500">Social Proof</td>
+          <td><span class="mono">2</span></td>
+          <td><div style="display:flex;align-items:center;gap:8px;"><div class="progress-track" style="width:80px"><div class="progress-fill" style="width:50%"></div></div><span class="mono" style="font-size:11px;color:var(--ink-3)">50%</span></div></td>
+          <td><span class="status-pill sp-testing">Testing</span></td>
+          <td><div class="tbl-actions"><button class="icon-btn">✏</button><button class="icon-btn">↗</button><button class="icon-btn">✕</button></div></td>
+        </tr>
+        <tr>
+          <td style="font-weight:500">Fear Appeal</td>
+          <td><span class="mono">1</span></td>
+          <td><div style="display:flex;align-items:center;gap:8px;"><div class="progress-track" style="width:80px"><div class="progress-fill" style="width:25%"></div></div><span class="mono" style="font-size:11px;color:var(--ink-3)">25%</span></div></td>
+          <td><span class="status-pill sp-untested">Draft</span></td>
+          <td><div class="tbl-actions"><button class="icon-btn">✏</button><button class="icon-btn">↗</button><button class="icon-btn">✕</button></div></td>
+        </tr>
+        <tr>
+          <td style="font-weight:500">Benefits-First</td>
+          <td><span class="mono">1</span></td>
+          <td><div style="display:flex;align-items:center;gap:8px;"><div class="progress-track" style="width:80px"><div class="progress-fill" style="width:25%"></div></div><span class="mono" style="font-size:11px;color:var(--ink-3)">25%</span></div></td>
+          <td><span class="status-pill sp-untested">Draft</span></td>
+          <td><div class="tbl-actions"><button class="icon-btn">✏</button><button class="icon-btn">↗</button><button class="icon-btn">✕</button></div></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════ -->
+<!-- TAB 3: PERSONAS                                    -->
+<!-- ═══════════════════════════════════════════════════ -->
+<section id="tab-personas" class="tab-panel simple-tab-panel">
+  <div class="simple-tab-head">
+    <h1 class="simple-tab-title">Personas</h1>
+    <button class="btn btn-accent">+ Add Persona</button>
+  </div>
+  <div class="data-table">
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Creatives</th>
+          <th>Angles Covered</th>
+          <th>Notes</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td style="font-weight:500">Busy Mom</td>
+          <td><span class="mono">5</span></td>
+          <td><span class="mono">3/5</span></td>
+          <td style="color:var(--ink-3);font-size:12px;font-style:italic">Pain-first messaging, time-saving hooks</td>
+          <td><div class="tbl-actions"><button class="icon-btn">✏</button><button class="icon-btn">↗</button><button class="icon-btn">✕</button></div></td>
+        </tr>
+        <tr>
+          <td style="font-weight:500">Health Enthusiast</td>
+          <td><span class="mono">3</span></td>
+          <td><span class="mono">3/5</span></td>
+          <td style="color:var(--ink-3);font-size:12px;font-style:italic">Social proof heavy, before/after focus</td>
+          <td><div class="tbl-actions"><button class="icon-btn">✏</button><button class="icon-btn">↗</button><button class="icon-btn">✕</button></div></td>
+        </tr>
+        <tr>
+          <td style="font-weight:500">Skeptic</td>
+          <td><span class="mono">3</span></td>
+          <td><span class="mono">2/5</span></td>
+          <td style="color:var(--ink-3);font-size:12px;font-style:italic">Authority-based, testimonial-driven</td>
+          <td><div class="tbl-actions"><button class="icon-btn">✏</button><button class="icon-btn">↗</button><button class="icon-btn">✕</button></div></td>
+        </tr>
+        <tr>
+          <td style="font-weight:500">Value Seeker</td>
+          <td><span class="mono">3</span></td>
+          <td><span class="mono">2/5</span></td>
+          <td style="color:var(--ink-3);font-size:12px;font-style:italic">Price anchoring, benefit stacking</td>
+          <td><div class="tbl-actions"><button class="icon-btn">✏</button><button class="icon-btn">↗</button><button class="icon-btn">✕</button></div></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════ -->
+<!-- TAB 4: CREATIVE TRACKER                            -->
+<!-- ═══════════════════════════════════════════════════ -->
+<section id="tab-tracker" class="tab-panel">
+
+  <!-- Section header -->
+  <div class="tracker-header">
+    <h1 class="tracker-title">Creative Tracker</h1>
+    <span class="count-badge">8</span>
+    <div class="tracker-header-right">
+      <button class="btn btn-ghost">↑ Push All to ClickUp</button>
+      <button class="btn btn-accent">+ Add Creative</button>
+    </div>
+  </div>
+
+  <!-- Filter bar -->
+  <div class="filter-bar">
+    <div class="filter-bar-primary">
+      <button class="filter-chip">Status: All ▾</button>
+      <button class="filter-chip">Funnel: All ▾</button>
+      <button class="filter-chip">Angle: All ▾</button>
+      <button class="filter-chip">Persona: All ▾</button>
+      <div class="filter-sep"></div>
+      <button class="filter-chip">Date: All Time ▾</button>
+      <div class="filter-sep"></div>
+      <div class="filter-search">
+        <svg width="13" height="13" viewBox="0 0 16 16" fill="none" style="flex-shrink:0;opacity:.5">
+          <circle cx="7" cy="7" r="5" stroke="currentColor" stroke-width="1.5"/>
+          <path d="m11 11 3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+        </svg>
+        <span>Search creatives...</span>
+      </div>
+      <button class="filter-chip" id="more-filters-btn" style="margin-left:auto">More filters +</button>
+    </div>
+    <div class="filter-bar-secondary" id="secondary-filters">
+      <button class="filter-chip">Format ▾</button>
+      <button class="filter-chip">Structure ▾</button>
+      <button class="filter-chip">Hook ▾</button>
+      <button class="filter-chip">Production ▾</button>
+      <button class="filter-chip">Ad Type ▾</button>
+      <span class="clear-link">Clear all</span>
+    </div>
+  </div>
+
+  <!-- Table -->
+  <div class="tracker-content">
+    <table class="tracker-table">
+      <thead>
+        <tr>
+          <th>Format Name</th>
+          <th>Angle</th>
+          <th>Persona</th>
+          <th>Structure</th>
+          <th>Hook</th>
+          <th>Production</th>
+          <th>Hypothesis</th>
+          <th>Ad Link</th>
+          <th>Drive</th>
+          <th>Ad Type</th>
+          <th>Funnel</th>
+          <th>Status</th>
+          <th>Created</th>
+          <th>Variations</th>
+          <th>Matrix</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr style="animation-delay:calc(var(--i,0)*40ms)">
+          <td><span class="creative-id">AT-001 · </span><span class="creative-name">Story Loop 30s</span></td>
+          <td>Pain Agitate Solution</td>
+          <td>Busy Mom</td>
+          <td>Problem-Solution</td>
+          <td>Question</td>
+          <td>UGC</td>
+          <td class="hypo-cell">Hook opens with pain point…</td>
+          <td><span class="link-cell">↗ Ad</span></td>
+          <td><span class="link-cell">↗ Drive</span></td>
+          <td>Video</td>
+          <td><span class="funnel-badge fb-tof">TOF</span></td>
+          <td><span class="status-pill sp-scale">Scale</span></td>
+          <td class="mono" style="font-size:11px;color:var(--ink-3)">Apr 08</td>
+          <td><span class="var-cell">5×</span></td>
+          <td><span class="matrix-cell">3 cells</span></td>
+          <td><div class="tbl-actions"><button class="icon-btn">✏</button><button class="icon-btn">↗</button><button class="icon-btn">✕</button></div></td>
+        </tr>
+        <tr>
+          <td><span class="creative-id">AT-002 · </span><span class="creative-name">Transformation 15s</span></td>
+          <td>Before/After</td>
+          <td>Health Enthusiast</td>
+          <td>Contrast</td>
+          <td>Stat</td>
+          <td>Motion</td>
+          <td class="hypo-cell">Before/after visual transform…</td>
+          <td><span class="link-cell absent">—</span></td>
+          <td><span class="link-cell">↗ Drive</span></td>
+          <td>Video</td>
+          <td><span class="funnel-badge fb-mof">MOF</span></td>
+          <td><span class="status-pill sp-testing">Testing</span></td>
+          <td class="mono" style="font-size:11px;color:var(--ink-3)">Apr 10</td>
+          <td><span class="var-cell">1×</span></td>
+          <td><span class="matrix-cell">1 cell</span></td>
+          <td><div class="tbl-actions"><button class="icon-btn">✏</button><button class="icon-btn">↗</button><button class="icon-btn">✕</button></div></td>
+        </tr>
+        <tr>
+          <td><span class="creative-id">AT-003 · </span><span class="creative-name">Testimonial Reel</span></td>
+          <td>Social Proof</td>
+          <td>Skeptic</td>
+          <td>Authority</td>
+          <td>Quote</td>
+          <td>Studio</td>
+          <td class="hypo-cell">Multi-person testimonial cut…</td>
+          <td><span class="link-cell">↗ Ad</span></td>
+          <td><span class="link-cell">↗ Drive</span></td>
+          <td>Video</td>
+          <td><span class="funnel-badge fb-bof">BOF</span></td>
+          <td><span class="status-pill sp-approved">Approved</span></td>
+          <td class="mono" style="font-size:11px;color:var(--ink-3)">Apr 11</td>
+          <td><span class="var-cell none">—</span></td>
+          <td><span class="matrix-cell">1 cell</span></td>
+          <td><div class="tbl-actions"><button class="icon-btn">✏</button><button class="icon-btn">↗</button><button class="icon-btn">✕</button></div></td>
+        </tr>
+        <tr>
+          <td><span class="creative-id">AT-004 · </span><span class="creative-name">Value Stack 60s</span></td>
+          <td>Benefits-First</td>
+          <td>Value Seeker</td>
+          <td>List</td>
+          <td>Statement</td>
+          <td>Voiceover</td>
+          <td class="hypo-cell">Stack 7 benefits rapidly…</td>
+          <td><span class="link-cell absent">—</span></td>
+          <td><span class="link-cell absent">—</span></td>
+          <td>Video</td>
+          <td><span class="funnel-badge fb-tof">TOF</span></td>
+          <td><span class="status-pill sp-loser">Loser</span></td>
+          <td class="mono" style="font-size:11px;color:var(--ink-3)">Apr 05</td>
+          <td><span class="var-cell none">—</span></td>
+          <td><span class="matrix-cell">1 cell</span></td>
+          <td><div class="tbl-actions"><button class="icon-btn">✏</button><button class="icon-btn">↗</button><button class="icon-btn">✕</button></div></td>
+        </tr>
+        <tr>
+          <td><span class="creative-id">AT-005 · </span><span class="creative-name">Fear Hook Cut</span></td>
+          <td>Fear Appeal</td>
+          <td>Busy Mom</td>
+          <td>Problem</td>
+          <td>Fear</td>
+          <td>UGC</td>
+          <td class="hypo-cell">Opens with fear trigger…</td>
+          <td><span class="link-cell">↗ Ad</span></td>
+          <td><span class="link-cell">↗ Drive</span></td>
+          <td>Video</td>
+          <td><span class="funnel-badge fb-tof">TOF</span></td>
+          <td><span class="status-pill sp-production">In Production</span></td>
+          <td class="mono" style="font-size:11px;color:var(--ink-3)">Apr 18</td>
+          <td><span class="var-cell none">—</span></td>
+          <td><span class="matrix-cell none">—</span></td>
+          <td><div class="tbl-actions"><button class="icon-btn">✏</button><button class="icon-btn">↗</button><button class="icon-btn">✕</button></div></td>
+        </tr>
+        <tr>
+          <td><span class="creative-id">AT-006 · </span><span class="creative-name">Authority Doc</span></td>
+          <td>Social Proof</td>
+          <td>Health Enthusiast</td>
+          <td>Authority</td>
+          <td>Stat</td>
+          <td>Documentary</td>
+          <td class="hypo-cell">Documentary-style authority piece…</td>
+          <td><span class="link-cell absent">—</span></td>
+          <td><span class="link-cell">↗ Drive</span></td>
+          <td>Video</td>
+          <td><span class="funnel-badge fb-mof">MOF</span></td>
+          <td><span class="status-pill sp-untested">Untested</span></td>
+          <td class="mono" style="font-size:11px;color:var(--ink-3)">Apr 20</td>
+          <td><span class="var-cell none">—</span></td>
+          <td><span class="matrix-cell none">—</span></td>
+          <td><div class="tbl-actions"><button class="icon-btn">✏</button><button class="icon-btn">↗</button><button class="icon-btn">✕</button></div></td>
+        </tr>
+        <tr>
+          <td><span class="creative-id">AT-007 · </span><span class="creative-name">Price Anchor Reel</span></td>
+          <td>Benefits-First</td>
+          <td>Value Seeker</td>
+          <td>List</td>
+          <td>Statement</td>
+          <td>Motion</td>
+          <td class="hypo-cell">Compare to competitors…</td>
+          <td><span class="link-cell absent">—</span></td>
+          <td><span class="link-cell absent">—</span></td>
+          <td>Video</td>
+          <td><span class="funnel-badge fb-bof">BOF</span></td>
+          <td><span class="status-pill sp-ready">Ready to Launch</span></td>
+          <td class="mono" style="font-size:11px;color:var(--ink-3)">Apr 17</td>
+          <td><span class="var-cell none">—</span></td>
+          <td><span class="matrix-cell">1 cell</span></td>
+          <td><div class="tbl-actions"><button class="icon-btn">✏</button><button class="icon-btn">↗</button><button class="icon-btn">✕</button></div></td>
+        </tr>
+        <tr>
+          <td><span class="creative-id">AT-008 · </span><span class="creative-name">UGC Raw Clip</span></td>
+          <td>Pain Agitate Solution</td>
+          <td>Skeptic</td>
+          <td>Problem-Solution</td>
+          <td>Question</td>
+          <td>UGC</td>
+          <td class="hypo-cell">Raw authentic UGC clip…</td>
+          <td><span class="link-cell">↗ Ad</span></td>
+          <td><span class="link-cell absent">—</span></td>
+          <td>Video</td>
+          <td><span class="funnel-badge fb-tof">TOF</span></td>
+          <td><span class="status-pill sp-winner">Winner</span></td>
+          <td class="mono" style="font-size:11px;color:var(--ink-3)">Apr 03</td>
+          <td><span class="var-cell">3×</span></td>
+          <td><span class="matrix-cell">2 cells</span></td>
+          <td><div class="tbl-actions"><button class="icon-btn">✏</button><button class="icon-btn">↗</button><button class="icon-btn">✕</button></div></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+</section>
+
+<!-- ═══════════════════════════════════════════════════ -->
+<!-- TAB 5: CREATIVE MATRIX                             -->
+<!-- ═══════════════════════════════════════════════════ -->
+<section id="tab-matrix" class="tab-panel">
+
+  <!-- Matrix header -->
+  <div class="matrix-header">
+    <h1 class="tracker-title">Creative Matrix</h1>
+    <span class="count-badge">20</span>
+    <div class="matrix-header-right">
+      <button class="date-chip" onclick="setDateChip(this)">Today</button>
+      <button class="date-chip" onclick="setDateChip(this)">Yesterday</button>
+      <button class="date-chip active" onclick="setDateChip(this)">This Week</button>
+      <button class="date-chip" onclick="setDateChip(this)">This Month</button>
+      <button class="date-chip" id="custom-date-btn" onclick="toggleCustomDate(this)">Custom ↓</button>
+    </div>
+  </div>
+
+  <!-- Custom date row -->
+  <div id="custom-date-row" style="display:none;padding:6px 20px;background:var(--paper);border-bottom:1px solid var(--line);gap:8px;align-items:center;">
+    <label style="font-size:12px;color:var(--ink-3)">From</label>
+    <input type="date" style="font-size:12px;border:1px solid var(--line);border-radius:6px;padding:3px 8px;background:var(--paper-2);color:var(--ink);font-family:'Satoshi',sans-serif;">
+    <label style="font-size:12px;color:var(--ink-3)">To</label>
+    <input type="date" style="font-size:12px;border:1px solid var(--line);border-radius:6px;padding:3px 8px;background:var(--paper-2);color:var(--ink);font-family:'Satoshi',sans-serif;">
+  </div>
+
+  <!-- Toolbar -->
+  <div class="matrix-toolbar">
+    <button class="filter-chip">Show: Active only ▾</button>
+    <button class="filter-chip">Filter personas ▾</button>
+  </div>
+
+  <!-- Matrix grid -->
+  <div class="matrix-wrap">
+    <div class="matrix-grid">
+
+      <!-- Corner -->
+      <div class="matrix-corner">Angle ↓ / Persona →</div>
+
+      <!-- Persona headers -->
+      <div class="matrix-persona-hd"><div class="persona-hd-name">Busy Mom</div><div class="persona-hd-count">5 creatives</div></div>
+      <div class="matrix-persona-hd"><div class="persona-hd-name">Health Enthusiast</div><div class="persona-hd-count">3 creatives</div></div>
+      <div class="matrix-persona-hd"><div class="persona-hd-name">Skeptic</div><div class="persona-hd-count">3 creatives</div></div>
+      <div class="matrix-persona-hd"><div class="persona-hd-name">Value Seeker</div><div class="persona-hd-count">3 creatives</div></div>
+
+      <!-- ── ROW 1: Pain Agitate Solution ── -->
+      <div class="matrix-angle-hd"><div class="angle-hd-name">Pain Agitate Solution</div><div class="angle-hd-count">3 total</div></div>
+
+      <!-- PAS × Busy Mom: 2 [Scale + Winner] -->
+      <div class="matrix-cell-content" onclick="openDrawer('Pain Agitate Solution','Busy Mom','pas-busy')">
+        <div class="cell-count-row">
+          <span class="cell-big-count">2</span>
+          <div class="cell-dots">
+            <div class="cell-dot-item"><div class="cell-dot-sm" style="background:var(--s-scale)"></div><span class="cell-dot-label">Scale</span></div>
+            <div class="cell-dot-item"><div class="cell-dot-sm" style="background:var(--s-winner)"></div><span class="cell-dot-label">Winner</span></div>
+          </div>
+        </div>
+        <div class="cell-bar-track">
+          <div class="cell-bar-seg" style="width:50%;background:var(--s-scale)"></div>
+          <div class="cell-bar-seg" style="width:50%;background:var(--s-winner)"></div>
+        </div>
+        <div class="cell-time">Scale Apr 03 · Won Apr 08</div>
+        <div class="cell-hover-bar">
+          <span class="hover-action">⊕ Add</span>
+          <span class="hover-action">⊕ Variation</span>
+          <span class="hover-action">⊕ Find Gap</span>
+        </div>
+      </div>
+
+      <!-- PAS × Health: 0 empty -->
+      <div class="matrix-cell-empty" onclick="openDrawer('Pain Agitate Solution','Health Enthusiast','pas-health')">
+        <span class="empty-label">— untested —</span>
+        <div class="empty-create">⊕ Create Task</div>
+      </div>
+
+      <!-- PAS × Skeptic: 1 [Testing] -->
+      <div class="matrix-cell-content" onclick="openDrawer('Pain Agitate Solution','Skeptic','pas-skeptic')">
+        <div class="cell-count-row">
+          <span class="cell-big-count">1</span>
+          <div class="cell-dots">
+            <div class="cell-dot-item"><div class="cell-dot-sm" style="background:var(--s-testing)"></div><span class="cell-dot-label">Testing</span></div>
+          </div>
+        </div>
+        <div class="cell-bar-track">
+          <div class="cell-bar-seg" style="width:100%;background:var(--s-testing)"></div>
+        </div>
+        <div class="cell-time">Testing: 8d</div>
+        <div class="cell-hover-bar">
+          <span class="hover-action">⊕ Add</span>
+          <span class="hover-action">⊕ Find Gap</span>
+        </div>
+      </div>
+
+      <!-- PAS × Value: 0 empty -->
+      <div class="matrix-cell-empty" onclick="openDrawer('Pain Agitate Solution','Value Seeker','pas-value')">
+        <span class="empty-label">— untested —</span>
+        <div class="empty-create">⊕ Create Task</div>
+      </div>
+
+      <!-- ── ROW 2: Before/After ── -->
+      <div class="matrix-angle-hd"><div class="angle-hd-name">Before/After</div><div class="angle-hd-count">4 total</div></div>
+
+      <!-- B/A × Busy Mom: 1 [Approved] -->
+      <div class="matrix-cell-content" onclick="openDrawer('Before/After','Busy Mom','ba-busy')">
+        <div class="cell-count-row">
+          <span class="cell-big-count">1</span>
+          <div class="cell-dots">
+            <div class="cell-dot-item"><div class="cell-dot-sm" style="background:var(--s-approved)"></div><span class="cell-dot-label">Approved</span></div>
+          </div>
+        </div>
+        <div class="cell-bar-track">
+          <div class="cell-bar-seg" style="width:100%;background:var(--s-approved)"></div>
+        </div>
+        <div class="cell-time">Approved 5d ago · queued</div>
+        <div class="cell-hover-bar">
+          <span class="hover-action">⊕ Add</span>
+          <span class="hover-action">⊕ Find Gap</span>
+        </div>
+      </div>
+
+      <!-- B/A × Health: 1 [Testing] -->
+      <div class="matrix-cell-content" onclick="openDrawer('Before/After','Health Enthusiast','ba-health')">
+        <div class="cell-count-row">
+          <span class="cell-big-count">1</span>
+          <div class="cell-dots">
+            <div class="cell-dot-item"><div class="cell-dot-sm" style="background:var(--s-testing)"></div><span class="cell-dot-label">Testing</span></div>
+          </div>
+        </div>
+        <div class="cell-bar-track">
+          <div class="cell-bar-seg" style="width:100%;background:var(--s-testing)"></div>
+        </div>
+        <div class="cell-time">Testing: 12d</div>
+        <div class="cell-hover-bar">
+          <span class="hover-action">⊕ Add</span>
+          <span class="hover-action">⊕ Find Gap</span>
+        </div>
+      </div>
+
+      <!-- B/A × Skeptic: 0 empty -->
+      <div class="matrix-cell-empty" onclick="openDrawer('Before/After','Skeptic','ba-skeptic')">
+        <span class="empty-label">— untested —</span>
+        <div class="empty-create">⊕ Create Task</div>
+      </div>
+
+      <!-- B/A × Value: 2 [Winner + Loser] -->
+      <div class="matrix-cell-content" onclick="openDrawer('Before/After','Value Seeker','ba-value')">
+        <div class="cell-count-row">
+          <span class="cell-big-count">2</span>
+          <div class="cell-dots">
+            <div class="cell-dot-item"><div class="cell-dot-sm" style="background:var(--s-winner)"></div><span class="cell-dot-label">Winner</span></div>
+            <div class="cell-dot-item"><div class="cell-dot-sm" style="background:var(--s-loser)"></div><span class="cell-dot-label">Loser</span></div>
+          </div>
+        </div>
+        <div class="cell-bar-track">
+          <div class="cell-bar-seg" style="width:50%;background:var(--s-winner)"></div>
+          <div class="cell-bar-seg" style="width:50%;background:var(--s-loser)"></div>
+        </div>
+        <div class="cell-time">Won Apr 08 · Ran 21d</div>
+        <div class="cell-hover-bar">
+          <span class="hover-action">⊕ Add</span>
+          <span class="hover-action">⊕ Variation</span>
+          <span class="hover-action">⊕ Find Gap</span>
+        </div>
+      </div>
+
+      <!-- ── ROW 3: Social Proof ── -->
+      <div class="matrix-angle-hd"><div class="angle-hd-name">Social Proof</div><div class="angle-hd-count">2 total</div></div>
+
+      <!-- SP × Busy Mom: 0 empty -->
+      <div class="matrix-cell-empty" onclick="openDrawer('Social Proof','Busy Mom','sp-busy')">
+        <span class="empty-label">— untested —</span>
+        <div class="empty-create">⊕ Create Task</div>
+      </div>
+
+      <!-- SP × Health: 1 [Approved] -->
+      <div class="matrix-cell-content" onclick="openDrawer('Social Proof','Health Enthusiast','sp-health')">
+        <div class="cell-count-row">
+          <span class="cell-big-count">1</span>
+          <div class="cell-dots">
+            <div class="cell-dot-item"><div class="cell-dot-sm" style="background:var(--s-approved)"></div><span class="cell-dot-label">Approved</span></div>
+          </div>
+        </div>
+        <div class="cell-bar-track">
+          <div class="cell-bar-seg" style="width:100%;background:var(--s-approved)"></div>
+        </div>
+        <div class="cell-time">Approved 2d ago</div>
+        <div class="cell-hover-bar">
+          <span class="hover-action">⊕ Add</span>
+          <span class="hover-action">⊕ Find Gap</span>
+        </div>
+      </div>
+
+      <!-- SP × Skeptic: 1 [Approved] -->
+      <div class="matrix-cell-content" onclick="openDrawer('Social Proof','Skeptic','sp-skeptic')">
+        <div class="cell-count-row">
+          <span class="cell-big-count">1</span>
+          <div class="cell-dots">
+            <div class="cell-dot-item"><div class="cell-dot-sm" style="background:var(--s-approved)"></div><span class="cell-dot-label">Approved</span></div>
+          </div>
+        </div>
+        <div class="cell-bar-track">
+          <div class="cell-bar-seg" style="width:100%;background:var(--s-approved)"></div>
+        </div>
+        <div class="cell-time">Approved Apr 11 · queued 11d</div>
+        <div class="cell-hover-bar">
+          <span class="hover-action">⊕ Add</span>
+          <span class="hover-action">⊕ Find Gap</span>
+        </div>
+      </div>
+
+      <!-- SP × Value: 0 empty -->
+      <div class="matrix-cell-empty" onclick="openDrawer('Social Proof','Value Seeker','sp-value')">
+        <span class="empty-label">— untested —</span>
+        <div class="empty-create">⊕ Create Task</div>
+      </div>
+
+      <!-- ── ROW 4: Fear Appeal ── -->
+      <div class="matrix-angle-hd"><div class="angle-hd-name">Fear Appeal</div><div class="angle-hd-count">1 total</div></div>
+
+      <!-- FA × Busy Mom: 1 [In Production] -->
+      <div class="matrix-cell-content" onclick="openDrawer('Fear Appeal','Busy Mom','fa-busy')">
+        <div class="cell-count-row">
+          <span class="cell-big-count">1</span>
+          <div class="cell-dots">
+            <div class="cell-dot-item"><div class="cell-dot-sm" style="background:var(--s-production)"></div><span class="cell-dot-label">In Prod</span></div>
+          </div>
+        </div>
+        <div class="cell-bar-track">
+          <div class="cell-bar-seg" style="width:100%;background:var(--s-production)"></div>
+        </div>
+        <div class="cell-time">In prod: 4d</div>
+        <div class="cell-hover-bar">
+          <span class="hover-action">⊕ Add</span>
+          <span class="hover-action">⊕ Find Gap</span>
+        </div>
+      </div>
+
+      <!-- FA × Health: 0 empty -->
+      <div class="matrix-cell-empty" onclick="openDrawer('Fear Appeal','Health Enthusiast','fa-health')">
+        <span class="empty-label">— untested —</span>
+        <div class="empty-create">⊕ Create Task</div>
+      </div>
+
+      <!-- FA × Skeptic: 0 empty -->
+      <div class="matrix-cell-empty" onclick="openDrawer('Fear Appeal','Skeptic','fa-skeptic')">
+        <span class="empty-label">— untested —</span>
+        <div class="empty-create">⊕ Create Task</div>
+      </div>
+
+      <!-- FA × Value: 0 empty -->
+      <div class="matrix-cell-empty" onclick="openDrawer('Fear Appeal','Value Seeker','fa-value')">
+        <span class="empty-label">— untested —</span>
+        <div class="empty-create">⊕ Create Task</div>
+      </div>
+
+      <!-- ── ROW 5: Benefits-First ── -->
+      <div class="matrix-angle-hd"><div class="angle-hd-name">Benefits-First</div><div class="angle-hd-count">2 total</div></div>
+
+      <!-- BF × Busy Mom: 0 empty -->
+      <div class="matrix-cell-empty" onclick="openDrawer('Benefits-First','Busy Mom','bf-busy')">
+        <span class="empty-label">— untested —</span>
+        <div class="empty-create">⊕ Create Task</div>
+      </div>
+
+      <!-- BF × Health: 0 empty -->
+      <div class="matrix-cell-empty" onclick="openDrawer('Benefits-First','Health Enthusiast','bf-health')">
+        <span class="empty-label">— untested —</span>
+        <div class="empty-create">⊕ Create Task</div>
+      </div>
+
+      <!-- BF × Skeptic: 0 empty -->
+      <div class="matrix-cell-empty" onclick="openDrawer('Benefits-First','Skeptic','bf-skeptic')">
+        <span class="empty-label">— untested —</span>
+        <div class="empty-create">⊕ Create Task</div>
+      </div>
+
+      <!-- BF × Value: 2 [Loser + Ready] -->
+      <div class="matrix-cell-content" onclick="openDrawer('Benefits-First','Value Seeker','bf-value')">
+        <div class="cell-count-row">
+          <span class="cell-big-count">2</span>
+          <div class="cell-dots">
+            <div class="cell-dot-item"><div class="cell-dot-sm" style="background:var(--s-loser)"></div><span class="cell-dot-label">Loser</span></div>
+            <div class="cell-dot-item"><div class="cell-dot-sm" style="background:var(--s-ready)"></div><span class="cell-dot-label">Ready</span></div>
+          </div>
+        </div>
+        <div class="cell-bar-track">
+          <div class="cell-bar-seg" style="width:50%;background:var(--s-loser)"></div>
+          <div class="cell-bar-seg" style="width:50%;background:var(--s-ready)"></div>
+        </div>
+        <div class="cell-time">Loser Apr 05 · Ready: 5d queued</div>
+        <div class="cell-hover-bar">
+          <span class="hover-action">⊕ Add</span>
+          <span class="hover-action">⊕ Find Gap</span>
+        </div>
+      </div>
+
+    </div><!-- /matrix-grid -->
+  </div><!-- /matrix-wrap -->
+
+</section>
+
+<!-- ═══════════════════════════════════════════════════ -->
+<!-- TAB 6: ACTION PLAN                                 -->
+<!-- ═══════════════════════════════════════════════════ -->
+<section id="tab-action" class="tab-panel placeholder-panel">
+  <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;">
+    <h1 class="placeholder-title">Action Plan</h1>
+    <span class="count-badge">0 selected</span>
+  </div>
+  <div class="placeholder-empty">
+    Push tasks from the Creative Matrix using the → Action Plan button.
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════ -->
+<!-- TAB 7: PRODUCTION                                  -->
+<!-- ═══════════════════════════════════════════════════ -->
+<section id="tab-production" class="tab-panel placeholder-panel">
+  <h1 class="placeholder-title">Production Board</h1>
+  <div class="kanban-board">
+    <div class="kanban-col">
+      <div class="kanban-col-head">In Queue</div>
+      <div class="kanban-col-body"></div>
+    </div>
+    <div class="kanban-col">
+      <div class="kanban-col-head">In Production</div>
+      <div class="kanban-col-body">
+        <div class="kanban-card">
+          <div class="kanban-card-id">AT-005</div>
+          <div class="kanban-card-name">Fear Hook Cut</div>
+          <div class="kanban-card-tags">
+            <span class="funnel-badge fb-tof">TOF</span>
+            <span style="font-size:11px;background:var(--paper-2);border:1px solid var(--line);border-radius:4px;padding:1px 6px;color:var(--ink-3)">UGC</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="kanban-col">
+      <div class="kanban-col-head">Complete</div>
+      <div class="kanban-col-body"></div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════ -->
+<!-- TAB 8: INSPIRATION                                 -->
+<!-- ═══════════════════════════════════════════════════ -->
+<section id="tab-inspiration" class="tab-panel placeholder-panel">
+  <h1 class="placeholder-title">Inspiration Queue</h1>
+  <div class="placeholder-empty">
+    No inspiration saved yet. Add competitor ads or reference content to analyze.
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════ -->
+<!-- DRAWER                                             -->
+<!-- ═══════════════════════════════════════════════════ -->
+<div class="drawer-backdrop" id="drawer-backdrop" onclick="closeDrawer()"></div>
+<div class="drawer" id="drawer">
+  <div class="drawer-head">
+    <div class="drawer-title" id="drawer-title">—</div>
+    <span class="drawer-count mono" id="drawer-count"></span>
+    <button class="drawer-close" onclick="closeDrawer()">✕</button>
+  </div>
+
+  <div class="drawer-toggle">
+    <div class="seg-control">
+      <button class="seg-btn active" onclick="setDrawerView('status',this)">By Status</button>
+      <button class="seg-btn" onclick="setDrawerView('funnel',this)">By Funnel</button>
+      <button class="seg-btn" onclick="setDrawerView('type',this)">By Type</button>
+    </div>
+  </div>
+
+  <div class="drawer-body" id="drawer-body">
+    <!-- populated by JS -->
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════ -->
+<!-- JAVASCRIPT                                         -->
+<!-- ═══════════════════════════════════════════════════ -->
+<script>
+/* ── Tab switching ─────────────────────────────────── */
+const tabBtns  = document.querySelectorAll('.tab-btn');
+const tabPanels = document.querySelectorAll('.tab-panel');
+
+tabBtns.forEach(btn => {
+  btn.addEventListener('click', () => {
+    const target = btn.dataset.tab;
+
+    tabBtns.forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+
+    tabPanels.forEach(p => {
+      const isTarget = p.id === 'tab-' + target;
+      p.classList.toggle('active', isTarget);
+      if (isTarget) {
+        // Re-trigger animation
+        p.style.animation = 'none';
+        p.offsetHeight; // reflow
+        p.style.animation = '';
+      }
+    });
+
+    // Stagger tracker rows on tab show
+    if (target === 'tracker') {
+      document.querySelectorAll('.tracker-table tbody tr').forEach((tr, i) => {
+        tr.style.setProperty('--i', i);
+        tr.style.animationDelay = (i * 40) + 'ms';
+      });
+    }
+  });
+});
+
+/* ── More filters toggle ───────────────────────────── */
+const moreFiltersBtn = document.getElementById('more-filters-btn');
+const secondaryFilters = document.getElementById('secondary-filters');
+let filtersOpen = false;
+
+moreFiltersBtn.addEventListener('click', () => {
+  filtersOpen = !filtersOpen;
+  secondaryFilters.classList.toggle('open', filtersOpen);
+  moreFiltersBtn.textContent = filtersOpen ? 'Fewer filters −' : 'More filters +';
+  moreFiltersBtn.classList.toggle('active', filtersOpen);
+});
+
+/* ── Date chips ─────────────────────────────────────── */
+function setDateChip(el) {
+  document.querySelectorAll('.date-chip').forEach(c => c.classList.remove('active'));
+  el.classList.add('active');
+}
+
+function toggleCustomDate(el) {
+  const row = document.getElementById('custom-date-row');
+  const isOpen = row.style.display === 'flex';
+  row.style.display = isOpen ? 'none' : 'flex';
+  setDateChip(el);
+  if (!isOpen) el.textContent = 'Custom ↑';
+  else el.textContent = 'Custom ↓';
+}
+
+/* ── Drawer data ────────────────────────────────────── */
+const cellData = {
+  'pas-busy': {
+    count: 2,
+    creatives: [
+      { id:'AT-001', name:'Story Loop 30s', status:'Scale', statusClass:'sp-scale', time:'Scaled Apr 03' },
+      { id:'AT-008', name:'UGC Raw Clip', status:'Winner', statusClass:'sp-winner', time:'Won Apr 08 · 3 variations' }
+    ],
+    byStatus: [{ dot:'sd-scale', name:'Scale', count:1 }, { dot:'sd-winner', name:'Winner', count:1 }],
+    byFunnel: [{ badge:'fb-tof', name:'TOF', count:2 }],
+    byType:   [{ name:'UGC', count:2 }],
+    hasWinner: true
+  },
+  'pas-health': { count:0, creatives:[], byStatus:[], byFunnel:[], byType:[], hasWinner:false },
+  'pas-skeptic': {
+    count:1,
+    creatives:[ { id:'AT-008', name:'UGC Raw Clip', status:'Testing', statusClass:'sp-testing', time:'Testing: 8 days' } ],
+    byStatus: [{ dot:'sd-testing', name:'Testing', count:1 }],
+    byFunnel: [{ badge:'fb-tof', name:'TOF', count:1 }],
+    byType:   [{ name:'UGC', count:1 }],
+    hasWinner: false
+  },
+  'pas-value': { count:0, creatives:[], byStatus:[], byFunnel:[], byType:[], hasWinner:false },
+  'ba-busy': {
+    count:1,
+    creatives:[ { id:'AT-002', name:'Transformation 15s', status:'Approved', statusClass:'sp-approved', time:'Approved 5d ago · queued' } ],
+    byStatus: [{ dot:'sd-approved', name:'Approved', count:1 }],
+    byFunnel: [{ badge:'fb-mof', name:'MOF', count:1 }],
+    byType:   [{ name:'Motion', count:1 }],
+    hasWinner: false
+  },
+  'ba-health': {
+    count:1,
+    creatives:[ { id:'AT-002', name:'Transformation 15s', status:'Testing', statusClass:'sp-testing', time:'Testing: 12 days' } ],
+    byStatus: [{ dot:'sd-testing', name:'Testing', count:1 }],
+    byFunnel: [{ badge:'fb-mof', name:'MOF', count:1 }],
+    byType:   [{ name:'Motion', count:1 }],
+    hasWinner: false
+  },
+  'ba-skeptic': { count:0, creatives:[], byStatus:[], byFunnel:[], byType:[], hasWinner:false },
+  'ba-value': {
+    count:2,
+    creatives:[
+      { id:'AT-004', name:'Value Stack 60s', status:'Loser', statusClass:'sp-loser', time:'Ran 21d · concluded' },
+      { id:'AT-007', name:'Price Anchor Reel', status:'Winner', statusClass:'sp-winner', time:'Won Apr 08' }
+    ],
+    byStatus: [{ dot:'sd-winner', name:'Winner', count:1 }, { dot:'sd-loser', name:'Loser', count:1 }],
+    byFunnel: [{ badge:'fb-bof', name:'BOF', count:2 }],
+    byType:   [{ name:'Motion', count:1 }, { name:'Voiceover', count:1 }],
+    hasWinner: true
+  },
+  'sp-busy': { count:0, creatives:[], byStatus:[], byFunnel:[], byType:[], hasWinner:false },
+  'sp-health': {
+    count:1,
+    creatives:[ { id:'AT-006', name:'Authority Doc', status:'Approved', statusClass:'sp-approved', time:'Approved 2d ago' } ],
+    byStatus: [{ dot:'sd-approved', name:'Approved', count:1 }],
+    byFunnel: [{ badge:'fb-mof', name:'MOF', count:1 }],
+    byType:   [{ name:'Documentary', count:1 }],
+    hasWinner: false
+  },
+  'sp-skeptic': {
+    count:1,
+    creatives:[ { id:'AT-003', name:'Testimonial Reel', status:'Approved', statusClass:'sp-approved', time:'Approved Apr 11 · queued 11d' } ],
+    byStatus: [{ dot:'sd-approved', name:'Approved', count:1 }],
+    byFunnel: [{ badge:'fb-bof', name:'BOF', count:1 }],
+    byType:   [{ name:'Studio', count:1 }],
+    hasWinner: false
+  },
+  'sp-value': { count:0, creatives:[], byStatus:[], byFunnel:[], byType:[], hasWinner:false },
+  'fa-busy': {
+    count:1,
+    creatives:[ { id:'AT-005', name:'Fear Hook Cut', status:'In Production', statusClass:'sp-production', time:'In prod: 4 days' } ],
+    byStatus: [{ dot:'sd-production', name:'In Production', count:1 }],
+    byFunnel: [{ badge:'fb-tof', name:'TOF', count:1 }],
+    byType:   [{ name:'UGC', count:1 }],
+    hasWinner: false
+  },
+  'fa-health': { count:0, creatives:[], byStatus:[], byFunnel:[], byType:[], hasWinner:false },
+  'fa-skeptic':{ count:0, creatives:[], byStatus:[], byFunnel:[], byType:[], hasWinner:false },
+  'fa-value':  { count:0, creatives:[], byStatus:[], byFunnel:[], byType:[], hasWinner:false },
+  'bf-busy':   { count:0, creatives:[], byStatus:[], byFunnel:[], byType:[], hasWinner:false },
+  'bf-health': { count:0, creatives:[], byStatus:[], byFunnel:[], byType:[], hasWinner:false },
+  'bf-skeptic':{ count:0, creatives:[], byStatus:[], byFunnel:[], byType:[], hasWinner:false },
+  'bf-value': {
+    count:2,
+    creatives:[
+      { id:'AT-004', name:'Value Stack 60s', status:'Loser', statusClass:'sp-loser', time:'Loser Apr 05 · concluded' },
+      { id:'AT-007', name:'Price Anchor Reel', status:'Ready to Launch', statusClass:'sp-ready', time:'Ready: 5d queued' }
+    ],
+    byStatus: [{ dot:'sd-loser', name:'Loser', count:1 }, { dot:'sd-ready', name:'Ready to Launch', count:1 }],
+    byFunnel: [{ badge:'fb-bof', name:'BOF', count:2 }],
+    byType:   [{ name:'Motion', count:1 }, { name:'Voiceover', count:1 }],
+    hasWinner: false
+  }
+};
+
+let currentCellKey = null;
+let currentViewMode = 'status';
+
+function openDrawer(angle, persona, key) {
+  currentCellKey = key;
+  const data = cellData[key] || { count:0, creatives:[], byStatus:[], byFunnel:[], byType:[], hasWinner:false };
+
+  document.getElementById('drawer-title').textContent = angle + ' × ' + persona;
+  document.getElementById('drawer-count').textContent = data.count + (data.count === 1 ? ' creative' : ' creatives');
+
+  renderDrawerBody(data, currentViewMode);
+
+  document.getElementById('drawer').classList.add('open');
+  document.getElementById('drawer-backdrop').classList.add('open');
+}
+
+function closeDrawer() {
+  document.getElementById('drawer').classList.remove('open');
+  document.getElementById('drawer-backdrop').classList.remove('open');
+}
+
+function setDrawerView(mode, btn) {
+  currentViewMode = mode;
+  document.querySelectorAll('.seg-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+
+  if (currentCellKey) {
+    const data = cellData[currentCellKey] || {};
+    renderDrawerBody(data, mode);
+  }
+}
+
+function renderDrawerBody(data, viewMode) {
+  const body = document.getElementById('drawer-body');
+
+  let html = '';
+
+  // Creative rows
+  if (data.creatives && data.creatives.length > 0) {
+    data.creatives.forEach(c => {
+      html += `
+        <div class="drawer-row">
+          <div class="drawer-row-left">
+            <div class="drawer-row-id">${c.id}</div>
+            <div class="drawer-row-name">${c.name}</div>
+            <div class="drawer-row-time">${c.time}</div>
+          </div>
+          <span class="status-pill ${c.statusClass}">${c.status}</span>
+        </div>`;
+    });
+  } else {
+    html += `<div style="padding:16px 0;font-size:12.5px;color:var(--ink-4);text-align:center;font-style:italic;">No creatives in this cell</div>`;
+  }
+
+  // Breakdown section
+  if (data.creatives && data.creatives.length > 0) {
+    html += `<div class="drawer-breakdown">`;
+    const label = viewMode === 'status' ? 'By Status' : viewMode === 'funnel' ? 'By Funnel' : 'By Type';
+    html += `<div class="breakdown-label">${label}</div>`;
+
+    const items = viewMode === 'status' ? data.byStatus : viewMode === 'funnel' ? data.byFunnel : data.byType;
+    (items || []).forEach(item => {
+      html += `<div class="breakdown-row">`;
+      if (viewMode === 'status') {
+        html += `<div class="status-dot ${item.dot}"></div>`;
+        html += `<span class="breakdown-name">${item.name}</span>`;
+      } else if (viewMode === 'funnel') {
+        html += `<span class="funnel-badge ${item.badge}">${item.name}</span>`;
+        html += `<span class="breakdown-name"></span>`;
+      } else {
+        html += `<span class="breakdown-name" style="font-size:12px;font-family:'JetBrains Mono',monospace">${item.name}</span>`;
+      }
+      html += `<span class="breakdown-count">${item.count}</span>`;
+      html += `</div>`;
+    });
+    html += `</div>`;
+  }
+
+  // Actions
+  html += `<div class="drawer-actions">`;
+  if (data.hasWinner) {
+    html += `<button class="btn btn-accent" style="width:100%;justify-content:center;">⊕ Make Variation</button>`;
+  }
+  html += `<button class="btn btn-ghost" style="width:100%;justify-content:center;">⊕ Add Creative Format</button>`;
+  if (!data.hasWinner) {
+    html += `<button class="btn btn-ghost" style="width:100%;justify-content:center;">⊕ Create Gap Task</button>`;
+  }
+  html += `</div>`;
+
+  body.innerHTML = html;
+}
+
+/* ── Stagger init for tracker rows ─────────────────── */
+document.querySelectorAll('.tracker-table tbody tr').forEach((tr, i) => {
+  tr.style.setProperty('--i', i);
+  tr.style.animationDelay = (i * 40) + 'ms';
+});
+
+/* ── Filter chip click toggle ───────────────────────── */
+document.querySelectorAll('.filter-chip:not(#more-filters-btn)').forEach(chip => {
+  chip.addEventListener('click', () => {
+    // Simple visual toggle for demo
+    chip.classList.toggle('active');
+  });
+});
+</script>
+</body>
+</html>

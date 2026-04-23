@@ -1,0 +1,768 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Layout 15 — Timeline feed</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+<style>
+:root {
+  --paper:   #faf9f5;
+  --paper-2: #f3f1e9;
+  --surface: #ffffff;
+  --line:    #e8e5dc;
+  --line-hi: #d6d1c1;
+  --ink:     #1a1814;
+  --ink-2:   #585449;
+  --ink-3:   #8f8a7c;
+  --ink-4:   #b8b3a2;
+  --accent:  #c05336;
+  --accent-soft: #f5e3da;
+  --sage:    #5e7557;
+  --ochre:   #a77c2e;
+  --rust:    #a83b28;
+  --dusk:    #4f6780;
+  --emerald: #35683f;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { background: var(--paper); color: var(--ink); min-height: 100vh; }
+body {
+  font-family: 'Inter', sans-serif;
+  font-size: 13px; line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Top */
+.top {
+  height: 54px; padding: 0 24px;
+  display: flex; align-items: center; gap: 14px;
+  border-bottom: 1px solid var(--line);
+  background: var(--paper);
+  position: sticky; top: 0; z-index: 10;
+}
+.brand { font-family: 'Instrument Serif', serif; font-style: italic; font-size: 22px; }
+.brand em { color: var(--accent); }
+.sep-v { width: 1px; height: 20px; background: var(--line); }
+.crumb { font-size: 12.5px; color: var(--ink-2); display: flex; gap: 8px; align-items: center; }
+.crumb a { color: var(--ink-2); padding: 3px 7px; border-radius: 4px; cursor: pointer; text-decoration: none; }
+.crumb a:hover { background: var(--paper-2); }
+.crumb .s { color: var(--ink-4); font-size: 10px; }
+.top .right { margin-left: auto; display: flex; gap: 10px; align-items: center; }
+.view-toggle { display: flex; gap: 1px; padding: 2px; background: var(--paper-2); border-radius: 6px; }
+.view-toggle span {
+  padding: 5px 11px; border-radius: 4px; cursor: pointer; color: var(--ink-3);
+  font-family: 'JetBrains Mono', monospace; font-size: 10.5px; font-weight: 500;
+  letter-spacing: 0.04em; text-transform: uppercase;
+}
+.view-toggle span.on { background: var(--surface); color: var(--ink); box-shadow: 0 1px 2px rgba(0,0,0,.05); }
+.btn {
+  height: 30px; padding: 0 12px;
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: 6px; font-family: inherit; font-size: 12.5px; font-weight: 500;
+  color: var(--ink); cursor: pointer;
+  display: inline-flex; align-items: center; gap: 6px;
+}
+.btn:hover { background: var(--paper-2); }
+.btn-p { background: var(--accent); color: white; border-color: var(--accent); }
+
+/* Page layout */
+.layout {
+  display: grid;
+  grid-template-columns: 1fr 320px;
+  max-width: 1280px;
+  margin: 0 auto;
+  gap: 32px;
+  padding: 28px 24px 60px;
+}
+
+.feed-main { min-width: 0; }
+.page-head {
+  margin-bottom: 22px;
+  display: flex; align-items: baseline; gap: 14px;
+}
+.page-head h1 {
+  font-family: 'Instrument Serif', serif;
+  font-style: italic; font-weight: 400;
+  font-size: 38px; letter-spacing: -0.025em; line-height: 1;
+}
+.page-head .sub {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px; color: var(--ink-3);
+  letter-spacing: 0.06em; text-transform: uppercase;
+}
+
+.filter-row {
+  display: flex; gap: 8px; align-items: center;
+  padding: 10px 14px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  margin-bottom: 22px;
+}
+.filter-row .s-input {
+  flex: 1; position: relative;
+}
+.filter-row input {
+  width: 100%; height: 30px;
+  background: var(--paper); border: 1px solid var(--line);
+  border-radius: 5px; padding: 0 10px 0 30px;
+  font-family: inherit; font-size: 12.5px;
+  color: var(--ink); outline: none;
+}
+.filter-row input:focus { border-color: var(--accent); }
+.filter-row .s-input::before {
+  content: '⌕'; position: absolute; left: 10px; top: 50%; transform: translateY(-50%);
+  color: var(--ink-4);
+}
+.filter-row .chip {
+  padding: 5px 11px; font-size: 11.5px;
+  background: var(--paper); border: 1px solid var(--line);
+  border-radius: 5px; cursor: pointer;
+  color: var(--ink-2); white-space: nowrap;
+  display: inline-flex; align-items: center; gap: 4px;
+}
+.filter-row .chip.on { background: var(--ink); color: white; border-color: var(--ink); }
+
+/* ══ DAY GROUP ══ */
+.day-group { margin-bottom: 34px; }
+.day-head {
+  display: flex; align-items: baseline; gap: 12px;
+  padding: 0 0 12px;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 16px;
+  position: sticky;
+  top: 54px;
+  background: var(--paper);
+  z-index: 2;
+  padding-top: 14px;
+  margin-top: -14px;
+}
+.day-head h2 {
+  font-family: 'Instrument Serif', serif;
+  font-style: italic;
+  font-weight: 400;
+  font-size: 28px;
+  letter-spacing: -0.02em;
+}
+.day-head .date {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px; color: var(--ink-3);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.day-head .rollup {
+  margin-left: auto;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px; color: var(--ink-3);
+  display: flex; gap: 14px; align-items: center;
+}
+.day-head .rollup strong { color: var(--ink); font-weight: 600; }
+
+/* ══ EVENT ══ */
+.event {
+  display: grid;
+  grid-template-columns: 70px 1fr;
+  gap: 14px;
+  padding: 12px 0;
+  position: relative;
+}
+.event::before {
+  content: ''; position: absolute;
+  left: 46px; top: 34px; bottom: -12px;
+  width: 1.5px;
+  background: var(--line);
+}
+.event:last-child::before { display: none; }
+
+.event-time {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  color: var(--ink-3);
+  letter-spacing: 0.02em;
+  padding-top: 12px;
+  text-align: right;
+}
+
+.event-body {
+  display: flex; gap: 14px;
+  position: relative;
+}
+
+.event-marker {
+  width: 32px; height: 32px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  display: grid; place-items: center;
+  background: var(--surface);
+  border: 2px solid var(--line-hi);
+  color: var(--ink-3);
+  font-size: 14px;
+  font-weight: 700;
+  position: relative; z-index: 1;
+}
+.event-marker.up     { border-color: var(--sage); color: var(--sage); }
+.event-marker.massive { border-color: var(--emerald); color: var(--emerald); background: rgba(53,104,63,.08); }
+.event-marker.down   { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+.event-marker.loser  { border-color: var(--rust); color: var(--rust); background: rgba(168,59,40,0.08); }
+.event-marker.info   { border-color: var(--dusk); color: var(--dusk); }
+.event-marker.new    { border-color: var(--ochre); color: var(--ochre); }
+.event-marker.sync   { border-color: var(--line); color: var(--ink-3); background: var(--paper-2); }
+
+.event-content {
+  flex: 1;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 14px 16px;
+  transition: border-color .12s, box-shadow .12s;
+  cursor: pointer;
+}
+.event-content:hover {
+  border-color: var(--line-hi);
+  box-shadow: 0 2px 6px rgba(0,0,0,.04);
+}
+
+.event-content.ghost {
+  background: transparent;
+  border: 1px dashed var(--line);
+  color: var(--ink-3);
+  cursor: default;
+  box-shadow: none;
+}
+.event-content.ghost:hover { border-color: var(--line); box-shadow: none; }
+
+.event-head {
+  display: flex; align-items: center; gap: 10px;
+  margin-bottom: 6px;
+}
+.event-head .label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  font-family: 'JetBrains Mono', monospace;
+}
+.event-head .label.up { color: var(--sage); }
+.event-head .label.massive { color: var(--emerald); }
+.event-head .label.down { color: var(--accent); }
+.event-head .label.loser { color: var(--rust); }
+.event-head .label.info { color: var(--dusk); }
+.event-head .label.new { color: var(--ochre); }
+.event-head .timespan {
+  margin-left: auto;
+  font-size: 10.5px; color: var(--ink-4);
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.event-title {
+  font-family: 'Instrument Serif', serif;
+  font-style: italic; font-weight: 400;
+  font-size: 20px; letter-spacing: -0.01em;
+  line-height: 1.25;
+  color: var(--ink);
+  margin-bottom: 8px;
+}
+.event-title em { color: var(--accent); font-style: italic; }
+
+/* Creative inline card */
+.creative-inline {
+  display: flex; align-items: center; gap: 12px;
+  padding: 8px;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  margin-top: 6px;
+}
+.creative-inline .thm {
+  width: 40px; height: 40px; border-radius: 6px;
+  background: var(--ink); position: relative;
+  flex-shrink: 0; overflow: hidden;
+}
+.creative-inline .thm::after {
+  content: '▶'; position: absolute; inset: 0;
+  display: grid; place-items: center;
+  color: var(--accent); font-size: 11px;
+}
+.creative-inline .thm.photo { background: var(--paper-2); }
+.creative-inline .thm.photo::after { content: '◈'; color: var(--sage); }
+.creative-inline .info { min-width: 0; flex: 1; }
+.creative-inline .nm {
+  font-weight: 600; font-size: 13px;
+  color: var(--ink); letter-spacing: -0.005em;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.creative-inline .tags {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10.5px; color: var(--ink-3);
+  margin-top: 2px;
+}
+.creative-inline .metrics {
+  display: flex; gap: 18px; align-items: center;
+  font-family: 'JetBrains Mono', monospace;
+  font-variant-numeric: tabular-nums;
+}
+.creative-inline .m { display: flex; flex-direction: column; align-items: flex-end; }
+.creative-inline .m .l {
+  font-size: 9.5px; color: var(--ink-3);
+  letter-spacing: 0.06em; text-transform: uppercase;
+  font-weight: 500;
+}
+.creative-inline .m .v {
+  font-size: 13.5px; font-weight: 700;
+  color: var(--ink);
+}
+.creative-inline .m .v.up { color: var(--sage); }
+.creative-inline .m .v.massive { color: var(--emerald); }
+.creative-inline .m .v.down { color: var(--accent); }
+.creative-inline .m .v.loser { color: var(--rust); }
+
+/* Mini chart */
+.mini-chart {
+  margin-top: 10px;
+  padding: 8px 10px;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+.mini-chart svg { display: block; width: 100%; height: 30px; }
+.mini-chart-meta {
+  display: flex; justify-content: space-between;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px; color: var(--ink-3);
+  margin-top: 4px;
+}
+
+.event-actions {
+  margin-top: 10px;
+  display: flex; gap: 6px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+.event-actions button {
+  padding: 4px 10px;
+  font-size: 11.5px;
+  font-weight: 500;
+  border-radius: 4px;
+  border: 1px solid var(--line);
+  background: var(--paper);
+  color: var(--ink-2);
+  cursor: pointer;
+  font-family: inherit;
+}
+.event-actions button:hover { background: var(--paper-2); border-color: var(--line-hi); color: var(--ink); }
+.event-actions button.primary {
+  background: var(--ink); color: white; border-color: var(--ink);
+}
+.event-actions button.primary:hover { background: var(--accent); border-color: var(--accent); }
+.event-actions .skip {
+  margin-left: auto; color: var(--ink-4);
+  padding: 4px 8px;
+  background: transparent; border: none;
+  font-size: 11px; cursor: pointer;
+}
+
+/* SIDEBAR */
+.sidebar-right {
+  position: sticky; top: 70px;
+  align-self: flex-start;
+  height: fit-content;
+  display: flex; flex-direction: column; gap: 16px;
+}
+.sr-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 16px;
+}
+.sr-card h3 {
+  font-family: 'Instrument Serif', serif;
+  font-style: italic;
+  font-weight: 400;
+  font-size: 16px;
+  letter-spacing: -0.01em;
+  margin-bottom: 10px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--line);
+}
+.sr-card h3 em { color: var(--accent); }
+
+.sr-stat-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.sr-stat .l {
+  font-size: 10.5px; color: var(--ink-3);
+  letter-spacing: 0.04em; text-transform: uppercase;
+  font-weight: 500;
+}
+.sr-stat .v {
+  font-family: 'Instrument Serif', serif;
+  font-style: italic;
+  font-size: 22px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+  margin-top: 2px;
+}
+
+.sr-list li {
+  list-style: none;
+  padding: 8px 0;
+  border-bottom: 1px dashed var(--line);
+  font-size: 12px;
+  color: var(--ink-2);
+  display: flex; gap: 8px; align-items: flex-start;
+}
+.sr-list li:last-child { border-bottom: none; }
+.sr-list li .t {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  color: var(--ink-3);
+  flex-shrink: 0;
+  min-width: 48px;
+}
+.sr-list li .txt { flex: 1; }
+.sr-list li .txt strong { color: var(--ink); font-weight: 600; }
+</style>
+</head>
+<body>
+
+<div class="top">
+  <div class="brand"><em>Immuvi.</em></div>
+  <div class="sep-v"></div>
+  <div class="crumb">
+    <a>Art Therapy</a><span class="s">›</span>
+    <a>Creative Tracker</a>
+  </div>
+  <div class="right">
+    <div class="view-toggle">
+      <span>Table</span><span>Board</span><span>Gallery</span><span>Matrix</span><span class="on">Timeline</span>
+    </div>
+    <div class="sep-v"></div>
+    <button class="btn">⇡ Push</button>
+    <button class="btn btn-p">+ Add Creative</button>
+  </div>
+</div>
+
+<div class="layout">
+
+<!-- FEED MAIN -->
+<div class="feed-main">
+  <div class="page-head">
+    <h1>Activity <em>Feed.</em></h1>
+    <div class="sub">WHAT HAPPENED · LAST 3 DAYS</div>
+  </div>
+
+  <div class="filter-row">
+    <div class="s-input"><input placeholder="Search events…"></div>
+    <span class="chip on">All activity</span>
+    <span class="chip">Status changes</span>
+    <span class="chip">Winners only</span>
+    <span class="chip">Kill list</span>
+  </div>
+
+  <!-- TODAY -->
+  <div class="day-group">
+    <div class="day-head">
+      <h2><em>Today</em></h2>
+      <div class="date">21 Apr 2026 · Monday</div>
+      <div class="rollup">
+        <span><strong>+$2,180</strong> spend</span>
+        <span><strong>1.52×</strong> ROAS</span>
+        <span><strong>3</strong> status changes</span>
+      </div>
+    </div>
+
+    <div class="event">
+      <div class="event-time">14:37</div>
+      <div class="event-body">
+        <div class="event-marker massive">◆</div>
+        <div class="event-content">
+          <div class="event-head">
+            <span class="label massive">Promoted · Massive Winner</span>
+            <span class="timespan">Day 7 · $1,842 spend</span>
+          </div>
+          <div class="event-title"><em>5773-1 old winner</em> crossed 1.9× ROAS on $1,842 spend — time to scale.</div>
+          <div class="creative-inline">
+            <div class="thm"></div>
+            <div class="info">
+              <div class="nm">5773-1 old winner</div>
+              <div class="tags">Art as Therapy · Women 25-45 · POV · AT-11439-v1</div>
+            </div>
+            <div class="metrics">
+              <div class="m"><span class="l">ROAS</span><span class="v massive">1.92×</span></div>
+              <div class="m"><span class="l">Spend</span><span class="v">$1,842</span></div>
+              <div class="m"><span class="l">CPA</span><span class="v">$12.40</span></div>
+            </div>
+          </div>
+          <div class="event-actions">
+            <button class="primary">Scale budget +30%</button>
+            <button>Duplicate & test</button>
+            <button>View brief</button>
+            <button class="skip">Dismiss</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="event">
+      <div class="event-time">13:04</div>
+      <div class="event-body">
+        <div class="event-marker down">↓</div>
+        <div class="event-content">
+          <div class="event-head">
+            <span class="label down">Fatigue flagged · WoW -42%</span>
+            <span class="timespan">Day 11 · $1,205 spend</span>
+          </div>
+          <div class="event-title"><em>10785-2 old winner</em> lost 42% ROAS week-over-week. Refresh or kill.</div>
+          <div class="creative-inline">
+            <div class="thm photo"></div>
+            <div class="info">
+              <div class="nm">10785-2 old winner</div>
+              <div class="tags">Scarcity · Women 25-45 · Pattern Interrupt · AT-10733</div>
+            </div>
+            <div class="metrics">
+              <div class="m"><span class="l">ROAS 3d</span><span class="v down">0.82×</span></div>
+              <div class="m"><span class="l">Spend</span><span class="v">$1,205</span></div>
+              <div class="m"><span class="l">Freq</span><span class="v">3.8</span></div>
+            </div>
+          </div>
+          <div class="mini-chart">
+            <svg viewBox="0 0 400 30" preserveAspectRatio="none">
+              <polyline fill="none" stroke="#c05336" stroke-width="1.8" points="0,4 33,6 66,8 100,10 133,13 166,16 200,18 233,21 266,23 300,25 333,26 366,27 400,28"/>
+              <circle cx="200" cy="18" r="3" fill="#c05336"/>
+            </svg>
+            <div class="mini-chart-meta">
+              <span>14d ROAS — changepoint Apr 15</span>
+              <span>Peak 1.62× → Now 0.82×</span>
+            </div>
+          </div>
+          <div class="event-actions">
+            <button class="primary">Kill ad</button>
+            <button>Duplicate + refresh hook</button>
+            <button>Investigate</button>
+            <button class="skip">Snooze 24h</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="event">
+      <div class="event-time">10:52</div>
+      <div class="event-body">
+        <div class="event-marker new">+</div>
+        <div class="event-content">
+          <div class="event-head">
+            <span class="label new">Launched · Testing begins</span>
+            <span class="timespan">Fresh creative · $0 spend</span>
+          </div>
+          <div class="event-title"><em>11591 new concept</em> went live on Meta — AI VO variation of the 5773 winner.</div>
+          <div class="creative-inline">
+            <div class="thm"></div>
+            <div class="info">
+              <div class="nm">11591 new concept (AI VO)</div>
+              <div class="tags">Emotional Lit. · Young Adults Grief · Pain/Problem · AT-11591</div>
+            </div>
+            <div class="metrics">
+              <div class="m"><span class="l">Status</span><span class="v" style="color:var(--dusk);">Testing</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="event">
+      <div class="event-time">09:20</div>
+      <div class="event-body">
+        <div class="event-marker sync">↻</div>
+        <div class="event-content ghost">
+          Morning sync · 66 creatives synced from ClickUp · Meta not connected · <a style="color: var(--accent); cursor:pointer;">Connect now →</a>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- YESTERDAY -->
+  <div class="day-group">
+    <div class="day-head">
+      <h2><em>Yesterday</em></h2>
+      <div class="date">20 Apr 2026 · Sunday</div>
+      <div class="rollup">
+        <span><strong>$1,850</strong> spend</span>
+        <span><strong>1.34×</strong> ROAS</span>
+      </div>
+    </div>
+
+    <div class="event">
+      <div class="event-time">17:42</div>
+      <div class="event-body">
+        <div class="event-marker up">↑</div>
+        <div class="event-content">
+          <div class="event-head">
+            <span class="label up">Promoted · Winner</span>
+            <span class="timespan">Day 2 · $624 spend</span>
+          </div>
+          <div class="event-title"><em>11591 new concept</em> crossed winner threshold in 48 hours.</div>
+          <div class="creative-inline">
+            <div class="thm"></div>
+            <div class="info">
+              <div class="nm">11591 new concept (AI VO)</div>
+              <div class="tags">Emotional Lit. · Young Adults Grief · AT-11591</div>
+            </div>
+            <div class="metrics">
+              <div class="m"><span class="l">ROAS</span><span class="v up">1.46×</span></div>
+              <div class="m"><span class="l">Spend</span><span class="v">$624</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="event">
+      <div class="event-time">14:15</div>
+      <div class="event-body">
+        <div class="event-marker loser">×</div>
+        <div class="event-content">
+          <div class="event-head">
+            <span class="label loser">Killed · Loser</span>
+            <span class="timespan">Day 8 · $187 spend</span>
+          </div>
+          <div class="event-title"><em>11436 new concept</em> failed to break even — killed at 0.42× ROAS.</div>
+          <div class="creative-inline">
+            <div class="thm"></div>
+            <div class="info">
+              <div class="nm">11436 new concept</div>
+              <div class="tags">Calm / Unwind · Self-Care · Curiosity · AT-11436</div>
+            </div>
+            <div class="metrics">
+              <div class="m"><span class="l">Final ROAS</span><span class="v loser">0.42×</span></div>
+              <div class="m"><span class="l">Spend</span><span class="v">$187</span></div>
+            </div>
+          </div>
+          <div class="event-actions">
+            <button>Restore</button>
+            <button>View post-mortem</button>
+            <button class="skip">Archive</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="event">
+      <div class="event-time">11:00</div>
+      <div class="event-body">
+        <div class="event-marker info">i</div>
+        <div class="event-content ghost">
+          <strong style="color: var(--ink);">Pipeline run completed</strong> — 21 round-3 creatives classified · Angle taxonomy stable · 0 new angles proposed
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- DAY BEFORE -->
+  <div class="day-group">
+    <div class="day-head">
+      <h2><em>Saturday</em></h2>
+      <div class="date">19 Apr 2026</div>
+      <div class="rollup">
+        <span><strong>$1,520</strong> spend</span>
+        <span><strong>1.28×</strong> ROAS</span>
+      </div>
+    </div>
+
+    <div class="event">
+      <div class="event-time">15:20</div>
+      <div class="event-body">
+        <div class="event-marker up">↑</div>
+        <div class="event-content">
+          <div class="event-head">
+            <span class="label up">Promoted · Winner</span>
+            <span class="timespan">Day 4 · $806 spend</span>
+          </div>
+          <div class="event-title"><em>4570-1 old winner</em> sustained above 1.5× ROAS for 4 consecutive days.</div>
+          <div class="creative-inline">
+            <div class="thm photo"></div>
+            <div class="info">
+              <div class="nm">4570-1 old winner</div>
+              <div class="tags">Emotional Literacy · Women 25-45 · AT-10835</div>
+            </div>
+            <div class="metrics">
+              <div class="m"><span class="l">ROAS</span><span class="v up">1.54×</span></div>
+              <div class="m"><span class="l">Spend</span><span class="v">$806</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+</div>
+
+<!-- RIGHT SIDEBAR -->
+<aside class="sidebar-right">
+
+  <div class="sr-card">
+    <h3><em>Today</em> at a glance</h3>
+    <div class="sr-stat-grid">
+      <div class="sr-stat"><div class="l">Spend</div><div class="v">$2,180</div></div>
+      <div class="sr-stat"><div class="l">ROAS</div><div class="v">1.52×</div></div>
+      <div class="sr-stat"><div class="l">New winners</div><div class="v">1</div></div>
+      <div class="sr-stat"><div class="l">Kill flags</div><div class="v" style="color: var(--accent);">1</div></div>
+    </div>
+  </div>
+
+  <div class="sr-card">
+    <h3>Kill <em>list</em></h3>
+    <ul class="sr-list">
+      <li>
+        <span class="t">⚠</span>
+        <span class="txt"><strong>10785-2</strong> — fatigued 42% WoW. $1.2k spent.</span>
+      </li>
+      <li>
+        <span class="t">⚠</span>
+        <span class="txt"><strong>10720-1</strong> — 2-day ROAS 0.68×. $340 spent.</span>
+      </li>
+    </ul>
+  </div>
+
+  <div class="sr-card">
+    <h3>Ready to <em>scale</em></h3>
+    <ul class="sr-list">
+      <li>
+        <span class="t">◆</span>
+        <span class="txt"><strong>5773-1</strong> 1.92× @ $1.8k. Scale +30%.</span>
+      </li>
+      <li>
+        <span class="t">↑</span>
+        <span class="txt"><strong>11591</strong> 1.46× on day 2. Hold.</span>
+      </li>
+      <li>
+        <span class="t">↑</span>
+        <span class="txt"><strong>11542</strong> 1.41× social proof winner.</span>
+      </li>
+    </ul>
+  </div>
+
+  <div class="sr-card">
+    <h3>Upcoming <em>tests</em></h3>
+    <ul class="sr-list">
+      <li>
+        <span class="t">3d</span>
+        <span class="txt"><strong>Set-2 VO delivery</strong> variants launch — 3 new creatives</span>
+      </li>
+      <li>
+        <span class="t">5d</span>
+        <span class="txt"><strong>Set-4 script</strong> variants — 3 narrative threads</span>
+      </li>
+    </ul>
+  </div>
+
+</aside>
+
+</div>
+
+</body>
+</html>

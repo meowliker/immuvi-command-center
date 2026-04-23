@@ -1,0 +1,993 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Creative Tracker — Premium</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Instrument+Serif:ital@1&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+  :root{
+    --canvas:#faf9f5;
+    --paper:#ffffff;
+    --paper-2:#f3f1e9;
+    --paper-3:#ede9dc;
+    --line:#e8e5dc;
+    --line-hi:#d6d1c1;
+    --ink:#1a1814;
+    --ink-2:#585449;
+    --ink-3:#8f8a7c;
+    --ink-4:#b8b3a2;
+    --accent:#c05336;
+    --accent-deep:#a4401f;
+    --accent-soft:#f5e3da;
+    --cyan:#00a3b8;
+    --massive:#35683f;       --massive-soft:#dcecd8;
+    --winner:#5e7557;        --winner-soft:#e4ebdc;
+    --mild:#a77c2e;          --mild-soft:#f3e7c7;
+    --fatigue:#c14400;       --fatigue-soft:#fbe0d0;
+    --testing:#4f6780;       --testing-soft:#dde4ec;
+    --loser:#a83b28;         --loser-soft:#f2dad6;
+    --shadow-card: 0 1px 2px rgba(26,24,20,.04), 0 6px 16px rgba(26,24,20,.06);
+    --shadow-lift: 0 2px 4px rgba(26,24,20,.05), 0 14px 28px rgba(26,24,20,.08);
+    --mono:'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+    --serif:'Instrument Serif', Georgia, serif;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    background:var(--canvas);
+    color:var(--ink);
+    font-family:'Inter',system-ui,-apple-system,sans-serif;
+    font-size:13px;
+    line-height:1.45;
+    -webkit-font-smoothing:antialiased;
+    text-rendering:optimizeLegibility;
+  }
+  button{font:inherit;color:inherit;cursor:pointer;border:0;background:transparent;padding:0}
+  a{color:inherit;text-decoration:none}
+  .mono{font-family:var(--mono);font-feature-settings:"tnum" 1,"zero" 1}
+
+  /* ---------- Masthead ---------- */
+  .masthead{
+    position:sticky;top:0;z-index:50;
+    height:40px;
+    background:rgba(250,249,245,.88);
+    backdrop-filter:saturate(180%) blur(10px);
+    -webkit-backdrop-filter:saturate(180%) blur(10px);
+    border-bottom:1px solid var(--line);
+    display:flex;align-items:center;
+    padding:0 20px;gap:14px;
+  }
+  .brand{display:flex;align-items:center;gap:8px;font-weight:600;letter-spacing:-0.01em}
+  .brand-dot{width:14px;height:14px;border-radius:4px;background:linear-gradient(140deg,var(--accent) 0%,var(--accent-deep) 100%);box-shadow:inset 0 1px 0 rgba(255,255,255,.35)}
+  .brand-name{font-size:13px}
+  .sep{width:1px;height:16px;background:var(--line-hi)}
+  .product-switch{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--ink-2);padding:4px 8px;border-radius:6px;border:1px solid transparent}
+  .product-switch:hover{background:var(--paper-2);border-color:var(--line)}
+  .product-switch svg{color:var(--ink-3)}
+  .mast-right{margin-left:auto;display:flex;align-items:center;gap:8px}
+  .live-pill{
+    display:inline-flex;align-items:center;gap:6px;
+    font-family:var(--mono);font-size:11px;color:var(--ink-2);
+    padding:3px 8px;border-radius:999px;border:1px solid var(--line);background:var(--paper);
+  }
+  .live-dot{width:6px;height:6px;border-radius:50%;background:var(--massive);box-shadow:0 0 0 3px rgba(53,104,63,.18);animation:pulse 2.2s ease-in-out infinite}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.55}}
+  .mbtn{
+    display:inline-flex;align-items:center;gap:6px;
+    height:26px;padding:0 10px;border-radius:6px;
+    font-size:12px;font-weight:500;
+    border:1px solid var(--line);background:var(--paper);color:var(--ink-2);
+    transition:background 120ms ease, color 120ms ease, border-color 120ms ease;
+  }
+  .mbtn:hover{background:var(--paper-2);color:var(--ink)}
+  .mbtn.primary{background:var(--ink);color:#fff;border-color:var(--ink)}
+  .mbtn.primary:hover{background:#000}
+  .mbtn svg{opacity:.8}
+
+  /* ---------- Page ---------- */
+  .shell{max-width:1440px;margin:0 auto;padding:0 28px 80px}
+
+  .hero{
+    padding:22px 0 16px;
+    display:flex;align-items:flex-end;justify-content:space-between;gap:24px;
+  }
+  .hero h1{
+    font-family:var(--serif);font-style:italic;font-weight:400;
+    font-size:40px;line-height:1;margin:0;letter-spacing:-0.01em;color:var(--ink);
+  }
+  .hero h1 .dot{color:var(--accent)}
+  .hero-sum{color:var(--ink-2);font-size:13px;margin-top:8px}
+  .hero-sum strong{color:var(--ink);font-weight:600}
+  .hero-sum .mono{color:var(--ink)}
+  .hero-aside{display:flex;align-items:center;gap:8px;color:var(--ink-3);font-size:11px;font-family:var(--mono)}
+  .hero-aside em{font-style:normal;color:var(--ink-2)}
+
+  /* ---------- Action Hub ---------- */
+  .hub{
+    display:grid;grid-template-columns:repeat(3,1fr);gap:14px;
+    margin-top:8px;
+  }
+  .deck{
+    position:relative;
+    background:var(--paper);
+    border:1px solid var(--line);
+    border-radius:12px;
+    padding:16px 16px 14px;
+    box-shadow:var(--shadow-card), inset 0 1px 0 rgba(255,255,255,.55);
+    transition:transform 160ms cubic-bezier(.2,.7,.2,1), box-shadow 200ms ease;
+    min-height:220px;
+    display:flex;flex-direction:column;
+  }
+  .deck:hover{transform:translateY(-1px);box-shadow:var(--shadow-lift), inset 0 1px 0 rgba(255,255,255,.6)}
+  .deck-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+  .deck-title{display:flex;align-items:center;gap:8px}
+  .deck-ic{
+    width:24px;height:24px;border-radius:7px;display:grid;place-items:center;
+    font-size:13px;
+  }
+  .deck-ic.scale{background:var(--massive-soft);color:var(--massive)}
+  .deck-ic.kill{background:var(--loser-soft);color:var(--loser)}
+  .deck-ic.fatigue{background:var(--fatigue-soft);color:var(--fatigue)}
+  .deck-head h3{
+    font-family:var(--serif);font-style:italic;font-weight:400;
+    font-size:19px;margin:0;letter-spacing:.01em;line-height:1;
+  }
+  .deck-count{
+    font-family:var(--mono);font-size:10px;color:var(--ink-3);
+    padding:2px 7px;border-radius:999px;border:1px solid var(--line);background:var(--paper-2);
+  }
+  .deck-list{display:flex;flex-direction:column;gap:8px;flex:1}
+  .deck-row{
+    display:grid;grid-template-columns:34px 1fr auto auto;gap:10px;align-items:center;
+    padding:6px 4px;border-radius:8px;
+    transition:background 120ms ease;
+  }
+  .deck-row:hover{background:var(--paper-2)}
+  .thumb{
+    width:34px;height:34px;border-radius:7px;flex-shrink:0;position:relative;
+    border:1px solid var(--line);overflow:hidden;
+  }
+  .thumb.v1{background:linear-gradient(135deg,#d7a588 0%,#b76b44 100%)}
+  .thumb.v2{background:linear-gradient(140deg,#eadfc5 0%,#c7a779 100%)}
+  .thumb.v3{background:linear-gradient(140deg,#b8c4ae 0%,#6b7f59 100%)}
+  .thumb.v4{background:linear-gradient(140deg,#c7a8a8 0%,#8b5858 100%)}
+  .thumb.v5{background:linear-gradient(140deg,#c2cbd9 0%,#6a7c93 100%)}
+  .thumb.v6{background:linear-gradient(140deg,#e6d5a4 0%,#a78a3a 100%)}
+  .thumb.v7{background:linear-gradient(140deg,#dbe1d0 0%,#8c9b72 100%)}
+  .thumb.v8{background:linear-gradient(140deg,#e7c9b7 0%,#a55f3a 100%)}
+  .thumb.video::after{
+    content:"";position:absolute;inset:0;display:block;
+    background:radial-gradient(circle at 50% 50%, rgba(255,255,255,.9) 0 6px, transparent 7px);
+    opacity:.75;
+  }
+  .deck-meta{min-width:0}
+  .deck-name{font-weight:600;font-size:12.5px;letter-spacing:-0.005em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .deck-sub{font-family:var(--mono);font-size:10.5px;color:var(--ink-3);margin-top:2px;letter-spacing:.01em}
+  .deck-hero{
+    font-family:var(--serif);font-style:italic;font-size:22px;line-height:1;text-align:right;
+  }
+  .deck-hero.win{color:var(--massive)}
+  .deck-hero.bad{color:var(--loser)}
+  .deck-hero.warn{color:var(--fatigue)}
+  .deck-hero sub{font-family:var(--mono);font-style:normal;font-size:10px;color:var(--ink-3);vertical-align:baseline;margin-left:1px}
+  .deck-act{
+    display:inline-flex;align-items:center;gap:4px;
+    font-size:11px;font-weight:500;
+    padding:5px 9px;border-radius:6px;
+    border:1px solid var(--line);background:var(--paper);color:var(--ink-2);
+    transition:all 120ms ease;
+  }
+  .deck-act:hover{border-color:var(--ink);color:var(--ink);background:var(--paper-2)}
+  .deck-act.go{background:var(--ink);color:#fff;border-color:var(--ink)}
+  .deck-act.go:hover{background:var(--accent);border-color:var(--accent)}
+  .deck-act.kill-btn:hover{border-color:var(--loser);color:var(--loser)}
+  .deck-act.warn-btn:hover{border-color:var(--fatigue);color:var(--fatigue)}
+  .deck-empty{
+    display:grid;place-items:center;flex:1;
+    color:var(--ink-3);font-size:11.5px;
+    border:1px dashed var(--line-hi);border-radius:8px;
+    padding:10px;min-height:48px;
+  }
+  .deck-empty em{font-style:italic;color:var(--ink-2)}
+  .deck-foot{
+    display:flex;align-items:center;justify-content:space-between;
+    margin-top:10px;padding-top:10px;border-top:1px solid var(--line);
+    font-size:11px;color:var(--ink-3);
+  }
+  .deck-foot .mono{color:var(--ink-2)}
+  .spark-inline{display:inline-block;vertical-align:middle;margin-right:6px}
+
+  /* ---------- Filter bar ---------- */
+  .filters{
+    position:sticky;top:40px;z-index:30;
+    margin-top:22px;
+    background:rgba(250,249,245,.92);
+    backdrop-filter:saturate(180%) blur(8px);
+    -webkit-backdrop-filter:saturate(180%) blur(8px);
+    padding:10px 0;
+    display:flex;align-items:center;gap:10px;
+    border-bottom:1px solid var(--line);
+  }
+  .search{
+    display:flex;align-items:center;gap:8px;
+    height:30px;padding:0 10px;border-radius:8px;
+    background:var(--paper);border:1px solid var(--line);min-width:240px;
+  }
+  .search input{
+    flex:1;border:0;outline:0;background:transparent;font:inherit;color:var(--ink);font-size:12.5px;
+  }
+  .search input::placeholder{color:var(--ink-4)}
+  .search kbd{font-family:var(--mono);font-size:10px;color:var(--ink-3);background:var(--paper-2);padding:1px 5px;border-radius:4px;border:1px solid var(--line)}
+  .chip{
+    display:inline-flex;align-items:center;gap:6px;
+    height:28px;padding:0 10px;border-radius:7px;
+    font-size:12px;color:var(--ink-2);
+    background:var(--paper);border:1px solid var(--line);
+    transition:background 120ms ease, border-color 120ms ease;
+  }
+  .chip:hover{background:var(--paper-2);border-color:var(--line-hi)}
+  .chip svg{opacity:.6}
+  .seg{
+    display:inline-flex;background:var(--paper);border:1px solid var(--line);border-radius:8px;padding:2px;gap:2px;
+  }
+  .seg button{
+    height:24px;padding:0 10px;border-radius:6px;font-size:11.5px;color:var(--ink-3);
+    transition:all 120ms ease;
+  }
+  .seg button.on{background:var(--ink);color:#fff}
+  .seg button:not(.on):hover{background:var(--paper-2);color:var(--ink)}
+  .filters .grow{flex:1}
+
+  /* ---------- Inventory table ---------- */
+  .inv-wrap{margin-top:14px;background:var(--paper);border:1px solid var(--line);border-radius:12px;overflow:hidden;box-shadow:0 1px 2px rgba(26,24,20,.03)}
+  table.inv{width:100%;border-collapse:collapse;font-size:12.5px}
+  table.inv thead th{
+    font-family:var(--mono);font-weight:500;font-size:10.5px;
+    text-transform:uppercase;letter-spacing:.07em;color:var(--ink-3);
+    text-align:left;padding:10px 14px;
+    border-bottom:1px solid var(--line);
+    background:var(--paper-2);
+    position:sticky;top:0;
+  }
+  table.inv thead th.right{text-align:right}
+  table.inv tbody tr{
+    position:relative;
+    border-bottom:1px solid var(--line);
+    transition:background 120ms ease;
+  }
+  table.inv tbody tr:last-child{border-bottom:0}
+  table.inv tbody tr::before{
+    content:"";position:absolute;left:0;top:0;bottom:0;width:2px;background:transparent;transition:background 120ms ease;
+  }
+  table.inv tbody tr:hover,
+  table.inv tbody tr.active{background:var(--paper-2)}
+  table.inv tbody tr:hover::before,
+  table.inv tbody tr.active::before{background:var(--accent)}
+  table.inv td{padding:8px 14px;vertical-align:middle;height:38px}
+
+  .row-creative{display:flex;align-items:center;gap:10px;min-width:220px}
+  .row-creative .thumb{width:28px;height:28px;border-radius:6px}
+  .row-name{font-weight:600;letter-spacing:-0.005em;font-size:12.5px}
+  .row-id{font-family:var(--mono);font-size:10.5px;color:var(--ink-3);margin-top:1px}
+  .row-id a{color:var(--ink-3);border-bottom:1px dashed var(--line-hi);padding-bottom:1px}
+  .row-id a:hover{color:var(--accent)}
+
+  .pill{
+    display:inline-flex;align-items:center;
+    padding:2px 7px;border-radius:999px;
+    font-size:11px;font-weight:500;
+    background:var(--paper-2);color:var(--ink-2);
+    border:1px solid var(--line);
+    white-space:nowrap;max-width:140px;overflow:hidden;text-overflow:ellipsis;
+  }
+  .pill.angle{background:#f6efe1;color:#7a5d22;border-color:#ead8ab}
+  .pill.persona{background:#eee9f3;color:#6c537d;border-color:#dbcde4}
+  .pill.hook{background:#e6eef0;color:#3d6a73;border-color:#c9dee2}
+  .chipx{
+    display:inline-block;font-family:var(--mono);font-size:10.5px;
+    color:var(--ink-3);padding:2px 6px;border-radius:4px;background:var(--paper-2);
+  }
+
+  .status{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;font-weight:500}
+  .status .sdot{width:7px;height:7px;border-radius:50%}
+  .status.massive{color:var(--massive)}.status.massive .sdot{background:var(--massive)}
+  .status.winner{color:var(--winner)} .status.winner .sdot{background:var(--winner)}
+  .status.mild{color:var(--mild)}     .status.mild .sdot{background:var(--mild)}
+  .status.fatigued{color:var(--fatigue)} .status.fatigued .sdot{background:var(--fatigue)}
+  .status.testing{color:var(--testing)}  .status.testing .sdot{background:var(--testing)}
+  .status.loser{color:var(--loser)}      .status.loser .sdot{background:var(--loser)}
+
+  .num{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:12.5px;text-align:right;font-weight:500}
+  .num.big{font-size:13.5px}
+  .num.massive{color:var(--massive)}
+  .num.winner{color:var(--winner)}
+  .num.mild{color:var(--mild)}
+  .num.fatigue{color:var(--fatigue)}
+  .num.loser{color:var(--loser)}
+  .num.testing{color:var(--ink-3)}
+  .num.muted{color:var(--ink-3)}
+
+  .spark{display:block}
+  .row-actions{display:flex;gap:2px;justify-content:flex-end;opacity:0;transition:opacity 120ms ease}
+  tr:hover .row-actions,tr.active .row-actions{opacity:1}
+  .row-actions button{
+    width:24px;height:24px;border-radius:6px;color:var(--ink-3);
+    display:inline-grid;place-items:center;
+    transition:background 120ms ease, color 120ms ease;
+  }
+  .row-actions button:hover{background:var(--paper-3);color:var(--ink)}
+
+  /* ---------- Right rail ---------- */
+  .scrim{
+    position:fixed;inset:0;background:rgba(26,24,20,.18);
+    opacity:0;pointer-events:none;transition:opacity 220ms ease;z-index:60;
+  }
+  body.panel-open .scrim{opacity:1;pointer-events:auto}
+  .rail{
+    position:fixed;top:0;right:0;bottom:0;width:360px;z-index:70;
+    background:var(--paper);
+    border-left:1px solid var(--line);
+    box-shadow:-14px 0 40px rgba(26,24,20,.06);
+    transform:translateX(100%);
+    transition:transform 280ms cubic-bezier(.2,.7,.2,1);
+    display:flex;flex-direction:column;
+  }
+  body.panel-open .rail{transform:translateX(0)}
+  .rail-head{
+    display:flex;align-items:center;justify-content:space-between;
+    padding:14px 18px;border-bottom:1px solid var(--line);
+  }
+  .rail-head .eyebrow{font-family:var(--mono);font-size:10.5px;color:var(--ink-3);text-transform:uppercase;letter-spacing:.1em}
+  .rail-close{width:28px;height:28px;border-radius:7px;display:grid;place-items:center;color:var(--ink-3)}
+  .rail-close:hover{background:var(--paper-2);color:var(--ink)}
+  .rail-body{flex:1;overflow:auto;padding:18px}
+  .rail-hero{
+    display:flex;gap:14px;align-items:flex-start;
+  }
+  .rail-hero .thumb{width:88px;height:88px;border-radius:10px;border:1px solid var(--line)}
+  .rail-title{font-family:var(--serif);font-style:italic;font-size:22px;line-height:1.08;letter-spacing:.005em}
+  .rail-meta{font-family:var(--mono);font-size:11px;color:var(--ink-3);margin-top:6px}
+  .rail-tags{display:flex;flex-wrap:wrap;gap:5px;margin-top:10px}
+  .rail-grid{
+    display:grid;grid-template-columns:repeat(3,1fr);gap:0;margin-top:18px;
+    border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--paper-2);
+  }
+  .rail-cell{padding:11px 12px;background:var(--paper);border-right:1px solid var(--line);border-bottom:1px solid var(--line)}
+  .rail-cell:nth-child(3n){border-right:0}
+  .rail-cell:nth-last-child(-n+3){border-bottom:0}
+  .rail-cell .k{font-family:var(--mono);font-size:9.5px;color:var(--ink-3);text-transform:uppercase;letter-spacing:.1em}
+  .rail-cell .v{font-family:var(--mono);font-size:15px;font-weight:500;margin-top:3px;color:var(--ink)}
+  .rail-cell .v.massive{color:var(--massive)}
+  .rail-cell .v.winner{color:var(--winner)}
+  .rail-cell .v.loser{color:var(--loser)}
+
+  .rail-chart{margin-top:16px;border:1px solid var(--line);border-radius:10px;padding:12px 14px;background:var(--paper)}
+  .rail-chart h4{margin:0 0 8px;font-size:11px;text-transform:uppercase;letter-spacing:.1em;color:var(--ink-3);font-weight:500;font-family:var(--mono)}
+
+  .rail-brief{
+    margin-top:16px;padding:12px 14px;border:1px solid var(--line);border-radius:10px;background:var(--paper);
+  }
+  .rail-brief h4{margin:0 0 6px;font-size:11px;text-transform:uppercase;letter-spacing:.1em;color:var(--ink-3);font-weight:500;font-family:var(--mono)}
+  .rail-brief p{margin:0;color:var(--ink-2);font-size:12.5px;line-height:1.55}
+
+  .rail-foot{
+    padding:12px 18px;border-top:1px solid var(--line);display:flex;gap:8px;
+  }
+  .rail-foot .mbtn{flex:1;height:32px;justify-content:center}
+
+  /* small screens — keep sensible */
+  @media (max-width: 1080px){
+    .hub{grid-template-columns:1fr}
+    .rail{width:100%}
+  }
+</style>
+</head>
+<body>
+
+  <!-- Masthead -->
+  <header class="masthead" role="banner">
+    <div class="brand"><span class="brand-dot"></span><span class="brand-name">Astro</span></div>
+    <span class="sep"></span>
+    <button class="product-switch" aria-label="Switch product">
+      Art as Therapy
+      <svg width="10" height="10" viewBox="0 0 10 10"><path d="M2.5 4l2.5 2.5L7.5 4" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </button>
+    <span class="sep"></span>
+    <span class="live-pill"><span class="live-dot"></span>Live sync · 2 min ago</span>
+    <div class="mast-right">
+      <button class="mbtn">
+        <svg width="12" height="12" viewBox="0 0 12 12"><path d="M6 1.5v9M6 10.5L3 7.5M6 10.5l3-3" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        Pull Meta
+      </button>
+      <button class="mbtn primary">
+        <svg width="12" height="12" viewBox="0 0 12 12"><path d="M3 2.5l5 3.5L3 9.5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        Sync to ClickUp
+      </button>
+    </div>
+  </header>
+
+  <main class="shell">
+
+    <!-- Hero -->
+    <section class="hero">
+      <div>
+        <h1>Creative Tracker<span class="dot">.</span></h1>
+        <div class="hero-sum">
+          <span class="mono">66</span> creatives <span style="color:var(--ink-4)">·</span>
+          <strong style="color:var(--massive)">18 winners</strong> <span style="color:var(--ink-4)">·</span>
+          <strong style="color:var(--fatigue)">3 fatigued</strong> <span style="color:var(--ink-4)">·</span>
+          <span class="mono">$12.4k</span> spend 7d <span style="color:var(--ink-4)">·</span>
+          <span class="mono">1.38×</span> ROAS
+        </div>
+      </div>
+      <div class="hero-aside">
+        <em>Mon 21 Apr · 09:02 local</em>
+      </div>
+    </section>
+
+    <!-- Action Hub -->
+    <section class="hub" aria-label="Today's action hub">
+
+      <!-- Scale -->
+      <article class="deck">
+        <header class="deck-head">
+          <div class="deck-title">
+            <div class="deck-ic scale" aria-hidden="true">
+              <svg width="13" height="13" viewBox="0 0 13 13"><path d="M2.5 9.5l3.5-4 2.2 2.3L11 4.5M8 4.5h3v3" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </div>
+            <h3>Scale today</h3>
+          </div>
+          <span class="deck-count">3</span>
+        </header>
+
+        <div class="deck-list">
+          <div class="deck-row">
+            <div class="thumb v1 video"></div>
+            <div class="deck-meta">
+              <div class="deck-name">5773-1 old winner</div>
+              <div class="deck-sub">AT-11439 · $1,842 · 7d</div>
+            </div>
+            <div class="deck-hero win">1.92<sub>×</sub></div>
+            <button class="deck-act go">Scale 30% →</button>
+          </div>
+
+          <div class="deck-row">
+            <div class="thumb v7"></div>
+            <div class="deck-meta">
+              <div class="deck-name">11542 social proof</div>
+              <div class="deck-sub">AT-11542 · $488 · day 5</div>
+            </div>
+            <div class="deck-hero win">1.41<sub>×</sub></div>
+            <button class="deck-act">Scale 20% →</button>
+          </div>
+
+          <div class="deck-row">
+            <div class="thumb v6 video"></div>
+            <div class="deck-meta">
+              <div class="deck-name">11591 new concept (AI VO)</div>
+              <div class="deck-sub">AT-11591 · $624 · day 2</div>
+            </div>
+            <div class="deck-hero win">1.46<sub>×</sub></div>
+            <button class="deck-act">Scale 20% →</button>
+          </div>
+        </div>
+
+        <footer class="deck-foot">
+          <span>
+            <svg class="spark-inline" width="60" height="14" viewBox="0 0 60 14"><polyline points="0,10 8,9 16,8 24,7 32,5 40,4 48,3 60,2" fill="none" stroke="#35683f" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            <span class="mono">ROAS trending ↑</span>
+          </span>
+          <span>combined $2.9k · 1.67× blended</span>
+        </footer>
+      </article>
+
+      <!-- Kill -->
+      <article class="deck">
+        <header class="deck-head">
+          <div class="deck-title">
+            <div class="deck-ic kill" aria-hidden="true">
+              <svg width="13" height="13" viewBox="0 0 13 13"><circle cx="6.5" cy="6.5" r="4.8" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M3.5 3.5L9.5 9.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+            </div>
+            <h3>Kill today</h3>
+          </div>
+          <span class="deck-count">2</span>
+        </header>
+
+        <div class="deck-list">
+          <div class="deck-row">
+            <div class="thumb v8"></div>
+            <div class="deck-meta">
+              <div class="deck-name">11436 new concept</div>
+              <div class="deck-sub">AT-11436 · day 8 · 0 purchases</div>
+            </div>
+            <div class="deck-hero bad">0.42<sub>×</sub></div>
+            <button class="deck-act kill-btn">Kill ⊗</button>
+          </div>
+
+          <div class="deck-empty">
+            <span>1 more borderline candidate · <em>Review at $150 spend</em></span>
+          </div>
+        </div>
+
+        <footer class="deck-foot">
+          <span>
+            <svg class="spark-inline" width="60" height="14" viewBox="0 0 60 14"><polyline points="0,3 10,4 20,6 30,7 40,9 50,10 60,12" fill="none" stroke="#a83b28" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            <span class="mono">$187 wasted · 0 CV</span>
+          </span>
+          <span>free $25/day budget</span>
+        </footer>
+      </article>
+
+      <!-- Fatigue -->
+      <article class="deck">
+        <header class="deck-head">
+          <div class="deck-title">
+            <div class="deck-ic fatigue" aria-hidden="true">
+              <svg width="13" height="13" viewBox="0 0 13 13"><path d="M2.5 3.5c1.5 1.5 1.5 4 0 5.5M6.5 3.5c1.5 1.5 1.5 4 0 5.5M10.5 3.5c1.5 1.5 1.5 4 0 5.5" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+            </div>
+            <h3>Fatigue watch</h3>
+          </div>
+          <span class="deck-count">1</span>
+        </header>
+
+        <div class="deck-list">
+          <div class="deck-row">
+            <div class="thumb v4"></div>
+            <div class="deck-meta">
+              <div class="deck-name">10785-2 old winner</div>
+              <div class="deck-sub">AT-10733 · $1,205 · WoW -42%</div>
+            </div>
+            <div class="deck-hero warn">0.98<sub>×</sub></div>
+            <button class="deck-act warn-btn">Refresh hook →</button>
+          </div>
+
+          <div class="deck-empty" style="min-height:96px">
+            <span>2 creatives at -18% WoW · <em>monitor another 24h</em></span>
+          </div>
+        </div>
+
+        <footer class="deck-foot">
+          <span>
+            <svg class="spark-inline" width="60" height="14" viewBox="0 0 60 14"><polyline points="0,3 8,3 16,4 24,6 32,7 40,9 48,10 60,12" fill="none" stroke="#c14400" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            <span class="mono">14d ROAS down</span>
+          </span>
+          <span>refresh queue · 3 briefs</span>
+        </footer>
+      </article>
+    </section>
+
+    <!-- Filter bar -->
+    <section class="filters" aria-label="Filters">
+      <label class="search">
+        <svg width="13" height="13" viewBox="0 0 13 13"><circle cx="5.5" cy="5.5" r="3.6" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M8.3 8.3L11 11" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+        <input placeholder="Search creative, ID, angle…" aria-label="Search creatives"/>
+        <kbd>⌘K</kbd>
+      </label>
+
+      <button class="chip">Angle: All
+        <svg width="8" height="8" viewBox="0 0 8 8"><path d="M2 3l2 2 2-2" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+      <button class="chip">Persona: All
+        <svg width="8" height="8" viewBox="0 0 8 8"><path d="M2 3l2 2 2-2" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+      <button class="chip">Hook: All
+        <svg width="8" height="8" viewBox="0 0 8 8"><path d="M2 3l2 2 2-2" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+      <button class="chip">Funnel: TOF
+        <svg width="8" height="8" viewBox="0 0 8 8"><path d="M2 3l2 2 2-2" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+
+      <div class="seg" role="tablist" aria-label="Quick filter">
+        <button class="on">All</button>
+        <button>Winners</button>
+        <button>Losers</button>
+        <button>Testing</button>
+      </div>
+
+      <span class="grow"></span>
+
+      <button class="mbtn">
+        <svg width="12" height="12" viewBox="0 0 12 12"><path d="M6 1.5v9M6 10.5L3 7.5M6 10.5l3-3" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        Push
+      </button>
+      <button class="mbtn primary">
+        <svg width="12" height="12" viewBox="0 0 12 12"><path d="M6 2v8M2 6h8" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+        Add creative
+      </button>
+    </section>
+
+    <!-- Inventory -->
+    <section class="inv-wrap" aria-label="Creative inventory">
+      <table class="inv" id="invTable">
+        <thead>
+          <tr>
+            <th>Creative</th>
+            <th>Angle</th>
+            <th>Persona</th>
+            <th>Hook</th>
+            <th>Structure</th>
+            <th>Status</th>
+            <th class="right">Spend 7d</th>
+            <th class="right">ROAS 7d</th>
+            <th>14d trend</th>
+            <th class="right">CPA</th>
+            <th class="right">Created</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+
+          <!-- Row 1 -->
+          <tr data-id="1">
+            <td>
+              <div class="row-creative">
+                <div class="thumb v1 video"></div>
+                <div>
+                  <div class="row-name">5773-1 old winner</div>
+                  <div class="row-id"><a href="#">AT-11439-v1</a> · video</div>
+                </div>
+              </div>
+            </td>
+            <td><span class="pill angle">Art as Therapy Alt</span></td>
+            <td><span class="pill persona">Women 25-45</span></td>
+            <td><span class="pill hook">POV · UGC</span></td>
+            <td><span class="chipx">TOF</span></td>
+            <td><span class="status massive"><span class="sdot"></span>Massive</span></td>
+            <td class="num big massive">$1,842</td>
+            <td class="num big massive">1.92×</td>
+            <td>
+              <svg class="spark" width="92" height="22" viewBox="0 0 92 22"><polyline points="0,15 10,14 20,13 30,12 42,10 52,8 62,6 72,5 82,4 92,3" fill="none" stroke="#35683f" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </td>
+            <td class="num">$12.40</td>
+            <td class="num muted">21 Apr</td>
+            <td>
+              <div class="row-actions">
+                <button title="Scale"><svg width="13" height="13" viewBox="0 0 13 13"><path d="M2.5 9.5l3.5-4 2.2 2.3L11 4.5M8 4.5h3v3" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+                <button title="Open"><svg width="13" height="13" viewBox="0 0 13 13"><path d="M3 3h7v7M4 9l5-5" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+                <button title="More"><svg width="13" height="13" viewBox="0 0 13 13"><circle cx="3.5" cy="6.5" r=".9" fill="currentColor"/><circle cx="6.5" cy="6.5" r=".9" fill="currentColor"/><circle cx="9.5" cy="6.5" r=".9" fill="currentColor"/></svg></button>
+              </div>
+            </td>
+          </tr>
+
+          <!-- Row 2 -->
+          <tr data-id="2">
+            <td>
+              <div class="row-creative">
+                <div class="thumb v2"></div>
+                <div>
+                  <div class="row-name">4570-1 old winner</div>
+                  <div class="row-id"><a href="#">AT-10835</a> · static</div>
+                </div>
+              </div>
+            </td>
+            <td><span class="pill angle">Emotional Literacy</span></td>
+            <td><span class="pill persona">Women 25-45</span></td>
+            <td><span class="pill hook">Curiosity</span></td>
+            <td><span class="chipx">TOF</span></td>
+            <td><span class="status winner"><span class="sdot"></span>Winner</span></td>
+            <td class="num big winner">$806</td>
+            <td class="num big winner">1.54×</td>
+            <td>
+              <svg class="spark" width="92" height="22" viewBox="0 0 92 22"><polyline points="0,14 10,13 20,14 30,12 42,11 52,9 62,8 72,7 82,6 92,5" fill="none" stroke="#5e7557" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </td>
+            <td class="num">$14.80</td>
+            <td class="num muted">19 Apr</td>
+            <td>
+              <div class="row-actions">
+                <button><svg width="13" height="13" viewBox="0 0 13 13"><path d="M2.5 9.5l3.5-4 2.2 2.3L11 4.5M8 4.5h3v3" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+                <button><svg width="13" height="13" viewBox="0 0 13 13"><path d="M3 3h7v7M4 9l5-5" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+                <button><svg width="13" height="13" viewBox="0 0 13 13"><circle cx="3.5" cy="6.5" r=".9" fill="currentColor"/><circle cx="6.5" cy="6.5" r=".9" fill="currentColor"/><circle cx="9.5" cy="6.5" r=".9" fill="currentColor"/></svg></button>
+              </div>
+            </td>
+          </tr>
+
+          <!-- Row 3 -->
+          <tr data-id="3">
+            <td>
+              <div class="row-creative">
+                <div class="thumb v3"></div>
+                <div>
+                  <div class="row-name">4569-2 old winner</div>
+                  <div class="row-id"><a href="#">AT-10834</a> · static</div>
+                </div>
+              </div>
+            </td>
+            <td><span class="pill angle">Scarcity</span></td>
+            <td><span class="pill persona">Women 25-45</span></td>
+            <td><span class="pill hook">Pattern Interrupt</span></td>
+            <td><span class="chipx">TOF</span></td>
+            <td><span class="status mild"><span class="sdot"></span>Mild</span></td>
+            <td class="num big mild">$412</td>
+            <td class="num big mild">1.33×</td>
+            <td>
+              <svg class="spark" width="92" height="22" viewBox="0 0 92 22"><polyline points="0,12 10,11 20,12 30,12 42,11 52,12 62,11 72,12 82,12 92,11" fill="none" stroke="#a77c2e" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </td>
+            <td class="num">$17.20</td>
+            <td class="num muted">18 Apr</td>
+            <td>
+              <div class="row-actions">
+                <button><svg width="13" height="13" viewBox="0 0 13 13"><path d="M2.5 9.5l3.5-4 2.2 2.3L11 4.5M8 4.5h3v3" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+                <button><svg width="13" height="13" viewBox="0 0 13 13"><path d="M3 3h7v7M4 9l5-5" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+                <button><svg width="13" height="13" viewBox="0 0 13 13"><circle cx="3.5" cy="6.5" r=".9" fill="currentColor"/><circle cx="6.5" cy="6.5" r=".9" fill="currentColor"/><circle cx="9.5" cy="6.5" r=".9" fill="currentColor"/></svg></button>
+              </div>
+            </td>
+          </tr>
+
+          <!-- Row 4 — Fatigued -->
+          <tr data-id="4">
+            <td>
+              <div class="row-creative">
+                <div class="thumb v4"></div>
+                <div>
+                  <div class="row-name">10785-2 old winner</div>
+                  <div class="row-id"><a href="#">AT-10733</a> · static · <span style="color:var(--fatigue)">WoW -42%</span></div>
+                </div>
+              </div>
+            </td>
+            <td><span class="pill angle">Scarcity</span></td>
+            <td><span class="pill persona">Women 25-45</span></td>
+            <td><span class="pill hook">Pattern Interrupt</span></td>
+            <td><span class="chipx">TOF</span></td>
+            <td><span class="status fatigued"><span class="sdot"></span>Fatigued</span></td>
+            <td class="num big fatigue">$1,205</td>
+            <td class="num big fatigue">0.98×</td>
+            <td>
+              <svg class="spark" width="92" height="22" viewBox="0 0 92 22"><polyline points="0,4 10,5 20,6 30,7 42,9 52,11 62,13 72,15 82,16 92,17" fill="none" stroke="#c14400" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </td>
+            <td class="num">$26.80</td>
+            <td class="num muted">10 Apr</td>
+            <td>
+              <div class="row-actions">
+                <button title="Refresh"><svg width="13" height="13" viewBox="0 0 13 13"><path d="M3 6a3.5 3.5 0 0 1 6.3-2M10 3.5V6H7.5M10 7a3.5 3.5 0 0 1-6.3 2M3 9.5V7H5.5" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+                <button><svg width="13" height="13" viewBox="0 0 13 13"><path d="M3 3h7v7M4 9l5-5" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+                <button><svg width="13" height="13" viewBox="0 0 13 13"><circle cx="3.5" cy="6.5" r=".9" fill="currentColor"/><circle cx="6.5" cy="6.5" r=".9" fill="currentColor"/><circle cx="9.5" cy="6.5" r=".9" fill="currentColor"/></svg></button>
+              </div>
+            </td>
+          </tr>
+
+          <!-- Row 5 — Testing -->
+          <tr data-id="5">
+            <td>
+              <div class="row-creative">
+                <div class="thumb v5"></div>
+                <div>
+                  <div class="row-name">6197-1 old winner</div>
+                  <div class="row-id"><a href="#">AT-10612</a> · static · <em style="color:var(--testing);font-style:normal">day 1</em></div>
+                </div>
+              </div>
+            </td>
+            <td><span class="pill angle">Scarcity</span></td>
+            <td><span class="pill persona">Women 25-45</span></td>
+            <td><span class="pill hook">Direct Offer</span></td>
+            <td><span class="chipx">TOF</span></td>
+            <td><span class="status testing"><span class="sdot"></span>Testing</span></td>
+            <td class="num big testing">$28</td>
+            <td class="num big muted">—</td>
+            <td>
+              <svg class="spark" width="92" height="22" viewBox="0 0 92 22"><polyline points="78,12 82,11 86,12 92,12" fill="none" stroke="#4f6780" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/><line x1="0" y1="12" x2="76" y2="12" stroke="#d6d1c1" stroke-width="1" stroke-dasharray="2 2"/></svg>
+            </td>
+            <td class="num muted">—</td>
+            <td class="num muted">21 Apr</td>
+            <td>
+              <div class="row-actions">
+                <button><svg width="13" height="13" viewBox="0 0 13 13"><path d="M2.5 9.5l3.5-4 2.2 2.3L11 4.5M8 4.5h3v3" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+                <button><svg width="13" height="13" viewBox="0 0 13 13"><path d="M3 3h7v7M4 9l5-5" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+                <button><svg width="13" height="13" viewBox="0 0 13 13"><circle cx="3.5" cy="6.5" r=".9" fill="currentColor"/><circle cx="6.5" cy="6.5" r=".9" fill="currentColor"/><circle cx="9.5" cy="6.5" r=".9" fill="currentColor"/></svg></button>
+              </div>
+            </td>
+          </tr>
+
+          <!-- Row 6 — Winner new concept -->
+          <tr data-id="6">
+            <td>
+              <div class="row-creative">
+                <div class="thumb v6 video"></div>
+                <div>
+                  <div class="row-name">11591 new concept (AI VO)</div>
+                  <div class="row-id"><a href="#">AT-11591</a> · video · <em style="color:var(--winner);font-style:normal">day 2</em></div>
+                </div>
+              </div>
+            </td>
+            <td><span class="pill angle">Emotional Literacy</span></td>
+            <td><span class="pill persona">Young Adults Grief</span></td>
+            <td><span class="pill hook">Pain / Problem</span></td>
+            <td><span class="chipx">TOF</span></td>
+            <td><span class="status winner"><span class="sdot"></span>Winner</span></td>
+            <td class="num big winner">$624</td>
+            <td class="num big winner">1.46×</td>
+            <td>
+              <svg class="spark" width="92" height="22" viewBox="0 0 92 22"><polyline points="0,15 14,14 28,12 42,10 56,9 70,7 82,5 92,4" fill="none" stroke="#5e7557" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </td>
+            <td class="num">$15.60</td>
+            <td class="num muted">20 Apr</td>
+            <td>
+              <div class="row-actions">
+                <button><svg width="13" height="13" viewBox="0 0 13 13"><path d="M2.5 9.5l3.5-4 2.2 2.3L11 4.5M8 4.5h3v3" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+                <button><svg width="13" height="13" viewBox="0 0 13 13"><path d="M3 3h7v7M4 9l5-5" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+                <button><svg width="13" height="13" viewBox="0 0 13 13"><circle cx="3.5" cy="6.5" r=".9" fill="currentColor"/><circle cx="6.5" cy="6.5" r=".9" fill="currentColor"/><circle cx="9.5" cy="6.5" r=".9" fill="currentColor"/></svg></button>
+              </div>
+            </td>
+          </tr>
+
+          <!-- Row 7 — Social proof -->
+          <tr data-id="7">
+            <td>
+              <div class="row-creative">
+                <div class="thumb v7"></div>
+                <div>
+                  <div class="row-name">11542 social proof</div>
+                  <div class="row-id"><a href="#">AT-11542</a> · static</div>
+                </div>
+              </div>
+            </td>
+            <td><span class="pill angle">Social Proof 18K</span></td>
+            <td><span class="pill persona">Women 25-45</span></td>
+            <td><span class="pill hook">Testimonial</span></td>
+            <td><span class="chipx">TOF</span></td>
+            <td><span class="status winner"><span class="sdot"></span>Winner</span></td>
+            <td class="num big winner">$488</td>
+            <td class="num big winner">1.41×</td>
+            <td>
+              <svg class="spark" width="92" height="22" viewBox="0 0 92 22"><polyline points="0,14 12,13 24,12 36,11 48,9 60,8 72,7 82,6 92,6" fill="none" stroke="#5e7557" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </td>
+            <td class="num">$16.20</td>
+            <td class="num muted">17 Apr</td>
+            <td>
+              <div class="row-actions">
+                <button><svg width="13" height="13" viewBox="0 0 13 13"><path d="M2.5 9.5l3.5-4 2.2 2.3L11 4.5M8 4.5h3v3" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+                <button><svg width="13" height="13" viewBox="0 0 13 13"><path d="M3 3h7v7M4 9l5-5" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+                <button><svg width="13" height="13" viewBox="0 0 13 13"><circle cx="3.5" cy="6.5" r=".9" fill="currentColor"/><circle cx="6.5" cy="6.5" r=".9" fill="currentColor"/><circle cx="9.5" cy="6.5" r=".9" fill="currentColor"/></svg></button>
+              </div>
+            </td>
+          </tr>
+
+          <!-- Row 8 — Loser -->
+          <tr data-id="8">
+            <td>
+              <div class="row-creative">
+                <div class="thumb v8"></div>
+                <div>
+                  <div class="row-name">11436 new concept</div>
+                  <div class="row-id"><a href="#">AT-11436</a> · static · <span style="color:var(--loser)">day 8 · kill</span></div>
+                </div>
+              </div>
+            </td>
+            <td><span class="pill angle">Calm / Unwind</span></td>
+            <td><span class="pill persona">Self-Care Adults</span></td>
+            <td><span class="pill hook">Hook + Offer</span></td>
+            <td><span class="chipx">TOF</span></td>
+            <td><span class="status loser"><span class="sdot"></span>Loser</span></td>
+            <td class="num big loser">$187</td>
+            <td class="num big loser">0.42×</td>
+            <td>
+              <svg class="spark" width="92" height="22" viewBox="0 0 92 22"><polyline points="0,8 14,10 28,12 42,14 56,15 70,16 82,17 92,18" fill="none" stroke="#a83b28" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </td>
+            <td class="num loser">$48.60</td>
+            <td class="num muted">14 Apr</td>
+            <td>
+              <div class="row-actions">
+                <button title="Kill"><svg width="13" height="13" viewBox="0 0 13 13"><circle cx="6.5" cy="6.5" r="4.8" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M3.5 3.5L9.5 9.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg></button>
+                <button><svg width="13" height="13" viewBox="0 0 13 13"><path d="M3 3h7v7M4 9l5-5" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+                <button><svg width="13" height="13" viewBox="0 0 13 13"><circle cx="3.5" cy="6.5" r=".9" fill="currentColor"/><circle cx="6.5" cy="6.5" r=".9" fill="currentColor"/><circle cx="9.5" cy="6.5" r=".9" fill="currentColor"/></svg></button>
+              </div>
+            </td>
+          </tr>
+
+        </tbody>
+      </table>
+    </section>
+  </main>
+
+  <!-- Right rail context panel -->
+  <div class="scrim" id="scrim"></div>
+  <aside class="rail" id="rail" aria-label="Creative details">
+    <div class="rail-head">
+      <div>
+        <div class="eyebrow">Creative details</div>
+      </div>
+      <button class="rail-close" id="railClose" aria-label="Close panel">
+        <svg width="14" height="14" viewBox="0 0 14 14"><path d="M3 3l8 8M11 3l-8 8" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+      </button>
+    </div>
+
+    <div class="rail-body">
+      <div class="rail-hero">
+        <div class="thumb v1 video" id="railThumb"></div>
+        <div style="min-width:0;flex:1">
+          <div class="rail-title" id="railTitle">5773-1 old winner</div>
+          <div class="rail-meta" id="railMeta">AT-11439-v1 · video · TOF · Created 21 Apr</div>
+          <div class="rail-tags" id="railTags">
+            <span class="pill angle">Art as Therapy Alt</span>
+            <span class="pill persona">Women 25-45</span>
+            <span class="pill hook">POV · UGC</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="rail-grid">
+        <div class="rail-cell"><div class="k">Spend 7d</div><div class="v">$1,842</div></div>
+        <div class="rail-cell"><div class="k">ROAS 7d</div><div class="v massive">1.92×</div></div>
+        <div class="rail-cell"><div class="k">CPA</div><div class="v">$12.40</div></div>
+        <div class="rail-cell"><div class="k">Purchases</div><div class="v">148</div></div>
+        <div class="rail-cell"><div class="k">CTR</div><div class="v">2.1%</div></div>
+        <div class="rail-cell"><div class="k">Hook rate</div><div class="v">34%</div></div>
+      </div>
+
+      <div class="rail-chart">
+        <h4>ROAS · 14 days</h4>
+        <svg width="100%" height="90" viewBox="0 0 312 90" preserveAspectRatio="none">
+          <defs>
+            <linearGradient id="grad" x1="0" x2="0" y1="0" y2="1">
+              <stop offset="0%" stop-color="#35683f" stop-opacity=".18"/>
+              <stop offset="100%" stop-color="#35683f" stop-opacity="0"/>
+            </linearGradient>
+          </defs>
+          <line x1="0" y1="58" x2="312" y2="58" stroke="#e8e5dc" stroke-dasharray="2 3"/>
+          <polyline points="0,72 24,68 48,62 72,58 96,55 120,48 144,44 168,38 192,32 216,28 240,22 264,18 288,14 312,10" fill="none" stroke="#35683f" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+          <polygon points="0,72 24,68 48,62 72,58 96,55 120,48 144,44 168,38 192,32 216,28 240,22 264,18 288,14 312,10 312,90 0,90" fill="url(#grad)"/>
+        </svg>
+      </div>
+
+      <div class="rail-brief">
+        <h4>Brief</h4>
+        <p>POV UGC hook from Sarah — "Art saved me when therapy wait-lists were 6 months." Visual cue: soft morning light, paint-covered hands. Pain-first opening, resolves into offer CTA at 0:18. Angle: Art as Therapy Alt. Primary persona: Women 25-45 seeking non-clinical mental-health tools.</p>
+      </div>
+    </div>
+
+    <div class="rail-foot">
+      <button class="mbtn">
+        <svg width="12" height="12" viewBox="0 0 12 12"><path d="M3 3h6v6M4 8l4-4" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        Open in Meta
+      </button>
+      <button class="mbtn primary">
+        <svg width="12" height="12" viewBox="0 0 12 12"><path d="M2 9l3-3 2 2 3-3M9 5h1V4" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        Edit & scale
+      </button>
+    </div>
+  </aside>
+
+<script>
+  (function(){
+    const rail = document.getElementById('rail');
+    const scrim = document.getElementById('scrim');
+    const closeBtn = document.getElementById('railClose');
+    const table = document.getElementById('invTable');
+    const railTitle = document.getElementById('railTitle');
+    const railMeta = document.getElementById('railMeta');
+    const railThumb = document.getElementById('railThumb');
+
+    function openPanel(row){
+      document.querySelectorAll('#invTable tbody tr').forEach(r=>r.classList.remove('active'));
+      row.classList.add('active');
+
+      // Pull name / id / thumb class from the row for a touch of realism
+      const name = row.querySelector('.row-name')?.textContent?.trim() || 'Creative';
+      const id = row.querySelector('.row-id')?.textContent?.trim() || '';
+      const thumbClass = row.querySelector('.thumb')?.className || 'thumb v1';
+
+      railTitle.textContent = name;
+      railMeta.textContent = id;
+      railThumb.className = thumbClass + ' ';
+      document.body.classList.add('panel-open');
+    }
+    function closePanel(){
+      document.body.classList.remove('panel-open');
+      document.querySelectorAll('#invTable tbody tr').forEach(r=>r.classList.remove('active'));
+    }
+
+    table.addEventListener('click', (e)=>{
+      // ignore clicks on inline links or action buttons
+      if (e.target.closest('a') || e.target.closest('.row-actions')) return;
+      const tr = e.target.closest('tbody tr');
+      if (tr) openPanel(tr);
+    });
+    closeBtn.addEventListener('click', closePanel);
+    scrim.addEventListener('click', closePanel);
+    document.addEventListener('keydown', (e)=>{ if(e.key==='Escape') closePanel(); });
+  })();
+</script>
+</body>
+</html>

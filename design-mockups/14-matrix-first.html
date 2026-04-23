@@ -1,0 +1,764 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Layout 14 — Matrix-first</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+<style>
+:root {
+  --paper:   #faf9f5;
+  --paper-2: #f3f1e9;
+  --paper-3: #ede9dc;
+  --surface: #ffffff;
+  --line:    #e8e5dc;
+  --line-hi: #d6d1c1;
+  --ink:     #1a1814;
+  --ink-2:   #585449;
+  --ink-3:   #8f8a7c;
+  --ink-4:   #b8b3a2;
+  --accent:  #c05336;
+  --accent-soft: #f5e3da;
+  --sage:    #5e7557;
+  --sage-deep: #3d5640;
+  --ochre:   #a77c2e;
+  --rust:    #a83b28;
+  --dusk:    #4f6780;
+  --emerald: #35683f;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { background: var(--paper); height: 100%; color: var(--ink); }
+body {
+  font-family: 'Inter', sans-serif;
+  font-size: 13px; line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  display: grid;
+  grid-template-rows: 54px auto 1fr;
+  min-height: 100vh;
+}
+
+/* Top */
+.top {
+  display: flex; align-items: center; gap: 14px;
+  padding: 0 24px;
+  border-bottom: 1px solid var(--line);
+}
+.brand { font-family: 'Instrument Serif', serif; font-style: italic; font-size: 22px; }
+.brand em { color: var(--accent); }
+.sep-v { width: 1px; height: 20px; background: var(--line); }
+.crumb { font-size: 12.5px; color: var(--ink-2); display: flex; gap: 8px; align-items: center; }
+.crumb a { color: var(--ink-2); padding: 3px 7px; border-radius: 4px; cursor: pointer; text-decoration: none; }
+.crumb a:hover { background: var(--paper-2); }
+.crumb .s { color: var(--ink-4); font-size: 10px; }
+.top .right { margin-left: auto; display: flex; gap: 10px; align-items: center; }
+.view-toggle { display: flex; gap: 1px; padding: 2px; background: var(--paper-2); border-radius: 6px; }
+.view-toggle span {
+  padding: 5px 11px; border-radius: 4px; cursor: pointer; color: var(--ink-3);
+  font-family: 'JetBrains Mono', monospace; font-size: 10.5px; font-weight: 500;
+  letter-spacing: 0.04em; text-transform: uppercase;
+}
+.view-toggle span.on { background: var(--surface); color: var(--ink); box-shadow: 0 1px 2px rgba(0,0,0,.05); }
+
+.btn {
+  height: 30px; padding: 0 12px;
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: 6px; font-family: inherit; font-size: 12.5px; font-weight: 500;
+  color: var(--ink); cursor: pointer;
+  display: inline-flex; align-items: center; gap: 6px;
+}
+.btn:hover { background: var(--paper-2); }
+.btn-p { background: var(--accent); color: white; border-color: var(--accent); }
+
+/* Page head */
+.ph {
+  padding: 28px 32px 18px;
+  display: flex; flex-wrap: wrap; align-items: flex-end; gap: 20px;
+  border-bottom: 1px solid var(--line);
+}
+.ph h1 {
+  font-family: 'Instrument Serif', serif;
+  font-style: italic; font-weight: 400;
+  font-size: 42px; letter-spacing: -0.025em; line-height: 1;
+}
+.ph .meta {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px; color: var(--ink-3);
+  letter-spacing: 0.06em; text-transform: uppercase;
+  padding-bottom: 6px;
+}
+
+/* Toolbar */
+.toolbar {
+  padding: 12px 32px;
+  display: flex; gap: 10px; align-items: center;
+  background: var(--paper);
+  border-bottom: 1px solid var(--line);
+}
+.tab-chip {
+  padding: 5px 11px;
+  font-size: 12px;
+  font-family: 'JetBrains Mono', monospace;
+  letter-spacing: 0.04em;
+  color: var(--ink-3); cursor: pointer;
+  border-radius: 4px;
+}
+.tab-chip:hover { background: var(--paper-2); color: var(--ink); }
+.tab-chip.on { background: var(--ink); color: white; }
+.toolbar .sep { width: 1px; height: 16px; background: var(--line); }
+.toolbar .legend {
+  margin-left: auto; display: flex; gap: 14px;
+  font-size: 11px; color: var(--ink-3);
+  font-family: 'JetBrains Mono', monospace;
+  align-items: center;
+}
+.toolbar .legend span { display: inline-flex; align-items: center; gap: 6px; }
+.toolbar .legend .sw {
+  width: 14px; height: 14px; border-radius: 3px;
+  border: 1px solid var(--line);
+}
+
+/* ═══ MATRIX GRID ═══ */
+.matrix-wrap {
+  padding: 24px 32px 40px;
+  overflow: auto;
+}
+.matrix {
+  display: grid;
+  grid-template-columns: 180px repeat(5, 1fr) 100px;
+  border-top: 1px solid var(--line);
+  border-left: 1px solid var(--line);
+  background: var(--surface);
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: 0 1px 3px rgba(0,0,0,.03);
+  min-width: 1000px;
+}
+.m-cell {
+  border-bottom: 1px solid var(--line);
+  border-right: 1px solid var(--line);
+  padding: 14px;
+  display: flex; flex-direction: column;
+  position: relative;
+  min-height: 100px;
+  cursor: pointer;
+  transition: background .1s;
+}
+.m-cell:hover { background: var(--paper-2); }
+
+/* Top-left corner */
+.m-corner {
+  background: var(--paper-2);
+  align-items: flex-end;
+  min-height: 70px;
+  padding: 0 14px 10px;
+}
+.m-corner .label {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  color: var(--ink-3);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+.m-corner .label em {
+  font-family: 'Instrument Serif', serif;
+  font-style: italic;
+  color: var(--ink-2);
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 13px;
+  margin: 0 3px;
+}
+
+/* Column headers (persona) */
+.m-col-hdr {
+  background: var(--paper-2);
+  min-height: 70px;
+  padding: 10px 14px;
+  cursor: default;
+  align-items: flex-start;
+  gap: 4px;
+}
+.m-col-hdr:hover { background: var(--paper-2); }
+.m-col-hdr .hdr-name {
+  font-weight: 600;
+  font-size: 13px;
+  letter-spacing: -0.005em;
+  color: var(--ink);
+  line-height: 1.25;
+}
+.m-col-hdr .hdr-count {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10.5px;
+  color: var(--ink-3);
+  margin-top: auto;
+}
+.m-col-hdr .hdr-count strong { color: var(--ink-2); font-weight: 600; }
+
+/* Row headers (angle) */
+.m-row-hdr {
+  background: var(--paper-2);
+  justify-content: center;
+  cursor: default;
+}
+.m-row-hdr:hover { background: var(--paper-2); }
+.m-row-hdr .ang {
+  font-family: 'Instrument Serif', serif;
+  font-style: italic;
+  font-size: 16px;
+  color: var(--ink);
+  letter-spacing: -0.01em;
+  line-height: 1.2;
+}
+.m-row-hdr .ang-meta {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10.5px;
+  color: var(--ink-3);
+  margin-top: 4px;
+}
+
+/* Cell body (data) */
+.m-cell.data {
+  justify-content: space-between;
+  padding: 12px;
+  gap: 8px;
+}
+.m-cell .count {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--ink-3);
+  letter-spacing: 0.04em;
+}
+.m-cell .count strong { color: var(--ink); font-size: 20px; font-weight: 800; }
+.m-cell .roas {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 16px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+.m-cell .spend {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  color: var(--ink-3);
+}
+.m-cell .thumbs {
+  display: flex; gap: -4px; margin-top: auto;
+}
+.m-cell .thumb-mini {
+  width: 20px; height: 20px; border-radius: 4px;
+  background: var(--ink); margin-right: -6px;
+  border: 2px solid var(--surface);
+  position: relative;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+.m-cell .thumb-mini.photo { background: var(--paper-3); }
+.m-cell .more {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  color: var(--ink-3);
+  margin-left: 8px;
+  align-self: center;
+}
+.m-cell .tier-bar {
+  height: 3px; border-radius: 2px; margin-top: 6px;
+  background: var(--line);
+  overflow: hidden;
+  display: flex;
+}
+.m-cell .tier-bar span { display: block; height: 100%; }
+
+/* ROAS color by intensity */
+.m-cell.tier-massive { background: linear-gradient(135deg, rgba(53,104,63,0.1), rgba(53,104,63,0.02)); }
+.m-cell.tier-massive:hover { background: linear-gradient(135deg, rgba(53,104,63,0.15), rgba(53,104,63,0.05)); }
+.m-cell.tier-massive .roas { color: var(--emerald); }
+
+.m-cell.tier-winner { background: linear-gradient(135deg, rgba(94,117,87,0.09), rgba(94,117,87,0.02)); }
+.m-cell.tier-winner:hover { background: linear-gradient(135deg, rgba(94,117,87,0.14), rgba(94,117,87,0.05)); }
+.m-cell.tier-winner .roas { color: var(--sage); }
+
+.m-cell.tier-mild { background: linear-gradient(135deg, rgba(167,124,46,0.08), rgba(167,124,46,0.02)); }
+.m-cell.tier-mild .roas { color: var(--ochre); }
+
+.m-cell.tier-fatigue { background: linear-gradient(135deg, rgba(192,83,54,0.08), rgba(192,83,54,0.02)); }
+.m-cell.tier-fatigue .roas { color: var(--accent); }
+
+.m-cell.tier-loser { background: linear-gradient(135deg, rgba(168,59,40,0.08), rgba(168,59,40,0.02)); }
+.m-cell.tier-loser .roas { color: var(--rust); }
+
+.m-cell.tier-testing { background: var(--paper); }
+.m-cell.tier-testing .roas { color: var(--ink-4); }
+
+.m-cell.empty {
+  background: var(--paper);
+  color: var(--ink-4);
+  font-size: 11px;
+  font-style: italic;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+}
+
+/* Totals column (right edge) */
+.m-total {
+  background: var(--paper-3);
+  justify-content: center;
+  border-left: 1px solid var(--line-hi);
+}
+.m-total .t-count {
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 700;
+  font-size: 18px;
+  color: var(--ink);
+}
+.m-total .t-sub {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  color: var(--ink-3);
+  margin-top: 2px;
+}
+.m-total .t-roas {
+  font-family: 'Instrument Serif', serif;
+  font-style: italic;
+  font-size: 20px;
+  font-weight: 400;
+  margin-top: 6px;
+  font-variant-numeric: tabular-nums;
+}
+.m-total.up .t-roas { color: var(--sage); }
+.m-total.down .t-roas { color: var(--accent); }
+
+/* Bottom totals row */
+.m-cell.bottom-total {
+  background: var(--paper-3);
+  border-top: 2px solid var(--line-hi);
+  justify-content: center;
+  gap: 2px;
+}
+.m-cell.bottom-total .t-count {
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 700;
+  font-size: 16px;
+}
+.m-cell.bottom-total .t-sub {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  color: var(--ink-3);
+}
+.m-cell.bottom-total .t-roas {
+  font-family: 'Instrument Serif', serif;
+  font-style: italic;
+  font-size: 17px;
+  margin-top: 2px;
+}
+
+/* Below-matrix insights */
+.insights {
+  padding: 28px 32px 40px;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+}
+.insight-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 18px 20px;
+}
+.insight-card h3 {
+  font-family: 'Instrument Serif', serif;
+  font-style: italic;
+  font-size: 18px; font-weight: 400;
+  letter-spacing: -0.01em;
+  margin-bottom: 8px;
+}
+.insight-card h3 em { font-style: italic; color: var(--accent); }
+.insight-card p {
+  font-size: 13px; color: var(--ink-2);
+  line-height: 1.6;
+}
+.insight-card .meta {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10.5px;
+  color: var(--ink-3);
+  display: flex; gap: 12px;
+}
+</style>
+</head>
+<body>
+
+<div class="top">
+  <div class="brand"><em>Immuvi.</em></div>
+  <div class="sep-v"></div>
+  <div class="crumb">
+    <a>Art Therapy</a><span class="s">›</span>
+    <a>Creative Tracker</a>
+  </div>
+  <div class="right">
+    <div class="view-toggle">
+      <span>Table</span><span>Board</span><span>Gallery</span><span class="on">Matrix</span><span>Timeline</span>
+    </div>
+    <div class="sep-v"></div>
+    <button class="btn">⇡ Push all</button>
+    <button class="btn btn-p">+ Add Creative</button>
+  </div>
+</div>
+
+<div class="ph">
+  <h1>Angle × Persona <em>Matrix</em></h1>
+  <div class="meta">7 ANGLES · 5 PERSONAS · 19/35 COMBINATIONS ACTIVE</div>
+</div>
+
+<div class="toolbar">
+  <span class="tab-chip on">Winners × spend</span>
+  <span class="tab-chip">Count only</span>
+  <span class="tab-chip">ROAS only</span>
+  <span class="tab-chip">WoW delta</span>
+  <div class="sep"></div>
+  <span class="tab-chip">Cold TOF</span>
+  <span class="tab-chip">MOF</span>
+  <span class="tab-chip">BOF</span>
+  <div class="legend">
+    <span><span class="sw" style="background: rgba(53,104,63,0.3);"></span>Massive ≥1.7×</span>
+    <span><span class="sw" style="background: rgba(94,117,87,0.3);"></span>Winner ≥1.4×</span>
+    <span><span class="sw" style="background: rgba(167,124,46,0.3);"></span>Mild 1.3×</span>
+    <span><span class="sw" style="background: rgba(192,83,54,0.3);"></span>Fatigued</span>
+    <span><span class="sw" style="background: rgba(168,59,40,0.3);"></span>Loser</span>
+    <span><span class="sw" style="background: var(--paper);"></span>Empty</span>
+  </div>
+</div>
+
+<div class="matrix-wrap">
+  <div class="matrix">
+
+    <!-- Headers -->
+    <div class="m-cell m-corner">
+      <div class="label">Angle <em>×</em> Persona</div>
+    </div>
+    <div class="m-cell m-col-hdr">
+      <div class="hdr-name">Stressed Women 25-45</div>
+      <div class="hdr-count"><strong>24</strong> creatives</div>
+    </div>
+    <div class="m-cell m-col-hdr">
+      <div class="hdr-name">Creative Self-Care Adults</div>
+      <div class="hdr-count"><strong>10</strong> creatives</div>
+    </div>
+    <div class="m-cell m-col-hdr">
+      <div class="hdr-name">Parents of Emotional Kids</div>
+      <div class="hdr-count"><strong>6</strong> creatives</div>
+    </div>
+    <div class="m-cell m-col-hdr">
+      <div class="hdr-name">Silently Scrolling Adults</div>
+      <div class="hdr-count"><strong>1</strong> creative</div>
+    </div>
+    <div class="m-cell m-col-hdr">
+      <div class="hdr-name">Young Adults · Grief</div>
+      <div class="hdr-count"><strong>1</strong> creative</div>
+    </div>
+    <div class="m-cell m-col-hdr" style="background: var(--paper-3);">
+      <div class="hdr-name">Totals</div>
+      <div class="hdr-count"><strong>42</strong> rows</div>
+    </div>
+
+    <!-- Row: Art as Therapy Alternative -->
+    <div class="m-cell m-row-hdr">
+      <div>
+        <div class="ang">Art as Therapy Alternative</div>
+        <div class="ang-meta">18 creatives · 1.58× avg</div>
+      </div>
+    </div>
+    <div class="m-cell data tier-massive">
+      <div>
+        <div class="count"><strong>12</strong> · creatives</div>
+        <div class="roas">1.78×</div>
+        <div class="spend">$4,920 · 7d</div>
+      </div>
+      <div class="thumbs">
+        <span class="thumb-mini"></span>
+        <span class="thumb-mini"></span>
+        <span class="thumb-mini photo"></span>
+        <span class="more">+9</span>
+      </div>
+    </div>
+    <div class="m-cell data tier-winner">
+      <div>
+        <div class="count"><strong>4</strong> · creatives</div>
+        <div class="roas">1.48×</div>
+        <div class="spend">$1,240</div>
+      </div>
+      <div class="thumbs">
+        <span class="thumb-mini"></span>
+        <span class="thumb-mini photo"></span>
+        <span class="more">+2</span>
+      </div>
+    </div>
+    <div class="m-cell data tier-mild">
+      <div>
+        <div class="count"><strong>2</strong> · creatives</div>
+        <div class="roas">1.32×</div>
+        <div class="spend">$620</div>
+      </div>
+      <div class="thumbs">
+        <span class="thumb-mini"></span>
+        <span class="thumb-mini"></span>
+      </div>
+    </div>
+    <div class="m-cell empty">not yet tested</div>
+    <div class="m-cell empty">not yet tested</div>
+    <div class="m-cell m-total up">
+      <div class="t-count">18</div>
+      <div class="t-sub">$6,780 · 7d</div>
+      <div class="t-roas">1.58×</div>
+    </div>
+
+    <!-- Row: Calm / Unwind Ritual -->
+    <div class="m-cell m-row-hdr">
+      <div>
+        <div class="ang">Calm / Unwind Ritual</div>
+        <div class="ang-meta">9 creatives · 1.12× avg</div>
+      </div>
+    </div>
+    <div class="m-cell data tier-winner">
+      <div>
+        <div class="count"><strong>4</strong> · creatives</div>
+        <div class="roas">1.41×</div>
+        <div class="spend">$1,420</div>
+      </div>
+      <div class="thumbs">
+        <span class="thumb-mini"></span>
+        <span class="thumb-mini photo"></span>
+        <span class="more">+2</span>
+      </div>
+    </div>
+    <div class="m-cell data tier-mild">
+      <div>
+        <div class="count"><strong>3</strong> · creatives</div>
+        <div class="roas">1.22×</div>
+        <div class="spend">$580</div>
+      </div>
+    </div>
+    <div class="m-cell data tier-loser">
+      <div>
+        <div class="count"><strong>2</strong> · creatives</div>
+        <div class="roas">0.58×</div>
+        <div class="spend">$340</div>
+      </div>
+    </div>
+    <div class="m-cell empty">not yet tested</div>
+    <div class="m-cell empty">not yet tested</div>
+    <div class="m-cell m-total">
+      <div class="t-count">9</div>
+      <div class="t-sub">$2,340 · 7d</div>
+      <div class="t-roas" style="color: var(--ochre);">1.12×</div>
+    </div>
+
+    <!-- Row: Scarcity / Limited-Time -->
+    <div class="m-cell m-row-hdr">
+      <div>
+        <div class="ang">Scarcity / Limited-Time</div>
+        <div class="ang-meta">5 creatives · 0.98× · ⚠ fatigue</div>
+      </div>
+    </div>
+    <div class="m-cell data tier-fatigue">
+      <div>
+        <div class="count"><strong>4</strong> · creatives</div>
+        <div class="roas">0.98× ↓</div>
+        <div class="spend">$1,850 · WoW -42%</div>
+      </div>
+      <div class="thumbs">
+        <span class="thumb-mini photo"></span>
+        <span class="thumb-mini photo"></span>
+        <span class="more">+2</span>
+      </div>
+    </div>
+    <div class="m-cell data tier-mild">
+      <div>
+        <div class="count"><strong>1</strong> · creative</div>
+        <div class="roas">1.28×</div>
+        <div class="spend">$310</div>
+      </div>
+    </div>
+    <div class="m-cell empty">not yet tested</div>
+    <div class="m-cell empty">not yet tested</div>
+    <div class="m-cell empty">not yet tested</div>
+    <div class="m-cell m-total down">
+      <div class="t-count">5</div>
+      <div class="t-sub">$2,160 · 7d</div>
+      <div class="t-roas">1.02×</div>
+    </div>
+
+    <!-- Row: Therapist-Recommended Tool -->
+    <div class="m-cell m-row-hdr">
+      <div>
+        <div class="ang">Therapist-Recommended</div>
+        <div class="ang-meta">5 creatives · 1.38× avg</div>
+      </div>
+    </div>
+    <div class="m-cell data tier-winner">
+      <div>
+        <div class="count"><strong>2</strong> · creatives</div>
+        <div class="roas">1.44×</div>
+        <div class="spend">$560</div>
+      </div>
+    </div>
+    <div class="m-cell data tier-mild">
+      <div>
+        <div class="count"><strong>2</strong> · creatives</div>
+        <div class="roas">1.30×</div>
+        <div class="spend">$360</div>
+      </div>
+    </div>
+    <div class="m-cell data tier-testing">
+      <div>
+        <div class="count"><strong>1</strong> · testing</div>
+        <div class="roas">—</div>
+        <div class="spend">$32</div>
+      </div>
+    </div>
+    <div class="m-cell empty">not yet tested</div>
+    <div class="m-cell empty">not yet tested</div>
+    <div class="m-cell m-total up">
+      <div class="t-count">5</div>
+      <div class="t-sub">$952 · 7d</div>
+      <div class="t-roas">1.38×</div>
+    </div>
+
+    <!-- Row: Emotional Literacy -->
+    <div class="m-cell m-row-hdr">
+      <div>
+        <div class="ang">Emotional Literacy</div>
+        <div class="ang-meta">3 creatives · 1.50× avg</div>
+      </div>
+    </div>
+    <div class="m-cell data tier-winner">
+      <div>
+        <div class="count"><strong>1</strong> · creative</div>
+        <div class="roas">1.54×</div>
+        <div class="spend">$806</div>
+      </div>
+    </div>
+    <div class="m-cell empty">not yet tested</div>
+    <div class="m-cell empty">not yet tested</div>
+    <div class="m-cell empty">not yet tested</div>
+    <div class="m-cell data tier-winner">
+      <div>
+        <div class="count"><strong>1</strong> · winner</div>
+        <div class="roas">1.46×</div>
+        <div class="spend">$624</div>
+      </div>
+    </div>
+    <div class="m-cell m-total up">
+      <div class="t-count">2</div>
+      <div class="t-sub">$1,430 · 7d</div>
+      <div class="t-roas">1.50×</div>
+    </div>
+
+    <!-- Row: Pattern Interrupt -->
+    <div class="m-cell m-row-hdr">
+      <div>
+        <div class="ang">Pattern Interrupt — Fake Alert</div>
+        <div class="ang-meta">2 creatives · 1.22× avg</div>
+      </div>
+    </div>
+    <div class="m-cell empty">not yet tested</div>
+    <div class="m-cell empty">not yet tested</div>
+    <div class="m-cell empty">not yet tested</div>
+    <div class="m-cell data tier-mild">
+      <div>
+        <div class="count"><strong>2</strong> · creatives</div>
+        <div class="roas">1.22×</div>
+        <div class="spend">$284</div>
+      </div>
+    </div>
+    <div class="m-cell empty">not yet tested</div>
+    <div class="m-cell m-total">
+      <div class="t-count">2</div>
+      <div class="t-sub">$284 · 7d</div>
+      <div class="t-roas" style="color: var(--ochre);">1.22×</div>
+    </div>
+
+    <!-- Row: Social Proof — 18K -->
+    <div class="m-cell m-row-hdr">
+      <div>
+        <div class="ang">Social Proof — 18K</div>
+        <div class="ang-meta">1 creative · 1.41× avg</div>
+      </div>
+    </div>
+    <div class="m-cell data tier-winner">
+      <div>
+        <div class="count"><strong>1</strong> · creative</div>
+        <div class="roas">1.41×</div>
+        <div class="spend">$488</div>
+      </div>
+    </div>
+    <div class="m-cell empty">not yet tested</div>
+    <div class="m-cell empty">not yet tested</div>
+    <div class="m-cell empty">not yet tested</div>
+    <div class="m-cell empty">not yet tested</div>
+    <div class="m-cell m-total up">
+      <div class="t-count">1</div>
+      <div class="t-sub">$488 · 7d</div>
+      <div class="t-roas">1.41×</div>
+    </div>
+
+    <!-- Bottom totals row -->
+    <div class="m-cell bottom-total" style="background: var(--paper-3); align-items: flex-start;">
+      <div class="t-sub" style="letter-spacing: 0.08em; text-transform: uppercase;">Column totals</div>
+    </div>
+    <div class="m-cell bottom-total">
+      <div class="t-count">24</div>
+      <div class="t-sub">$8,756 · 7d</div>
+      <div class="t-roas" style="color: var(--sage)">1.54×</div>
+    </div>
+    <div class="m-cell bottom-total">
+      <div class="t-count">10</div>
+      <div class="t-sub">$2,180 · 7d</div>
+      <div class="t-roas" style="color: var(--ochre)">1.24×</div>
+    </div>
+    <div class="m-cell bottom-total">
+      <div class="t-count">6</div>
+      <div class="t-sub">$1,244 · 7d</div>
+      <div class="t-roas" style="color: var(--accent)">0.94×</div>
+    </div>
+    <div class="m-cell bottom-total">
+      <div class="t-count">1</div>
+      <div class="t-sub">$284</div>
+      <div class="t-roas" style="color: var(--ochre)">1.22×</div>
+    </div>
+    <div class="m-cell bottom-total">
+      <div class="t-count">1</div>
+      <div class="t-sub">$624</div>
+      <div class="t-roas" style="color: var(--sage)">1.46×</div>
+    </div>
+    <div class="m-cell bottom-total" style="background: var(--ink); color: var(--paper);">
+      <div class="t-count" style="color: var(--paper);">42</div>
+      <div class="t-sub" style="color: var(--paper-2);">$12.4k · 7d</div>
+      <div class="t-roas" style="color: var(--accent-soft);">1.38×</div>
+    </div>
+
+  </div>
+</div>
+
+<div class="insights">
+  <div class="insight-card">
+    <h3>Scale <em>Art as Therapy × Women 25-45</em></h3>
+    <p>12 creatives at 1.78× avg ROAS across $4.9k spend. This is your strongest cell — move more budget here first.</p>
+    <div class="meta"><span>TIER · MASSIVE</span><span>12 creatives</span></div>
+  </div>
+  <div class="insight-card">
+    <h3><em>Refresh</em> Scarcity × Women 25-45</h3>
+    <p>4 creatives showing fatigue signals. ROAS dropped 42% WoW. Duplicate + swap hook before spend hits $2k.</p>
+    <div class="meta"><span>TIER · FATIGUED</span><span>WoW -42%</span></div>
+  </div>
+  <div class="insight-card">
+    <h3>Fill the <em>empty cells</em></h3>
+    <p>16 angle × persona combinations untested. Highest opportunity: Emotional Literacy × Parents, Therapist-Rec × Women.</p>
+    <div class="meta"><span>16 empty combos</span><span>Opportunity</span></div>
+  </div>
+</div>
+
+</body>
+</html>

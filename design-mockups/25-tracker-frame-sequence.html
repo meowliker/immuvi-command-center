@@ -1,0 +1,397 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Creative Tracker · Frame Sequence</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --canvas:#faf9f5;--surface:#ffffff;--surface-2:#f3f1e9;--line:#e8e5dc;--line-hi:#d6d1c1;
+  --ink:#1a1814;--ink-2:#585449;--ink-3:#8f8a7c;--ink-4:#b8b3a2;
+  --accent:#c05336;--accent-soft:#f5e3da;--cyan:#00a3b8;--sage:#5e7557;--ochre:#a77c2e;
+  --coral:#c14400;--rust:#a83b28;--dusk:#4f6780;--emerald:#35683f;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{background:var(--canvas);color:var(--ink);font-family:'Inter',system-ui,sans-serif;-webkit-font-smoothing:antialiased;overflow-x:hidden}
+.mono{font-family:'JetBrains Mono',monospace}
+
+.nav{position:fixed;top:0;left:0;right:0;z-index:100;display:flex;align-items:center;justify-content:space-between;padding:14px 32px;backdrop-filter:blur(12px);background:rgba(250,249,245,.8);border-bottom:1px solid var(--line)}
+.nav-brand{display:flex;align-items:center;gap:10px}
+.nav-logo{width:22px;height:22px;border-radius:6px;background:linear-gradient(135deg,var(--accent),#e27a5c);display:grid;place-items:center;color:#fff;font-weight:700;font-size:11px}
+.nav-tabs{display:flex;gap:4px;background:var(--surface-2);padding:4px;border-radius:10px;border:1px solid var(--line)}
+.nav-tab{padding:7px 14px;font-size:12.5px;font-weight:500;color:var(--ink-2);border-radius:7px;cursor:pointer}
+.nav-tab.active{background:#fff;color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.08)}
+.nav-user{display:flex;align-items:center;gap:10px;color:var(--ink-2);font-size:12px}
+.nav-avatar{width:28px;height:28px;border-radius:50%;background:linear-gradient(135deg,var(--cyan),#4ac6d4);display:grid;place-items:center;font-weight:700;font-size:12px;color:#fff}
+
+/* Loading bar - top */
+.loadbar{position:fixed;top:0;left:0;right:0;height:2px;z-index:101;background:transparent}
+.loadbar-fill{height:100%;background:linear-gradient(90deg,var(--accent),var(--cyan));width:0%;transition:width .15s linear}
+
+/* Scene wrapper (pinned canvas scene) */
+.scene{height:600vh;position:relative}
+.scene-inner{position:sticky;top:0;height:100vh;overflow:hidden;background:#0f0d0a}
+.scene canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+.scene-overlay{position:absolute;inset:0;z-index:3;pointer-events:none;display:flex;flex-direction:column;justify-content:space-between;padding:120px 50px 60px;color:#fff}
+.scene-kicker{font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.3em;text-transform:uppercase;color:rgba(255,255,255,.5)}
+.scene-kicker .dot{display:inline-block;width:6px;height:6px;background:var(--accent);border-radius:50%;vertical-align:middle;margin-right:10px}
+.scene-title-wrap{max-width:960px}
+.scene-title{font-family:'Instrument Serif',serif;font-style:italic;font-size:clamp(56px,8vw,120px);line-height:.95;color:#fff;margin-top:16px}
+.scene-title em{color:var(--accent)}
+.scene-caption{font-size:14px;color:rgba(255,255,255,.55);max-width:480px;margin-top:20px;line-height:1.5}
+.frame-badge{position:absolute;top:28px;right:32px;font-family:'JetBrains Mono',monospace;font-size:12px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.15);color:#fff;padding:6px 12px;border-radius:999px;letter-spacing:.15em;backdrop-filter:blur(6px);z-index:5}
+.frame-badge b{color:var(--accent);font-weight:600}
+
+.scene-bot{display:flex;justify-content:space-between;align-items:flex-end;gap:40px}
+.scene-meta{font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:rgba(255,255,255,.4)}
+.scroll-hint{display:flex;align-items:center;gap:10px;font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.25em;text-transform:uppercase;color:rgba(255,255,255,.6)}
+.scroll-hint .line{width:40px;height:1px;background:rgba(255,255,255,.3);position:relative;overflow:hidden}
+.scroll-hint .line::after{content:'';position:absolute;width:20px;height:100%;background:var(--accent);left:-20px;animation:slide 2.2s ease-in-out infinite}
+@keyframes slide{0%{left:-20px}100%{left:40px}}
+
+/* frame-keyed KPI column (appears during scene) */
+.scene-kpis{position:absolute;right:50px;top:50%;transform:translateY(-50%);z-index:4;display:flex;flex-direction:column;gap:26px;color:#fff;text-align:right}
+.sk{opacity:.4;transition:opacity .4s}
+.sk.on{opacity:1}
+.sk-k{font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.22em;text-transform:uppercase;color:rgba(255,255,255,.5);margin-bottom:6px}
+.sk-v{font-family:'Instrument Serif',serif;font-style:italic;font-size:52px;line-height:1;color:#fff}
+.sk-d{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--cyan);margin-top:4px}
+
+/* Transition */
+.transition{height:140px;background:linear-gradient(to bottom,#0f0d0a,var(--canvas))}
+
+/* Table section */
+.sheet{padding:80px 60px 160px;max-width:1400px;margin:0 auto}
+.sheet-head{display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:40px;gap:24px}
+.sheet-title{font-family:'Instrument Serif',serif;font-style:italic;font-size:64px;line-height:.95;letter-spacing:-.02em}
+.sheet-sub{font-size:14px;color:var(--ink-3);max-width:360px;line-height:1.5;padding-bottom:8px}
+.summary-strip{display:grid;grid-template-columns:repeat(5,1fr);gap:1px;background:var(--line);border:1px solid var(--line);border-radius:14px;overflow:hidden;margin-bottom:56px}
+.strip-cell{background:var(--surface);padding:22px}
+.strip-label{font-size:11px;color:var(--ink-3);text-transform:uppercase;letter-spacing:.14em;margin-bottom:10px;font-family:'JetBrains Mono',monospace}
+.strip-value{font-family:'Instrument Serif',serif;font-style:italic;font-size:44px;line-height:1;margin-bottom:6px}
+.strip-delta{font-family:'JetBrains Mono',monospace;font-size:11.5px;color:var(--sage)}
+.strip-delta.neg{color:var(--rust)}
+
+.tracker{background:var(--surface);border:1px solid var(--line);border-radius:14px;overflow:hidden;box-shadow:0 1px 2px rgba(0,0,0,.02)}
+.tracker-head{display:grid;grid-template-columns:260px 120px 130px 110px 120px 110px 90px 80px;padding:14px 24px;background:var(--surface-2);border-bottom:1px solid var(--line);font-size:11px;text-transform:uppercase;letter-spacing:.12em;color:var(--ink-3);font-family:'JetBrains Mono',monospace;font-weight:500}
+.tracker-row{display:grid;grid-template-columns:260px 120px 130px 110px 120px 110px 90px 80px;padding:18px 24px;border-bottom:1px solid var(--line);font-size:13.5px;align-items:center;transition:background .15s}
+.tracker-row:hover{background:#fefdf9}
+.tracker-row:last-child{border-bottom:none}
+.cell-name{display:flex;align-items:center;gap:12px}
+.thumb{width:38px;height:38px;border-radius:8px;flex-shrink:0}
+.thumb-1{background:linear-gradient(135deg,#c05336,#e27a5c)}
+.thumb-2{background:linear-gradient(135deg,#5e7557,#8aaa81)}
+.thumb-3{background:linear-gradient(135deg,#a77c2e,#d2a554)}
+.thumb-4{background:linear-gradient(135deg,#c14400,#e8734c)}
+.thumb-5{background:linear-gradient(135deg,#4f6780,#7d95af)}
+.thumb-6{background:linear-gradient(135deg,#35683f,#68a575)}
+.thumb-7{background:linear-gradient(135deg,#00a3b8,#4ac6d4)}
+.thumb-8{background:linear-gradient(135deg,#a83b28,#d1604c)}
+.nm-title{font-weight:600;font-size:13.5px;color:var(--ink);line-height:1.2}
+.nm-meta{font-size:11.5px;color:var(--ink-3);font-family:'JetBrains Mono',monospace}
+.pill{display:inline-flex;padding:3px 10px;border-radius:999px;font-size:11.5px;font-weight:600;white-space:nowrap}
+.p-massive{background:#dcead0;color:var(--emerald)}
+.p-winner{background:#e1ecd9;color:var(--sage)}
+.p-mild{background:#f5e8c7;color:var(--ochre)}
+.p-fatigued{background:#f8d9c4;color:var(--coral)}
+.p-testing{background:#d9e1ee;color:var(--dusk)}
+.p-loser{background:#f2cfc7;color:var(--rust)}
+.p-accent{background:var(--accent-soft);color:var(--accent)}
+.p-soft{background:var(--surface-2);color:var(--ink-2);font-weight:500}
+.num{font-family:'JetBrains Mono',monospace;font-weight:500}
+.num-big{font-family:'Instrument Serif',serif;font-style:italic;font-size:22px;line-height:1}
+.up{color:var(--sage)}
+.down{color:var(--rust)}
+.foot{padding:60px 32px;text-align:center;color:var(--ink-3);font-size:12px;letter-spacing:.2em;text-transform:uppercase;font-family:'JetBrains Mono',monospace;border-top:1px solid var(--line)}
+</style>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="nav-brand">
+    <div class="nav-logo">I</div>
+    <span style="font-weight:600;letter-spacing:-.01em">Immuvi</span>
+    <span style="opacity:.5;font-size:12px;margin-left:4px">Command Center</span>
+  </div>
+  <div class="nav-tabs">
+    <div class="nav-tab">Command HQ</div>
+    <div class="nav-tab">Angles</div>
+    <div class="nav-tab">Personas</div>
+    <div class="nav-tab active">Creative Tracker</div>
+    <div class="nav-tab">Creative Matrix</div>
+  </div>
+  <div class="nav-user">
+    <span class="mono" style="font-size:12px">⌘K</span>
+    <div class="nav-avatar">GP</div>
+  </div>
+</nav>
+
+<div class="loadbar"><div class="loadbar-fill" id="loadFill"></div></div>
+
+<!-- SCENE: 600vh pin with canvas frame sequence -->
+<section class="scene" id="scene">
+  <div class="scene-inner">
+    <canvas id="frameCanvas"></canvas>
+    <div class="frame-badge">FRAME <b id="frameNum">000</b> / 120</div>
+    <div class="scene-kpis" id="sceneKpis">
+      <div class="sk" data-from="10" data-to="30"><div class="sk-k">Creatives</div><div class="sk-v">66</div><div class="sk-d">+3</div></div>
+      <div class="sk" data-from="30" data-to="55"><div class="sk-k">Winners 7d</div><div class="sk-v">18</div><div class="sk-d">+2</div></div>
+      <div class="sk" data-from="55" data-to="80"><div class="sk-k">Spend 7d</div><div class="sk-v">$12.4k</div><div class="sk-d">+18%</div></div>
+      <div class="sk" data-from="80" data-to="115"><div class="sk-k">Blended ROAS</div><div class="sk-v">1.38×</div><div class="sk-d">+0.04</div></div>
+    </div>
+    <div class="scene-overlay">
+      <div>
+        <div class="scene-kicker"><span class="dot"></span>Creative Tracker · Frame Sequence</div>
+        <div class="scene-title-wrap">
+          <h1 class="scene-title">Every creative,<br><em>one frame</em> at a time.</h1>
+          <p class="scene-caption">A 120-frame scrub of the last seven days. Scroll down to play.</p>
+        </div>
+      </div>
+      <div class="scene-bot">
+        <div class="scene-meta">IMMUVI · COMMAND CENTER · v2.4</div>
+        <div class="scroll-hint"><span>scroll to play</span><span class="line"></span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="transition"></div>
+
+<!-- TABLE SECTION -->
+<section class="sheet">
+  <div class="sheet-head">
+    <h2 class="sheet-title">And here they are,<br>all eight.</h2>
+    <p class="sheet-sub">Past the scene, back to the grid. Eight hand-picked creatives from this week — the full tracker follows below.</p>
+  </div>
+
+  <div class="summary-strip">
+    <div class="strip-cell"><div class="strip-label">Creatives</div><div class="strip-value">66</div><div class="strip-delta">+3</div></div>
+    <div class="strip-cell"><div class="strip-label">Winners 7d</div><div class="strip-value">18</div><div class="strip-delta">+2</div></div>
+    <div class="strip-cell"><div class="strip-label">Fatigued</div><div class="strip-value">3</div><div class="strip-delta neg">+1</div></div>
+    <div class="strip-cell"><div class="strip-label">Spend 7d</div><div class="strip-value">$12.4k</div><div class="strip-delta">+18%</div></div>
+    <div class="strip-cell"><div class="strip-label">Blended ROAS</div><div class="strip-value">1.38×</div><div class="strip-delta">+0.04</div></div>
+  </div>
+
+  <div class="tracker">
+    <div class="tracker-head"><div>Creative</div><div>Angle</div><div>Persona</div><div>Hook</div><div>Format</div><div>Status</div><div>Spend</div><div>ROAS</div></div>
+    <div class="tracker-row">
+      <div class="cell-name"><div class="thumb thumb-1"></div><div><div class="nm-title">5773-1 old winner</div><div class="nm-meta">AT-11439-v1</div></div></div>
+      <div><span class="pill p-accent">Art as Therapy</span></div>
+      <div><span class="pill p-soft">Women 25-45</span></div>
+      <div><span class="pill p-soft">POV</span></div>
+      <div><span class="pill p-soft">UGC · TOF</span></div>
+      <div><span class="pill p-massive">Massive</span></div>
+      <div class="num">$1,842</div>
+      <div class="num-big up">1.92×</div>
+    </div>
+    <div class="tracker-row">
+      <div class="cell-name"><div class="thumb thumb-2"></div><div><div class="nm-title">4570-1 old winner</div><div class="nm-meta">AT-10835</div></div></div>
+      <div><span class="pill p-accent">Emotional Literacy</span></div>
+      <div><span class="pill p-soft">Women 25-45</span></div>
+      <div><span class="pill p-soft">Curiosity</span></div>
+      <div><span class="pill p-soft">Static · TOF</span></div>
+      <div><span class="pill p-winner">Winner</span></div>
+      <div class="num">$806</div>
+      <div class="num-big up">1.54×</div>
+    </div>
+    <div class="tracker-row">
+      <div class="cell-name"><div class="thumb thumb-3"></div><div><div class="nm-title">4569-2 old winner</div><div class="nm-meta">AT-10834</div></div></div>
+      <div><span class="pill p-accent">Scarcity</span></div>
+      <div><span class="pill p-soft">Women 25-45</span></div>
+      <div><span class="pill p-soft">Pattern Int.</span></div>
+      <div><span class="pill p-soft">Static · TOF</span></div>
+      <div><span class="pill p-mild">Mild</span></div>
+      <div class="num">$412</div>
+      <div class="num-big">1.33×</div>
+    </div>
+    <div class="tracker-row">
+      <div class="cell-name"><div class="thumb thumb-4"></div><div><div class="nm-title">10785-2 old winner</div><div class="nm-meta">AT-10733</div></div></div>
+      <div><span class="pill p-accent">Scarcity</span></div>
+      <div><span class="pill p-soft">Women 25-45</span></div>
+      <div><span class="pill p-soft">Pattern Int.</span></div>
+      <div><span class="pill p-soft">Static · TOF</span></div>
+      <div><span class="pill p-fatigued">Fatigued</span></div>
+      <div class="num">$1,205</div>
+      <div class="num-big down">0.98×</div>
+    </div>
+    <div class="tracker-row">
+      <div class="cell-name"><div class="thumb thumb-5"></div><div><div class="nm-title">6197-1 old winner</div><div class="nm-meta">AT-10612</div></div></div>
+      <div><span class="pill p-accent">Scarcity</span></div>
+      <div><span class="pill p-soft">Women 25-45</span></div>
+      <div><span class="pill p-soft">Direct Offer</span></div>
+      <div><span class="pill p-soft">Static · TOF</span></div>
+      <div><span class="pill p-testing">Testing</span></div>
+      <div class="num">$28</div>
+      <div class="num-big" style="color:var(--ink-3)">—</div>
+    </div>
+    <div class="tracker-row">
+      <div class="cell-name"><div class="thumb thumb-6"></div><div><div class="nm-title">11591 new concept</div><div class="nm-meta">AT-11591</div></div></div>
+      <div><span class="pill p-accent">Emotional Literacy</span></div>
+      <div><span class="pill p-soft">Young Adults · Grief</span></div>
+      <div><span class="pill p-soft">Pain</span></div>
+      <div><span class="pill p-soft">Story · TOF</span></div>
+      <div><span class="pill p-winner">Winner</span></div>
+      <div class="num">$624</div>
+      <div class="num-big up">1.46×</div>
+    </div>
+    <div class="tracker-row">
+      <div class="cell-name"><div class="thumb thumb-7"></div><div><div class="nm-title">11542 social proof</div><div class="nm-meta">AT-11542</div></div></div>
+      <div><span class="pill p-accent">Social Proof 18K</span></div>
+      <div><span class="pill p-soft">Women 25-45</span></div>
+      <div><span class="pill p-soft">Testimonial</span></div>
+      <div><span class="pill p-soft">UGC · TOF</span></div>
+      <div><span class="pill p-winner">Winner</span></div>
+      <div class="num">$488</div>
+      <div class="num-big up">1.41×</div>
+    </div>
+    <div class="tracker-row">
+      <div class="cell-name"><div class="thumb thumb-8"></div><div><div class="nm-title">11436 new concept</div><div class="nm-meta">AT-11436</div></div></div>
+      <div><span class="pill p-accent">Calm / Unwind</span></div>
+      <div><span class="pill p-soft">Self-Care Adults</span></div>
+      <div><span class="pill p-soft">Curiosity</span></div>
+      <div><span class="pill p-soft">Hook+Offer · TOF</span></div>
+      <div><span class="pill p-loser">Loser</span></div>
+      <div class="num">$187</div>
+      <div class="num-big down">0.42×</div>
+    </div>
+  </div>
+</section>
+
+<div class="foot">Immuvi Command Center · frame-sequence variant</div>
+
+<script>
+// Canvas frame sequence
+const canvas = document.getElementById('frameCanvas');
+const ctx = canvas.getContext('2d');
+const scene = document.getElementById('scene');
+const frameNumEl = document.getElementById('frameNum');
+const loadFill = document.getElementById('loadFill');
+const sks = document.querySelectorAll('.sk');
+const TOTAL = 120;
+let dpr = Math.min(window.devicePixelRatio || 1, 2);
+
+function resize(){
+  canvas.width = window.innerWidth * dpr;
+  canvas.height = window.innerHeight * dpr;
+  canvas.style.width = window.innerWidth + 'px';
+  canvas.style.height = window.innerHeight + 'px';
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+}
+resize();
+window.addEventListener('resize', resize);
+
+function drawFrame(f){
+  const w = window.innerWidth, h = window.innerHeight;
+  const t = f / TOTAL; // 0..1
+
+  // Background gradient - warms as we progress
+  const grad = ctx.createRadialGradient(w*0.5, h*0.5, 50, w*0.5, h*0.5, Math.max(w,h));
+  const warmth = 0.15 + t * 0.6;
+  grad.addColorStop(0, `rgba(192, 83, 54, ${warmth})`);
+  grad.addColorStop(0.5, `rgba(30, 25, 20, ${0.8 - t*0.3})`);
+  grad.addColorStop(1, '#0f0d0a');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0,0,w,h);
+
+  // Rings — expand outward as f grows
+  const cx = w*0.5, cy = h*0.5;
+  ctx.lineWidth = 1;
+  for (let i = 0; i < 12; i++){
+    const phase = (f * 0.8 + i * 14) % 240;
+    const r = phase * 3.2;
+    const alpha = Math.max(0, 1 - phase/240) * 0.35;
+    ctx.strokeStyle = i % 3 === 0 ? `rgba(0,163,184,${alpha})` : `rgba(192,83,54,${alpha})`;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI*2);
+    ctx.stroke();
+  }
+
+  // Geometric morph — rotating squares that turn into a bar chart by the end
+  const n = 8; // 8 shapes for 8 creatives
+  const roasArr = [1.92, 1.54, 1.33, 0.98, 0.0, 1.46, 1.41, 0.42];
+  const colors = ['#35683f','#5e7557','#a77c2e','#c14400','#4f6780','#5e7557','#00a3b8','#a83b28'];
+  const baseY = h * 0.5;
+  const spread = Math.min(w * 0.7, 800);
+  const startX = cx - spread/2;
+  const morph = Math.min(t * 1.4, 1); // 0..1 finishing by f=85
+
+  for (let i = 0; i < n; i++){
+    const x = startX + (spread/(n-1)) * i;
+    const rotation = (1 - morph) * (Math.PI/4 + f * 0.02 + i * 0.3);
+    const scale = 1 - morph * 0.5;
+    const barH = morph * (roasArr[i] * 80 + 10);
+    const sqSize = 44 * scale;
+
+    ctx.save();
+    ctx.translate(x, baseY);
+
+    // draw morphing element: starts as rotating square, ends as vertical bar
+    ctx.fillStyle = colors[i];
+    ctx.globalAlpha = 0.15 + morph * 0.75;
+
+    if (morph < 0.98){
+      // rotating square
+      ctx.rotate(rotation);
+      ctx.fillRect(-sqSize/2, -sqSize/2, sqSize, sqSize);
+    } else {
+      // bar chart
+      ctx.fillRect(-20, -barH, 40, barH);
+      // label
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = '#fff';
+      ctx.font = '600 10px "JetBrains Mono", monospace';
+      ctx.textAlign = 'center';
+      if (roasArr[i] > 0) ctx.fillText(roasArr[i].toFixed(2)+'×', 0, 18);
+      else ctx.fillText('—', 0, 18);
+    }
+    ctx.restore();
+  }
+
+  // Top cinematic bars (letterbox effect that fades away)
+  const letterH = (1 - t) * 80;
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, w, letterH);
+  ctx.fillRect(0, h - letterH, w, letterH);
+
+  // Subtle noise (grain)
+  ctx.globalAlpha = 0.04;
+  for (let i = 0; i < 80; i++){
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(Math.random()*w, Math.random()*h, 1.5, 1.5);
+  }
+  ctx.globalAlpha = 1;
+}
+
+let currentFrame = -1;
+function update(){
+  const rect = scene.getBoundingClientRect();
+  const scrollable = scene.offsetHeight - window.innerHeight;
+  const inside = -rect.top;
+  const progress = Math.min(Math.max(inside / scrollable, 0), 1);
+  const frame = Math.floor(progress * TOTAL);
+
+  if (frame !== currentFrame){
+    currentFrame = frame;
+    drawFrame(frame);
+    frameNumEl.textContent = String(frame).padStart(3,'0');
+    // loading bar fills during first 20 frames
+    const loadPct = Math.min(frame / 20, 1) * 100;
+    loadFill.style.width = loadPct + '%';
+    // keyed KPI highlights
+    sks.forEach(el => {
+      const from = parseInt(el.dataset.from);
+      const to = parseInt(el.dataset.to);
+      el.classList.toggle('on', frame >= from && frame <= to);
+    });
+  }
+  requestAnimationFrame(update);
+}
+drawFrame(0);
+requestAnimationFrame(update);
+</script>
+</body>
+</html>

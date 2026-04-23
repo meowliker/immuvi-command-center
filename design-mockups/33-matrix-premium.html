@@ -1,0 +1,885 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=1440, initial-scale=1" />
+<title>Creative Matrix — Astro Rekha</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --canvas:#faf9f5;
+    --paper:#ffffff;
+    --paper-2:#f3f1e9;
+    --paper-3:#ede9dc;
+    --line:#e8e5dc;
+    --line-hi:#d6d1c1;
+    --ink:#1a1814;
+    --ink-2:#585449;
+    --ink-3:#8f8a7c;
+    --ink-4:#b8b3a2;
+    --accent:#c05336;
+    --accent-soft:#f5e3da;
+    --cyan:#00a3b8;
+    --heat-massive: rgba(53,104,63,0.18);
+    --heat-winner:  rgba(94,117,87,0.14);
+    --heat-mild:    rgba(167,124,46,0.12);
+    --heat-neutral: #f3f1e9;
+    --heat-fatigue: rgba(193,68,0,0.12);
+    --heat-loser:   rgba(168,59,40,0.18);
+    --swatch-massive:#35683f;
+    --swatch-winner:#5e7557;
+    --swatch-mild:#a77c2e;
+    --swatch-neutral:#b8b3a2;
+    --swatch-fatigue:#c14400;
+    --swatch-loser:#a83b28;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;background:var(--canvas);color:var(--ink);font-family:'Inter',sans-serif;-webkit-font-smoothing:antialiased;font-feature-settings:'ss01','cv11'}
+  body{min-height:100vh;font-size:13px;line-height:1.45}
+  .serif{font-family:'Instrument Serif',serif;font-style:italic;font-weight:400;letter-spacing:-0.01em}
+  .mono{font-family:'JetBrains Mono',monospace;font-weight:400}
+
+  /* ===== Masthead ===== */
+  .masthead{
+    position:sticky;top:0;z-index:60;height:40px;
+    background:rgba(250,249,245,0.88);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
+    border-bottom:1px solid var(--line);
+    display:flex;align-items:center;padding:0 28px;gap:14px;
+  }
+  .brand{display:flex;align-items:center;gap:10px;font-weight:600;font-size:12.5px;letter-spacing:-0.01em}
+  .brand-mark{width:18px;height:18px;border-radius:5px;background:linear-gradient(135deg,var(--accent) 0%,#8a3a25 100%);box-shadow:inset 0 1px 0 rgba(255,255,255,0.18)}
+  .brand-sep{color:var(--ink-4);font-weight:400}
+  .brand-prod{color:var(--ink-2);font-weight:500}
+  .mast-spacer{flex:1}
+  .live-pill{display:inline-flex;align-items:center;gap:6px;height:22px;padding:0 10px;border-radius:999px;background:var(--paper);border:1px solid var(--line);font-size:11px;color:var(--ink-2);font-weight:500}
+  .live-dot{width:6px;height:6px;border-radius:50%;background:#4a8f56;box-shadow:0 0 0 3px rgba(74,143,86,0.14);animation:pulse 2.4s infinite ease-in-out}
+  @keyframes pulse{50%{box-shadow:0 0 0 5px rgba(74,143,86,0.05)}}
+  .sync{display:inline-flex;align-items:center;gap:6px;color:var(--ink-3);font-size:11px}
+  .sync svg{width:11px;height:11px}
+
+  /* ===== Hero ===== */
+  .hero{padding:32px 48px 22px;max-width:1600px;margin:0 auto}
+  .hero-title{font-size:40px;line-height:1;color:var(--ink);margin:0 0 10px;letter-spacing:-0.02em}
+  .hero-title .dot{color:var(--accent);font-style:normal}
+  .hero-sub{font-size:13.5px;color:var(--ink-2);max-width:920px;line-height:1.55}
+  .hero-sub .mono-inline{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--ink);background:var(--paper-2);padding:1px 6px;border-radius:4px}
+
+  /* ===== Insight Spine ===== */
+  .spine{max-width:1600px;margin:0 auto;padding:6px 48px 28px;display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+  .insight{
+    background:var(--paper);border:1px solid var(--line);border-radius:14px;
+    padding:18px 20px;min-height:120px;
+    display:flex;flex-direction:column;justify-content:space-between;
+    position:relative;overflow:hidden;
+    transition:border-color .18s ease, transform .18s ease;
+  }
+  .insight::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--glow);opacity:0.9}
+  .insight:hover{border-color:var(--line-hi);transform:translateY(-1px)}
+  .insight.win{--glow:var(--swatch-massive)}
+  .insight.risk{--glow:var(--swatch-fatigue)}
+  .insight.opp{--glow:var(--cyan)}
+  .ins-head{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+  .ins-icon{font-size:16px;width:22px;height:22px;display:inline-flex;align-items:center;justify-content:center}
+  .ins-label{font-size:10.5px;letter-spacing:0.1em;text-transform:uppercase;color:var(--ink-3);font-weight:600}
+  .ins-title{font-size:22px;line-height:1.15;color:var(--ink);letter-spacing:-0.01em;margin:0 0 6px}
+  .ins-title .strong{font-style:normal;font-family:'Inter';font-weight:600;font-size:19px}
+  .ins-metric{font-size:12px;color:var(--ink-2);margin-bottom:12px;line-height:1.5}
+  .ins-metric .mono-inline{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--ink)}
+  .ins-action{display:inline-flex;align-items:center;gap:6px;color:var(--accent);font-size:12px;font-weight:600;cursor:pointer;padding:4px 0;border-bottom:1px solid transparent;transition:border-color .15s ease;align-self:flex-start}
+  .ins-action:hover{border-color:var(--accent)}
+  .ins-action svg{width:11px;height:11px}
+
+  /* ===== Matrix ===== */
+  .matrix-wrap{max-width:1600px;margin:0 auto;padding:0 48px 12px}
+  .matrix-bar{display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:14px;padding:0 4px}
+  .matrix-bar .m-title{font-size:13px;color:var(--ink-2);font-weight:500;letter-spacing:0.02em}
+  .matrix-bar .m-meta{font-size:11.5px;color:var(--ink-3);font-family:'JetBrains Mono',monospace}
+
+  .matrix{
+    background:var(--paper);border:1px solid var(--line);border-radius:16px;
+    padding:14px;overflow:hidden;
+    box-shadow:0 1px 0 rgba(0,0,0,0.02), 0 20px 40px -28px rgba(26,24,20,0.12);
+  }
+  .grid{
+    display:grid;
+    grid-template-columns:220px repeat(5, minmax(140px,1fr)) 110px;
+    gap:8px;
+  }
+  /* Header row */
+  .col-corner{
+    grid-column:1;grid-row:1;
+    padding:12px 10px;
+    display:flex;flex-direction:column;justify-content:flex-end;
+    font-size:10.5px;letter-spacing:0.1em;text-transform:uppercase;color:var(--ink-3);font-weight:600;
+  }
+  .col-corner .crn-sub{font-family:'JetBrains Mono',monospace;text-transform:none;letter-spacing:0;color:var(--ink-4);font-size:10px;margin-top:3px;font-weight:400}
+  .col-h{
+    grid-row:1;padding:10px 12px 12px;border-bottom:1px solid var(--line-hi);
+    display:flex;flex-direction:column;gap:3px;
+  }
+  .col-h .name{font-family:'Instrument Serif',serif;font-style:italic;font-size:15px;color:var(--ink);line-height:1.15}
+  .col-h .meta{font-family:'JetBrains Mono',monospace;font-size:10.5px;color:var(--ink-3)}
+  .col-h.tot-h{grid-column:7}
+  .col-h.tot-h .name{color:var(--ink-2);font-size:13px}
+  .col-h.tot-h .meta{color:var(--ink-3)}
+
+  /* Row header */
+  .row-h{
+    grid-column:1;
+    padding:12px 14px 10px 8px;
+    border-right:1px solid var(--line-hi);
+    display:flex;flex-direction:column;justify-content:center;gap:3px;
+    background:var(--paper);
+    position:sticky;left:0;z-index:2;
+  }
+  .row-h .name{font-family:'Instrument Serif',serif;font-style:italic;font-size:17px;color:var(--ink);line-height:1.12;letter-spacing:-0.005em}
+  .row-h .meta{font-family:'JetBrains Mono',monospace;font-size:10.5px;color:var(--ink-3);display:flex;align-items:center;gap:6px}
+  .row-h .meta .fat{color:var(--swatch-fatigue);font-weight:500}
+  .row-h.tot-r{background:var(--paper-3);border-right:none;border-top:1px solid var(--line-hi)}
+  .row-h.tot-r .name{font-family:'Inter';font-style:normal;font-weight:600;font-size:11px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-2)}
+
+  /* Data cell */
+  .cell{
+    position:relative;min-height:120px;
+    padding:10px 12px 10px;border-radius:10px;
+    background:var(--paper-2);
+    border:1px solid transparent;
+    display:grid;grid-template-rows:auto 1fr auto;
+    cursor:pointer;
+    transition:transform .16s ease, box-shadow .16s ease, border-color .16s ease;
+    overflow:hidden;
+    opacity:0;transform:translateY(4px);
+    animation:cellIn .38s cubic-bezier(.2,.7,.2,1) forwards;
+  }
+  @keyframes cellIn{to{opacity:1;transform:translateY(0)}}
+  .cell::before{
+    content:"";position:absolute;left:0;right:0;top:0;height:1px;
+    background:linear-gradient(to right, transparent, rgba(255,255,255,0.7), transparent);
+    pointer-events:none;opacity:0.8;
+  }
+  .cell:hover{
+    transform:translateY(-1px);
+    box-shadow:0 0 0 1px var(--accent), 0 10px 22px -16px rgba(192,83,54,0.35);
+    z-index:3;
+    border-color:transparent;
+  }
+  .cell .top{display:flex;align-items:center;gap:7px;font-family:'JetBrains Mono',monospace;font-size:10.5px;color:var(--ink-2)}
+  .dot{width:6px;height:6px;border-radius:50%;flex:none}
+  .d-win{background:var(--swatch-massive)}
+  .d-sage{background:var(--swatch-winner)}
+  .d-mild{background:var(--swatch-mild)}
+  .d-neutral{background:var(--ink-4)}
+  .d-fatigue{background:var(--swatch-fatigue)}
+  .d-loser{background:var(--swatch-loser)}
+  .d-testing{background:var(--cyan);box-shadow:0 0 0 2px rgba(0,163,184,0.18)}
+  .cell .top .warn{margin-left:auto;display:inline-flex;align-items:center;gap:3px;color:var(--swatch-fatigue);font-weight:500;font-size:10px;font-family:'JetBrains Mono',monospace}
+  .cell .top .warn svg{width:10px;height:10px}
+
+  .cell .big{
+    font-family:'Instrument Serif',serif;font-style:italic;font-size:38px;line-height:1;color:var(--ink);
+    display:flex;align-items:center;justify-content:center;letter-spacing:-0.02em;
+    padding:2px 0 4px;
+  }
+  .cell .big .unit{font-family:'Inter';font-style:normal;font-size:14px;color:var(--ink-3);margin-left:2px;align-self:flex-end;padding-bottom:6px;font-weight:500}
+  .cell.testing .big{font-family:'Inter';font-style:normal;font-size:13px;color:var(--cyan);font-weight:600;letter-spacing:0.12em;text-transform:uppercase}
+
+  .cell .bot{display:flex;align-items:center;justify-content:space-between;gap:6px;margin-top:auto}
+  .cell .spend{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--ink-2);font-weight:500}
+  .thumbs{display:flex;align-items:center}
+  .thumbs .t{
+    width:16px;height:16px;border-radius:50%;border:1.5px solid var(--paper);
+    background-size:cover;background-position:center;margin-left:-5px;
+    box-shadow:0 1px 2px rgba(26,24,20,0.12);
+  }
+  .thumbs .t:first-child{margin-left:0}
+  .thumbs .plus{margin-left:4px;font-family:'JetBrains Mono',monospace;font-size:9.5px;color:var(--ink-3);font-weight:500}
+
+  /* Heat variants */
+  .h-massive{background:var(--heat-massive)}
+  .h-winner {background:var(--heat-winner)}
+  .h-mild   {background:var(--heat-mild)}
+  .h-neutral{background:var(--heat-neutral)}
+  .h-fatigue{background:var(--heat-fatigue)}
+  .h-loser  {background:var(--heat-loser)}
+
+  /* Empty */
+  .cell.empty{
+    background:var(--paper);
+    border:1px dashed var(--line-hi);
+    display:flex;align-items:center;justify-content:center;
+    color:var(--ink-4);font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:0.04em;
+    min-height:120px;cursor:default;
+  }
+  .cell.empty:hover{transform:none;box-shadow:none;border-color:var(--line-hi);background:var(--paper)}
+  .cell.empty .emp-inner{display:flex;flex-direction:column;align-items:center;gap:6px;opacity:0.95}
+  .cell.empty .emp-plus{width:18px;height:18px;border-radius:50%;border:1px dashed var(--ink-4);display:flex;align-items:center;justify-content:center;color:var(--ink-4);font-family:'Inter';font-size:13px;line-height:1}
+  .cell.empty .emp-txt{font-size:10.5px}
+  .cell.empty:hover .emp-plus{border-color:var(--accent);color:var(--accent)}
+  .cell.empty:hover{border-color:var(--accent);cursor:pointer}
+
+  /* Totals cells */
+  .cell.tot{
+    background:var(--paper-3);border:1px solid var(--line-hi);
+    min-height:120px;
+  }
+  .cell.tot .big{font-size:34px;color:var(--ink)}
+  .cell.tot .label{font-family:'Inter';font-weight:600;font-size:9.5px;letter-spacing:0.1em;text-transform:uppercase;color:var(--ink-3)}
+  .cell.tot .bot{color:var(--ink-3);font-family:'JetBrains Mono',monospace;font-size:10.5px;justify-content:flex-start}
+  .cell.tot.grand{background:var(--ink);color:var(--paper)}
+  .cell.tot.grand .label{color:var(--ink-4)}
+  .cell.tot.grand .big{color:#fff}
+  .cell.tot.grand .bot{color:var(--ink-4)}
+  .cell.tot.warn-p .big{color:var(--swatch-fatigue)}
+
+  /* Hidden column (persona filter toggle) */
+  .grid.hide-1 .col-p1, .grid.hide-1 .c-p1{display:none}
+  .grid.hide-2 .col-p2, .grid.hide-2 .c-p2{display:none}
+  .grid.hide-3 .col-p3, .grid.hide-3 .c-p3{display:none}
+  .grid.hide-4 .col-p4, .grid.hide-4 .c-p4{display:none}
+  .grid.hide-5 .col-p5, .grid.hide-5 .c-p5{display:none}
+
+  /* ===== Legend / filter strip ===== */
+  .legend{
+    max-width:1600px;margin:0 auto;padding:18px 48px 10px;
+    display:flex;align-items:center;gap:28px;flex-wrap:wrap;
+  }
+  .lg-group{display:flex;align-items:center;gap:10px}
+  .lg-label{font-size:10.5px;letter-spacing:0.1em;text-transform:uppercase;color:var(--ink-3);font-weight:600;margin-right:4px}
+  .lg-scale{display:flex;align-items:center;gap:0;border:1px solid var(--line);border-radius:999px;padding:4px;background:var(--paper)}
+  .lg-seg{display:inline-flex;align-items:center;gap:6px;padding:3px 10px;border-radius:999px;font-family:'JetBrains Mono',monospace;font-size:10.5px;color:var(--ink-2)}
+  .lg-sq{width:10px;height:10px;border-radius:3px;border:1px solid rgba(0,0,0,0.04)}
+  .filter-row{display:flex;align-items:center;gap:8px;margin-left:auto;flex-wrap:wrap}
+  .fchip{
+    display:inline-flex;align-items:center;gap:7px;
+    padding:5px 11px;border-radius:999px;border:1px solid var(--line);background:var(--paper);
+    font-size:11.5px;color:var(--ink-2);cursor:pointer;user-select:none;
+    transition:background .14s ease, color .14s ease, border-color .14s ease;
+    font-weight:500;
+  }
+  .fchip .fdot{width:6px;height:6px;border-radius:50%;background:var(--accent);opacity:0.7}
+  .fchip.off{color:var(--ink-4);background:var(--paper-2);text-decoration:line-through;text-decoration-color:var(--ink-4);text-decoration-thickness:1px}
+  .fchip.off .fdot{background:var(--ink-4);opacity:0.5}
+  .fchip:hover{border-color:var(--line-hi)}
+
+  /* ===== Drawer ===== */
+  .drawer-scrim{
+    position:fixed;inset:0;background:rgba(26,24,20,0.22);backdrop-filter:blur(2px);
+    opacity:0;pointer-events:none;transition:opacity .28s ease;z-index:70;
+  }
+  .drawer-scrim.open{opacity:1;pointer-events:auto}
+  .drawer{
+    position:fixed;top:0;right:0;bottom:0;width:440px;max-width:92vw;
+    background:var(--paper);border-left:1px solid var(--line-hi);
+    transform:translateX(105%);transition:transform .28s cubic-bezier(.2,.7,.2,1);
+    z-index:71;display:flex;flex-direction:column;
+    box-shadow:-24px 0 50px -20px rgba(26,24,20,0.22);
+  }
+  .drawer.open{transform:translateX(0)}
+  .dh{padding:22px 24px 14px;border-bottom:1px solid var(--line)}
+  .dh-kicker{font-size:10.5px;letter-spacing:0.12em;text-transform:uppercase;color:var(--ink-3);font-weight:600;margin-bottom:4px}
+  .dh-title{font-family:'Instrument Serif',serif;font-style:italic;font-size:26px;line-height:1.15;color:var(--ink);letter-spacing:-0.01em;margin:0 0 10px}
+  .dh-stats{display:flex;gap:16px;font-family:'JetBrains Mono',monospace;font-size:11.5px;color:var(--ink-2)}
+  .dh-stats .v{color:var(--ink);font-weight:500}
+  .dh-close{position:absolute;top:14px;right:14px;width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:var(--paper-2);border:1px solid var(--line);cursor:pointer;color:var(--ink-2)}
+  .dh-close:hover{background:var(--paper-3)}
+  .dh-close svg{width:12px;height:12px}
+  .dlist{flex:1;overflow:auto;padding:14px 18px 14px}
+  .ditem{display:grid;grid-template-columns:44px 1fr auto;gap:12px;align-items:center;padding:10px 8px;border-radius:10px;transition:background .14s ease;cursor:pointer}
+  .ditem:hover{background:var(--paper-2)}
+  .dthumb{width:44px;height:44px;border-radius:8px;background-size:cover;background-position:center;background-color:var(--paper-3);box-shadow:inset 0 0 0 1px var(--line)}
+  .dname{font-size:12.5px;color:var(--ink);font-weight:500;line-height:1.25;margin-bottom:2px}
+  .dmeta{font-family:'JetBrains Mono',monospace;font-size:10.5px;color:var(--ink-3)}
+  .droas{font-family:'Instrument Serif',serif;font-style:italic;font-size:20px;color:var(--ink);letter-spacing:-0.01em}
+  .droas.good{color:var(--swatch-massive)}
+  .droas.warn{color:var(--swatch-fatigue)}
+  .dfoot{padding:16px 22px;border-top:1px solid var(--line);background:var(--paper-2);display:flex;align-items:center;gap:12px}
+  .dcta{
+    flex:1;display:inline-flex;align-items:center;justify-content:center;gap:8px;
+    height:40px;border-radius:10px;background:var(--ink);color:#fff;
+    font-size:12.5px;font-weight:600;cursor:pointer;
+    transition:background .14s ease;
+  }
+  .dcta:hover{background:#2a2721}
+  .dcta svg{width:12px;height:12px}
+  .dghost{height:40px;padding:0 16px;border-radius:10px;background:var(--paper);border:1px solid var(--line);font-size:12px;color:var(--ink-2);cursor:pointer;font-weight:500}
+  .dghost:hover{border-color:var(--line-hi)}
+
+  /* Responsive */
+  @media (max-width:1280px){
+    .grid{grid-template-columns:200px repeat(5, minmax(128px,1fr)) 104px}
+    .hero,.spine,.matrix-wrap,.legend{padding-left:32px;padding-right:32px}
+  }
+</style>
+</head>
+<body>
+
+<header class="masthead">
+  <div class="brand">
+    <span class="brand-mark" aria-hidden="true"></span>
+    <span>Astro Rekha</span>
+    <span class="brand-sep">/</span>
+    <span class="brand-prod">Creative OS</span>
+  </div>
+  <div class="mast-spacer"></div>
+  <span class="live-pill"><span class="live-dot"></span>Live · Meta Ads</span>
+  <span class="sync">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 11-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg>
+    Synced 2m ago
+  </span>
+</header>
+
+<section class="hero">
+  <h1 class="hero-title serif">Creative Matrix<span class="dot">.</span></h1>
+  <p class="hero-sub">
+    <span class="mono-inline">42</span> creatives across <span class="mono-inline">19 / 35</span> angle × persona combinations ·
+    <span class="mono-inline">16</span> empty combos ·
+    <span class="mono-inline">$12.4k</span> spend 7d ·
+    <span class="mono-inline">1.38×</span> blended ROAS
+  </p>
+</section>
+
+<section class="spine" aria-label="Today's insights">
+  <article class="insight win">
+    <div>
+      <div class="ins-head">
+        <span class="ins-icon">🏆</span>
+        <span class="ins-label">Strongest combo</span>
+      </div>
+      <h3 class="ins-title serif">Art as Therapy × Women 25-45</h3>
+      <p class="ins-metric"><span class="mono-inline">1.78×</span> ROAS across 12 creatives · <span class="mono-inline">$4,920</span> spend · pacing +18% WoW</p>
+    </div>
+    <a class="ins-action" href="#">Scale this combo
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M13 5l7 7-7 7"/></svg>
+    </a>
+  </article>
+
+  <article class="insight risk">
+    <div>
+      <div class="ins-head">
+        <span class="ins-icon">⚠️</span>
+        <span class="ins-label">Refresh or kill</span>
+      </div>
+      <h3 class="ins-title serif">Scarcity × Women 25-45</h3>
+      <p class="ins-metric">ROAS dropped <span class="mono-inline">-42%</span> WoW · 4 creatives fatigued · <span class="mono-inline">$1,850</span> at risk</p>
+    </div>
+    <a class="ins-action" href="#">Refresh hook
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M13 5l7 7-7 7"/></svg>
+    </a>
+  </article>
+
+  <article class="insight opp">
+    <div>
+      <div class="ins-head">
+        <span class="ins-icon">🎯</span>
+        <span class="ins-label">Next opportunity</span>
+      </div>
+      <h3 class="ins-title serif">Emotional Literacy × Parents</h3>
+      <p class="ins-metric">Untested · angle avg <span class="mono-inline">1.50×</span> · try <span class="mono-inline">1–2</span> concepts</p>
+    </div>
+    <a class="ins-action" href="#">Brief it
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M13 5l7 7-7 7"/></svg>
+    </a>
+  </article>
+</section>
+
+<section class="matrix-wrap">
+  <div class="matrix-bar">
+    <span class="m-title">Angle × Persona heatmap</span>
+    <span class="m-meta">7 angles · 5 personas · 35 combos · 19 active</span>
+  </div>
+
+  <div class="matrix">
+    <div class="grid" id="grid">
+
+      <!-- Row 1: headers -->
+      <div class="col-corner">
+        Angle ↓ · Persona →
+        <span class="crn-sub">click any cell to open</span>
+      </div>
+
+      <div class="col-h col-p1">
+        <span class="name">Stressed Women 25-45</span>
+        <span class="meta">24 creatives · 1.54×</span>
+      </div>
+      <div class="col-h col-p2">
+        <span class="name">Creative Self-Care Adults</span>
+        <span class="meta">10 creatives · 1.24×</span>
+      </div>
+      <div class="col-h col-p3">
+        <span class="name">Parents of Emotional Kids</span>
+        <span class="meta">6 creatives · 0.94×</span>
+      </div>
+      <div class="col-h col-p4">
+        <span class="name">Silently Scrolling Adults</span>
+        <span class="meta">1 creative · 1.22×</span>
+      </div>
+      <div class="col-h col-p5">
+        <span class="name">Young Adults · Grief</span>
+        <span class="meta">1 creative · 1.46×</span>
+      </div>
+      <div class="col-h tot-h">
+        <span class="name">Angle total</span>
+        <span class="meta">portfolio</span>
+      </div>
+
+      <!-- =========== ROW: Art as Therapy =========== -->
+      <div class="row-h"><span class="name">Art as Therapy Alternative</span><span class="meta">18 creatives · 1.58×</span></div>
+
+      <div class="cell h-massive c-p1" data-combo="Art as Therapy × Women 25-45" data-count="12" data-roas="1.78" data-spend="$4,920">
+        <div class="top"><span class="dot d-win"></span>12 · creatives</div>
+        <div class="big">1.78<span class="unit">×</span></div>
+        <div class="bot"><span class="spend">$4,920</span>
+          <div class="thumbs">
+            <span class="t" style="background:linear-gradient(135deg,#c6846a,#8a3e26)"></span>
+            <span class="t" style="background:linear-gradient(135deg,#e6b097,#a8573a)"></span>
+            <span class="t" style="background:linear-gradient(135deg,#a77c2e,#6b4e18)"></span>
+            <span class="plus">+9</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="cell h-winner c-p2" data-combo="Art as Therapy × Self-Care" data-count="4" data-roas="1.48" data-spend="$1,240">
+        <div class="top"><span class="dot d-sage"></span>4 · creatives</div>
+        <div class="big">1.48<span class="unit">×</span></div>
+        <div class="bot"><span class="spend">$1,240</span>
+          <div class="thumbs">
+            <span class="t" style="background:linear-gradient(135deg,#6b8f6b,#3c5a3c)"></span>
+            <span class="t" style="background:linear-gradient(135deg,#a2b79c,#6a7f63)"></span>
+            <span class="t" style="background:linear-gradient(135deg,#8ca084,#526a4e)"></span>
+            <span class="plus">+1</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="cell h-mild c-p3" data-combo="Art as Therapy × Parents" data-count="2" data-roas="1.32" data-spend="$620">
+        <div class="top"><span class="dot d-mild"></span>2 · creatives</div>
+        <div class="big">1.32<span class="unit">×</span></div>
+        <div class="bot"><span class="spend">$620</span>
+          <div class="thumbs">
+            <span class="t" style="background:linear-gradient(135deg,#c9a65a,#7d6422)"></span>
+            <span class="t" style="background:linear-gradient(135deg,#b48e3a,#6e5418)"></span>
+          </div>
+        </div>
+      </div>
+
+      <div class="cell empty c-p4"><div class="emp-inner"><span class="emp-plus">+</span><span class="emp-txt">— untested —</span></div></div>
+      <div class="cell empty c-p5"><div class="emp-inner"><span class="emp-plus">+</span><span class="emp-txt">— untested —</span></div></div>
+
+      <div class="cell tot">
+        <div class="label">total</div>
+        <div class="big">1.58<span class="unit" style="font-size:12px">×</span></div>
+        <div class="bot">18 creatives · $6.8k</div>
+      </div>
+
+      <!-- =========== ROW: Calm/Unwind =========== -->
+      <div class="row-h"><span class="name">Calm / Unwind Ritual</span><span class="meta">9 creatives · 1.12×</span></div>
+
+      <div class="cell h-winner c-p1" data-combo="Calm/Unwind × Women 25-45" data-count="4" data-roas="1.41" data-spend="$1,420">
+        <div class="top"><span class="dot d-sage"></span>4 · creatives</div>
+        <div class="big">1.41<span class="unit">×</span></div>
+        <div class="bot"><span class="spend">$1,420</span>
+          <div class="thumbs">
+            <span class="t" style="background:linear-gradient(135deg,#7a9c86,#41614c)"></span>
+            <span class="t" style="background:linear-gradient(135deg,#a3bca9,#6a8772)"></span>
+            <span class="t" style="background:linear-gradient(135deg,#8fae97,#597a63)"></span>
+            <span class="plus">+1</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="cell h-neutral c-p2" data-combo="Calm/Unwind × Self-Care" data-count="3" data-roas="1.22" data-spend="$580">
+        <div class="top"><span class="dot d-neutral"></span>3 · creatives</div>
+        <div class="big">1.22<span class="unit">×</span></div>
+        <div class="bot"><span class="spend">$580</span>
+          <div class="thumbs">
+            <span class="t" style="background:linear-gradient(135deg,#b8b3a2,#807b6a)"></span>
+            <span class="t" style="background:linear-gradient(135deg,#c5bfab,#8f8876)"></span>
+            <span class="t" style="background:linear-gradient(135deg,#9e9987,#6c6857)"></span>
+          </div>
+        </div>
+      </div>
+
+      <div class="cell h-fatigue c-p3" data-combo="Calm/Unwind × Parents" data-count="2" data-roas="0.58" data-spend="$340">
+        <div class="top"><span class="dot d-fatigue"></span>2 · creatives</div>
+        <div class="big">0.58<span class="unit">×</span></div>
+        <div class="bot"><span class="spend">$340</span>
+          <div class="thumbs">
+            <span class="t" style="background:linear-gradient(135deg,#c55c32,#7d3415)"></span>
+            <span class="t" style="background:linear-gradient(135deg,#a84a23,#6a2d10)"></span>
+          </div>
+        </div>
+      </div>
+
+      <div class="cell empty c-p4"><div class="emp-inner"><span class="emp-plus">+</span><span class="emp-txt">— untested —</span></div></div>
+      <div class="cell empty c-p5"><div class="emp-inner"><span class="emp-plus">+</span><span class="emp-txt">— untested —</span></div></div>
+
+      <div class="cell tot">
+        <div class="label">total</div>
+        <div class="big">1.12<span class="unit" style="font-size:12px">×</span></div>
+        <div class="bot">9 creatives · $2.3k</div>
+      </div>
+
+      <!-- =========== ROW: Scarcity =========== -->
+      <div class="row-h"><span class="name">Scarcity / Limited-Time</span><span class="meta">5 creatives · 0.98× <span class="fat">· fatigued</span></span></div>
+
+      <div class="cell h-fatigue c-p1" data-combo="Scarcity × Women 25-45" data-count="4" data-roas="0.98" data-spend="$1,850" data-warn="-42% WoW">
+        <div class="top">
+          <span class="dot d-fatigue"></span>4 · creatives
+          <span class="warn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 22h20L12 2z"/><path d="M12 10v5M12 18v.01"/></svg>
+            -42% WoW
+          </span>
+        </div>
+        <div class="big">0.98<span class="unit">×</span></div>
+        <div class="bot"><span class="spend">$1,850</span>
+          <div class="thumbs">
+            <span class="t" style="background:linear-gradient(135deg,#b84a22,#742d10)"></span>
+            <span class="t" style="background:linear-gradient(135deg,#a4401c,#632509)"></span>
+            <span class="t" style="background:linear-gradient(135deg,#d1623a,#84361a)"></span>
+            <span class="plus">+1</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="cell h-neutral c-p2" data-combo="Scarcity × Self-Care" data-count="1" data-roas="1.28" data-spend="$310">
+        <div class="top"><span class="dot d-neutral"></span>1 · creative</div>
+        <div class="big">1.28<span class="unit">×</span></div>
+        <div class="bot"><span class="spend">$310</span>
+          <div class="thumbs">
+            <span class="t" style="background:linear-gradient(135deg,#b8b3a2,#7d7866)"></span>
+          </div>
+        </div>
+      </div>
+
+      <div class="cell empty c-p3"><div class="emp-inner"><span class="emp-plus">+</span><span class="emp-txt">— untested —</span></div></div>
+      <div class="cell empty c-p4"><div class="emp-inner"><span class="emp-plus">+</span><span class="emp-txt">— untested —</span></div></div>
+      <div class="cell empty c-p5"><div class="emp-inner"><span class="emp-plus">+</span><span class="emp-txt">— untested —</span></div></div>
+
+      <div class="cell tot">
+        <div class="label">total</div>
+        <div class="big" style="color:var(--swatch-fatigue)">0.98<span class="unit" style="font-size:12px;color:var(--swatch-fatigue)">×</span></div>
+        <div class="bot">5 creatives · $2.2k</div>
+      </div>
+
+      <!-- =========== ROW: Therapist-Recommended =========== -->
+      <div class="row-h"><span class="name">Therapist-Recommended</span><span class="meta">5 creatives · 1.38×</span></div>
+
+      <div class="cell h-winner c-p1" data-combo="Therapist-Rec × Women 25-45" data-count="2" data-roas="1.44" data-spend="$560">
+        <div class="top"><span class="dot d-sage"></span>2 · creatives</div>
+        <div class="big">1.44<span class="unit">×</span></div>
+        <div class="bot"><span class="spend">$560</span>
+          <div class="thumbs">
+            <span class="t" style="background:linear-gradient(135deg,#7f9d84,#44624c)"></span>
+            <span class="t" style="background:linear-gradient(135deg,#a5bbad,#6c8573)"></span>
+          </div>
+        </div>
+      </div>
+
+      <div class="cell h-mild c-p2" data-combo="Therapist-Rec × Self-Care" data-count="2" data-roas="1.30" data-spend="$360">
+        <div class="top"><span class="dot d-mild"></span>2 · creatives</div>
+        <div class="big">1.30<span class="unit">×</span></div>
+        <div class="bot"><span class="spend">$360</span>
+          <div class="thumbs">
+            <span class="t" style="background:linear-gradient(135deg,#c9a65a,#7d6422)"></span>
+            <span class="t" style="background:linear-gradient(135deg,#b79038,#6b5116)"></span>
+          </div>
+        </div>
+      </div>
+
+      <div class="cell h-neutral c-p3" data-combo="Therapist-Rec × Parents" data-count="1" data-roas="TESTING" data-spend="$32">
+        <div class="top"><span class="dot d-testing"></span>1 · creative</div>
+        <div class="big" style="font-family:'Inter';font-style:normal;font-size:13px;color:var(--cyan);font-weight:600;letter-spacing:0.12em;text-transform:uppercase">Testing</div>
+        <div class="bot"><span class="spend">$32</span>
+          <div class="thumbs">
+            <span class="t" style="background:linear-gradient(135deg,#5cbfcd,#007082)"></span>
+          </div>
+        </div>
+      </div>
+
+      <div class="cell empty c-p4"><div class="emp-inner"><span class="emp-plus">+</span><span class="emp-txt">— untested —</span></div></div>
+      <div class="cell empty c-p5"><div class="emp-inner"><span class="emp-plus">+</span><span class="emp-txt">— untested —</span></div></div>
+
+      <div class="cell tot">
+        <div class="label">total</div>
+        <div class="big">1.38<span class="unit" style="font-size:12px">×</span></div>
+        <div class="bot">5 creatives · $952</div>
+      </div>
+
+      <!-- =========== ROW: Emotional Literacy =========== -->
+      <div class="row-h"><span class="name">Emotional Literacy</span><span class="meta">3 creatives · 1.50×</span></div>
+
+      <div class="cell h-winner c-p1" data-combo="Emotional Lit × Women 25-45" data-count="1" data-roas="1.54" data-spend="$806">
+        <div class="top"><span class="dot d-sage"></span>1 · creative</div>
+        <div class="big">1.54<span class="unit">×</span></div>
+        <div class="bot"><span class="spend">$806</span>
+          <div class="thumbs">
+            <span class="t" style="background:linear-gradient(135deg,#7e9d83,#40604a)"></span>
+          </div>
+        </div>
+      </div>
+
+      <div class="cell empty c-p2"><div class="emp-inner"><span class="emp-plus">+</span><span class="emp-txt">— untested —</span></div></div>
+      <div class="cell empty c-p3"><div class="emp-inner"><span class="emp-plus">+</span><span class="emp-txt">— untested —</span></div></div>
+      <div class="cell empty c-p4"><div class="emp-inner"><span class="emp-plus">+</span><span class="emp-txt">— untested —</span></div></div>
+
+      <div class="cell h-winner c-p5" data-combo="Emotional Lit × Grief" data-count="1" data-roas="1.46" data-spend="$624">
+        <div class="top"><span class="dot d-sage"></span>1 · creative</div>
+        <div class="big">1.46<span class="unit">×</span></div>
+        <div class="bot"><span class="spend">$624</span>
+          <div class="thumbs">
+            <span class="t" style="background:linear-gradient(135deg,#86a58a,#4c6e56)"></span>
+          </div>
+        </div>
+      </div>
+
+      <div class="cell tot">
+        <div class="label">total</div>
+        <div class="big">1.50<span class="unit" style="font-size:12px">×</span></div>
+        <div class="bot">2 creatives · $1.4k</div>
+      </div>
+
+      <!-- =========== ROW: Pattern Interrupt =========== -->
+      <div class="row-h"><span class="name">Pattern Interrupt — Fake Alert</span><span class="meta">2 creatives · 1.22×</span></div>
+
+      <div class="cell empty c-p1"><div class="emp-inner"><span class="emp-plus">+</span><span class="emp-txt">— untested —</span></div></div>
+      <div class="cell empty c-p2"><div class="emp-inner"><span class="emp-plus">+</span><span class="emp-txt">— untested —</span></div></div>
+      <div class="cell empty c-p3"><div class="emp-inner"><span class="emp-plus">+</span><span class="emp-txt">— untested —</span></div></div>
+
+      <div class="cell h-neutral c-p4" data-combo="Pattern Interrupt × Silently Scrolling" data-count="2" data-roas="1.22" data-spend="$284">
+        <div class="top"><span class="dot d-neutral"></span>2 · creatives</div>
+        <div class="big">1.22<span class="unit">×</span></div>
+        <div class="bot"><span class="spend">$284</span>
+          <div class="thumbs">
+            <span class="t" style="background:linear-gradient(135deg,#b8b3a2,#807a67)"></span>
+            <span class="t" style="background:linear-gradient(135deg,#a9a48f,#706b58)"></span>
+          </div>
+        </div>
+      </div>
+
+      <div class="cell empty c-p5"><div class="emp-inner"><span class="emp-plus">+</span><span class="emp-txt">— untested —</span></div></div>
+
+      <div class="cell tot">
+        <div class="label">total</div>
+        <div class="big">1.22<span class="unit" style="font-size:12px">×</span></div>
+        <div class="bot">2 creatives · $284</div>
+      </div>
+
+      <!-- =========== ROW: Social Proof =========== -->
+      <div class="row-h"><span class="name">Social Proof — 18K</span><span class="meta">1 creative · 1.41×</span></div>
+
+      <div class="cell h-winner c-p1" data-combo="Social Proof × Women 25-45" data-count="1" data-roas="1.41" data-spend="$488">
+        <div class="top"><span class="dot d-sage"></span>1 · creative</div>
+        <div class="big">1.41<span class="unit">×</span></div>
+        <div class="bot"><span class="spend">$488</span>
+          <div class="thumbs">
+            <span class="t" style="background:linear-gradient(135deg,#7e9e83,#42624b)"></span>
+          </div>
+        </div>
+      </div>
+
+      <div class="cell empty c-p2"><div class="emp-inner"><span class="emp-plus">+</span><span class="emp-txt">— untested —</span></div></div>
+      <div class="cell empty c-p3"><div class="emp-inner"><span class="emp-plus">+</span><span class="emp-txt">— untested —</span></div></div>
+      <div class="cell empty c-p4"><div class="emp-inner"><span class="emp-plus">+</span><span class="emp-txt">— untested —</span></div></div>
+      <div class="cell empty c-p5"><div class="emp-inner"><span class="emp-plus">+</span><span class="emp-txt">— untested —</span></div></div>
+
+      <div class="cell tot">
+        <div class="label">total</div>
+        <div class="big">1.41<span class="unit" style="font-size:12px">×</span></div>
+        <div class="bot">1 creative · $488</div>
+      </div>
+
+      <!-- =========== TOTALS ROW =========== -->
+      <div class="row-h tot-r"><span class="name">Persona total</span></div>
+
+      <div class="cell tot c-p1">
+        <div class="label">Women 25-45</div>
+        <div class="big">1.54<span class="unit" style="font-size:12px">×</span></div>
+        <div class="bot">24 creatives · $9.5k</div>
+      </div>
+      <div class="cell tot c-p2">
+        <div class="label">Self-Care</div>
+        <div class="big">1.24<span class="unit" style="font-size:12px">×</span></div>
+        <div class="bot">10 creatives · $2.5k</div>
+      </div>
+      <div class="cell tot warn-p c-p3">
+        <div class="label">Parents</div>
+        <div class="big">0.94<span class="unit" style="font-size:12px">×</span></div>
+        <div class="bot">6 creatives · $992</div>
+      </div>
+      <div class="cell tot c-p4">
+        <div class="label">Silently Scrolling</div>
+        <div class="big">1.22<span class="unit" style="font-size:12px">×</span></div>
+        <div class="bot">1 creative · $284</div>
+      </div>
+      <div class="cell tot c-p5">
+        <div class="label">Grief</div>
+        <div class="big">1.46<span class="unit" style="font-size:12px">×</span></div>
+        <div class="bot">1 creative · $624</div>
+      </div>
+
+      <div class="cell tot grand">
+        <div class="label">blended</div>
+        <div class="big">1.38<span class="unit" style="font-size:12px;color:#d6d1c1">×</span></div>
+        <div class="bot">42 creatives · $12.4k · 7d</div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<section class="legend">
+  <div class="lg-group">
+    <span class="lg-label">Heatmap</span>
+    <div class="lg-scale">
+      <span class="lg-seg"><span class="lg-sq" style="background:var(--heat-loser)"></span>&lt; 0.5×</span>
+      <span class="lg-seg"><span class="lg-sq" style="background:var(--heat-fatigue)"></span>0.5–0.99</span>
+      <span class="lg-seg"><span class="lg-sq" style="background:var(--heat-neutral)"></span>1.0–1.29</span>
+      <span class="lg-seg"><span class="lg-sq" style="background:var(--heat-mild)"></span>1.3–1.49</span>
+      <span class="lg-seg"><span class="lg-sq" style="background:var(--heat-winner)"></span>1.5–1.69</span>
+      <span class="lg-seg"><span class="lg-sq" style="background:var(--heat-massive)"></span>≥ 1.7×</span>
+    </div>
+  </div>
+
+  <div class="filter-row">
+    <span class="lg-label">Personas</span>
+    <span class="fchip" data-col="1"><span class="fdot"></span>Women 25-45</span>
+    <span class="fchip" data-col="2"><span class="fdot"></span>Self-Care</span>
+    <span class="fchip" data-col="3"><span class="fdot"></span>Parents</span>
+    <span class="fchip" data-col="4"><span class="fdot"></span>Silently Scrolling</span>
+    <span class="fchip" data-col="5"><span class="fdot"></span>Grief</span>
+  </div>
+</section>
+
+<!-- Drawer -->
+<div class="drawer-scrim" id="scrim"></div>
+<aside class="drawer" id="drawer" aria-hidden="true">
+  <div style="position:relative">
+    <button class="dh-close" id="dclose" aria-label="Close">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+    </button>
+    <div class="dh">
+      <div class="dh-kicker">Combination</div>
+      <h2 class="dh-title serif" id="dtitle">Art as Therapy × Women 25-45</h2>
+      <div class="dh-stats">
+        <span><span class="v" id="dcount">12</span> creatives</span>
+        <span><span class="v" id="droasv">1.78×</span> ROAS</span>
+        <span><span class="v" id="dspend">$4,920</span> · 7d</span>
+      </div>
+    </div>
+  </div>
+  <div class="dlist" id="dlist">
+    <!-- dynamically populated -->
+  </div>
+  <div class="dfoot">
+    <button class="dcta">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+      Launch another creative
+    </button>
+    <button class="dghost">Brief</button>
+  </div>
+</aside>
+
+<script>
+  // Cell stagger: assign --i for row-major delay
+  (function(){
+    var cells = document.querySelectorAll('#grid .cell');
+    cells.forEach(function(c, i){
+      c.style.animationDelay = (Math.min(i,20) * 24) + 'ms';
+    });
+  })();
+
+  // Persona filter toggles
+  document.querySelectorAll('.fchip').forEach(function(chip){
+    chip.addEventListener('click', function(){
+      var col = chip.getAttribute('data-col');
+      chip.classList.toggle('off');
+      document.getElementById('grid').classList.toggle('hide-' + col);
+    });
+  });
+
+  // Drawer logic
+  var drawer = document.getElementById('drawer');
+  var scrim = document.getElementById('scrim');
+  var dtitle = document.getElementById('dtitle');
+  var dcount = document.getElementById('dcount');
+  var droasv = document.getElementById('droasv');
+  var dspend = document.getElementById('dspend');
+  var dlist = document.getElementById('dlist');
+
+  var sampleNames = [
+    'Hook variant · watercolor loop',
+    'UGC · studio close-up',
+    'Static carousel · 3-step',
+    'Narrator v2 · soft voice',
+    'Text-only · muted BG',
+    'Caption split · warm palette',
+    'AI-gen · paint pour',
+    'Direct hook · 0:03 cut',
+    'Testimonial · vertical',
+    'B-roll · linework',
+    'Story ad · native blue',
+    'Remix · stop-motion'
+  ];
+  var gradients = [
+    'linear-gradient(135deg,#c6846a,#8a3e26)',
+    'linear-gradient(135deg,#7a9c86,#41614c)',
+    'linear-gradient(135deg,#c9a65a,#7d6422)',
+    'linear-gradient(135deg,#8ca0a8,#4b6267)',
+    'linear-gradient(135deg,#b8b3a2,#807a67)',
+    'linear-gradient(135deg,#e6b097,#a8573a)',
+    'linear-gradient(135deg,#8a6aa0,#4e3a64)',
+    'linear-gradient(135deg,#a2b79c,#6a7f63)'
+  ];
+
+  function fillList(count, avgRoas){
+    dlist.innerHTML = '';
+    var n = Math.min(Math.max(count, 3), 12);
+    for (var i=0; i<n; i++){
+      // wobble individual creative ROAS around the combo average
+      var jitter = (Math.sin(i*1.7)*0.24);
+      var r = (parseFloat(avgRoas) || 1.2) + jitter;
+      r = Math.max(0.4, Math.min(2.3, r));
+      var cls = 'droas' + (r >= 1.5 ? ' good' : (r < 1 ? ' warn' : ''));
+      var spend = Math.round((parseFloat(avgRoas)||1)*210 + i*40);
+      var item = document.createElement('div');
+      item.className = 'ditem';
+      item.innerHTML =
+        '<div class="dthumb" style="background-image:' + gradients[i%gradients.length] + '"></div>' +
+        '<div><div class="dname">' + sampleNames[i%sampleNames.length] + '</div>' +
+        '<div class="dmeta">$' + spend + ' · 7d · ' + (2+i) + ' placements</div></div>' +
+        '<div class="' + cls + '">' + r.toFixed(2) + '×</div>';
+      dlist.appendChild(item);
+    }
+  }
+
+  function openDrawer(el){
+    var combo = el.getAttribute('data-combo') || 'Combination';
+    var count = el.getAttribute('data-count') || '—';
+    var roas  = el.getAttribute('data-roas')  || '—';
+    var spend = el.getAttribute('data-spend') || '—';
+    dtitle.textContent = combo;
+    dcount.textContent = count;
+    droasv.textContent = (roas === 'TESTING' ? 'Testing' : roas + '×');
+    dspend.textContent = spend;
+    fillList(parseInt(count,10)||3, roas === 'TESTING' ? 1.0 : roas);
+    drawer.classList.add('open');
+    scrim.classList.add('open');
+    drawer.setAttribute('aria-hidden','false');
+  }
+  function closeDrawer(){
+    drawer.classList.remove('open');
+    scrim.classList.remove('open');
+    drawer.setAttribute('aria-hidden','true');
+  }
+  document.querySelectorAll('.cell[data-combo]').forEach(function(c){
+    c.addEventListener('click', function(){ openDrawer(c); });
+  });
+  document.getElementById('dclose').addEventListener('click', closeDrawer);
+  scrim.addEventListener('click', closeDrawer);
+  document.addEventListener('keydown', function(e){ if (e.key === 'Escape') closeDrawer(); });
+</script>
+
+</body>
+</html>

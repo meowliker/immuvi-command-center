@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Creative Matrix · Angle Chapters</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --canvas:#faf9f5; --surface:#ffffff; --surface-2:#f3f1e9;
+  --line:#e8e5dc; --line-hi:#d6d1c1;
+  --ink:#1a1814; --ink-2:#585449; --ink-3:#8f8a7c; --ink-4:#b8b3a2;
+  --accent:#c05336; --accent-soft:#f5e3da;
+  --cyan:#00a3b8;
+  --sage:#5e7557; --ochre:#a77c2e; --coral:#c14400; --rust:#a83b28;
+  --dusk:#4f6780; --emerald:#35683f;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+html,body{background:var(--canvas);color:var(--ink);font-family:'Inter',sans-serif;font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased}
+.mono{font-family:'JetBrains Mono',monospace;font-variant-numeric:tabular-nums}
+
+/* nav */
+.nav{position:fixed;top:0;left:0;right:0;z-index:80;background:rgba(250,249,245,.86);backdrop-filter:saturate(140%) blur(14px);-webkit-backdrop-filter:saturate(140%) blur(14px);border-bottom:1px solid var(--line)}
+.nav-inner{max-width:1440px;margin:0 auto;padding:14px 40px;display:flex;align-items:center;gap:32px}
+.brand{display:flex;align-items:center;gap:10px;font-weight:700;font-size:14px;letter-spacing:-.01em}
+.brand .dot{width:10px;height:10px;border-radius:3px;background:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.nav-links{display:flex;gap:4px;margin-left:24px}
+.nav-link{padding:7px 12px;border-radius:8px;color:var(--ink-2);font-size:13px;font-weight:500;cursor:pointer}
+.nav-link:hover{background:var(--surface-2);color:var(--ink)}
+.nav-link.active{background:var(--ink);color:var(--canvas)}
+.nav-right{margin-left:auto;display:flex;gap:12px;font-size:12px;color:var(--ink-3)}
+.nav-badge{display:inline-flex;align-items:center;gap:6px;padding:4px 9px;border:1px solid var(--line-hi);border-radius:999px;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--ink-2)}
+.nav-badge .pulse{width:6px;height:6px;border-radius:50%;background:var(--sage);box-shadow:0 0 0 0 rgba(94,117,87,.6);animation:pulse 2s infinite}
+@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(94,117,87,.6)}70%{box-shadow:0 0 0 8px rgba(94,117,87,0)}}
+
+/* scroll-snap container */
+.chapters{scroll-snap-type:y mandatory;overflow-y:auto;height:100vh;scroll-behavior:smooth}
+.chapter{min-height:100vh;scroll-snap-align:start;position:relative;display:flex;align-items:center;padding:100px 56px 80px;overflow:hidden}
+.chapter .bg{position:absolute;inset:0;background:var(--canvas);transition:opacity .9s ease}
+.chapter .orb{position:absolute;width:620px;height:620px;border-radius:50%;filter:blur(110px);opacity:.22;pointer-events:none}
+.chapter .orb.a{background:var(--accent);top:-180px;right:-120px}
+.chapter .orb.b{background:var(--cyan);bottom:-220px;left:-180px;opacity:.14}
+
+.chap-grid{position:relative;z-index:2;width:100%;max-width:1440px;margin:0 auto;display:grid;grid-template-columns:minmax(340px,0.95fr) 1.6fr;gap:64px;align-items:center}
+.chap-left{display:flex;flex-direction:column;gap:20px}
+.chap-left .idx{font-family:'JetBrains Mono',monospace;font-size:11px;text-transform:uppercase;letter-spacing:.2em;color:var(--accent);font-weight:600}
+.chap-left .idx .of{color:var(--ink-4)}
+.chap-left h1{font-family:'Instrument Serif',serif;font-style:italic;font-weight:400;font-size:clamp(54px,7vw,88px);line-height:.95;letter-spacing:-.025em;color:var(--ink)}
+.chap-left .lede{color:var(--ink-2);font-size:17px;line-height:1.55;max-width:440px}
+.chap-stats{display:flex;gap:32px;margin-top:24px;padding-top:24px;border-top:1px solid var(--line)}
+.chap-stats .s{display:flex;flex-direction:column;gap:4px}
+.chap-stats .v{font-family:'JetBrains Mono',monospace;font-size:24px;font-weight:500;letter-spacing:-.02em;color:var(--ink)}
+.chap-stats .l{font-size:10px;text-transform:uppercase;letter-spacing:.12em;color:var(--ink-3);font-weight:500}
+
+.persona-row{display:grid;grid-template-columns:repeat(5,1fr);gap:10px}
+.persona-card{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:18px;min-height:240px;position:relative;display:flex;flex-direction:column;gap:8px;transition:transform .6s cubic-bezier(.2,.7,.2,1),opacity .6s ease;opacity:0;transform:translateY(24px)}
+.chapter.in-view .persona-card{opacity:1;transform:translateY(0)}
+.chapter.in-view .persona-card:nth-child(1){transition-delay:.15s}
+.chapter.in-view .persona-card:nth-child(2){transition-delay:.25s}
+.chapter.in-view .persona-card:nth-child(3){transition-delay:.35s}
+.chapter.in-view .persona-card:nth-child(4){transition-delay:.45s}
+.chapter.in-view .persona-card:nth-child(5){transition-delay:.55s}
+
+.persona-card .phead{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-3);font-weight:500}
+.persona-card .pname{font-weight:600;font-size:13px;letter-spacing:-.01em;line-height:1.3;color:var(--ink)}
+.persona-card .roas{font-family:'JetBrains Mono',monospace;font-size:44px;font-weight:500;letter-spacing:-.03em;line-height:1;margin-top:auto}
+.persona-card .tier{font-family:'JetBrains Mono',monospace;font-size:10px;text-transform:uppercase;letter-spacing:.12em;font-weight:500}
+.persona-card .meta{display:flex;justify-content:space-between;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--ink-3);margin-top:10px;padding-top:10px;border-top:1px solid var(--line)}
+.persona-card .meta .sp{color:var(--ink-2);font-weight:500}
+.wow{display:inline-block;padding:2px 6px;border-radius:999px;background:rgba(193,68,0,.14);color:var(--coral);font-family:'JetBrains Mono',monospace;font-size:9px;font-weight:500;margin-left:4px;vertical-align:middle}
+
+.p-massive{background:linear-gradient(135deg,#eef2ea,#dfe6d7);border-color:#c3d0b8}
+.p-massive .roas,.p-massive .tier{color:#35683f}
+.p-winner{background:linear-gradient(135deg,#f1f3ed,#e4e9dc);border-color:#c8d0bc}
+.p-winner .roas,.p-winner .tier{color:#5e7557}
+.p-mild{background:linear-gradient(135deg,#f6efe0,#ecdfc4);border-color:#d9c898}
+.p-mild .roas,.p-mild .tier{color:#a77c2e}
+.p-fatigue{background:linear-gradient(135deg,#f7e4d8,#efcbb5);border-color:#e0b299}
+.p-fatigue .roas,.p-fatigue .tier{color:#c14400}
+.p-loser{background:linear-gradient(135deg,#f1dcd6,#e7c0b7);border-color:#d5a498}
+.p-loser .roas,.p-loser .tier{color:#a83b28}
+.p-testing{background:linear-gradient(135deg,#e6ecf2,#cfd9e4);border-color:#b4c1d0}
+.p-testing .roas,.p-testing .tier{color:#4f6780}
+.p-empty{background:repeating-linear-gradient(135deg,transparent,transparent 8px,rgba(184,179,162,.1) 8px,rgba(184,179,162,.1) 9px),var(--surface);border:1px dashed var(--line-hi);justify-content:center;align-items:center;text-align:center}
+.p-empty .phead,.p-empty .pname{color:var(--ink-4)}
+.p-empty .note{font-family:'Instrument Serif',serif;font-style:italic;color:var(--ink-4);font-size:15px;margin-top:16px}
+
+/* progress */
+.progress{position:fixed;bottom:0;left:0;right:0;z-index:70;padding:18px 40px;background:rgba(250,249,245,.86);backdrop-filter:saturate(140%) blur(14px);-webkit-backdrop-filter:saturate(140%) blur(14px);border-top:1px solid var(--line);display:flex;align-items:center;gap:24px}
+.progress .lbl{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--ink-3);text-transform:uppercase;letter-spacing:.14em}
+.progress .lbl strong{color:var(--accent);font-weight:500}
+.progress .bar{flex:1;height:3px;background:var(--line);border-radius:2px;overflow:hidden;position:relative}
+.progress .bar i{position:absolute;top:0;left:0;bottom:0;background:var(--accent);border-radius:2px;transition:width .45s cubic-bezier(.2,.7,.2,1);width:14%}
+.progress .dots{display:flex;gap:6px}
+.progress .dot{width:8px;height:8px;border-radius:50%;background:var(--line-hi);cursor:pointer;transition:background .3s}
+.progress .dot.active{background:var(--accent)}
+.progress .title{font-size:13px;font-weight:600;color:var(--ink);min-width:180px}
+
+/* overview chapter */
+.overview .chap-grid{grid-template-columns:1fr}
+.overview h1{font-size:clamp(80px,14vw,220px);text-align:center;line-height:.88}
+.overview .lede{max-width:620px;text-align:center;margin:0 auto;font-size:19px}
+.overview .sumbox{margin-top:56px;display:grid;grid-template-columns:repeat(4,1fr);gap:20px;max-width:1080px;margin-left:auto;margin-right:auto}
+.overview .sumbox .c{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:22px}
+.overview .sumbox .c .v{font-family:'JetBrains Mono',monospace;font-size:34px;font-weight:500;letter-spacing:-.02em}
+.overview .sumbox .c .l{font-size:11px;text-transform:uppercase;letter-spacing:.1em;color:var(--ink-3);margin-top:4px;font-weight:500}
+.overview .sumbox .c.acc .v{color:var(--accent)}
+.overview .sumbox .c.cy .v{color:var(--cyan)}
+.overview .sumbox .c.em .v{color:var(--emerald)}
+
+.hint{display:inline-flex;align-items:center;gap:8px;padding:6px 12px;border:1px solid var(--line-hi);border-radius:999px;background:var(--surface);font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--ink-2);text-transform:uppercase;letter-spacing:.12em}
+
+.end{text-align:center;padding-top:80px}
+.end h2{font-family:'Instrument Serif',serif;font-style:italic;font-weight:400;font-size:72px;line-height:1;letter-spacing:-.02em;margin-bottom:20px}
+.cta{display:inline-flex;align-items:center;gap:10px;margin-top:28px;padding:16px 28px;background:var(--accent);color:var(--canvas);border-radius:999px;font-weight:600;font-size:14px;cursor:pointer}
+
+</style>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="nav-inner">
+    <div class="brand"><span class="dot"></span><span>Immuvi Command Center</span></div>
+    <div class="nav-links">
+      <a class="nav-link">Command HQ</a>
+      <a class="nav-link">Angles</a>
+      <a class="nav-link">Personas</a>
+      <a class="nav-link">Creative Tracker</a>
+      <a class="nav-link active">Creative Matrix</a>
+    </div>
+    <div class="nav-right">
+      <span class="nav-badge"><span class="pulse"></span>Live · 42 creatives</span>
+      <span>Last 28 days</span>
+    </div>
+  </div>
+</nav>
+
+<main class="chapters" id="chapters">
+
+  <!-- Chapter 0: overview -->
+  <section class="chapter overview" data-idx="0" data-title="The Portfolio">
+    <div class="orb a"></div><div class="orb b"></div>
+    <div class="chap-grid">
+      <div style="text-align:center;display:flex;flex-direction:column;gap:28px;align-items:center">
+        <span class="hint">Chapter 0 · The portfolio</span>
+        <h1>Seven angles,<br>one at a time.</h1>
+        <p class="lede">Rather than squint at a grid, walk through the map one angle at a time. Each scroll is a chapter — the angle name, what worked, and who it worked on.</p>
+        <div class="sumbox">
+          <div class="c acc"><div class="v">1.38×</div><div class="l">blended roas</div></div>
+          <div class="c"><div class="v">42</div><div class="l">creatives</div></div>
+          <div class="c em"><div class="v">19/35</div><div class="l">active cells</div></div>
+          <div class="c cy"><div class="v">$12.4k</div><div class="l">spend · 28d</div></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Chapter 1: Art as Therapy -->
+  <section class="chapter" data-idx="1" data-title="Art as Therapy Alternative">
+    <div class="orb a"></div>
+    <div class="chap-grid">
+      <div class="chap-left">
+        <div class="idx">Angle 01 <span class="of">/ 07</span></div>
+        <h1>Art as Therapy<br>Alternative.</h1>
+        <p class="lede">The load-bearing angle — 43% of all classified creatives and the only one that breaks into Massive territory. Women 25-45 are the engine.</p>
+        <div class="chap-stats">
+          <div class="s"><div class="v">18</div><div class="l">creatives</div></div>
+          <div class="s"><div class="v">1.58×</div><div class="l">avg roas</div></div>
+          <div class="s"><div class="v">$6.8k</div><div class="l">spend</div></div>
+        </div>
+      </div>
+      <div class="persona-row">
+        <div class="persona-card p-massive"><div class="phead">Women 25-45</div><div class="pname">Stressed · core buyer</div><div class="tier">◆ Massive</div><div class="roas">1.78×</div><div class="meta"><span>12 creatives</span><span class="sp">$4,920</span></div></div>
+        <div class="persona-card p-winner"><div class="phead">Self-Care</div><div class="pname">Creative adults</div><div class="tier">Winner</div><div class="roas">1.48×</div><div class="meta"><span>4 creatives</span><span class="sp">$1,240</span></div></div>
+        <div class="persona-card p-mild"><div class="phead">Parents</div><div class="pname">Of emotional kids</div><div class="tier">Mild</div><div class="roas">1.32×</div><div class="meta"><span>2 creatives</span><span class="sp">$620</span></div></div>
+        <div class="persona-card p-empty"><div class="phead">Silently Scrolling</div><div class="pname">Quiet adults</div><div class="note">not yet tested</div></div>
+        <div class="persona-card p-empty"><div class="phead">Young · Grief</div><div class="pname">Grieving</div><div class="note">not yet tested</div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Chapter 2: Calm / Unwind -->
+  <section class="chapter" data-idx="2" data-title="Calm / Unwind Ritual">
+    <div class="orb a"></div>
+    <div class="chap-grid">
+      <div class="chap-left">
+        <div class="idx">Angle 02 <span class="of">/ 07</span></div>
+        <h1>Calm / Unwind<br>Ritual.</h1>
+        <p class="lede">Warm and quiet — wins on Women 25-45 but plainly breaks against Parents. The failure isn't a bug; it's a lens-match problem.</p>
+        <div class="chap-stats">
+          <div class="s"><div class="v">9</div><div class="l">creatives</div></div>
+          <div class="s"><div class="v">1.12×</div><div class="l">avg roas</div></div>
+          <div class="s"><div class="v">$2.3k</div><div class="l">spend</div></div>
+        </div>
+      </div>
+      <div class="persona-row">
+        <div class="persona-card p-winner"><div class="phead">Women 25-45</div><div class="pname">Core buyer</div><div class="tier">Winner</div><div class="roas">1.41×</div><div class="meta"><span>4 creatives</span><span class="sp">$1,420</span></div></div>
+        <div class="persona-card p-mild"><div class="phead">Self-Care</div><div class="pname">Creative adults</div><div class="tier">Mild</div><div class="roas">1.22×</div><div class="meta"><span>3 creatives</span><span class="sp">$580</span></div></div>
+        <div class="persona-card p-loser"><div class="phead">Parents</div><div class="pname">Of emotional kids</div><div class="tier">Loser</div><div class="roas">0.58×</div><div class="meta"><span>2 creatives</span><span class="sp">$340</span></div></div>
+        <div class="persona-card p-empty"><div class="phead">Silently Scrolling</div><div class="pname">Quiet adults</div><div class="note">not yet tested</div></div>
+        <div class="persona-card p-empty"><div class="phead">Young · Grief</div><div class="pname">Grieving</div><div class="note">not yet tested</div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Chapter 3: Scarcity -->
+  <section class="chapter" data-idx="3" data-title="Scarcity / Limited-Time">
+    <div class="orb a" style="background:var(--coral)"></div>
+    <div class="chap-grid">
+      <div class="chap-left">
+        <div class="idx">Angle 03 <span class="of">/ 07</span></div>
+        <h1>Scarcity /<br>Limited-Time.</h1>
+        <p class="lede">The fatigue signal of the week. Women 25-45 is the canary — WoW -42%, and spend still pointing at it. Pull hard, refresh harder.</p>
+        <div class="chap-stats">
+          <div class="s"><div class="v">5</div><div class="l">creatives</div></div>
+          <div class="s"><div class="v">0.98×</div><div class="l">avg roas</div></div>
+          <div class="s"><div class="v">$2.2k</div><div class="l">spend</div></div>
+        </div>
+      </div>
+      <div class="persona-row">
+        <div class="persona-card p-fatigue"><div class="phead">Women 25-45</div><div class="pname">Core buyer</div><div class="tier">Fatigued</div><div class="roas">0.98×<span class="wow">-42%</span></div><div class="meta"><span>4 creatives</span><span class="sp">$1,850</span></div></div>
+        <div class="persona-card p-mild"><div class="phead">Self-Care</div><div class="pname">Creative adults</div><div class="tier">Mild</div><div class="roas">1.28×</div><div class="meta"><span>1 creative</span><span class="sp">$310</span></div></div>
+        <div class="persona-card p-empty"><div class="phead">Parents</div><div class="pname">Of emotional kids</div><div class="note">not yet tested</div></div>
+        <div class="persona-card p-empty"><div class="phead">Silently Scrolling</div><div class="pname">Quiet adults</div><div class="note">not yet tested</div></div>
+        <div class="persona-card p-empty"><div class="phead">Young · Grief</div><div class="pname">Grieving</div><div class="note">not yet tested</div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Chapter 4: Therapist-Rec -->
+  <section class="chapter" data-idx="4" data-title="Therapist-Recommended">
+    <div class="orb a"></div>
+    <div class="chap-grid">
+      <div class="chap-left">
+        <div class="idx">Angle 04 <span class="of">/ 07</span></div>
+        <h1>Therapist-<br>Recommended.</h1>
+        <p class="lede">Authority angle that holds across Women and Self-Care. Parents is still a Testing flag — 1 creative, $32 spend, too early to call.</p>
+        <div class="chap-stats">
+          <div class="s"><div class="v">5</div><div class="l">creatives</div></div>
+          <div class="s"><div class="v">1.38×</div><div class="l">avg roas</div></div>
+          <div class="s"><div class="v">$952</div><div class="l">spend</div></div>
+        </div>
+      </div>
+      <div class="persona-row">
+        <div class="persona-card p-winner"><div class="phead">Women 25-45</div><div class="pname">Core buyer</div><div class="tier">Winner</div><div class="roas">1.44×</div><div class="meta"><span>2 creatives</span><span class="sp">$560</span></div></div>
+        <div class="persona-card p-mild"><div class="phead">Self-Care</div><div class="pname">Creative adults</div><div class="tier">Mild</div><div class="roas">1.30×</div><div class="meta"><span>2 creatives</span><span class="sp">$360</span></div></div>
+        <div class="persona-card p-testing"><div class="phead">Parents</div><div class="pname">Of emotional kids</div><div class="tier">Testing</div><div class="roas">—</div><div class="meta"><span>1 creative</span><span class="sp">$32</span></div></div>
+        <div class="persona-card p-empty"><div class="phead">Silently Scrolling</div><div class="pname">Quiet adults</div><div class="note">not yet tested</div></div>
+        <div class="persona-card p-empty"><div class="phead">Young · Grief</div><div class="pname">Grieving</div><div class="note">not yet tested</div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Chapter 5: Emotional Lit -->
+  <section class="chapter" data-idx="5" data-title="Emotional Literacy">
+    <div class="orb a"></div>
+    <div class="chap-grid">
+      <div class="chap-left">
+        <div class="idx">Angle 05 <span class="of">/ 07</span></div>
+        <h1>Emotional<br>Literacy.</h1>
+        <p class="lede">Small volume, quiet discipline. Both tested cells are Winners. This is the angle to scale next — not the one we already lean on.</p>
+        <div class="chap-stats">
+          <div class="s"><div class="v">3</div><div class="l">creatives</div></div>
+          <div class="s"><div class="v">1.50×</div><div class="l">avg roas</div></div>
+          <div class="s"><div class="v">$1.4k</div><div class="l">spend</div></div>
+        </div>
+      </div>
+      <div class="persona-row">
+        <div class="persona-card p-winner"><div class="phead">Women 25-45</div><div class="pname">Core buyer</div><div class="tier">Winner</div><div class="roas">1.54×</div><div class="meta"><span>1 creative</span><span class="sp">$806</span></div></div>
+        <div class="persona-card p-empty"><div class="phead">Self-Care</div><div class="pname">Creative adults</div><div class="note">not yet tested</div></div>
+        <div class="persona-card p-empty"><div class="phead">Parents</div><div class="pname">Of emotional kids</div><div class="note">not yet tested</div></div>
+        <div class="persona-card p-empty"><div class="phead">Silently Scrolling</div><div class="pname">Quiet adults</div><div class="note">not yet tested</div></div>
+        <div class="persona-card p-winner"><div class="phead">Young · Grief</div><div class="pname">Grieving</div><div class="tier">Winner</div><div class="roas">1.46×</div><div class="meta"><span>1 creative</span><span class="sp">$624</span></div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Chapter 6: Pattern Interrupt -->
+  <section class="chapter" data-idx="6" data-title="Pattern Interrupt">
+    <div class="orb a"></div>
+    <div class="chap-grid">
+      <div class="chap-left">
+        <div class="idx">Angle 06 <span class="of">/ 07</span></div>
+        <h1>Pattern<br>Interrupt.</h1>
+        <p class="lede">Cheapest angle by far — $284 total spend. Lands a Mild on Silently Scrolling, the only persona where it's been shown. Needs a cross-persona test.</p>
+        <div class="chap-stats">
+          <div class="s"><div class="v">2</div><div class="l">creatives</div></div>
+          <div class="s"><div class="v">1.22×</div><div class="l">avg roas</div></div>
+          <div class="s"><div class="v">$284</div><div class="l">spend</div></div>
+        </div>
+      </div>
+      <div class="persona-row">
+        <div class="persona-card p-empty"><div class="phead">Women 25-45</div><div class="pname">Core buyer</div><div class="note">not yet tested</div></div>
+        <div class="persona-card p-empty"><div class="phead">Self-Care</div><div class="pname">Creative adults</div><div class="note">not yet tested</div></div>
+        <div class="persona-card p-empty"><div class="phead">Parents</div><div class="pname">Of emotional kids</div><div class="note">not yet tested</div></div>
+        <div class="persona-card p-mild"><div class="phead">Silently Scrolling</div><div class="pname">Quiet adults</div><div class="tier">Mild</div><div class="roas">1.22×</div><div class="meta"><span>2 creatives</span><span class="sp">$284</span></div></div>
+        <div class="persona-card p-empty"><div class="phead">Young · Grief</div><div class="pname">Grieving</div><div class="note">not yet tested</div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Chapter 7: Social Proof -->
+  <section class="chapter" data-idx="7" data-title="Social Proof · 18K">
+    <div class="orb a"></div>
+    <div class="chap-grid">
+      <div class="chap-left">
+        <div class="idx">Angle 07 <span class="of">/ 07</span></div>
+        <h1>Social Proof —<br>18K strong.</h1>
+        <p class="lede">One ad. One persona. One Winner. Efficient, but dangerously narrow — everything rides on a single creative holding up.</p>
+        <div class="chap-stats">
+          <div class="s"><div class="v">1</div><div class="l">creative</div></div>
+          <div class="s"><div class="v">1.41×</div><div class="l">avg roas</div></div>
+          <div class="s"><div class="v">$488</div><div class="l">spend</div></div>
+        </div>
+      </div>
+      <div class="persona-row">
+        <div class="persona-card p-winner"><div class="phead">Women 25-45</div><div class="pname">Core buyer</div><div class="tier">Winner</div><div class="roas">1.41×</div><div class="meta"><span>1 creative</span><span class="sp">$488</span></div></div>
+        <div class="persona-card p-empty"><div class="phead">Self-Care</div><div class="pname">Creative adults</div><div class="note">not yet tested</div></div>
+        <div class="persona-card p-empty"><div class="phead">Parents</div><div class="pname">Of emotional kids</div><div class="note">not yet tested</div></div>
+        <div class="persona-card p-empty"><div class="phead">Silently Scrolling</div><div class="pname">Quiet adults</div><div class="note">not yet tested</div></div>
+        <div class="persona-card p-empty"><div class="phead">Young · Grief</div><div class="pname">Grieving</div><div class="note">not yet tested</div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- End -->
+  <section class="chapter end" data-idx="8" data-title="Plan the next shot">
+    <div class="orb a"></div>
+    <div class="chap-grid">
+      <div style="text-align:center;margin:0 auto">
+        <div class="idx">Fin</div>
+        <h2>Sixteen empty cells.<br>Which fills next?</h2>
+        <p class="lede" style="margin:16px auto 0">Queue a test in the least-explored corner of the grid — where a single winner could rewrite the whole blend.</p>
+        <a class="cta">Open the planning queue →</a>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<div class="progress">
+  <span class="lbl">Angle <strong id="pIdx">0</strong><span style="color:var(--ink-4)"> / 7</span></span>
+  <span class="title" id="pTitle">The Portfolio</span>
+  <div class="bar"><i id="pBar"></i></div>
+  <div class="dots" id="pDots"></div>
+</div>
+
+<script>
+  const scroller = document.getElementById('chapters');
+  const chapters = scroller.querySelectorAll('.chapter');
+  const pIdx = document.getElementById('pIdx');
+  const pTitle = document.getElementById('pTitle');
+  const pBar = document.getElementById('pBar');
+  const pDots = document.getElementById('pDots');
+  // build dots
+  chapters.forEach((c,i)=>{
+    const d = document.createElement('span');
+    d.className = 'dot' + (i===0?' active':'');
+    d.addEventListener('click',()=>c.scrollIntoView({behavior:'smooth'}));
+    pDots.appendChild(d);
+  });
+  const dots = pDots.querySelectorAll('.dot');
+  const io = new IntersectionObserver((entries)=>{
+    entries.forEach(e=>{
+      if(e.isIntersecting && e.intersectionRatio > 0.5){
+        const idx = parseInt(e.target.dataset.idx,10);
+        chapters.forEach(c=>c.classList.remove('in-view'));
+        e.target.classList.add('in-view');
+        pIdx.textContent = idx;
+        pTitle.textContent = e.target.dataset.title;
+        pBar.style.width = (idx/8*100) + '%';
+        dots.forEach((d,i)=>d.classList.toggle('active', i<=idx));
+      }
+    });
+  },{root:scroller, threshold:[0.5]});
+  chapters.forEach(c=>io.observe(c));
+  // first-view
+  chapters[0].classList.add('in-view');
+</script>
+</body>
+</html>

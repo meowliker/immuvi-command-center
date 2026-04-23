@@ -1,0 +1,732 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Immuvi Command Center — Intelligence Brief</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400;1,600&family=Space+Grotesk:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:        #f5f0e8;
+    --surface:   #ffffff;
+    --surface-2: #ede8da;
+    --border:    #d6cfc0;
+    --border-lt: #e8e2d6;
+    --text:      #1c1a17;
+    --text-mid:  #4a4540;
+    --text-dim:  #8a8278;
+    --text-faint:#b5afa5;
+    --accent:    #8b5a2b;
+    --accent-lt: rgba(139,90,43,0.08);
+    --sage:      #4a6741;
+    --sage-lt:   rgba(74,103,65,0.10);
+    --row-alt:   #faf7f1;
+    --serif:     'Playfair Display', Georgia, serif;
+    --sans:      'Space Grotesk', sans-serif;
+    --mono:      'JetBrains Mono', monospace;
+
+    /* status palette — muted, stamp-style */
+    --s-winner:    #4a6741;
+    --s-loser:     #8b3a3a;
+    --s-testing:   #2d5a8b;
+    --s-production:#7a5c1e;
+    --s-approved:  #5a3d7a;
+    --s-untested:  #6b6560;
+  }
+
+  html, body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 13px;
+    line-height: 1.6;
+    min-height: 100vh;
+  }
+
+  /* ─── Shell ─────────────────────────────────────── */
+  .shell {
+    max-width: 1200px;
+    margin: 0 auto;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* ─── Masthead ───────────────────────────────────── */
+  .masthead {
+    padding: 28px 40px 0;
+    border-bottom: 2px solid var(--text);
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 24px;
+  }
+  .masthead-left {}
+  .masthead-overline {
+    font-family: var(--mono);
+    font-size: 9px;
+    font-weight: 600;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 4px;
+  }
+  .masthead-title {
+    font-family: var(--serif);
+    font-size: 28px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    color: var(--text);
+    line-height: 1.1;
+  }
+  .masthead-subtitle {
+    font-family: var(--serif);
+    font-size: 13px;
+    font-style: italic;
+    color: var(--text-dim);
+    margin-top: 4px;
+    padding-bottom: 16px;
+  }
+  .masthead-right {
+    text-align: right;
+    padding-bottom: 16px;
+  }
+  .masthead-date {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text-dim);
+    letter-spacing: 0.08em;
+    margin-bottom: 2px;
+  }
+  .masthead-edition {
+    font-family: var(--sans);
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--text-mid);
+  }
+
+  /* ─── Tab Nav ────────────────────────────────────── */
+  .tabnav {
+    display: flex;
+    gap: 0;
+    padding: 0 40px;
+    background: var(--bg);
+    border-bottom: 1px solid var(--border);
+  }
+  .tab {
+    font-family: var(--serif);
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-dim);
+    padding: 12px 20px 10px;
+    cursor: pointer;
+    border-bottom: 3px solid transparent;
+    margin-bottom: -1px;
+    letter-spacing: 0.01em;
+    transition: color 0.15s, border-color 0.15s;
+    user-select: none;
+  }
+  .tab:hover { color: var(--text-mid); }
+  .tab.active {
+    color: var(--accent);
+    border-bottom-color: var(--accent);
+  }
+
+  /* ─── Content ────────────────────────────────────── */
+  .content { flex: 1; }
+  .panel { display: none; padding: 32px 40px 48px; }
+  .panel.active { display: block; }
+
+  /* ─── Section Divider ────────────────────────────── */
+  .section-divider {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+  .section-divider-rule { flex: 1; height: 1px; background: var(--border); }
+  .section-divider-label {
+    font-family: var(--mono);
+    font-size: 9px;
+    font-weight: 600;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+    white-space: nowrap;
+  }
+
+  /* ─── Tracker Summary Bar ────────────────────────── */
+  .tracker-summary {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+  }
+  .summary-headline {
+    font-family: var(--serif);
+    font-size: 16px;
+    font-style: italic;
+    color: var(--text-mid);
+    margin-right: 8px;
+  }
+  .summary-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-family: var(--mono);
+    font-size: 9px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 2px 7px;
+    border: 1px solid currentColor;
+    border-radius: 2px;
+  }
+  .chip-winner    { color: var(--s-winner); }
+  .chip-loser     { color: var(--s-loser); }
+  .chip-testing   { color: var(--s-testing); }
+  .chip-approved  { color: var(--s-approved); }
+  .chip-production{ color: var(--s-production); }
+  .chip-untested  { color: var(--s-untested); }
+
+  /* ─── Tracker Table ──────────────────────────────── */
+  .table-wrap {
+    border: 1px solid var(--border);
+    background: var(--surface);
+    overflow-x: auto;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    min-width: 800px;
+  }
+  thead {
+    background: var(--surface-2);
+    border-bottom: 2px solid var(--border);
+  }
+  th {
+    padding: 10px 16px;
+    text-align: left;
+    font-family: var(--mono);
+    font-size: 9px;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    white-space: nowrap;
+  }
+  td {
+    padding: 0 16px;
+    height: 44px;
+    border-bottom: 1px solid var(--border-lt);
+    font-size: 12.5px;
+    vertical-align: middle;
+  }
+  tr:nth-child(even) td { background: var(--row-alt); }
+  tr:last-child td { border-bottom: none; }
+  tr {
+    border-left: 4px solid transparent;
+    transition: border-color 0.12s;
+  }
+  tr:hover { border-left-color: var(--accent); }
+  tr:hover td { background: var(--accent-lt); }
+
+  .col-id {
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--text);
+    white-space: nowrap;
+  }
+  .col-angle { color: var(--text-mid); font-weight: 500; }
+  .col-persona { color: var(--text-mid); }
+  .col-other { color: var(--text-dim); font-size: 12px; }
+  .col-funnel {
+    font-family: var(--mono);
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    color: var(--text-dim);
+  }
+
+  .status-badge {
+    display: inline-flex;
+    align-items: center;
+    font-family: var(--mono);
+    font-size: 9px;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    padding: 2px 7px;
+    border: 1px solid currentColor;
+    border-radius: 2px;
+    white-space: nowrap;
+  }
+  .s-winner    { color: var(--s-winner); }
+  .s-loser     { color: var(--s-loser); }
+  .s-testing   { color: var(--s-testing); }
+  .s-production{ color: var(--s-production); }
+  .s-approved  { color: var(--s-approved); }
+  .s-untested  { color: var(--s-untested); }
+
+  /* ─── Matrix / Coverage Map ──────────────────────── */
+  .coverage-intro {
+    font-family: var(--serif);
+    font-size: 15px;
+    font-style: italic;
+    color: var(--text-mid);
+    margin-bottom: 24px;
+    line-height: 1.5;
+    max-width: 600px;
+  }
+
+  .coverage-grid {
+    display: grid;
+    grid-template-columns: 200px repeat(4, 1fr);
+    gap: 1px;
+    background: var(--border);
+    border: 1px solid var(--border);
+  }
+
+  .cov-corner {
+    background: var(--surface-2);
+    padding: 12px 16px;
+    display: flex;
+    align-items: flex-end;
+  }
+  .cov-corner-label {
+    font-family: var(--mono);
+    font-size: 8px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+    line-height: 1.2;
+  }
+
+  .cov-col-header {
+    background: var(--surface-2);
+    padding: 12px 16px;
+    text-align: center;
+  }
+  .cov-col-name {
+    font-family: var(--sans);
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text);
+    display: block;
+    margin-bottom: 2px;
+  }
+  .cov-col-sub {
+    font-family: var(--mono);
+    font-size: 9px;
+    letter-spacing: 0.06em;
+    color: var(--text-dim);
+    text-transform: uppercase;
+  }
+
+  .cov-row-label {
+    background: var(--surface);
+    padding: 0 16px;
+    display: flex;
+    align-items: center;
+    min-height: 80px;
+    border-right: 2px solid var(--border);
+  }
+  .cov-row-label-text {
+    font-family: var(--serif);
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text);
+    line-height: 1.2;
+  }
+
+  .cov-cell {
+    background: var(--surface);
+    min-height: 80px;
+    padding: 14px 16px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    transition: background 0.12s;
+    cursor: pointer;
+    position: relative;
+  }
+  .cov-cell:hover { background: var(--accent-lt); }
+  .cov-cell:hover::before {
+    content: '';
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    width: 3px;
+    background: var(--accent);
+  }
+
+  .cov-cell.filled {}
+  .cov-cell.empty { background: var(--surface-2); }
+  .cov-cell.empty:hover { background: var(--border-lt); }
+
+  .cov-count {
+    font-family: var(--mono);
+    font-size: 22px;
+    font-weight: 600;
+    line-height: 1;
+    margin-bottom: 4px;
+  }
+  .cov-status-dot {
+    display: inline-block;
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    margin-right: 5px;
+    vertical-align: middle;
+  }
+  .dot-winner    { background: var(--s-winner); }
+  .dot-loser     { background: var(--s-loser); }
+  .dot-testing   { background: var(--s-testing); }
+  .dot-production{ background: var(--s-production); }
+  .dot-approved  { background: var(--s-approved); }
+
+  .cov-cell-status {
+    font-family: var(--mono);
+    font-size: 9px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    display: flex;
+    align-items: center;
+  }
+
+  .cov-empty-text {
+    font-family: var(--serif);
+    font-size: 12px;
+    font-style: italic;
+    color: var(--text-faint);
+  }
+
+  /* ─── Footer ─────────────────────────────────────── */
+  .doc-footer {
+    padding: 16px 40px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .footer-brand {
+    font-family: var(--serif);
+    font-size: 12px;
+    font-style: italic;
+    color: var(--text-dim);
+  }
+  .footer-meta {
+    font-family: var(--mono);
+    font-size: 9px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+  }
+</style>
+</head>
+<body>
+<div class="shell">
+
+  <!-- Masthead -->
+  <header class="masthead">
+    <div class="masthead-left">
+      <div class="masthead-overline">Immuvi Command Center · Intelligence Brief</div>
+      <div class="masthead-title">Creative Intelligence Report</div>
+      <div class="masthead-subtitle">Ad Creative Testing — Consolidated Coverage View</div>
+    </div>
+    <div class="masthead-right">
+      <div class="masthead-date">22 APRIL 2026</div>
+      <div class="masthead-edition">Volume 1 · Issue 4</div>
+    </div>
+  </header>
+
+  <!-- Tab Nav -->
+  <nav class="tabnav">
+    <div class="tab active" data-tab="tracker">Creative Tracker</div>
+    <div class="tab" data-tab="matrix">Creative Matrix</div>
+  </nav>
+
+  <!-- Content -->
+  <main class="content">
+
+    <!-- TRACKER PANEL -->
+    <div class="panel active" id="panel-tracker">
+
+      <div class="section-divider">
+        <div class="section-divider-rule"></div>
+        <div class="section-divider-label">Active Creative Log</div>
+        <div class="section-divider-rule"></div>
+      </div>
+
+      <!-- Summary -->
+      <div class="tracker-summary">
+        <span class="summary-headline">6 creatives in circulation —</span>
+        <span class="summary-chip chip-winner">1 Winner</span>
+        <span class="summary-chip chip-loser">1 Loser</span>
+        <span class="summary-chip chip-testing">1 Testing</span>
+        <span class="summary-chip chip-approved">1 Approved</span>
+        <span class="summary-chip chip-production">1 In Production</span>
+        <span class="summary-chip chip-untested">1 Untested</span>
+      </div>
+
+      <!-- Table -->
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Format Name</th>
+              <th>Angle</th>
+              <th>Persona</th>
+              <th>Structure</th>
+              <th>Hook</th>
+              <th>Production</th>
+              <th>Funnel</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="col-id">AT-001 · Story Loop 30s</td>
+              <td class="col-angle">Pain Agitate Solution</td>
+              <td class="col-persona">Busy Mom</td>
+              <td class="col-other">Problem-Solution</td>
+              <td class="col-other">Question</td>
+              <td class="col-other">UGC</td>
+              <td class="col-funnel">TOF</td>
+              <td><span class="status-badge s-winner">Winner</span></td>
+            </tr>
+            <tr>
+              <td class="col-id">AT-002 · Transformation 15s</td>
+              <td class="col-angle">Before/After</td>
+              <td class="col-persona">Health Enthusiast</td>
+              <td class="col-other">Contrast</td>
+              <td class="col-other">Stat</td>
+              <td class="col-other">Motion</td>
+              <td class="col-funnel">MOF</td>
+              <td><span class="status-badge s-testing">Testing</span></td>
+            </tr>
+            <tr>
+              <td class="col-id">AT-003 · Testimonial Reel</td>
+              <td class="col-angle">Social Proof</td>
+              <td class="col-persona">Skeptic</td>
+              <td class="col-other">Authority</td>
+              <td class="col-other">Quote</td>
+              <td class="col-other">Studio</td>
+              <td class="col-funnel">BOF</td>
+              <td><span class="status-badge s-approved">Approved</span></td>
+            </tr>
+            <tr>
+              <td class="col-id">AT-004 · Value Stack 60s</td>
+              <td class="col-angle">Benefits-First</td>
+              <td class="col-persona">Value Seeker</td>
+              <td class="col-other">List</td>
+              <td class="col-other">Statement</td>
+              <td class="col-other">Voiceover</td>
+              <td class="col-funnel">TOF</td>
+              <td><span class="status-badge s-loser">Loser</span></td>
+            </tr>
+            <tr>
+              <td class="col-id">AT-005 · Fear Hook Cut</td>
+              <td class="col-angle">Fear Appeal</td>
+              <td class="col-persona">Busy Mom</td>
+              <td class="col-other">Problem</td>
+              <td class="col-other">Fear</td>
+              <td class="col-other">UGC</td>
+              <td class="col-funnel">TOF</td>
+              <td><span class="status-badge s-production">In Production</span></td>
+            </tr>
+            <tr>
+              <td class="col-id">AT-006 · Authority Doc</td>
+              <td class="col-angle">Social Proof</td>
+              <td class="col-persona">Health Enthusiast</td>
+              <td class="col-other">Authority</td>
+              <td class="col-other">Stat</td>
+              <td class="col-other">Documentary</td>
+              <td class="col-funnel">MOF</td>
+              <td><span class="status-badge s-untested">Untested</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+    </div>
+
+    <!-- MATRIX PANEL -->
+    <div class="panel" id="panel-matrix">
+
+      <div class="section-divider">
+        <div class="section-divider-rule"></div>
+        <div class="section-divider-label">Coverage Map — Angle × Persona</div>
+        <div class="section-divider-rule"></div>
+      </div>
+
+      <p class="coverage-intro">
+        The following matrix maps each creative angle against its target persona. Filled cells indicate active creative coverage; empty cells represent untested territory.
+      </p>
+
+      <div class="coverage-grid">
+        <!-- Header -->
+        <div class="cov-corner">
+          <span class="cov-corner-label">Angle<br>↓ Persona →</span>
+        </div>
+        <div class="cov-col-header">
+          <span class="cov-col-name">Busy Mom</span>
+          <span class="cov-col-sub">Primary</span>
+        </div>
+        <div class="cov-col-header">
+          <span class="cov-col-name">Health Enthusiast</span>
+          <span class="cov-col-sub">Secondary</span>
+        </div>
+        <div class="cov-col-header">
+          <span class="cov-col-name">Skeptic</span>
+          <span class="cov-col-sub">Challenger</span>
+        </div>
+        <div class="cov-col-header">
+          <span class="cov-col-name">Value Seeker</span>
+          <span class="cov-col-sub">Price-Conscious</span>
+        </div>
+
+        <!-- Row: Pain Agitate Solution -->
+        <div class="cov-row-label">
+          <span class="cov-row-label-text">Pain Agitate Solution</span>
+        </div>
+        <div class="cov-cell filled">
+          <div class="cov-count s-winner">2</div>
+          <div class="cov-cell-status s-winner">
+            <span class="cov-status-dot dot-winner"></span>Winner
+          </div>
+        </div>
+        <div class="cov-cell empty">
+          <span class="cov-empty-text">— uncovered —</span>
+        </div>
+        <div class="cov-cell filled">
+          <div class="cov-count s-testing">1</div>
+          <div class="cov-cell-status s-testing">
+            <span class="cov-status-dot dot-testing"></span>Testing
+          </div>
+        </div>
+        <div class="cov-cell empty">
+          <span class="cov-empty-text">— uncovered —</span>
+        </div>
+
+        <!-- Row: Before/After -->
+        <div class="cov-row-label">
+          <span class="cov-row-label-text">Before / After</span>
+        </div>
+        <div class="cov-cell filled">
+          <div class="cov-count s-approved">1</div>
+          <div class="cov-cell-status s-approved">
+            <span class="cov-status-dot dot-approved"></span>Approved
+          </div>
+        </div>
+        <div class="cov-cell filled">
+          <div class="cov-count s-testing">1</div>
+          <div class="cov-cell-status s-testing">
+            <span class="cov-status-dot dot-testing"></span>Testing
+          </div>
+        </div>
+        <div class="cov-cell empty">
+          <span class="cov-empty-text">— uncovered —</span>
+        </div>
+        <div class="cov-cell filled">
+          <div class="cov-count s-winner">2</div>
+          <div class="cov-cell-status s-winner">
+            <span class="cov-status-dot dot-winner"></span>Winner
+          </div>
+        </div>
+
+        <!-- Row: Social Proof -->
+        <div class="cov-row-label">
+          <span class="cov-row-label-text">Social Proof</span>
+        </div>
+        <div class="cov-cell empty">
+          <span class="cov-empty-text">— uncovered —</span>
+        </div>
+        <div class="cov-cell filled">
+          <div class="cov-count s-approved">1</div>
+          <div class="cov-cell-status s-approved">
+            <span class="cov-status-dot dot-approved"></span>Approved
+          </div>
+        </div>
+        <div class="cov-cell filled">
+          <div class="cov-count s-approved">1</div>
+          <div class="cov-cell-status s-approved">
+            <span class="cov-status-dot dot-approved"></span>Approved
+          </div>
+        </div>
+        <div class="cov-cell empty">
+          <span class="cov-empty-text">— uncovered —</span>
+        </div>
+
+        <!-- Row: Fear Appeal -->
+        <div class="cov-row-label">
+          <span class="cov-row-label-text">Fear Appeal</span>
+        </div>
+        <div class="cov-cell filled">
+          <div class="cov-count s-production">1</div>
+          <div class="cov-cell-status s-production">
+            <span class="cov-status-dot dot-production"></span>In Production
+          </div>
+        </div>
+        <div class="cov-cell empty">
+          <span class="cov-empty-text">— uncovered —</span>
+        </div>
+        <div class="cov-cell empty">
+          <span class="cov-empty-text">— uncovered —</span>
+        </div>
+        <div class="cov-cell empty">
+          <span class="cov-empty-text">— uncovered —</span>
+        </div>
+
+        <!-- Row: Benefits-First -->
+        <div class="cov-row-label">
+          <span class="cov-row-label-text">Benefits-First</span>
+        </div>
+        <div class="cov-cell empty">
+          <span class="cov-empty-text">— uncovered —</span>
+        </div>
+        <div class="cov-cell empty">
+          <span class="cov-empty-text">— uncovered —</span>
+        </div>
+        <div class="cov-cell empty">
+          <span class="cov-empty-text">— uncovered —</span>
+        </div>
+        <div class="cov-cell filled">
+          <div class="cov-count s-loser">1</div>
+          <div class="cov-cell-status s-loser">
+            <span class="cov-status-dot dot-loser"></span>Loser
+          </div>
+        </div>
+
+      </div>
+
+    </div>
+
+  </main>
+
+  <!-- Footer -->
+  <footer class="doc-footer">
+    <span class="footer-brand">Immuvi Command Center — Intelligence Brief</span>
+    <span class="footer-meta">Confidential · Internal Use Only · 2026</span>
+  </footer>
+
+</div>
+
+<script>
+  document.querySelectorAll('.tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      const target = tab.dataset.tab;
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+      tab.classList.add('active');
+      document.getElementById('panel-' + target).classList.add('active');
+    });
+  });
+</script>
+</body>
+</html>

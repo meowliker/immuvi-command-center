@@ -1,0 +1,1763 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Immuvi Command Center — Redesign 36</title>
+  <link href="https://api.fontshare.com/v2/css?f[]=satoshi@400,500,600,700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Instrument+Serif:ital@1&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --canvas: #faf9f5;
+      --paper: #ffffff;
+      --paper-2: #f3f1e9;
+      --paper-3: #ede9dc;
+      --line: #e8e5dc;
+      --line-hi: #d6d1c1;
+      --ink: #1a1814;
+      --ink-2: #585449;
+      --ink-3: #8f8a7c;
+      --ink-4: #b8b3a2;
+      --accent: #c05336;
+      --accent-deep: #a4401f;
+      --accent-soft: #f5e3da;
+
+      --s-scale: #35683f;     --s-scale-soft: #dcecd8;
+      --s-winner: #5e7557;    --s-winner-soft: #e4ebdc;
+      --s-testing: #4f6780;   --s-testing-soft: #dde4ec;
+      --s-approved: #7c5c2e;  --s-approved-soft: #f0e4cc;
+      --s-ready: #3a6b8a;     --s-ready-soft: #d4e8f0;
+      --s-prod: #c14400;      --s-prod-soft: #fbe0d0;
+      --s-loser: #a83b28;     --s-loser-soft: #f2dad6;
+      --s-untested: #8f8a7c;  --s-untested-soft: #f3f1e9;
+
+      --tr: all 160ms cubic-bezier(0.32,0.72,0,1);
+      --tr-lg: all 280ms cubic-bezier(0.32,0.72,0,1);
+      --sh: 0 1px 2px rgba(26,24,20,.04), 0 4px 12px rgba(26,24,20,.06);
+    }
+
+    html, body { height: 100%; background: var(--canvas); font-family: 'Satoshi', system-ui, sans-serif; color: var(--ink); -webkit-font-smoothing: antialiased; }
+
+    /* ─── MASTHEAD ─────────────────────────────────────────────────── */
+    .masthead {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      height: 44px;
+      background: rgba(250,249,245,0.92);
+      backdrop-filter: blur(16px) saturate(1.4);
+      border-bottom: 1px solid var(--line);
+      display: flex;
+      align-items: center;
+      padding: 0 20px;
+      gap: 0;
+    }
+    .masthead::after {
+      content: '';
+      position: absolute;
+      bottom: -1px;
+      left: 0; right: 0;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, rgba(192,83,54,.3), transparent);
+      pointer-events: none;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding-right: 16px;
+      border-right: 1px solid var(--line);
+      flex-shrink: 0;
+    }
+    .brand-mark {
+      width: 22px;
+      height: 22px;
+      border-radius: 6px;
+      background: linear-gradient(135deg, var(--accent), var(--accent-deep));
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      font-weight: 700;
+      color: #fff;
+      letter-spacing: -0.02em;
+    }
+    .brand-name {
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: -0.01em;
+      color: var(--ink);
+    }
+    .brand-name em { color: var(--accent); font-style: normal; }
+    .nav-tabs {
+      display: flex;
+      align-items: center;
+      gap: 2px;
+      padding-left: 12px;
+      flex: 1;
+    }
+    .nav-tab {
+      height: 28px;
+      padding: 0 11px;
+      border-radius: 5px;
+      font-size: 12.5px;
+      font-weight: 500;
+      color: var(--ink-3);
+      cursor: pointer;
+      border: none;
+      background: transparent;
+      font-family: 'Satoshi', system-ui, sans-serif;
+      transition: var(--tr);
+      white-space: nowrap;
+    }
+    .nav-tab:hover { background: var(--paper-2); color: var(--ink-2); }
+    .nav-tab.active { color: var(--accent); background: var(--accent-soft); font-weight: 600; }
+    .masthead-right {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding-left: 12px;
+    }
+    .sync-dot {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: var(--s-scale);
+      box-shadow: 0 0 0 0 rgba(53,104,63,0);
+      animation: pulse-sync 2.4s ease infinite;
+    }
+    @keyframes pulse-sync {
+      0%   { box-shadow: 0 0 0 0 rgba(53,104,63,.5); }
+      60%  { box-shadow: 0 0 0 5px rgba(53,104,63,0); }
+      100% { box-shadow: 0 0 0 0 rgba(53,104,63,0); }
+    }
+    .avatar {
+      width: 26px; height: 26px;
+      border-radius: 50%;
+      background: var(--paper-2);
+      border: 1px solid var(--line-hi);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 10px; font-weight: 600; color: var(--ink-2);
+    }
+    .btn-primary {
+      height: 28px; padding: 0 14px;
+      border-radius: 5px;
+      background: var(--accent);
+      color: #fff;
+      font-family: 'Satoshi', system-ui, sans-serif;
+      font-size: 12.5px; font-weight: 500;
+      border: none; cursor: pointer;
+      transition: var(--tr);
+    }
+    .btn-primary:hover { background: var(--accent-deep); }
+    .btn-primary:active { transform: translateY(1px); background: var(--accent-deep); }
+    .btn-ghost {
+      height: 28px; padding: 0 12px;
+      border-radius: 5px;
+      background: var(--paper);
+      border: 1px solid var(--line);
+      color: var(--ink-2);
+      font-family: 'Satoshi', system-ui, sans-serif;
+      font-size: 12.5px; font-weight: 500;
+      cursor: pointer;
+      transition: var(--tr);
+    }
+    .btn-ghost:hover { border-color: var(--line-hi); color: var(--ink); }
+    .btn-ghost:active { transform: translateY(1px); }
+
+    /* ─── TAB PANELS ───────────────────────────────────────────────── */
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; animation: fadeUp 200ms cubic-bezier(0.32,0.72,0,1) both; }
+    @keyframes fadeUp { from { opacity:0; transform: translateY(4px); } to { opacity:1; transform: translateY(0); } }
+
+    /* ─── SECTION HEADER ───────────────────────────────────────────── */
+    .section-header {
+      position: sticky;
+      top: 44px;
+      z-index: 90;
+      background: var(--paper);
+      border-bottom: 1px solid var(--line);
+      padding: 12px 24px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .sh-left { display: flex; flex-direction: column; gap: 2px; flex: 1; }
+    .sh-eyebrow { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .12em; color: var(--ink-3); line-height: 1; }
+    .sh-title-row { display: flex; align-items: baseline; gap: 8px; }
+    .sh-title { font-family: 'Instrument Serif', serif; font-style: italic; font-size: 22px; letter-spacing: -.02em; color: var(--ink); line-height: 1; }
+    .sh-count { font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 500; color: var(--ink-3); background: var(--paper-2); padding: 2px 8px; border-radius: 100px; border: 1px solid var(--line); }
+
+    /* ─── FILTER BAR ───────────────────────────────────────────────── */
+    .filter-bar {
+      position: sticky;
+      top: 108px;
+      z-index: 89;
+      background: var(--canvas);
+      border-bottom: 1px solid var(--line);
+      padding: 0 24px;
+    }
+    .filter-primary {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 0;
+      flex-wrap: nowrap;
+    }
+    .filter-secondary {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding-bottom: 8px;
+      flex-wrap: wrap;
+      max-height: 0;
+      overflow: hidden;
+      transition: max-height 300ms cubic-bezier(0.32,0.72,0,1), padding-bottom 300ms;
+    }
+    .filter-secondary.open { max-height: 60px; padding-bottom: 8px; }
+    .filter-divider { width: 1px; height: 16px; background: var(--line-hi); flex-shrink: 0; }
+    .chip {
+      height: 28px; padding: 0 11px;
+      border-radius: 14px;
+      border: 1px solid var(--line);
+      background: var(--paper);
+      font-family: 'Satoshi', system-ui, sans-serif;
+      font-size: 12px; font-weight: 500;
+      color: var(--ink-2);
+      cursor: pointer;
+      display: flex; align-items: center; gap: 4px;
+      white-space: nowrap;
+      transition: var(--tr);
+      flex-shrink: 0;
+    }
+    .chip:hover { border-color: var(--line-hi); color: var(--ink); }
+    .chip.active { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+    .chip-muted { background: transparent; border-color: transparent; font-size: 11.5px; color: var(--ink-3); }
+    .chip-muted:hover { background: var(--paper-2); border-color: var(--line); }
+    .chip-muted.active { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+    .chip .chevron { font-size: 8px; opacity: .6; }
+    .pill-group { display: flex; gap: 1px; }
+    .pill-group .chip { border-radius: 0; }
+    .pill-group .chip:first-child { border-radius: 14px 0 0 14px; }
+    .pill-group .chip:last-child { border-radius: 0 14px 14px 0; }
+    .search-chip {
+      height: 28px; padding: 0 10px;
+      border-radius: 14px;
+      border: 1px solid var(--line);
+      background: var(--paper);
+      display: flex; align-items: center; gap: 6px;
+      transition: var(--tr);
+      min-width: 160px;
+    }
+    .search-chip svg { opacity: .4; flex-shrink: 0; }
+    .search-chip input {
+      border: none; background: transparent;
+      font-family: 'Satoshi', system-ui, sans-serif;
+      font-size: 12px; color: var(--ink);
+      outline: none; width: 100%;
+    }
+    .search-chip input::placeholder { color: var(--ink-4); }
+
+    /* ─── TABLE ─────────────────────────────────────────────────────── */
+    .table-wrap { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; min-width: 1100px; }
+    thead th {
+      position: sticky; top: 196px; z-index: 80;
+      padding: 0 10px; height: 32px;
+      font-size: 10.5px; font-weight: 600;
+      text-transform: uppercase; letter-spacing: .07em;
+      color: var(--ink-3);
+      background: var(--canvas);
+      border-bottom: 1px solid var(--line);
+      white-space: nowrap;
+      cursor: pointer;
+      user-select: none;
+      transition: color 120ms;
+    }
+    thead th:first-child { padding-left: 24px; }
+    thead th:last-child { padding-right: 24px; }
+    thead th:hover { color: var(--ink-2); }
+    thead th.sort-asc, thead th.sort-desc { color: var(--accent); }
+    .sort-icon { font-size: 7px; margin-left: 3px; opacity: .5; }
+    tbody tr {
+      border-bottom: 1px solid rgba(232,229,220,.6);
+      transition: background 100ms;
+      animation: rowIn 220ms cubic-bezier(0.32,0.72,0,1) both;
+      animation-delay: calc(var(--i,0) * 35ms);
+    }
+    @keyframes rowIn { from { opacity:0; transform: translateY(3px); } to { opacity:1; transform: translateY(0); } }
+    tbody tr:hover { background: #f9f7f1; }
+    tbody td {
+      padding: 0 10px; height: 36px;
+      font-size: 13px; color: var(--ink-2);
+      vertical-align: middle;
+      white-space: nowrap;
+    }
+    tbody td:first-child { padding-left: 24px; }
+    tbody td:last-child { padding-right: 24px; }
+    .cell-id { font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 500; color: var(--ink-3); }
+    .cell-dot { color: var(--line-hi); margin: 0 4px; }
+    .cell-name { font-weight: 600; font-size: 13px; color: var(--ink); }
+    .cell-hypothesis { font-size: 11.5px; color: var(--ink-3); max-width: 220px; overflow: hidden; text-overflow: ellipsis; }
+    .cell-link { font-size: 11px; font-weight: 500; color: var(--accent); text-decoration: none; padding: 2px 6px; border-radius: 4px; border: 1px solid var(--accent-soft); transition: var(--tr); }
+    .cell-link:hover { background: var(--accent-soft); }
+    .cell-empty { color: var(--ink-4); }
+    .cell-sm { font-size: 12px; color: var(--ink-3); }
+    .cell-adtype { font-size: 11.5px; font-weight: 500; color: var(--ink-2); }
+    .cell-created { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--ink-3); }
+    .cell-var { font-family: 'JetBrains Mono', monospace; font-size: 11.5px; font-weight: 500; color: var(--ink-2); }
+    .cell-matrix { font-size: 11.5px; color: var(--ink-3); }
+    .badge-funnel { display: inline-flex; align-items: center; height: 18px; padding: 0 7px; border-radius: 3px; font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; }
+    .badge-tof { background: var(--s-testing-soft); color: var(--s-testing); }
+    .badge-mof { background: var(--s-approved-soft); color: var(--s-approved); }
+    .badge-bof { background: var(--s-winner-soft); color: var(--s-winner); }
+    .pill-status { display: inline-flex; align-items: center; height: 20px; padding: 0 8px; border-radius: 10px; font-size: 11px; font-weight: 500; white-space: nowrap; }
+    .s-scale   { background: var(--s-scale-soft);   color: var(--s-scale); }
+    .s-winner  { background: var(--s-winner-soft);  color: var(--s-winner); }
+    .s-testing { background: var(--s-testing-soft); color: var(--s-testing); }
+    .s-approved{ background: var(--s-approved-soft);color: var(--s-approved); }
+    .s-ready   { background: var(--s-ready-soft);   color: var(--s-ready); }
+    .s-prod    { background: var(--s-prod-soft);     color: var(--s-prod); }
+    .s-loser   { background: var(--s-loser-soft);   color: var(--s-loser); }
+    .s-untested{ background: var(--s-untested-soft);color: var(--s-untested); }
+    .actions-cell { display: flex; align-items: center; gap: 4px; opacity: 0; transition: opacity 120ms; }
+    tbody tr:hover .actions-cell { opacity: 1; }
+    .action-btn { width: 22px; height: 22px; border-radius: 4px; border: 1px solid var(--line); background: var(--paper); cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 10px; color: var(--ink-3); transition: var(--tr); }
+    .action-btn:hover { border-color: var(--line-hi); color: var(--ink-2); }
+    .action-btn.delete:hover { border-color: var(--s-loser-soft); color: var(--s-loser); background: var(--s-loser-soft); }
+
+    /* ─── DASHBOARD ─────────────────────────────────────────────────── */
+    .dash-body { padding: 24px; display: flex; flex-direction: column; gap: 20px; max-width: 1440px; }
+    .kpi-row { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; }
+    .kpi-card {
+      background: var(--paper-2); border: 1px solid var(--line); border-radius: 10px; padding: 3px;
+      box-shadow: var(--sh);
+    }
+    .kpi-inner { background: var(--paper); border-radius: 8px; padding: 16px 18px; }
+    .kpi-label { font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: .1em; color: var(--ink-3); margin-bottom: 8px; }
+    .kpi-num { font-family: 'JetBrains Mono', monospace; font-size: 28px; font-weight: 500; color: var(--ink); letter-spacing: -.02em; font-feature-settings: "tnum" 1; line-height: 1; margin-bottom: 6px; }
+    .kpi-delta { font-family: 'JetBrains Mono', monospace; font-size: 11.5px; font-weight: 500; }
+    .kpi-delta.up { color: var(--s-scale); }
+    .kpi-delta.down { color: var(--s-loser); }
+    .kpi-delta.neutral { color: var(--ink-3); }
+    .dash-row-2 { display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 12px; }
+    .dash-card { background: var(--paper-2); border: 1px solid var(--line); border-radius: 10px; padding: 3px; box-shadow: var(--sh); }
+    .dash-card-inner { background: var(--paper); border-radius: 8px; padding: 16px 18px; height: 100%; }
+    .dash-card-title { font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: .1em; color: var(--ink-3); margin-bottom: 12px; }
+    .stat-list { display: flex; flex-direction: column; gap: 8px; }
+    .stat-row { display: flex; align-items: center; gap: 8px; }
+    .stat-bar-track { flex: 1; height: 4px; background: var(--paper-2); border-radius: 2px; overflow: hidden; }
+    .stat-bar-fill { height: 100%; border-radius: 2px; }
+    .stat-label { font-size: 12px; color: var(--ink-2); min-width: 80px; }
+    .stat-val { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--ink-3); min-width: 28px; text-align: right; }
+    .funnel-pills { display: flex; flex-direction: column; gap: 10px; }
+    .funnel-row { display: flex; flex-direction: column; gap: 4px; }
+    .funnel-name { font-size: 11px; font-weight: 500; color: var(--ink-2); }
+    .funnel-count { font-family: 'JetBrains Mono', monospace; font-size: 22px; font-weight: 500; color: var(--ink); }
+    .funnel-sub { font-size: 10.5px; color: var(--ink-3); }
+
+    /* ─── MATRIX ────────────────────────────────────────────────────── */
+    .matrix-body { padding: 0 24px 40px; }
+    .matrix-toolbar {
+      position: sticky; top: 44px; z-index: 90;
+      background: var(--paper);
+      border-bottom: 1px solid var(--line);
+      padding: 10px 24px;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .matrix-toolbar .sh-left { gap: 2px; }
+    .matrix-toolbar .sh-title { font-size: 22px; }
+
+    .angle-section { margin-top: 24px; }
+    .angle-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 10px;
+      padding: 10px 14px;
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+    }
+    .angle-label {
+      font-family: 'Instrument Serif', serif;
+      font-style: italic;
+      font-size: 17px;
+      letter-spacing: -.02em;
+      color: var(--ink);
+    }
+    .angle-meta {
+      display: flex; align-items: center; gap: 6px;
+      margin-left: auto;
+    }
+    .angle-total { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--ink-3); }
+    .angle-status-strip {
+      display: flex; gap: 3px; align-items: center;
+    }
+    .angle-dot {
+      width: 7px; height: 7px; border-radius: 50%;
+      display: inline-block;
+    }
+    .angle-dot-label { font-size: 10.5px; font-weight: 500; }
+
+    .persona-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 10px;
+    }
+    .persona-col-header {
+      padding: 6px 10px 8px;
+      display: flex; flex-direction: column; gap: 2px;
+    }
+    .persona-name { font-size: 12px; font-weight: 600; color: var(--ink-2); }
+    .persona-sub { font-size: 10.5px; color: var(--ink-3); }
+
+    /* Matrix column headers row */
+    .matrix-col-headers {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 10px;
+      padding: 6px 0 4px;
+    }
+
+    /* Matrix cell */
+    .mcell {
+      min-height: 130px;
+      padding: 12px;
+      border-radius: 8px;
+      border: 1px solid var(--line);
+      background: var(--paper);
+      cursor: pointer;
+      position: relative;
+      overflow: hidden;
+      transition: border-color 160ms cubic-bezier(0.32,0.72,0,1),
+                  background 160ms cubic-bezier(0.32,0.72,0,1),
+                  box-shadow 160ms cubic-bezier(0.32,0.72,0,1);
+    }
+    .mcell:hover {
+      border-color: var(--accent);
+      background: #fefcf9;
+      box-shadow: 0 2px 12px rgba(192,83,54,.08);
+    }
+    .mcell-empty {
+      border-style: dashed;
+      border-color: var(--line-hi);
+      background: var(--paper-2);
+      display: flex; align-items: center; justify-content: center;
+      flex-direction: column; gap: 6px;
+      cursor: pointer;
+    }
+    .mcell-empty:hover { border-color: var(--accent); background: var(--accent-soft); }
+    .mcell-empty:hover .empty-icon { color: var(--accent); }
+    .empty-icon { font-size: 18px; color: var(--line-hi); transition: color 160ms; }
+    .empty-label { font-size: 10.5px; font-weight: 500; color: var(--ink-4); }
+
+    .mcell-count {
+      font-family: 'Instrument Serif', serif;
+      font-style: italic;
+      font-size: 30px;
+      letter-spacing: -.03em;
+      color: var(--ink);
+      line-height: 1;
+      margin-bottom: 4px;
+    }
+    .mcell-sublabel {
+      font-size: 10.5px;
+      color: var(--ink-3);
+      margin-bottom: 10px;
+    }
+
+    /* Status proportion bar */
+    .mcell-bar {
+      display: flex; gap: 2px; height: 4px;
+      border-radius: 2px; overflow: hidden;
+      margin-bottom: 8px;
+    }
+    .mcell-bar-seg { border-radius: 2px; }
+
+    /* Status dots */
+    .mcell-statuses { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px; }
+    .mcell-sdot {
+      display: flex; align-items: center; gap: 3px;
+      font-size: 10.5px; font-weight: 500; color: var(--ink-3);
+    }
+    .sdot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+
+    /* Funnel coverage */
+    .mcell-funnel { display: flex; gap: 4px; margin-bottom: 6px; }
+    .funnel-pill {
+      font-size: 9.5px; font-weight: 600;
+      text-transform: uppercase; letter-spacing: .04em;
+      padding: 1px 5px; border-radius: 3px;
+    }
+    .fp-t { background: var(--s-testing-soft); color: var(--s-testing); }
+    .fp-m { background: var(--s-approved-soft); color: var(--s-approved); }
+    .fp-b { background: var(--s-winner-soft); color: var(--s-winner); }
+    .fp-miss { background: var(--s-loser-soft); color: var(--s-loser); opacity: .6; border: 1px dashed var(--s-loser); font-style: italic; }
+
+    /* Time tracking */
+    .mcell-time {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      color: var(--ink-4);
+      display: flex; align-items: center; gap: 4px;
+    }
+
+    /* Cell hover action bar */
+    .mcell-actions {
+      position: absolute; bottom: 0; left: 0; right: 0;
+      height: 28px;
+      background: rgba(250,249,245,.96);
+      border-top: 1px solid var(--line);
+      display: flex; align-items: center;
+      padding: 0 8px; gap: 4px;
+      transform: translateY(100%);
+      transition: transform 160ms cubic-bezier(0.32,0.72,0,1);
+    }
+    .mcell:hover .mcell-actions { transform: translateY(0); }
+    .mcell-act-btn {
+      height: 20px; padding: 0 8px; border-radius: 4px;
+      border: 1px solid var(--line); background: var(--paper);
+      font-family: 'Satoshi', system-ui, sans-serif;
+      font-size: 10.5px; font-weight: 500; color: var(--ink-2);
+      cursor: pointer; transition: var(--tr);
+    }
+    .mcell-act-btn:hover { border-color: var(--line-hi); color: var(--ink); }
+    .mcell-act-btn.accent { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+    .spacer { flex: 1; }
+
+    /* ─── DRAWER ─────────────────────────────────────────────────────── */
+    .drawer-backdrop {
+      position: fixed; inset: 0; z-index: 200;
+      background: rgba(26,24,20,.15);
+      opacity: 0; pointer-events: none;
+      transition: opacity 280ms cubic-bezier(0.32,0.72,0,1);
+      backdrop-filter: blur(2px);
+    }
+    .drawer-backdrop.open { opacity: 1; pointer-events: all; }
+    .drawer {
+      position: fixed; top: 0; right: 0; bottom: 0; z-index: 201;
+      width: 380px;
+      background: var(--paper);
+      border-left: 1px solid var(--line);
+      transform: translateX(100%);
+      transition: transform 280ms cubic-bezier(0.32,0.72,0,1);
+      display: flex; flex-direction: column;
+    }
+    .drawer.open { transform: translateX(0); }
+    .drawer-header {
+      padding: 14px 16px 12px;
+      border-bottom: 1px solid var(--line);
+      display: flex; align-items: flex-start; gap: 8px;
+    }
+    .drawer-title-block { flex: 1; display: flex; flex-direction: column; gap: 3px; }
+    .drawer-angle { font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: .1em; color: var(--ink-3); }
+    .drawer-persona { font-family: 'Instrument Serif', serif; font-style: italic; font-size: 20px; letter-spacing: -.02em; color: var(--ink); }
+    .drawer-close {
+      width: 24px; height: 24px; border-radius: 5px;
+      border: 1px solid var(--line); background: var(--paper);
+      cursor: pointer; font-size: 12px; color: var(--ink-3);
+      display: flex; align-items: center; justify-content: center;
+      transition: var(--tr); flex-shrink: 0; margin-top: 2px;
+    }
+    .drawer-close:hover { border-color: var(--line-hi); color: var(--ink); }
+
+    /* Drawer view toggle */
+    .drawer-toggle { padding: 10px 16px; border-bottom: 1px solid var(--line); }
+    .seg-ctrl { display: flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+    .seg-btn {
+      flex: 1; height: 26px;
+      font-family: 'Satoshi', system-ui, sans-serif;
+      font-size: 11.5px; font-weight: 500;
+      border: none; background: var(--paper);
+      color: var(--ink-3); cursor: pointer;
+      transition: var(--tr);
+      border-right: 1px solid var(--line);
+    }
+    .seg-btn:last-child { border-right: none; }
+    .seg-btn:hover { background: var(--paper-2); color: var(--ink-2); }
+    .seg-btn.active { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+
+    /* Drawer body */
+    .drawer-body { flex: 1; overflow-y: auto; padding: 12px 0; }
+    .drawer-group { margin-bottom: 4px; }
+    .drawer-group-header {
+      padding: 4px 16px 6px;
+      font-size: 10px; font-weight: 600;
+      text-transform: uppercase; letter-spacing: .1em;
+      color: var(--ink-4);
+    }
+    .creative-row {
+      min-height: 44px; padding: 8px 16px;
+      display: flex; align-items: center; gap: 10px;
+      border-bottom: 1px solid rgba(232,229,220,.5);
+      transition: background 100ms;
+      cursor: pointer;
+    }
+    .creative-row:hover { background: var(--paper-2); }
+    .cr-id { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--ink-4); min-width: 44px; }
+    .cr-name { font-size: 12.5px; font-weight: 500; color: var(--ink); flex: 1; line-height: 1.3; }
+    .cr-sub { font-size: 11px; color: var(--ink-3); }
+    .cr-meta { display: flex; flex-direction: column; gap: 3px; flex: 1; }
+
+    /* Drawer footer */
+    .drawer-footer {
+      padding: 10px 16px;
+      border-top: 1px solid var(--line);
+      display: flex; gap: 6px;
+    }
+    .drawer-footer .btn-primary { flex: 1; height: 32px; font-size: 12.5px; border-radius: 6px; }
+    .drawer-footer .btn-ghost { height: 32px; border-radius: 6px; }
+
+    /* ─── PLACEHOLDER TABS ───────────────────────────────────────────── */
+    .placeholder-tab {
+      display: flex; align-items: center; justify-content: center;
+      min-height: 320px; flex-direction: column; gap: 12px;
+      color: var(--ink-3);
+    }
+    .placeholder-tab .ph-icon { font-size: 32px; opacity: .3; }
+    .placeholder-tab .ph-title { font-family: 'Instrument Serif', serif; font-style: italic; font-size: 22px; color: var(--ink-2); }
+    .placeholder-tab .ph-sub { font-size: 13px; color: var(--ink-3); }
+
+    /* ─── MISC ───────────────────────────────────────────────────────── */
+    ::-webkit-scrollbar { width: 4px; height: 4px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--line-hi); border-radius: 2px; }
+
+    .gap-spacer { flex: 1; }
+  </style>
+</head>
+<body>
+
+<!-- ══════════════════════════════════════════════════════════════ -->
+<!-- MASTHEAD                                                        -->
+<!-- ══════════════════════════════════════════════════════════════ -->
+<header class="masthead">
+  <div class="brand">
+    <div class="brand-mark">I</div>
+    <div class="brand-name">Immuvi <em>CC</em></div>
+  </div>
+  <nav class="nav-tabs">
+    <button class="nav-tab" onclick="switchTab('dashboard',this)">Dashboard</button>
+    <button class="nav-tab active" onclick="switchTab('tracker',this)">Creative Tracker</button>
+    <button class="nav-tab" onclick="switchTab('matrix',this)">Creative Matrix</button>
+    <button class="nav-tab" onclick="switchTab('brief',this)">Brief Builder</button>
+    <button class="nav-tab" onclick="switchTab('angles',this)">Angles &amp; Personas</button>
+    <button class="nav-tab" onclick="switchTab('inspiration',this)">Inspiration</button>
+    <button class="nav-tab" onclick="switchTab('production',this)">Production</button>
+    <button class="nav-tab" onclick="switchTab('settings',this)">Settings</button>
+  </nav>
+  <div class="masthead-right">
+    <div class="sync-dot" title="Live sync active"></div>
+    <div class="avatar">GP</div>
+  </div>
+</header>
+
+
+<!-- ══════════════════════════════════════════════════════════════ -->
+<!-- TAB: DASHBOARD                                                  -->
+<!-- ══════════════════════════════════════════════════════════════ -->
+<div class="tab-panel" id="tab-dashboard">
+  <div style="background:var(--paper);border-bottom:1px solid var(--line);padding:12px 24px;display:flex;align-items:baseline;gap:8px;">
+    <div style="display:flex;flex-direction:column;gap:2px;">
+      <span class="sh-eyebrow">Overview</span>
+      <div style="display:flex;align-items:baseline;gap:8px;">
+        <span class="sh-title">Dashboard</span>
+        <span style="font-size:10.5px;font-family:'JetBrains Mono',monospace;color:var(--ink-3);">Apr 22, 2026</span>
+      </div>
+    </div>
+  </div>
+  <div class="dash-body">
+    <div class="kpi-row">
+      <div class="kpi-card">
+        <div class="kpi-inner">
+          <div class="kpi-label">Total Creatives</div>
+          <div class="kpi-num">147</div>
+          <div class="kpi-delta up">+12 this month</div>
+        </div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-inner">
+          <div class="kpi-label">Active Testing</div>
+          <div class="kpi-num">23</div>
+          <div class="kpi-delta neutral">across 4 angles</div>
+        </div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-inner">
+          <div class="kpi-label">Winners</div>
+          <div class="kpi-num">31</div>
+          <div class="kpi-delta up">+4 vs last month</div>
+        </div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-inner">
+          <div class="kpi-label">Scaling</div>
+          <div class="kpi-num">8</div>
+          <div class="kpi-delta up">+2 vs last week</div>
+        </div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-inner">
+          <div class="kpi-label">Win Rate</div>
+          <div class="kpi-num">21%</div>
+          <div class="kpi-delta down">−3pp vs last mo</div>
+        </div>
+      </div>
+    </div>
+    <div class="dash-row-2">
+      <div class="dash-card">
+        <div class="dash-card-inner">
+          <div class="dash-card-title">Status Distribution</div>
+          <div class="stat-list">
+            <div class="stat-row">
+              <span class="stat-label" style="color:var(--s-scale)">Scaling</span>
+              <div class="stat-bar-track"><div class="stat-bar-fill" style="width:5%;background:var(--s-scale)"></div></div>
+              <span class="stat-val">8</span>
+            </div>
+            <div class="stat-row">
+              <span class="stat-label" style="color:var(--s-winner)">Winner</span>
+              <div class="stat-bar-track"><div class="stat-bar-fill" style="width:21%;background:var(--s-winner)"></div></div>
+              <span class="stat-val">31</span>
+            </div>
+            <div class="stat-row">
+              <span class="stat-label" style="color:var(--s-testing)">Testing</span>
+              <div class="stat-bar-track"><div class="stat-bar-fill" style="width:16%;background:var(--s-testing)"></div></div>
+              <span class="stat-val">23</span>
+            </div>
+            <div class="stat-row">
+              <span class="stat-label" style="color:var(--s-approved)">Approved</span>
+              <div class="stat-bar-track"><div class="stat-bar-fill" style="width:12%;background:var(--s-approved)"></div></div>
+              <span class="stat-val">18</span>
+            </div>
+            <div class="stat-row">
+              <span class="stat-label" style="color:var(--s-ready)">Ready</span>
+              <div class="stat-bar-track"><div class="stat-bar-fill" style="width:7%;background:var(--s-ready)"></div></div>
+              <span class="stat-val">11</span>
+            </div>
+            <div class="stat-row">
+              <span class="stat-label" style="color:var(--s-prod)">In Prod</span>
+              <div class="stat-bar-track"><div class="stat-bar-fill" style="width:5%;background:var(--s-prod)"></div></div>
+              <span class="stat-val">7</span>
+            </div>
+            <div class="stat-row">
+              <span class="stat-label" style="color:var(--s-loser)">Loser</span>
+              <div class="stat-bar-track"><div class="stat-bar-fill" style="width:24%;background:var(--s-loser)"></div></div>
+              <span class="stat-val">35</span>
+            </div>
+            <div class="stat-row">
+              <span class="stat-label" style="color:var(--s-untested)">Untested</span>
+              <div class="stat-bar-track"><div class="stat-bar-fill" style="width:9%;background:var(--s-untested)"></div></div>
+              <span class="stat-val">14</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="dash-card">
+        <div class="dash-card-inner">
+          <div class="dash-card-title">Funnel Coverage</div>
+          <div class="funnel-pills">
+            <div class="funnel-row">
+              <div class="funnel-name">Top of Funnel</div>
+              <div class="funnel-count" style="color:var(--s-testing)">61</div>
+              <div class="funnel-sub">41% of library</div>
+            </div>
+            <div style="height:1px;background:var(--line);"></div>
+            <div class="funnel-row">
+              <div class="funnel-name">Mid of Funnel</div>
+              <div class="funnel-count" style="color:var(--s-approved)">52</div>
+              <div class="funnel-sub">35% of library</div>
+            </div>
+            <div style="height:1px;background:var(--line);"></div>
+            <div class="funnel-row">
+              <div class="funnel-name">Bottom of Funnel</div>
+              <div class="funnel-count" style="color:var(--s-winner)">34</div>
+              <div class="funnel-sub">23% of library</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="dash-card">
+        <div class="dash-card-inner">
+          <div class="dash-card-title">Matrix Coverage</div>
+          <div style="font-family:'JetBrains Mono',monospace;font-size:28px;font-weight:500;color:var(--ink);margin-bottom:4px;">11/16</div>
+          <div style="font-size:11.5px;color:var(--ink-3);margin-bottom:12px;">cells with creatives</div>
+          <div style="font-size:11px;color:var(--ink-3);line-height:1.6;">
+            5 uncovered cells — gaps in Skeptic×PAS and Newcomer×Curiosity segments
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════════════════════════════════════ -->
+<!-- TAB: CREATIVE TRACKER                                           -->
+<!-- ══════════════════════════════════════════════════════════════ -->
+<div class="tab-panel active" id="tab-tracker">
+
+  <!-- Section Header -->
+  <div class="section-header">
+    <div class="sh-left">
+      <span class="sh-eyebrow">Creative Library</span>
+      <div class="sh-title-row">
+        <span class="sh-title">Creative Tracker</span>
+        <span class="sh-count" id="rowCountBadge">147 creatives</span>
+      </div>
+    </div>
+    <div style="display:flex;align-items:center;gap:6px;">
+      <button class="btn-ghost" style="font-size:11.5px;">Export ↓</button>
+      <button class="btn-ghost" style="font-size:11.5px;">Columns</button>
+      <button class="btn-primary">+ Add Creative</button>
+    </div>
+  </div>
+
+  <!-- Filter Bar -->
+  <div class="filter-bar" id="filterBar">
+    <div class="filter-primary">
+      <!-- Task type pill group -->
+      <div class="pill-group" id="taskTypeGroup">
+        <button class="chip active" data-type="all">All</button>
+        <button class="chip" data-type="video">Video</button>
+        <button class="chip" data-type="image">Image</button>
+        <button class="chip" data-type="copy">Copy</button>
+      </div>
+      <div class="filter-divider"></div>
+      <button class="chip" id="statusFilter">Status <span class="chevron">▾</span></button>
+      <button class="chip" id="funnelFilter">Funnel <span class="chevron">▾</span></button>
+      <button class="chip" id="angleFilter">Angle <span class="chevron">▾</span></button>
+      <button class="chip" id="personaFilter">Persona <span class="chevron">▾</span></button>
+      <button class="chip" id="dateFilter">Date range <span class="chevron">▾</span></button>
+      <div class="filter-divider"></div>
+      <div class="search-chip" id="searchChip">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+        <input id="searchInput" type="text" placeholder="Search creatives…">
+      </div>
+      <div class="gap-spacer"></div>
+      <button class="chip chip-muted" id="moreFiltersBtn">More filters +</button>
+      <button class="chip chip-muted" id="clearAllBtn">Clear all</button>
+    </div>
+    <div class="filter-secondary" id="filterSecondary">
+      <button class="chip" id="formatFilter">Format <span class="chevron">▾</span></button>
+      <button class="chip" id="structureFilter">Structure <span class="chevron">▾</span></button>
+      <button class="chip" id="hookFilter">Hook Type <span class="chevron">▾</span></button>
+      <button class="chip" id="productionFilter">Production <span class="chevron">▾</span></button>
+      <button class="chip" id="adTypeFilter">Ad Type <span class="chevron">▾</span></button>
+    </div>
+  </div>
+
+  <!-- Table -->
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th data-col="name" style="min-width:200px">Name <span class="sort-icon">↕</span></th>
+          <th data-col="angle">Angle <span class="sort-icon">↕</span></th>
+          <th data-col="persona">Persona <span class="sort-icon">↕</span></th>
+          <th data-col="structure">Structure <span class="sort-icon">↕</span></th>
+          <th data-col="hook">Hook <span class="sort-icon">↕</span></th>
+          <th data-col="production">Production <span class="sort-icon">↕</span></th>
+          <th data-col="hypothesis" style="min-width:180px">Hypothesis <span class="sort-icon">↕</span></th>
+          <th data-col="brief">Brief <span class="sort-icon">↕</span></th>
+          <th data-col="ad">Live Ad <span class="sort-icon">↕</span></th>
+          <th data-col="adtype">Ad Type <span class="sort-icon">↕</span></th>
+          <th data-col="funnel">Funnel <span class="sort-icon">↕</span></th>
+          <th data-col="status">Status <span class="sort-icon">↕</span></th>
+          <th data-col="created">Created <span class="sort-icon">↕</span></th>
+          <th data-col="vars">Vars <span class="sort-icon">↕</span></th>
+          <th data-col="matrix">Matrix <span class="sort-icon">↕</span></th>
+          <th style="width:70px;cursor:default;"></th>
+        </tr>
+      </thead>
+      <tbody id="tableBody">
+        <tr style="--i:0">
+          <td><span class="cell-id">AT-001</span><span class="cell-dot">·</span><span class="cell-name">Pain Point Hero</span></td>
+          <td>Problem-Solution</td><td>Skeptic</td>
+          <td class="cell-sm">Problem-Solution</td><td class="cell-sm">Statement</td><td class="cell-sm">Motion</td>
+          <td><span class="cell-hypothesis">Hero video tackling core objection head-on</span></td>
+          <td><a href="#" class="cell-link">↗ Brief</a></td>
+          <td><a href="#" class="cell-link">↗ Ad</a></td>
+          <td class="cell-adtype">Video</td>
+          <td><span class="badge-funnel badge-tof">TOF</span></td>
+          <td><span class="pill-status s-scale">Scaling</span></td>
+          <td class="cell-created">Mar 12</td>
+          <td><span class="cell-var">5×</span></td>
+          <td class="cell-matrix">3 cells</td>
+          <td><div class="actions-cell">
+            <button class="action-btn" title="Edit">✏</button>
+            <button class="action-btn" title="Open">↗</button>
+            <button class="action-btn delete" title="Delete">✕</button>
+          </div></td>
+        </tr>
+        <tr style="--i:1">
+          <td><span class="cell-id">AT-002</span><span class="cell-dot">·</span><span class="cell-name">Transformation Proof</span></td>
+          <td>Social Proof</td><td>Explorer</td>
+          <td class="cell-sm">Before-After</td><td class="cell-sm">Story</td><td class="cell-sm">UGC</td>
+          <td><span class="cell-hypothesis">Real customer before/after testimonial sequence</span></td>
+          <td><a href="#" class="cell-link">↗ Brief</a></td>
+          <td><a href="#" class="cell-link">↗ Ad</a></td>
+          <td class="cell-adtype">Video</td>
+          <td><span class="badge-funnel badge-mof">MOF</span></td>
+          <td><span class="pill-status s-winner">Winner</span></td>
+          <td class="cell-created">Mar 14</td>
+          <td><span class="cell-var">3×</span></td>
+          <td class="cell-matrix">2 cells</td>
+          <td><div class="actions-cell">
+            <button class="action-btn" title="Edit">✏</button>
+            <button class="action-btn" title="Open">↗</button>
+            <button class="action-btn delete" title="Delete">✕</button>
+          </div></td>
+        </tr>
+        <tr style="--i:2">
+          <td><span class="cell-id">AT-003</span><span class="cell-dot">·</span><span class="cell-name">Curiosity Hook Static</span></td>
+          <td>Curiosity Gap</td><td>Newcomer</td>
+          <td class="cell-sm">Problem-Solution</td><td class="cell-sm">Question</td><td class="cell-sm">Static</td>
+          <td><span class="cell-hypothesis">Intrigue-driven static pulling newcomers in</span></td>
+          <td><a href="#" class="cell-link">↗ Brief</a></td>
+          <td><span class="cell-empty">—</span></td>
+          <td class="cell-adtype">Image</td>
+          <td><span class="badge-funnel badge-tof">TOF</span></td>
+          <td><span class="pill-status s-testing">Testing</span></td>
+          <td class="cell-created">Mar 28</td>
+          <td><span class="cell-var">2×</span></td>
+          <td class="cell-matrix">1 cell</td>
+          <td><div class="actions-cell">
+            <button class="action-btn" title="Edit">✏</button>
+            <button class="action-btn" title="Open">↗</button>
+            <button class="action-btn delete" title="Delete">✕</button>
+          </div></td>
+        </tr>
+        <tr style="--i:3">
+          <td><span class="cell-id">AT-004</span><span class="cell-dot">·</span><span class="cell-name">Authority Stack</span></td>
+          <td>Social Proof</td><td>Skeptic</td>
+          <td class="cell-sm">Listicle</td><td class="cell-sm">Statistic</td><td class="cell-sm">Motion</td>
+          <td><span class="cell-hypothesis">Credibility via stacked proof points + numbers</span></td>
+          <td><a href="#" class="cell-link">↗ Brief</a></td>
+          <td><a href="#" class="cell-link">↗ Ad</a></td>
+          <td class="cell-adtype">Video</td>
+          <td><span class="badge-funnel badge-mof">MOF</span></td>
+          <td><span class="pill-status s-approved">Approved</span></td>
+          <td class="cell-created">Apr 02</td>
+          <td><span class="cell-var">1×</span></td>
+          <td class="cell-matrix">1 cell</td>
+          <td><div class="actions-cell">
+            <button class="action-btn" title="Edit">✏</button>
+            <button class="action-btn" title="Open">↗</button>
+            <button class="action-btn delete" title="Delete">✕</button>
+          </div></td>
+        </tr>
+        <tr style="--i:4">
+          <td><span class="cell-id">AT-005</span><span class="cell-dot">·</span><span class="cell-name">Pain Amplifier</span></td>
+          <td>Pain Agitate</td><td>Loyalist</td>
+          <td class="cell-sm">PAS</td><td class="cell-sm">Statement</td><td class="cell-sm">UGC</td>
+          <td><span class="cell-hypothesis">Agitate the problem before offering relief</span></td>
+          <td><a href="#" class="cell-link">↗ Brief</a></td>
+          <td><a href="#" class="cell-link">↗ Ad</a></td>
+          <td class="cell-adtype">Video</td>
+          <td><span class="badge-funnel badge-bof">BOF</span></td>
+          <td><span class="pill-status s-ready">Ready to Launch</span></td>
+          <td class="cell-created">Apr 05</td>
+          <td><span class="cell-var">4×</span></td>
+          <td class="cell-matrix">2 cells</td>
+          <td><div class="actions-cell">
+            <button class="action-btn" title="Edit">✏</button>
+            <button class="action-btn" title="Open">↗</button>
+            <button class="action-btn delete" title="Delete">✕</button>
+          </div></td>
+        </tr>
+        <tr style="--i:5">
+          <td><span class="cell-id">AT-006</span><span class="cell-dot">·</span><span class="cell-name">Community Proof</span></td>
+          <td>Social Proof</td><td>Explorer</td>
+          <td class="cell-sm">Testimonial</td><td class="cell-sm">Story</td><td class="cell-sm">UGC</td>
+          <td><span class="cell-hypothesis">Community belonging + social validation angle</span></td>
+          <td><a href="#" class="cell-link">↗ Brief</a></td>
+          <td><a href="#" class="cell-link">↗ Ad</a></td>
+          <td class="cell-adtype">Video</td>
+          <td><span class="badge-funnel badge-mof">MOF</span></td>
+          <td><span class="pill-status s-prod">In Production</span></td>
+          <td class="cell-created">Apr 08</td>
+          <td><span class="cell-var">2×</span></td>
+          <td class="cell-matrix">1 cell</td>
+          <td><div class="actions-cell">
+            <button class="action-btn" title="Edit">✏</button>
+            <button class="action-btn" title="Open">↗</button>
+            <button class="action-btn delete" title="Delete">✕</button>
+          </div></td>
+        </tr>
+        <tr style="--i:6">
+          <td><span class="cell-id">AT-007</span><span class="cell-dot">·</span><span class="cell-name">ROI Calculator</span></td>
+          <td>Problem-Solution</td><td>Loyalist</td>
+          <td class="cell-sm">Problem-Solution</td><td class="cell-sm">Statistic</td><td class="cell-sm">Motion</td>
+          <td><span class="cell-hypothesis">Show measurable ROI to quantify-minded buyers</span></td>
+          <td><a href="#" class="cell-link">↗ Brief</a></td>
+          <td><a href="#" class="cell-link">↗ Ad</a></td>
+          <td class="cell-adtype">Video</td>
+          <td><span class="badge-funnel badge-bof">BOF</span></td>
+          <td><span class="pill-status s-loser">Loser</span></td>
+          <td class="cell-created">Apr 01</td>
+          <td><span class="cell-var">2×</span></td>
+          <td class="cell-matrix">1 cell</td>
+          <td><div class="actions-cell">
+            <button class="action-btn" title="Edit">✏</button>
+            <button class="action-btn" title="Open">↗</button>
+            <button class="action-btn delete" title="Delete">✕</button>
+          </div></td>
+        </tr>
+        <tr style="--i:7">
+          <td><span class="cell-id">AT-008</span><span class="cell-dot">·</span><span class="cell-name">UGC Raw Clip</span></td>
+          <td>Pain Agitate</td><td>Skeptic</td>
+          <td class="cell-sm">Problem-Solution</td><td class="cell-sm">Question</td><td class="cell-sm">UGC</td>
+          <td><span class="cell-hypothesis">Raw authentic UGC addressing skeptic objections</span></td>
+          <td><a href="#" class="cell-link">↗ Brief</a></td>
+          <td><a href="#" class="cell-link">↗ Ad</a></td>
+          <td class="cell-adtype">Video</td>
+          <td><span class="badge-funnel badge-tof">TOF</span></td>
+          <td><span class="pill-status s-winner">Winner</span></td>
+          <td class="cell-created">Apr 03</td>
+          <td><span class="cell-var">3×</span></td>
+          <td class="cell-matrix">2 cells</td>
+          <td><div class="actions-cell">
+            <button class="action-btn" title="Edit">✏</button>
+            <button class="action-btn" title="Open">↗</button>
+            <button class="action-btn delete" title="Delete">✕</button>
+          </div></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════════════════════════════════════ -->
+<!-- TAB: CREATIVE MATRIX                                            -->
+<!-- ══════════════════════════════════════════════════════════════ -->
+<div class="tab-panel" id="tab-matrix">
+
+  <!-- Matrix toolbar (sticky) -->
+  <div class="matrix-toolbar">
+    <div class="sh-left">
+      <span class="sh-eyebrow">Angle × Persona Grid</span>
+      <div class="sh-title-row">
+        <span class="sh-title">Creative Matrix</span>
+        <span class="sh-count">4 angles · 4 personas · 11 active cells</span>
+      </div>
+    </div>
+    <div style="display:flex;align-items:center;gap:6px;margin-left:auto;">
+      <button class="chip" id="matrixDateFilter">Date range <span class="chevron">▾</span></button>
+      <button class="chip" id="matrixStatusFilter">Status <span class="chevron">▾</span></button>
+      <button class="btn-ghost" style="font-size:11.5px;">Export</button>
+      <button class="btn-primary">+ Add Persona</button>
+    </div>
+  </div>
+
+  <!-- Persona Column Header Row (global, sticky) -->
+  <div style="position:sticky;top:108px;z-index:88;background:var(--canvas);border-bottom:1px solid var(--line);padding:0 24px;">
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;padding:8px 0;">
+      <div class="persona-col-header">
+        <div class="persona-name">Skeptic</div>
+        <div class="persona-sub">Needs proof first</div>
+      </div>
+      <div class="persona-col-header">
+        <div class="persona-name">Explorer</div>
+        <div class="persona-sub">Solution-aware</div>
+      </div>
+      <div class="persona-col-header">
+        <div class="persona-name">Loyalist</div>
+        <div class="persona-sub">Brand familiar</div>
+      </div>
+      <div class="persona-col-header">
+        <div class="persona-name">Newcomer</div>
+        <div class="persona-sub">Problem-aware</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="matrix-body">
+
+    <!-- ── ANGLE 1: Problem-Solution ──────────────────────────────── -->
+    <div class="angle-section">
+      <div class="angle-header">
+        <span class="angle-label">Problem-Solution</span>
+        <span style="font-size:11px;color:var(--ink-3);">Show the problem, deliver the fix with clarity</span>
+        <div class="angle-meta">
+          <div class="angle-status-strip">
+            <span class="angle-dot" style="background:var(--s-scale)"></span>
+            <span class="angle-dot-label" style="color:var(--s-scale);font-size:10.5px;font-weight:600;">1 Scaling</span>
+          </div>
+          <div class="angle-status-strip">
+            <span class="angle-dot" style="background:var(--s-winner)"></span>
+            <span class="angle-dot-label" style="color:var(--s-winner);font-size:10.5px;font-weight:600;">2 Winner</span>
+          </div>
+          <div class="angle-status-strip">
+            <span class="angle-dot" style="background:var(--s-testing)"></span>
+            <span class="angle-dot-label" style="color:var(--s-testing);font-size:10.5px;font-weight:600;">3 Testing</span>
+          </div>
+          <span class="angle-total">·&nbsp;9 total</span>
+        </div>
+      </div>
+      <div class="persona-grid">
+        <!-- Skeptic × Problem-Solution -->
+        <div class="mcell" onclick="openDrawer('Problem-Solution','Skeptic',3,[{id:'AT-001',name:'Pain Point Hero',status:'scale',funnel:'TOF',time:'scaling 14d'},{id:'AT-009',name:'Direct Rebuttal',status:'winner',funnel:'MOF',time:'won after 9d'},{id:'AT-021',name:'Credibility First',status:'testing',funnel:'TOF',time:'7d testing'}])">
+          <div class="mcell-count">3</div>
+          <div class="mcell-sublabel">creatives</div>
+          <div class="mcell-bar">
+            <div class="mcell-bar-seg" style="flex:1;background:var(--s-scale)"></div>
+            <div class="mcell-bar-seg" style="flex:1;background:var(--s-winner)"></div>
+            <div class="mcell-bar-seg" style="flex:1;background:var(--s-testing)"></div>
+          </div>
+          <div class="mcell-statuses">
+            <div class="mcell-sdot"><span class="sdot" style="background:var(--s-scale)"></span>1 Scaling</div>
+            <div class="mcell-sdot"><span class="sdot" style="background:var(--s-winner)"></span>1 Winner</div>
+            <div class="mcell-sdot"><span class="sdot" style="background:var(--s-testing)"></span>1 Testing</div>
+          </div>
+          <div class="mcell-funnel">
+            <span class="funnel-pill fp-t">TOF</span>
+            <span class="funnel-pill fp-m">MOF</span>
+            <span class="funnel-pill fp-miss">no BOF</span>
+          </div>
+          <div class="mcell-time">⏱ Scaling 14d</div>
+          <div class="mcell-actions">
+            <button class="mcell-act-btn accent" onclick="event.stopPropagation();openDrawer('Problem-Solution','Skeptic',3,[])">View</button>
+            <button class="mcell-act-btn" onclick="event.stopPropagation()">+ Add</button>
+            <span class="spacer"></span>
+            <button class="mcell-act-btn" onclick="event.stopPropagation()">↗ Brief</button>
+          </div>
+        </div>
+        <!-- Explorer × Problem-Solution -->
+        <div class="mcell" onclick="openDrawer('Problem-Solution','Explorer',2,[{id:'AT-012',name:'How-To Explainer',status:'winner',funnel:'TOF',time:'won after 12d'},{id:'AT-019',name:'Feature Demo',status:'approved',funnel:'MOF',time:'queued 3d'}])">
+          <div class="mcell-count">2</div>
+          <div class="mcell-sublabel">creatives</div>
+          <div class="mcell-bar">
+            <div class="mcell-bar-seg" style="flex:1;background:var(--s-winner)"></div>
+            <div class="mcell-bar-seg" style="flex:1;background:var(--s-approved)"></div>
+          </div>
+          <div class="mcell-statuses">
+            <div class="mcell-sdot"><span class="sdot" style="background:var(--s-winner)"></span>1 Winner</div>
+            <div class="mcell-sdot"><span class="sdot" style="background:var(--s-approved)"></span>1 Approved</div>
+          </div>
+          <div class="mcell-funnel">
+            <span class="funnel-pill fp-t">TOF</span>
+            <span class="funnel-pill fp-m">MOF</span>
+            <span class="funnel-pill fp-miss">no BOF</span>
+          </div>
+          <div class="mcell-time">⏱ Latest won 12d</div>
+          <div class="mcell-actions">
+            <button class="mcell-act-btn accent" onclick="event.stopPropagation()">View</button>
+            <button class="mcell-act-btn" onclick="event.stopPropagation()">+ Add</button>
+            <span class="spacer"></span>
+            <button class="mcell-act-btn" onclick="event.stopPropagation()">↗ Brief</button>
+          </div>
+        </div>
+        <!-- Loyalist × Problem-Solution -->
+        <div class="mcell" onclick="openDrawer('Problem-Solution','Loyalist',4,[{id:'AT-007',name:'ROI Calculator',status:'loser',funnel:'BOF',time:'ran 21d'},{id:'AT-015',name:'Upgrade Pitch',status:'winner',funnel:'BOF',time:'won after 8d'},{id:'AT-022',name:'Loyalty Offer',status:'testing',funnel:'BOF',time:'5d testing'},{id:'AT-030',name:'Advanced Users',status:'approved',funnel:'MOF',time:'queued 2d'}])">
+          <div class="mcell-count">4</div>
+          <div class="mcell-sublabel">creatives</div>
+          <div class="mcell-bar">
+            <div class="mcell-bar-seg" style="flex:1;background:var(--s-loser)"></div>
+            <div class="mcell-bar-seg" style="flex:2;background:var(--s-winner)"></div>
+            <div class="mcell-bar-seg" style="flex:1;background:var(--s-testing)"></div>
+          </div>
+          <div class="mcell-statuses">
+            <div class="mcell-sdot"><span class="sdot" style="background:var(--s-winner)"></span>1 Winner</div>
+            <div class="mcell-sdot"><span class="sdot" style="background:var(--s-testing)"></span>1 Testing</div>
+            <div class="mcell-sdot"><span class="sdot" style="background:var(--s-loser)"></span>1 Loser</div>
+          </div>
+          <div class="mcell-funnel">
+            <span class="funnel-pill fp-m">MOF</span>
+            <span class="funnel-pill fp-b">BOF</span>
+            <span class="funnel-pill fp-miss">no TOF</span>
+          </div>
+          <div class="mcell-time">⏱ Active 5d testing</div>
+          <div class="mcell-actions">
+            <button class="mcell-act-btn accent" onclick="event.stopPropagation()">View</button>
+            <button class="mcell-act-btn" onclick="event.stopPropagation()">+ Add</button>
+            <span class="spacer"></span>
+            <button class="mcell-act-btn" onclick="event.stopPropagation()">↗ Brief</button>
+          </div>
+        </div>
+        <!-- Newcomer × Problem-Solution -->
+        <div class="mcell" onclick="openDrawer('Problem-Solution','Newcomer',1,[{id:'AT-031',name:'Entry Point',status:'testing',funnel:'TOF',time:'4d testing'}])">
+          <div class="mcell-count">1</div>
+          <div class="mcell-sublabel">creative</div>
+          <div class="mcell-bar">
+            <div class="mcell-bar-seg" style="flex:1;background:var(--s-testing)"></div>
+          </div>
+          <div class="mcell-statuses">
+            <div class="mcell-sdot"><span class="sdot" style="background:var(--s-testing)"></span>1 Testing</div>
+          </div>
+          <div class="mcell-funnel">
+            <span class="funnel-pill fp-t">TOF</span>
+            <span class="funnel-pill fp-miss">no MOF</span>
+            <span class="funnel-pill fp-miss">no BOF</span>
+          </div>
+          <div class="mcell-time">⏱ 4d testing</div>
+          <div class="mcell-actions">
+            <button class="mcell-act-btn accent" onclick="event.stopPropagation()">View</button>
+            <button class="mcell-act-btn" onclick="event.stopPropagation()">+ Add</button>
+            <span class="spacer"></span>
+            <button class="mcell-act-btn" onclick="event.stopPropagation()">↗ Brief</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── ANGLE 2: Social Proof ───────────────────────────────────── -->
+    <div class="angle-section">
+      <div class="angle-header">
+        <span class="angle-label">Social Proof</span>
+        <span style="font-size:11px;color:var(--ink-3);">Leverage community, reviews and results</span>
+        <div class="angle-meta">
+          <div class="angle-status-strip">
+            <span class="angle-dot" style="background:var(--s-winner)"></span>
+            <span class="angle-dot-label" style="color:var(--s-winner);font-size:10.5px;font-weight:600;">3 Winner</span>
+          </div>
+          <div class="angle-status-strip">
+            <span class="angle-dot" style="background:var(--s-prod)"></span>
+            <span class="angle-dot-label" style="color:var(--s-prod);font-size:10.5px;font-weight:600;">1 In Prod</span>
+          </div>
+          <span class="angle-total">·&nbsp;6 total</span>
+        </div>
+      </div>
+      <div class="persona-grid">
+        <!-- Skeptic × Social Proof -->
+        <div class="mcell" onclick="openDrawer('Social Proof','Skeptic',2,[{id:'AT-004',name:'Authority Stack',status:'approved',funnel:'MOF',time:'queued 6d'},{id:'AT-017',name:'Case Study Cut',status:'winner',funnel:'BOF',time:'won after 15d'}])">
+          <div class="mcell-count">2</div>
+          <div class="mcell-sublabel">creatives</div>
+          <div class="mcell-bar">
+            <div class="mcell-bar-seg" style="flex:1;background:var(--s-approved)"></div>
+            <div class="mcell-bar-seg" style="flex:1;background:var(--s-winner)"></div>
+          </div>
+          <div class="mcell-statuses">
+            <div class="mcell-sdot"><span class="sdot" style="background:var(--s-winner)"></span>1 Winner</div>
+            <div class="mcell-sdot"><span class="sdot" style="background:var(--s-approved)"></span>1 Approved</div>
+          </div>
+          <div class="mcell-funnel">
+            <span class="funnel-pill fp-m">MOF</span>
+            <span class="funnel-pill fp-b">BOF</span>
+            <span class="funnel-pill fp-miss">no TOF</span>
+          </div>
+          <div class="mcell-time">⏱ Winner 15d run</div>
+          <div class="mcell-actions">
+            <button class="mcell-act-btn accent" onclick="event.stopPropagation()">View</button>
+            <button class="mcell-act-btn" onclick="event.stopPropagation()">+ Add</button>
+            <span class="spacer"></span>
+            <button class="mcell-act-btn" onclick="event.stopPropagation()">↗ Brief</button>
+          </div>
+        </div>
+        <!-- Explorer × Social Proof -->
+        <div class="mcell" onclick="openDrawer('Social Proof','Explorer',3,[{id:'AT-002',name:'Transformation Proof',status:'winner',funnel:'MOF',time:'won after 11d'},{id:'AT-006',name:'Community Proof',status:'prod',funnel:'MOF',time:'7d in prod'},{id:'AT-023',name:'Results Reel',status:'winner',funnel:'TOF',time:'won after 18d'}])">
+          <div class="mcell-count">3</div>
+          <div class="mcell-sublabel">creatives</div>
+          <div class="mcell-bar">
+            <div class="mcell-bar-seg" style="flex:2;background:var(--s-winner)"></div>
+            <div class="mcell-bar-seg" style="flex:1;background:var(--s-prod)"></div>
+          </div>
+          <div class="mcell-statuses">
+            <div class="mcell-sdot"><span class="sdot" style="background:var(--s-winner)"></span>2 Winner</div>
+            <div class="mcell-sdot"><span class="sdot" style="background:var(--s-prod)"></span>1 In Prod</div>
+          </div>
+          <div class="mcell-funnel">
+            <span class="funnel-pill fp-t">TOF</span>
+            <span class="funnel-pill fp-m">MOF</span>
+            <span class="funnel-pill fp-miss">no BOF</span>
+          </div>
+          <div class="mcell-time">⏱ In prod 7d</div>
+          <div class="mcell-actions">
+            <button class="mcell-act-btn accent" onclick="event.stopPropagation()">View</button>
+            <button class="mcell-act-btn" onclick="event.stopPropagation()">+ Add</button>
+            <span class="spacer"></span>
+            <button class="mcell-act-btn" onclick="event.stopPropagation()">↗ Brief</button>
+          </div>
+        </div>
+        <!-- Loyalist × Social Proof (empty) -->
+        <div class="mcell mcell-empty" onclick="openDrawer('Social Proof','Loyalist',0,[])">
+          <div class="empty-icon">+</div>
+          <div class="empty-label">Add first creative</div>
+        </div>
+        <!-- Newcomer × Social Proof -->
+        <div class="mcell" onclick="openDrawer('Social Proof','Newcomer',1,[{id:'AT-025',name:'First Timer Story',status:'testing',funnel:'TOF',time:'3d testing'}])">
+          <div class="mcell-count">1</div>
+          <div class="mcell-sublabel">creative</div>
+          <div class="mcell-bar">
+            <div class="mcell-bar-seg" style="flex:1;background:var(--s-testing)"></div>
+          </div>
+          <div class="mcell-statuses">
+            <div class="mcell-sdot"><span class="sdot" style="background:var(--s-testing)"></span>1 Testing</div>
+          </div>
+          <div class="mcell-funnel">
+            <span class="funnel-pill fp-t">TOF</span>
+            <span class="funnel-pill fp-miss">no MOF</span>
+            <span class="funnel-pill fp-miss">no BOF</span>
+          </div>
+          <div class="mcell-time">⏱ 3d testing</div>
+          <div class="mcell-actions">
+            <button class="mcell-act-btn accent" onclick="event.stopPropagation()">View</button>
+            <button class="mcell-act-btn" onclick="event.stopPropagation()">+ Add</button>
+            <span class="spacer"></span>
+            <button class="mcell-act-btn" onclick="event.stopPropagation()">↗ Brief</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── ANGLE 3: Pain Agitate ───────────────────────────────────── -->
+    <div class="angle-section">
+      <div class="angle-header">
+        <span class="angle-label">Pain Agitate</span>
+        <span style="font-size:11px;color:var(--ink-3);">Surface the pain, let it breathe, then resolve</span>
+        <div class="angle-meta">
+          <div class="angle-status-strip">
+            <span class="angle-dot" style="background:var(--s-winner)"></span>
+            <span class="angle-dot-label" style="color:var(--s-winner);font-size:10.5px;font-weight:600;">1 Winner</span>
+          </div>
+          <div class="angle-status-strip">
+            <span class="angle-dot" style="background:var(--s-ready)"></span>
+            <span class="angle-dot-label" style="color:var(--s-ready);font-size:10.5px;font-weight:600;">1 Ready</span>
+          </div>
+          <span class="angle-total">·&nbsp;4 total</span>
+        </div>
+      </div>
+      <div class="persona-grid">
+        <!-- Skeptic × Pain Agitate (empty) -->
+        <div class="mcell mcell-empty" onclick="openDrawer('Pain Agitate','Skeptic',0,[])">
+          <div class="empty-icon">+</div>
+          <div class="empty-label">No creatives yet</div>
+        </div>
+        <!-- Explorer × Pain Agitate -->
+        <div class="mcell" onclick="openDrawer('Pain Agitate','Explorer',2,[{id:'AT-011',name:'Frustration Spiral',status:'winner',funnel:'TOF',time:'won after 16d'},{id:'AT-028',name:'Status Quo Hurt',status:'testing',funnel:'TOF',time:'9d testing'}])">
+          <div class="mcell-count">2</div>
+          <div class="mcell-sublabel">creatives</div>
+          <div class="mcell-bar">
+            <div class="mcell-bar-seg" style="flex:1;background:var(--s-winner)"></div>
+            <div class="mcell-bar-seg" style="flex:1;background:var(--s-testing)"></div>
+          </div>
+          <div class="mcell-statuses">
+            <div class="mcell-sdot"><span class="sdot" style="background:var(--s-winner)"></span>1 Winner</div>
+            <div class="mcell-sdot"><span class="sdot" style="background:var(--s-testing)"></span>1 Testing</div>
+          </div>
+          <div class="mcell-funnel">
+            <span class="funnel-pill fp-t">TOF</span>
+            <span class="funnel-pill fp-miss">no MOF</span>
+            <span class="funnel-pill fp-miss">no BOF</span>
+          </div>
+          <div class="mcell-time">⏱ 9d testing</div>
+          <div class="mcell-actions">
+            <button class="mcell-act-btn accent" onclick="event.stopPropagation()">View</button>
+            <button class="mcell-act-btn" onclick="event.stopPropagation()">+ Add</button>
+            <span class="spacer"></span>
+            <button class="mcell-act-btn" onclick="event.stopPropagation()">↗ Brief</button>
+          </div>
+        </div>
+        <!-- Loyalist × Pain Agitate -->
+        <div class="mcell" onclick="openDrawer('Pain Agitate','Loyalist',1,[{id:'AT-005',name:'Pain Amplifier',status:'ready',funnel:'BOF',time:'queued 4d'}])">
+          <div class="mcell-count">1</div>
+          <div class="mcell-sublabel">creative</div>
+          <div class="mcell-bar">
+            <div class="mcell-bar-seg" style="flex:1;background:var(--s-ready)"></div>
+          </div>
+          <div class="mcell-statuses">
+            <div class="mcell-sdot"><span class="sdot" style="background:var(--s-ready)"></span>1 Ready</div>
+          </div>
+          <div class="mcell-funnel">
+            <span class="funnel-pill fp-b">BOF</span>
+            <span class="funnel-pill fp-miss">no TOF</span>
+            <span class="funnel-pill fp-miss">no MOF</span>
+          </div>
+          <div class="mcell-time">⏱ Queued 4d</div>
+          <div class="mcell-actions">
+            <button class="mcell-act-btn accent" onclick="event.stopPropagation()">View</button>
+            <button class="mcell-act-btn" onclick="event.stopPropagation()">+ Add</button>
+            <span class="spacer"></span>
+            <button class="mcell-act-btn" onclick="event.stopPropagation()">↗ Brief</button>
+          </div>
+        </div>
+        <!-- Newcomer × Pain Agitate (empty) -->
+        <div class="mcell mcell-empty" onclick="openDrawer('Pain Agitate','Newcomer',0,[])">
+          <div class="empty-icon">+</div>
+          <div class="empty-label">Gap — needs TOF</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── ANGLE 4: Curiosity Gap ──────────────────────────────────── -->
+    <div class="angle-section">
+      <div class="angle-header">
+        <span class="angle-label">Curiosity Gap</span>
+        <span style="font-size:11px;color:var(--ink-3);">Withhold to compel — drive click with intrigue</span>
+        <div class="angle-meta">
+          <div class="angle-status-strip">
+            <span class="angle-dot" style="background:var(--s-testing)"></span>
+            <span class="angle-dot-label" style="color:var(--s-testing);font-size:10.5px;font-weight:600;">2 Testing</span>
+          </div>
+          <div class="angle-status-strip">
+            <span class="angle-dot" style="background:var(--s-untested)"></span>
+            <span class="angle-dot-label" style="color:var(--s-untested);font-size:10.5px;font-weight:600;">1 Untested</span>
+          </div>
+          <span class="angle-total">·&nbsp;3 total</span>
+        </div>
+      </div>
+      <div class="persona-grid">
+        <!-- Skeptic × Curiosity Gap -->
+        <div class="mcell" onclick="openDrawer('Curiosity Gap','Skeptic',1,[{id:'AT-033',name:'What They Won\'t Tell You',status:'testing',funnel:'TOF',time:'6d testing'}])">
+          <div class="mcell-count">1</div>
+          <div class="mcell-sublabel">creative</div>
+          <div class="mcell-bar">
+            <div class="mcell-bar-seg" style="flex:1;background:var(--s-testing)"></div>
+          </div>
+          <div class="mcell-statuses">
+            <div class="mcell-sdot"><span class="sdot" style="background:var(--s-testing)"></span>1 Testing</div>
+          </div>
+          <div class="mcell-funnel">
+            <span class="funnel-pill fp-t">TOF</span>
+            <span class="funnel-pill fp-miss">no MOF</span>
+            <span class="funnel-pill fp-miss">no BOF</span>
+          </div>
+          <div class="mcell-time">⏱ 6d testing</div>
+          <div class="mcell-actions">
+            <button class="mcell-act-btn accent" onclick="event.stopPropagation()">View</button>
+            <button class="mcell-act-btn" onclick="event.stopPropagation()">+ Add</button>
+            <span class="spacer"></span>
+            <button class="mcell-act-btn" onclick="event.stopPropagation()">↗ Brief</button>
+          </div>
+        </div>
+        <!-- Explorer × Curiosity Gap (empty) -->
+        <div class="mcell mcell-empty" onclick="openDrawer('Curiosity Gap','Explorer',0,[])">
+          <div class="empty-icon">+</div>
+          <div class="empty-label">No creatives yet</div>
+        </div>
+        <!-- Loyalist × Curiosity Gap -->
+        <div class="mcell" onclick="openDrawer('Curiosity Gap','Loyalist',1,[{id:'AT-036',name:'Secret Formula',status:'testing',funnel:'MOF',time:'2d testing'}])">
+          <div class="mcell-count">1</div>
+          <div class="mcell-sublabel">creative</div>
+          <div class="mcell-bar">
+            <div class="mcell-bar-seg" style="flex:1;background:var(--s-testing)"></div>
+          </div>
+          <div class="mcell-statuses">
+            <div class="mcell-sdot"><span class="sdot" style="background:var(--s-testing)"></span>1 Testing</div>
+          </div>
+          <div class="mcell-funnel">
+            <span class="funnel-pill fp-m">MOF</span>
+            <span class="funnel-pill fp-miss">no TOF</span>
+            <span class="funnel-pill fp-miss">no BOF</span>
+          </div>
+          <div class="mcell-time">⏱ 2d testing</div>
+          <div class="mcell-actions">
+            <button class="mcell-act-btn accent" onclick="event.stopPropagation()">View</button>
+            <button class="mcell-act-btn" onclick="event.stopPropagation()">+ Add</button>
+            <span class="spacer"></span>
+            <button class="mcell-act-btn" onclick="event.stopPropagation()">↗ Brief</button>
+          </div>
+        </div>
+        <!-- Newcomer × Curiosity Gap -->
+        <div class="mcell" onclick="openDrawer('Curiosity Gap','Newcomer',1,[{id:'AT-003',name:'Curiosity Hook Static',status:'testing',funnel:'TOF',time:'4d testing'}])">
+          <div class="mcell-count">1</div>
+          <div class="mcell-sublabel">creative</div>
+          <div class="mcell-bar">
+            <div class="mcell-bar-seg" style="flex:1;background:var(--s-untested)"></div>
+          </div>
+          <div class="mcell-statuses">
+            <div class="mcell-sdot"><span class="sdot" style="background:var(--s-untested)"></span>1 Untested</div>
+          </div>
+          <div class="mcell-funnel">
+            <span class="funnel-pill fp-t">TOF</span>
+            <span class="funnel-pill fp-miss">no MOF</span>
+            <span class="funnel-pill fp-miss">no BOF</span>
+          </div>
+          <div class="mcell-time">⏱ Not yet launched</div>
+          <div class="mcell-actions">
+            <button class="mcell-act-btn accent" onclick="event.stopPropagation()">View</button>
+            <button class="mcell-act-btn" onclick="event.stopPropagation()">+ Add</button>
+            <span class="spacer"></span>
+            <button class="mcell-act-btn" onclick="event.stopPropagation()">↗ Brief</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /matrix-body -->
+</div><!-- /tab-matrix -->
+
+
+<!-- ══════════════════════════════════════════════════════════════ -->
+<!-- PLACEHOLDER TABS                                               -->
+<!-- ══════════════════════════════════════════════════════════════ -->
+<div class="tab-panel" id="tab-brief">
+  <div class="placeholder-tab">
+    <div class="ph-icon">✍</div>
+    <div class="ph-title">Brief Builder</div>
+    <div class="ph-sub">Structure and generate creative briefs</div>
+  </div>
+</div>
+<div class="tab-panel" id="tab-angles">
+  <div class="placeholder-tab">
+    <div class="ph-icon">⬡</div>
+    <div class="ph-title">Angles &amp; Personas</div>
+    <div class="ph-sub">Manage your angle library and persona definitions</div>
+  </div>
+</div>
+<div class="tab-panel" id="tab-inspiration">
+  <div class="placeholder-tab">
+    <div class="ph-icon">◈</div>
+    <div class="ph-title">Inspiration Board</div>
+    <div class="ph-sub">Swipe file, competitor ads, reference creatives</div>
+  </div>
+</div>
+<div class="tab-panel" id="tab-production">
+  <div class="placeholder-tab">
+    <div class="ph-icon">▶</div>
+    <div class="ph-title">Production Queue</div>
+    <div class="ph-sub">Track what's being made and where it stands</div>
+  </div>
+</div>
+<div class="tab-panel" id="tab-settings">
+  <div class="placeholder-tab">
+    <div class="ph-icon">⊙</div>
+    <div class="ph-title">Settings</div>
+    <div class="ph-sub">Workspace, integrations, team configuration</div>
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════════════════════════════════════ -->
+<!-- DRAWER                                                          -->
+<!-- ══════════════════════════════════════════════════════════════ -->
+<div class="drawer-backdrop" id="drawerBackdrop" onclick="closeDrawer()"></div>
+<div class="drawer" id="drawer">
+  <div class="drawer-header">
+    <div class="drawer-title-block">
+      <div class="drawer-angle" id="drawerAngleLabel">—</div>
+      <div class="drawer-persona" id="drawerPersonaLabel">—</div>
+    </div>
+    <button class="drawer-close" onclick="closeDrawer()">✕</button>
+  </div>
+  <div class="drawer-toggle">
+    <div class="seg-ctrl" id="drawerSegCtrl">
+      <button class="seg-btn active" data-view="status" onclick="setDrawerView(this)">By Status</button>
+      <button class="seg-btn" data-view="funnel" onclick="setDrawerView(this)">By Funnel</button>
+      <button class="seg-btn" data-view="type" onclick="setDrawerView(this)">By Type</button>
+    </div>
+  </div>
+  <div class="drawer-body" id="drawerBody"></div>
+  <div class="drawer-footer">
+    <button class="btn-primary">+ Add Creative</button>
+    <button class="btn-ghost">↗ Open Brief</button>
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════════════════════════════════════ -->
+<!-- JAVASCRIPT                                                      -->
+<!-- ══════════════════════════════════════════════════════════════ -->
+<script>
+(function () {
+  'use strict';
+
+  // ─── TAB SWITCHING ────────────────────────────────────────────────
+  function switchTab(name, btn) {
+    document.querySelectorAll('.tab-panel').forEach(function (p) { p.classList.remove('active'); });
+    document.querySelectorAll('.nav-tab').forEach(function (b) { b.classList.remove('active'); });
+    var panel = document.getElementById('tab-' + name);
+    if (panel) panel.classList.add('active');
+    if (btn) btn.classList.add('active');
+  }
+  window.switchTab = switchTab;
+
+  // ─── TRACKER FILTERS ──────────────────────────────────────────────
+  var moreFiltersBtn = document.getElementById('moreFiltersBtn');
+  var filterSecondary = document.getElementById('filterSecondary');
+  var moreFiltersOpen = false;
+
+  if (moreFiltersBtn) {
+    moreFiltersBtn.addEventListener('click', function () {
+      moreFiltersOpen = !moreFiltersOpen;
+      filterSecondary.classList.toggle('open', moreFiltersOpen);
+      moreFiltersBtn.classList.toggle('active', moreFiltersOpen);
+      moreFiltersBtn.textContent = moreFiltersOpen ? 'Fewer filters −' : 'More filters +';
+    });
+  }
+
+  var clearAllBtn = document.getElementById('clearAllBtn');
+  if (clearAllBtn) {
+    clearAllBtn.addEventListener('click', function () {
+      setActiveType('all');
+      document.querySelectorAll('#filterBar .chip:not(.pill-group .chip):not(.chip-muted)').forEach(function (c) { c.classList.remove('active'); });
+      var si = document.getElementById('searchInput');
+      if (si) si.value = '';
+      moreFiltersOpen = false;
+      if (filterSecondary) filterSecondary.classList.remove('open');
+      if (moreFiltersBtn) { moreFiltersBtn.classList.remove('active'); moreFiltersBtn.textContent = 'More filters +'; }
+    });
+  }
+
+  var taskTypeGroup = document.getElementById('taskTypeGroup');
+  if (taskTypeGroup) {
+    var taskTypeBtns = taskTypeGroup.querySelectorAll('.chip');
+    function setActiveType(type) {
+      taskTypeBtns.forEach(function (b) { b.classList.toggle('active', b.dataset.type === type); });
+    }
+    taskTypeBtns.forEach(function (b) { b.addEventListener('click', function () { setActiveType(b.dataset.type); }); });
+    window.setActiveType = setActiveType;
+  }
+
+  var dropdownChips = document.querySelectorAll('#statusFilter,#funnelFilter,#angleFilter,#personaFilter,#dateFilter');
+  dropdownChips.forEach(function (chip) {
+    chip.addEventListener('click', function () {
+      var wasActive = chip.classList.contains('active');
+      dropdownChips.forEach(function (c) { c.classList.remove('active'); });
+      chip.classList.toggle('active', !wasActive);
+    });
+  });
+
+  // Sort
+  var currentSortCol = null, currentSortDir = null;
+  document.querySelectorAll('th[data-col]').forEach(function (th) {
+    th.addEventListener('click', function () {
+      var col = th.dataset.col;
+      var icon = th.querySelector('.sort-icon');
+      if (currentSortCol === col) {
+        if (currentSortDir === 'asc') {
+          currentSortDir = 'desc'; th.classList.remove('sort-asc'); th.classList.add('sort-desc'); if (icon) icon.textContent = '▼';
+        } else {
+          currentSortDir = null; currentSortCol = null; th.classList.remove('sort-desc'); if (icon) icon.textContent = '↕';
+        }
+      } else {
+        if (currentSortCol) {
+          var prev = document.querySelector('th[data-col="' + currentSortCol + '"]');
+          if (prev) { prev.classList.remove('sort-asc','sort-desc'); var pi = prev.querySelector('.sort-icon'); if (pi) pi.textContent = '↕'; }
+        }
+        currentSortCol = col; currentSortDir = 'asc'; th.classList.add('sort-asc'); if (icon) icon.textContent = '▲';
+      }
+    });
+  });
+
+  // Search
+  var searchInput = document.getElementById('searchInput');
+  var searchChip = document.getElementById('searchChip');
+  if (searchInput && searchChip) {
+    searchInput.addEventListener('focus', function () { searchChip.style.borderColor = 'var(--line-hi)'; searchChip.style.background = 'var(--paper-2)'; });
+    searchInput.addEventListener('blur', function () { searchChip.style.borderColor = ''; searchChip.style.background = ''; });
+    searchInput.addEventListener('input', function () {
+      var q = searchInput.value.trim().toLowerCase();
+      document.querySelectorAll('#tableBody tr').forEach(function (row) {
+        row.style.display = (!q || row.textContent.toLowerCase().includes(q)) ? '' : 'none';
+      });
+    });
+  }
+
+  // ─── DRAWER ───────────────────────────────────────────────────────
+  var drawerEl = document.getElementById('drawer');
+  var drawerBackdrop = document.getElementById('drawerBackdrop');
+  var drawerAngleLabel = document.getElementById('drawerAngleLabel');
+  var drawerPersonaLabel = document.getElementById('drawerPersonaLabel');
+  var drawerBodyEl = document.getElementById('drawerBody');
+  var drawerSegCtrl = document.getElementById('drawerSegCtrl');
+
+  var currentDrawerView = 'status';
+  var currentCreatives = [];
+
+  var statusMeta = {
+    scale:    { label: 'Scaling',        color: 'var(--s-scale)',    soft: 'var(--s-scale-soft)' },
+    winner:   { label: 'Winner',         color: 'var(--s-winner)',   soft: 'var(--s-winner-soft)' },
+    testing:  { label: 'Testing',        color: 'var(--s-testing)',  soft: 'var(--s-testing-soft)' },
+    approved: { label: 'Approved',       color: 'var(--s-approved)', soft: 'var(--s-approved-soft)' },
+    ready:    { label: 'Ready to Launch',color: 'var(--s-ready)',    soft: 'var(--s-ready-soft)' },
+    prod:     { label: 'In Production',  color: 'var(--s-prod)',     soft: 'var(--s-prod-soft)' },
+    loser:    { label: 'Loser',          color: 'var(--s-loser)',    soft: 'var(--s-loser-soft)' },
+    untested: { label: 'Untested',       color: 'var(--s-untested)', soft: 'var(--s-untested-soft)' }
+  };
+
+  function groupBy(arr, key) {
+    return arr.reduce(function (acc, item) {
+      var k = item[key] || '—';
+      if (!acc[k]) acc[k] = [];
+      acc[k].push(item);
+      return acc;
+    }, {});
+  }
+
+  function renderCreativeRow(cr) {
+    var sm = statusMeta[cr.status] || statusMeta.untested;
+    return '<div class="creative-row">' +
+      '<span class="cr-id">' + cr.id + '</span>' +
+      '<div class="cr-meta">' +
+        '<span class="cr-name">' + cr.name + '</span>' +
+        '<span class="cr-sub" style="font-family:\'JetBrains Mono\',monospace;font-size:10px;color:var(--ink-4);">' + (cr.time || '') + '</span>' +
+      '</div>' +
+      '<span class="pill-status" style="background:' + sm.soft + ';color:' + sm.color + ';font-size:10.5px;">' + sm.label + '</span>' +
+    '</div>';
+  }
+
+  function renderDrawerBody() {
+    if (!currentCreatives.length) {
+      drawerBodyEl.innerHTML = '<div style="padding:24px 16px;text-align:center;color:var(--ink-3);font-size:12.5px;">No creatives in this cell yet.<br><span style="color:var(--accent);cursor:pointer;font-weight:500;">+ Add the first one</span></div>';
+      return;
+    }
+
+    var html = '';
+    if (currentDrawerView === 'status') {
+      var groups = groupBy(currentCreatives, 'status');
+      var order = ['scale','winner','testing','approved','ready','prod','loser','untested'];
+      order.forEach(function (s) {
+        if (groups[s]) {
+          var sm = statusMeta[s] || statusMeta.untested;
+          html += '<div class="drawer-group"><div class="drawer-group-header" style="color:' + sm.color + ';">' + sm.label + ' (' + groups[s].length + ')</div>';
+          groups[s].forEach(function (cr) { html += renderCreativeRow(cr); });
+          html += '</div>';
+        }
+      });
+    } else if (currentDrawerView === 'funnel') {
+      var fgroups = groupBy(currentCreatives, 'funnel');
+      ['TOF','MOF','BOF','—'].forEach(function (f) {
+        if (fgroups[f]) {
+          var fLabel = f === 'TOF' ? 'Top of Funnel' : f === 'MOF' ? 'Mid of Funnel' : f === 'BOF' ? 'Bottom of Funnel' : 'Unassigned';
+          html += '<div class="drawer-group"><div class="drawer-group-header">' + fLabel + ' (' + fgroups[f].length + ')</div>';
+          fgroups[f].forEach(function (cr) { html += renderCreativeRow(cr); });
+          html += '</div>';
+        }
+      });
+    } else {
+      // By type — use funnel as proxy for now
+      currentCreatives.forEach(function (cr) { html += renderCreativeRow(cr); });
+    }
+
+    drawerBodyEl.innerHTML = html;
+  }
+
+  window.openDrawer = function (angle, persona, count, creatives) {
+    drawerAngleLabel.textContent = angle;
+    drawerPersonaLabel.textContent = persona;
+    currentCreatives = creatives || [];
+    currentDrawerView = 'status';
+    // Reset toggle
+    drawerSegCtrl.querySelectorAll('.seg-btn').forEach(function (b) { b.classList.toggle('active', b.dataset.view === 'status'); });
+    renderDrawerBody();
+    drawerEl.classList.add('open');
+    drawerBackdrop.classList.add('open');
+    document.body.style.overflow = 'hidden';
+  };
+
+  window.closeDrawer = function () {
+    drawerEl.classList.remove('open');
+    drawerBackdrop.classList.remove('open');
+    document.body.style.overflow = '';
+  };
+
+  window.setDrawerView = function (btn) {
+    drawerSegCtrl.querySelectorAll('.seg-btn').forEach(function (b) { b.classList.remove('active'); });
+    btn.classList.add('active');
+    currentDrawerView = btn.dataset.view;
+    renderDrawerBody();
+  };
+
+  // Close drawer on Escape
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') closeDrawer();
+  });
+
+})();
+</script>
+
+</body>
+</html>

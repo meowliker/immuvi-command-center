@@ -1,0 +1,547 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Layout 18 — Holo Gradient Cards</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:           #0b0d1a;
+  --bg-2:         #11142a;
+  --surface:      #161a35;
+  --line:         rgba(255,255,255,0.08);
+  --line-hi:      rgba(255,255,255,0.14);
+  --text:         #f4f7fc;
+  --text-2:       #a8b0c9;
+  --text-3:       #6d7595;
+  --text-4:       #454c6c;
+  --cyan:         #00d4ff;
+  --cyan-deep:    #0099cc;
+  --cyan-soft:    rgba(0,212,255,0.1);
+  --cyan-glow:    rgba(0,212,255,0.25);
+  --lime:         #a3e635;
+  --green:        #22d383;
+  --amber:        #fbbf24;
+  --coral:        #ff7b57;
+  --rose:         #ff5788;
+  --sky:          #4da3ff;
+  --violet:       #8b5cf6;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { background: var(--bg); color: var(--text); min-height: 100vh; }
+body {
+  font-family: 'Inter', sans-serif;
+  font-size: 13.5px; line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  font-feature-settings: "cv11","ss01";
+  background-image:
+    radial-gradient(ellipse 60% 40% at 20% 0%, var(--cyan-glow), transparent 60%),
+    radial-gradient(ellipse 50% 30% at 90% 20%, rgba(139,92,246,0.12), transparent 60%);
+  background-attachment: fixed;
+}
+.mono { font-family: 'JetBrains Mono', monospace; }
+
+/* Nav (same pattern) */
+.nav {
+  position: sticky; top: 0; z-index: 50;
+  backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+  background: rgba(11,13,26,0.72);
+  border-bottom: 1px solid var(--line);
+  padding: 14px 32px;
+  display: flex; align-items: center; gap: 18px;
+}
+.logo { display: flex; align-items: center; gap: 9px; font-weight: 700; font-size: 16.5px; letter-spacing: -0.025em; }
+.logo-mark { width: 26px; height: 26px; border-radius: 7px; background: radial-gradient(circle at 30% 30%, var(--cyan), var(--cyan-deep) 55%, #006688); box-shadow: 0 4px 16px var(--cyan-glow); }
+.nav-links { display: flex; gap: 2px; margin-left: 20px; }
+.nav-link { padding: 7px 13px; font-size: 13.5px; font-weight: 500; color: var(--text-2); border-radius: 7px; cursor: pointer; }
+.nav-link:hover { background: var(--surface); color: var(--text); }
+.nav-link.active { background: var(--surface); color: var(--text); box-shadow: inset 0 0 0 1px var(--line-hi); }
+.nav-link .ct { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; color: var(--text-3); margin-left: 6px; background: var(--surface); padding: 1px 6px; border-radius: 3px; }
+.nav-link.active .ct { background: var(--cyan-soft); color: var(--cyan); }
+.nav .right { margin-left: auto; display: flex; gap: 10px; }
+.btn { height: 34px; padding: 0 14px; background: var(--surface); border: 1px solid var(--line-hi); border-radius: 8px; color: var(--text); font-family: inherit; font-size: 13px; font-weight: 500; cursor: pointer; }
+.btn-primary { background: linear-gradient(180deg, var(--cyan), var(--cyan-deep)); color: #001622; border: none; font-weight: 600; box-shadow: 0 0 0 1px rgba(0,212,255,.4), 0 6px 20px var(--cyan-glow); }
+
+/* Hero */
+.hero {
+  max-width: 1360px; margin: 0 auto;
+  padding: 40px 32px 24px;
+}
+.hero h1 {
+  font-size: clamp(36px, 4vw, 50px);
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1.05;
+}
+.hero h1 .grad {
+  background: linear-gradient(90deg, var(--cyan), var(--violet));
+  -webkit-background-clip: text; background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+.hero .sub { margin-top: 10px; color: var(--text-2); font-size: 16px; max-width: 600px; }
+
+/* Filter */
+.filter-bar {
+  max-width: 1360px; margin: 0 auto;
+  padding: 0 32px 20px;
+  display: flex; flex-wrap: wrap; gap: 8px;
+}
+.chip { height: 34px; padding: 0 12px; background: var(--surface); border: 1px solid var(--line-hi); border-radius: 8px; cursor: pointer; font-size: 12.5px; color: var(--text-2); display: inline-flex; align-items: center; gap: 6px; }
+.chip.on { background: var(--cyan-soft); color: var(--cyan); border-color: rgba(0,212,255,.3); }
+.chip .ch { font-size: 10px; opacity: 0.7; }
+
+/* CARDS GRID */
+.cards {
+  max-width: 1360px; margin: 0 auto;
+  padding: 0 32px 60px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
+  gap: 14px;
+}
+
+.c {
+  position: relative;
+  border-radius: 16px;
+  padding: 18px 20px;
+  overflow: hidden;
+  cursor: pointer;
+  transition: transform .2s, box-shadow .2s;
+  border: 1px solid var(--line);
+  background: var(--surface);
+}
+.c:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 12px 40px rgba(0,0,0,.3);
+}
+
+/* Gradient backgrounds per tier */
+.c.massive {
+  background:
+    radial-gradient(ellipse 80% 70% at 100% 0%, rgba(163,230,53,0.25) 0%, transparent 60%),
+    linear-gradient(135deg, rgba(163,230,53,0.08) 0%, rgba(22,26,53,0.9) 50%);
+  border-color: rgba(163,230,53,0.25);
+}
+.c.winner {
+  background:
+    radial-gradient(ellipse 80% 70% at 100% 0%, rgba(34,211,131,0.2) 0%, transparent 60%),
+    linear-gradient(135deg, rgba(34,211,131,0.05) 0%, rgba(22,26,53,0.9) 50%);
+  border-color: rgba(34,211,131,0.22);
+}
+.c.mild {
+  background:
+    radial-gradient(ellipse 80% 70% at 100% 0%, rgba(251,191,36,0.2) 0%, transparent 60%),
+    linear-gradient(135deg, rgba(251,191,36,0.05) 0%, rgba(22,26,53,0.9) 50%);
+  border-color: rgba(251,191,36,0.22);
+}
+.c.fatigue {
+  background:
+    radial-gradient(ellipse 80% 70% at 100% 0%, rgba(255,123,87,0.22) 0%, transparent 60%),
+    linear-gradient(135deg, rgba(255,123,87,0.07) 0%, rgba(22,26,53,0.9) 50%);
+  border-color: rgba(255,123,87,0.25);
+}
+.c.testing {
+  background:
+    radial-gradient(ellipse 80% 70% at 100% 0%, rgba(77,163,255,0.18) 0%, transparent 60%),
+    linear-gradient(135deg, rgba(77,163,255,0.05) 0%, rgba(22,26,53,0.9) 50%);
+  border-color: rgba(77,163,255,0.22);
+}
+.c.loser {
+  background:
+    radial-gradient(ellipse 80% 70% at 100% 0%, rgba(255,87,136,0.22) 0%, transparent 60%),
+    linear-gradient(135deg, rgba(255,87,136,0.06) 0%, rgba(22,26,53,0.9) 50%);
+  border-color: rgba(255,87,136,0.25);
+}
+
+.c .top-row {
+  display: flex; align-items: center; gap: 12px;
+  margin-bottom: 14px;
+}
+.c .thm {
+  width: 44px; height: 44px;
+  border-radius: 9px;
+  background: linear-gradient(135deg, var(--violet), var(--cyan));
+  position: relative;
+  flex-shrink: 0;
+  box-shadow: 0 2px 8px rgba(0,0,0,.3), inset 0 1px 0 rgba(255,255,255,.15);
+}
+.c .thm::after { content: '▶'; position: absolute; inset: 0; display: grid; place-items: center; color: white; font-size: 13px; text-shadow: 0 1px 2px rgba(0,0,0,.4); }
+.c .thm.photo { background: linear-gradient(135deg, var(--coral), var(--amber)); }
+.c .thm.photo::after { content: '◈'; }
+
+.c .heading { min-width: 0; flex: 1; }
+.c .nm { font-size: 15.5px; font-weight: 600; letter-spacing: -0.01em; line-height: 1.2; }
+.c .id { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; color: var(--text-3); margin-top: 2px; }
+
+.c .status {
+  align-self: flex-start;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 11px; font-weight: 700;
+  letter-spacing: 0.02em;
+  display: inline-flex; align-items: center; gap: 5px;
+}
+.c .status .d { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.c.massive .status { background: rgba(163,230,53,0.15); color: var(--lime); }
+.c.massive .status .d { box-shadow: 0 0 8px var(--lime); }
+.c.winner .status  { background: rgba(34,211,131,0.15); color: var(--green); }
+.c.mild .status    { background: rgba(251,191,36,0.15); color: var(--amber); }
+.c.fatigue .status { background: rgba(255,123,87,0.15); color: var(--coral); }
+.c.testing .status { background: rgba(77,163,255,0.15); color: var(--sky); }
+.c.loser .status   { background: rgba(255,87,136,0.15); color: var(--rose); }
+
+.c .tags { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 14px; }
+.c .tag {
+  padding: 3px 9px; border-radius: 6px;
+  font-size: 11.5px; font-weight: 500;
+  background: rgba(255,255,255,0.06);
+  color: var(--text-2);
+  border: 1px solid rgba(255,255,255,0.06);
+}
+
+/* Metrics row */
+.c .metrics-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  padding: 12px 14px;
+  background: rgba(0,0,0,0.3);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  margin-bottom: 12px;
+}
+.c .m { text-align: left; }
+.c .m .l {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 9.5px;
+  color: var(--text-3);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  margin-bottom: 4px;
+  font-weight: 500;
+}
+.c .m .v {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 19px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.015em;
+}
+.c.massive .m .v.roas { color: var(--lime); }
+.c.winner  .m .v.roas { color: var(--green); }
+.c.mild    .m .v.roas { color: var(--amber); }
+.c.fatigue .m .v.roas { color: var(--coral); }
+.c.testing .m .v.roas { color: var(--sky); }
+.c.loser   .m .v.roas { color: var(--rose); }
+.c .m .v.dim { color: var(--text-4); }
+
+/* Chart row */
+.c .chart {
+  padding: 8px 12px;
+  background: rgba(0,0,0,0.25);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: flex; align-items: center; gap: 10px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10.5px;
+  color: var(--text-3);
+}
+.c .chart .label { flex-shrink: 0; }
+.c .chart svg { flex: 1; height: 28px; }
+.c .chart .delta { flex-shrink: 0; font-weight: 600; }
+.c.massive .chart .delta { color: var(--lime); }
+.c.winner .chart .delta { color: var(--green); }
+.c.mild .chart .delta { color: var(--amber); }
+.c.fatigue .chart .delta { color: var(--coral); }
+.c.loser .chart .delta { color: var(--rose); }
+
+.c .foot {
+  display: flex; align-items: center; gap: 12px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10.5px;
+  color: var(--text-3);
+}
+.c .foot a {
+  color: var(--text-3); text-decoration: none;
+  padding: 3px 8px; border-radius: 4px;
+}
+.c .foot a:hover { background: rgba(255,255,255,0.06); color: var(--text); }
+.c .foot .date { margin-left: auto; }
+</style>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="logo"><div class="logo-mark"></div>Immuvi</div>
+  <div class="nav-links">
+    <a class="nav-link">Command HQ</a>
+    <a class="nav-link">Angles <span class="ct">7</span></a>
+    <a class="nav-link active">Tracker <span class="ct">66</span></a>
+    <a class="nav-link">Matrix <span class="ct">19/35</span></a>
+  </div>
+  <div class="right">
+    <button class="btn">⇡ Push</button>
+    <button class="btn btn-primary">↻ Sync</button>
+  </div>
+</nav>
+
+<section class="hero">
+  <h1>Every creative, colored by <span class="grad">performance.</span></h1>
+  <p class="sub">Each card's glow tells you the story. Green for winners, amber for the middle, coral for the ones slipping.</p>
+</section>
+
+<div class="filter-bar">
+  <span class="chip on">Winners <span class="ch">▾</span></span>
+  <span class="chip">All Angles <span class="ch">▾</span></span>
+  <span class="chip">All Personas <span class="ch">▾</span></span>
+  <span class="chip">All Hooks <span class="ch">▾</span></span>
+  <span class="chip">7D <span class="ch">▾</span></span>
+</div>
+
+<div class="cards">
+
+  <div class="c massive">
+    <div class="top-row">
+      <div class="thm"></div>
+      <div class="heading">
+        <div class="nm">5773-1 old winner</div>
+        <div class="id">AT-11439-v1 · Art Therapy</div>
+      </div>
+      <span class="status"><span class="d"></span>◆ Massive</span>
+    </div>
+    <div class="tags">
+      <span class="tag">Art as Therapy</span>
+      <span class="tag">Women 25-45</span>
+      <span class="tag">POV</span>
+      <span class="tag">UGC</span>
+      <span class="tag">TOF</span>
+    </div>
+    <div class="metrics-row">
+      <div class="m"><div class="l">ROAS 7d</div><div class="v roas">1.92×</div></div>
+      <div class="m"><div class="l">Spend 7d</div><div class="v">$1,842</div></div>
+      <div class="m"><div class="l">CPA</div><div class="v">$12.40</div></div>
+    </div>
+    <div class="chart">
+      <span class="label">ROAS 14d</span>
+      <svg viewBox="0 0 200 28" preserveAspectRatio="none">
+        <polyline fill="none" stroke="#a3e635" stroke-width="1.8" points="0,22 20,18 40,16 60,13 80,10 100,8 120,6 140,4 160,3 180,2 200,1"/>
+      </svg>
+      <span class="delta">↑ +24%</span>
+    </div>
+    <div class="foot">
+      <a>↗ ClickUp</a>
+      <a>📄 Brief</a>
+      <a>Drive</a>
+      <span class="date">21 Apr</span>
+    </div>
+  </div>
+
+  <div class="c winner">
+    <div class="top-row">
+      <div class="thm photo"></div>
+      <div class="heading">
+        <div class="nm">4570-1 old winner</div>
+        <div class="id">AT-10835 · Art Therapy</div>
+      </div>
+      <span class="status"><span class="d"></span>Winner</span>
+    </div>
+    <div class="tags">
+      <span class="tag">Emotional Lit.</span>
+      <span class="tag">Women 25-45</span>
+      <span class="tag">Curiosity</span>
+      <span class="tag">Static / Photo</span>
+    </div>
+    <div class="metrics-row">
+      <div class="m"><div class="l">ROAS 7d</div><div class="v roas">1.54×</div></div>
+      <div class="m"><div class="l">Spend 7d</div><div class="v">$806</div></div>
+      <div class="m"><div class="l">CPA</div><div class="v">$14.80</div></div>
+    </div>
+    <div class="chart">
+      <span class="label">ROAS 14d</span>
+      <svg viewBox="0 0 200 28" preserveAspectRatio="none">
+        <polyline fill="none" stroke="#22d383" stroke-width="1.8" points="0,18 20,17 40,15 60,16 80,13 100,12 120,11 140,10 160,9 180,8 200,7"/>
+      </svg>
+      <span class="delta">↑ +8%</span>
+    </div>
+    <div class="foot">
+      <a>↗ ClickUp</a>
+      <a>📄 Brief</a>
+      <span class="date">19 Apr</span>
+    </div>
+  </div>
+
+  <div class="c winner">
+    <div class="top-row">
+      <div class="thm"></div>
+      <div class="heading">
+        <div class="nm">11591 new concept</div>
+        <div class="id">AT-11591 · AI VO variant</div>
+      </div>
+      <span class="status"><span class="d"></span>Winner</span>
+    </div>
+    <div class="tags">
+      <span class="tag">Emotional Lit.</span>
+      <span class="tag">Young Adults · Grief</span>
+      <span class="tag">Pain / Problem</span>
+      <span class="tag">Story</span>
+    </div>
+    <div class="metrics-row">
+      <div class="m"><div class="l">ROAS 7d</div><div class="v roas">1.46×</div></div>
+      <div class="m"><div class="l">Spend 7d</div><div class="v">$624</div></div>
+      <div class="m"><div class="l">Age</div><div class="v">2d</div></div>
+    </div>
+    <div class="chart">
+      <span class="label">ROAS 14d</span>
+      <svg viewBox="0 0 200 28" preserveAspectRatio="none">
+        <polyline fill="none" stroke="#22d383" stroke-width="1.8" points="0,22 20,20 40,18 60,16 80,14 100,12 120,10 140,8 160,7 180,6 200,5"/>
+      </svg>
+      <span class="delta">↑ new</span>
+    </div>
+    <div class="foot">
+      <a>↗ ClickUp</a>
+      <a>📄 Brief</a>
+      <span class="date">20 Apr</span>
+    </div>
+  </div>
+
+  <div class="c mild">
+    <div class="top-row">
+      <div class="thm photo"></div>
+      <div class="heading">
+        <div class="nm">4569-2 old winner</div>
+        <div class="id">AT-10834 · Art Therapy</div>
+      </div>
+      <span class="status"><span class="d"></span>Mild</span>
+    </div>
+    <div class="tags">
+      <span class="tag">Scarcity</span>
+      <span class="tag">Women 25-45</span>
+      <span class="tag">Pattern Interrupt</span>
+    </div>
+    <div class="metrics-row">
+      <div class="m"><div class="l">ROAS 7d</div><div class="v roas">1.33×</div></div>
+      <div class="m"><div class="l">Spend 7d</div><div class="v">$412</div></div>
+      <div class="m"><div class="l">CPA</div><div class="v">$17.20</div></div>
+    </div>
+    <div class="chart">
+      <span class="label">ROAS 14d</span>
+      <svg viewBox="0 0 200 28" preserveAspectRatio="none">
+        <polyline fill="none" stroke="#fbbf24" stroke-width="1.8" points="0,14 20,15 40,13 60,14 80,15 100,13 120,14 140,13 160,14 180,13 200,13"/>
+      </svg>
+      <span class="delta">→ 0%</span>
+    </div>
+    <div class="foot">
+      <a>↗ ClickUp</a>
+      <a>📄 Brief</a>
+      <span class="date">18 Apr</span>
+    </div>
+  </div>
+
+  <div class="c fatigue">
+    <div class="top-row">
+      <div class="thm photo"></div>
+      <div class="heading">
+        <div class="nm">10785-2 old winner</div>
+        <div class="id">AT-10733 · fatigue flagged</div>
+      </div>
+      <span class="status"><span class="d"></span>Fatigued</span>
+    </div>
+    <div class="tags">
+      <span class="tag">Scarcity</span>
+      <span class="tag">Women 25-45</span>
+      <span class="tag">Pattern Interrupt</span>
+    </div>
+    <div class="metrics-row">
+      <div class="m"><div class="l">ROAS 7d</div><div class="v roas">0.98×</div></div>
+      <div class="m"><div class="l">Spend 7d</div><div class="v">$1,205</div></div>
+      <div class="m"><div class="l">Freq</div><div class="v">3.8</div></div>
+    </div>
+    <div class="chart">
+      <span class="label">ROAS 14d</span>
+      <svg viewBox="0 0 200 28" preserveAspectRatio="none">
+        <polyline fill="none" stroke="#ff7b57" stroke-width="1.8" points="0,6 20,8 40,10 60,12 80,14 100,16 120,18 140,20 160,22 180,24 200,25"/>
+        <circle cx="100" cy="16" r="3.5" fill="#ff7b57"/>
+      </svg>
+      <span class="delta">↓ -42% WoW</span>
+    </div>
+    <div class="foot">
+      <a>↗ ClickUp</a>
+      <a>📄 Brief</a>
+      <a style="color: var(--coral); font-weight: 600;">Refresh ⚡</a>
+      <span class="date">10 Apr</span>
+    </div>
+  </div>
+
+  <div class="c testing">
+    <div class="top-row">
+      <div class="thm photo"></div>
+      <div class="heading">
+        <div class="nm">6197-1 old winner</div>
+        <div class="id">AT-10612 · testing</div>
+      </div>
+      <span class="status"><span class="d"></span>Testing</span>
+    </div>
+    <div class="tags">
+      <span class="tag">Scarcity</span>
+      <span class="tag">Women 25-45</span>
+      <span class="tag">Direct Offer</span>
+    </div>
+    <div class="metrics-row">
+      <div class="m"><div class="l">ROAS 7d</div><div class="v roas dim">—</div></div>
+      <div class="m"><div class="l">Spend 7d</div><div class="v">$28</div></div>
+      <div class="m"><div class="l">Age</div><div class="v">1d</div></div>
+    </div>
+    <div class="chart">
+      <span class="label">Building data</span>
+      <svg viewBox="0 0 200 28" preserveAspectRatio="none">
+        <polyline fill="none" stroke="#454c6c" stroke-width="1.3" stroke-dasharray="3 2" points="0,14 200,14"/>
+      </svg>
+      <span class="delta" style="color: var(--text-3);">—</span>
+    </div>
+    <div class="foot">
+      <a>↗ ClickUp</a>
+      <a>📄 Brief</a>
+      <span class="date">21 Apr</span>
+    </div>
+  </div>
+
+  <div class="c loser">
+    <div class="top-row">
+      <div class="thm"></div>
+      <div class="heading">
+        <div class="nm">11436 new concept</div>
+        <div class="id">AT-11436 · kill candidate</div>
+      </div>
+      <span class="status"><span class="d"></span>Loser</span>
+    </div>
+    <div class="tags">
+      <span class="tag">Calm / Unwind</span>
+      <span class="tag">Self-Care Adults</span>
+      <span class="tag">Curiosity</span>
+    </div>
+    <div class="metrics-row">
+      <div class="m"><div class="l">ROAS 7d</div><div class="v roas">0.42×</div></div>
+      <div class="m"><div class="l">Spend 7d</div><div class="v">$187</div></div>
+      <div class="m"><div class="l">Age</div><div class="v">8d</div></div>
+    </div>
+    <div class="chart">
+      <span class="label">ROAS 14d</span>
+      <svg viewBox="0 0 200 28" preserveAspectRatio="none">
+        <polyline fill="none" stroke="#ff5788" stroke-width="1.8" points="0,8 20,10 40,13 60,15 80,17 100,19 120,21 140,22 160,23 180,24 200,25"/>
+      </svg>
+      <span class="delta">↓ -58%</span>
+    </div>
+    <div class="foot">
+      <a>↗ ClickUp</a>
+      <a>📄 Brief</a>
+      <a style="color: var(--rose); font-weight: 600;">Kill ⊗</a>
+      <span class="date">14 Apr</span>
+    </div>
+  </div>
+
+</div>
+
+</body>
+</html>

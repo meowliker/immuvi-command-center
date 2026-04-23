@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Creative Matrix · Count-up Insights</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --canvas:#faf9f5; --surface:#ffffff; --surface-2:#f3f1e9;
+  --line:#e8e5dc; --line-hi:#d6d1c1;
+  --ink:#1a1814; --ink-2:#585449; --ink-3:#8f8a7c; --ink-4:#b8b3a2;
+  --accent:#c05336; --accent-soft:#f5e3da;
+  --cyan:#00a3b8;
+  --sage:#5e7557; --ochre:#a77c2e; --coral:#c14400; --rust:#a83b28;
+  --dusk:#4f6780; --emerald:#35683f;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:var(--canvas);color:var(--ink);font-family:'Inter',sans-serif;font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased}
+body{min-height:420vh}
+.mono{font-family:'JetBrains Mono',monospace;font-variant-numeric:tabular-nums}
+
+/* nav */
+.nav{position:sticky;top:0;z-index:50;background:rgba(250,249,245,.86);backdrop-filter:saturate(140%) blur(14px);-webkit-backdrop-filter:saturate(140%) blur(14px);border-bottom:1px solid var(--line)}
+.nav-inner{max-width:1320px;margin:0 auto;padding:14px 32px;display:flex;align-items:center;gap:32px}
+.brand{display:flex;align-items:center;gap:10px;font-weight:700;font-size:14px}
+.brand .dot{width:10px;height:10px;border-radius:3px;background:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.nav-links{display:flex;gap:4px;margin-left:24px}
+.nav-link{padding:7px 12px;border-radius:8px;color:var(--ink-2);font-size:13px;font-weight:500;cursor:pointer}
+.nav-link:hover{background:var(--surface-2);color:var(--ink)}
+.nav-link.active{background:var(--ink);color:var(--canvas)}
+.nav-right{margin-left:auto;display:flex;gap:12px;font-size:12px;color:var(--ink-3)}
+.nav-badge{display:inline-flex;align-items:center;gap:6px;padding:4px 9px;border:1px solid var(--line-hi);border-radius:999px;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--ink-2)}
+.nav-badge .pulse{width:6px;height:6px;border-radius:50%;background:var(--sage);animation:pulse 2s infinite}
+@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(94,117,87,.6)}70%{box-shadow:0 0 0 8px rgba(94,117,87,0)}}
+
+/* hero count-up */
+.hero-wrap{position:relative;padding:100px 0 160px;overflow:hidden}
+.hero-wrap::before{content:"";position:absolute;width:900px;height:900px;border-radius:50%;background:radial-gradient(circle,rgba(192,83,54,.16),transparent 62%);top:-320px;left:50%;transform:translateX(-60%);pointer-events:none}
+.hero-wrap::after{content:"";position:absolute;width:700px;height:700px;border-radius:50%;background:radial-gradient(circle,rgba(0,163,184,.12),transparent 62%);bottom:-280px;right:-100px;pointer-events:none}
+.hero{position:relative;max-width:1320px;margin:0 auto;padding:0 32px;display:grid;grid-template-columns:1.3fr 1fr;gap:64px;align-items:center}
+
+.hero-left .eyebrow{display:inline-flex;align-items:center;gap:8px;padding:6px 12px;border:1px solid var(--line-hi);border-radius:999px;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--ink-2);text-transform:uppercase;letter-spacing:.12em;background:var(--surface);margin-bottom:24px}
+.hero-left .eyebrow .sq{width:8px;height:8px;background:var(--accent);border-radius:2px}
+.hero-left .label{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--ink-3);text-transform:uppercase;letter-spacing:.18em;margin-bottom:14px}
+.hero-num{font-family:'Instrument Serif',serif;font-style:italic;font-weight:400;font-size:clamp(150px,22vw,280px);line-height:.86;letter-spacing:-.04em;color:var(--ink);display:flex;align-items:baseline;gap:12px}
+.hero-num .x{font-size:.55em;color:var(--accent)}
+.hero-num .n{display:inline-block;min-width:2.2ch;text-align:right}
+.hero-left .cap{font-size:19px;color:var(--ink-2);max-width:480px;line-height:1.55;margin-top:32px}
+
+.kpi-grid{display:grid;grid-template-columns:1fr;gap:16px}
+.kpi{background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:22px 26px;display:flex;flex-direction:column;gap:6px;position:relative;overflow:hidden;opacity:0;transform:translateX(40px);transition:opacity .9s cubic-bezier(.2,.7,.2,1),transform .9s cubic-bezier(.2,.7,.2,1)}
+.kpi.vis{opacity:1;transform:translateX(0)}
+.kpi:nth-child(2){transition-delay:.1s}
+.kpi:nth-child(3){transition-delay:.2s}
+.kpi:nth-child(4){transition-delay:.3s}
+.kpi .lb{font-size:11px;color:var(--ink-3);text-transform:uppercase;letter-spacing:.12em;font-weight:500}
+.kpi .vv{display:flex;align-items:baseline;gap:8px}
+.kpi .v{font-family:'JetBrains Mono',monospace;font-size:40px;font-weight:500;letter-spacing:-.02em;color:var(--ink)}
+.kpi .u{font-size:15px;color:var(--ink-2);font-weight:500}
+.kpi .trend{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--sage)}
+.kpi .sub{font-size:12px;color:var(--ink-3)}
+.kpi::before{content:"";position:absolute;top:0;left:0;bottom:0;width:3px;background:var(--line)}
+.kpi.acc::before{background:var(--accent)}
+.kpi.em::before{background:var(--emerald)}
+.kpi.cy::before{background:var(--cyan)}
+.kpi.wn::before{background:var(--sage)}
+
+/* section */
+.section{max-width:1320px;margin:0 auto;padding:80px 32px}
+.section-head{display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:40px;gap:32px}
+.section-head h2{font-family:'Instrument Serif',serif;font-style:italic;font-weight:400;font-size:56px;line-height:1;letter-spacing:-.02em}
+.section-head .sub{color:var(--ink-3);font-size:13px;max-width:360px;text-align:right}
+
+/* compact matrix */
+.matrix-wrap{background:var(--surface);border:1px solid var(--line);border-radius:22px;padding:24px;overflow:hidden}
+.matrix-bar{display:flex;align-items:center;justify-content:space-between;padding-bottom:20px;border-bottom:1px solid var(--line);margin-bottom:20px;gap:20px}
+.matrix-bar strong{font-size:15px}
+.matrix-bar .legend{display:flex;gap:12px;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--ink-2)}
+.matrix-bar .legend span{display:inline-flex;align-items:center;gap:5px}
+.matrix-bar .legend i{width:9px;height:9px;border-radius:2px;display:inline-block}
+
+.matrix{display:grid;grid-template-columns:180px repeat(5,1fr);gap:6px}
+.mcorner{min-height:72px}
+.mch{background:var(--surface-2);border:1px solid var(--line);border-radius:10px;padding:10px 12px;min-height:72px;display:flex;flex-direction:column;justify-content:flex-end;gap:2px}
+.mch .n{font-size:11px;font-weight:600;line-height:1.25;letter-spacing:-.01em}
+.mch .c{font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--ink-3);text-transform:uppercase;letter-spacing:.08em}
+.mrh{background:var(--surface-2);border:1px solid var(--line);border-radius:10px;padding:10px 12px;min-height:80px;display:flex;flex-direction:column;justify-content:center;gap:2px}
+.mrh .n{font-family:'Instrument Serif',serif;font-style:italic;font-size:17px;line-height:1.1}
+.mrh .c{font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--ink-3);text-transform:uppercase;letter-spacing:.08em}
+.mc{border:1px solid var(--line);border-radius:10px;padding:10px 12px;min-height:80px;position:relative;display:flex;flex-direction:column;gap:2px;transition:transform .2s}
+.mc:hover{transform:translateY(-2px)}
+.mc .tr{font-family:'JetBrains Mono',monospace;font-size:9px;text-transform:uppercase;letter-spacing:.1em;font-weight:500}
+.mc .r{font-family:'JetBrains Mono',monospace;font-size:20px;font-weight:500;letter-spacing:-.02em;line-height:1}
+.mc .ft{position:absolute;bottom:8px;left:12px;right:12px;display:flex;justify-content:space-between;font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--ink-3)}
+.mc .ft .sp{color:var(--ink-2);font-weight:500}
+.c-massive{background:linear-gradient(135deg,#eef2ea,#dfe6d7);border-color:#c3d0b8}
+.c-massive .r,.c-massive .tr{color:#35683f}
+.c-winner{background:linear-gradient(135deg,#f1f3ed,#e4e9dc);border-color:#c8d0bc}
+.c-winner .r,.c-winner .tr{color:#5e7557}
+.c-mild{background:linear-gradient(135deg,#f6efe0,#ecdfc4);border-color:#d9c898}
+.c-mild .r,.c-mild .tr{color:#a77c2e}
+.c-fatigue{background:linear-gradient(135deg,#f7e4d8,#efcbb5);border-color:#e0b299}
+.c-fatigue .r,.c-fatigue .tr{color:#c14400}
+.c-loser{background:linear-gradient(135deg,#f1dcd6,#e7c0b7);border-color:#d5a498}
+.c-loser .r,.c-loser .tr{color:#a83b28}
+.c-testing{background:linear-gradient(135deg,#e6ecf2,#cfd9e4);border-color:#b4c1d0}
+.c-testing .r,.c-testing .tr{color:#4f6780}
+.c-empty{background:repeating-linear-gradient(135deg,transparent,transparent 6px,rgba(184,179,162,.1) 6px,rgba(184,179,162,.1) 7px);border:1px dashed var(--line-hi);min-height:80px;display:flex;align-items:center;justify-content:center}
+.c-empty .em{font-family:'Instrument Serif',serif;font-style:italic;color:var(--ink-4);font-size:11px}
+.wow{display:inline-block;padding:1px 5px;border-radius:999px;background:rgba(193,68,0,.14);color:var(--coral);font-family:'JetBrains Mono',monospace;font-size:8px;font-weight:500;margin-left:4px;vertical-align:middle}
+
+/* INSIGHT CARDS */
+.insights{max-width:1320px;margin:40px auto 0;padding:80px 32px 160px;display:flex;flex-direction:column;gap:32px}
+.ins-head{display:flex;flex-direction:column;gap:8px;margin-bottom:20px}
+.ins-head .eyebrow{display:inline-flex;align-items:center;gap:8px;padding:6px 12px;border:1px solid var(--line-hi);border-radius:999px;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--ink-2);text-transform:uppercase;letter-spacing:.12em;background:var(--surface);align-self:flex-start;width:max-content}
+.ins-head h2{font-family:'Instrument Serif',serif;font-style:italic;font-weight:400;font-size:64px;line-height:1;letter-spacing:-.02em}
+
+.insight{background:var(--surface);border:1px solid var(--line);border-radius:22px;padding:40px;display:grid;grid-template-columns:80px 1fr auto;gap:32px;align-items:center;position:relative;overflow:hidden;opacity:0;transform:translateX(80px);transition:opacity .95s cubic-bezier(.2,.7,.2,1),transform .95s cubic-bezier(.2,.7,.2,1)}
+.insight.vis{opacity:1;transform:translateX(0)}
+.insight .num{font-family:'Instrument Serif',serif;font-style:italic;font-size:88px;line-height:1;color:var(--ink-4);letter-spacing:-.03em}
+.insight .body .tag{font-family:'JetBrains Mono',monospace;font-size:10px;text-transform:uppercase;letter-spacing:.14em;color:var(--accent);font-weight:600;margin-bottom:10px;display:inline-block}
+.insight .body h3{font-family:'Instrument Serif',serif;font-style:italic;font-weight:400;font-size:36px;line-height:1.1;letter-spacing:-.02em;margin-bottom:12px}
+.insight .body p{color:var(--ink-2);font-size:15px;max-width:640px;line-height:1.55}
+.insight .stats{display:flex;flex-direction:column;gap:4px;text-align:right;font-family:'JetBrains Mono',monospace}
+.insight .stats .v{font-size:26px;font-weight:500;letter-spacing:-.02em;color:var(--ink)}
+.insight .stats .l{font-size:10px;color:var(--ink-3);text-transform:uppercase;letter-spacing:.1em}
+.insight .btn{padding:10px 18px;border:1px solid var(--line-hi);border-radius:999px;font-size:12px;font-weight:600;color:var(--ink);cursor:pointer;transition:all .2s;margin-top:14px;display:inline-flex;align-items:center;gap:6px}
+.insight .btn:hover{background:var(--ink);color:var(--canvas);border-color:var(--ink)}
+.insight .spark{position:absolute;right:-40px;top:-40px;width:260px;height:260px;border-radius:50%;filter:blur(70px);opacity:.18;pointer-events:none}
+.insight.scale .spark{background:var(--sage)}
+.insight.refresh .spark{background:var(--coral)}
+.insight.opp .spark{background:var(--cyan)}
+.insight.scale{border-left:4px solid var(--sage)}
+.insight.refresh{border-left:4px solid var(--coral)}
+.insight.opp{border-left:4px solid var(--cyan)}
+
+.end{text-align:center;padding:80px 32px 140px}
+.end h3{font-family:'Instrument Serif',serif;font-style:italic;font-weight:400;font-size:80px;line-height:1;letter-spacing:-.02em;margin-bottom:20px}
+.end p{color:var(--ink-2);font-size:17px;max-width:540px;margin:0 auto}
+.cta{display:inline-flex;align-items:center;gap:10px;margin-top:32px;padding:18px 32px;background:var(--accent);color:var(--canvas);border-radius:999px;font-weight:600;font-size:14px;cursor:pointer}
+
+</style>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="nav-inner">
+    <div class="brand"><span class="dot"></span><span>Immuvi Command Center</span></div>
+    <div class="nav-links">
+      <a class="nav-link">Command HQ</a>
+      <a class="nav-link">Angles</a>
+      <a class="nav-link">Personas</a>
+      <a class="nav-link">Creative Tracker</a>
+      <a class="nav-link active">Creative Matrix</a>
+    </div>
+    <div class="nav-right">
+      <span class="nav-badge"><span class="pulse"></span>Live · 42 creatives</span>
+      <span>Last 28 days</span>
+    </div>
+  </div>
+</nav>
+
+<section class="hero-wrap">
+  <div class="hero">
+    <div class="hero-left">
+      <div class="eyebrow"><span class="sq"></span>Blended roas · 28 days · all creatives</div>
+      <div class="label">The number.</div>
+      <div class="hero-num"><span class="n" id="nRoas">0.00</span><span class="x">×</span></div>
+      <div class="cap">A single figure hides the grain underneath. Scroll on — we'll pull the blended number apart into a 35-cell map of where the spend is actually earning.</div>
+    </div>
+    <div class="kpi-grid">
+      <div class="kpi acc"><div class="lb">Classified creatives</div><div class="vv"><span class="v" id="nCreat">0</span></div><div class="sub">of 42 total · 100% coverage</div></div>
+      <div class="kpi em"><div class="lb">Active cells</div><div class="vv"><span class="v" id="nActive">0</span><span class="u">/ 35</span></div><div class="sub">16 empty · opportunity zone</div></div>
+      <div class="kpi cy"><div class="lb">Spend · last 28d</div><div class="vv"><span class="v" id="nSpend">$0</span></div><div class="sub trend">▲ +12% vs prior period</div></div>
+      <div class="kpi wn"><div class="lb">Winners &amp; massives</div><div class="vv"><span class="v" id="nWin">0</span><span class="u">/ 19</span></div><div class="sub">$10.7k carrying the blend</div></div>
+    </div>
+  </div>
+</section>
+
+<section class="section">
+  <div class="section-head">
+    <h2>The map, in one glance.</h2>
+    <div class="sub">Now the cells. Scroll past the matrix to surface the three moves the grid is telling us to make.</div>
+  </div>
+
+  <div class="matrix-wrap">
+    <div class="matrix-bar">
+      <strong>Angle × Persona · 19 active · 16 empty</strong>
+      <div class="legend">
+        <span><i style="background:linear-gradient(135deg,#35683f,#5e7557)"></i>Massive</span>
+        <span><i style="background:#5e7557"></i>Winner</span>
+        <span><i style="background:#a77c2e"></i>Mild</span>
+        <span><i style="background:#c14400"></i>Fatigue</span>
+        <span><i style="background:#a83b28"></i>Loser</span>
+        <span><i style="background:#4f6780"></i>Testing</span>
+      </div>
+    </div>
+    <div class="matrix">
+      <div class="mcorner"></div>
+      <div class="mch"><div class="n">Stressed Women 25-45</div><div class="c">24 creatives</div></div>
+      <div class="mch"><div class="n">Creative Self-Care Adults</div><div class="c">10 creatives</div></div>
+      <div class="mch"><div class="n">Parents of Emotional Kids</div><div class="c">6 creatives</div></div>
+      <div class="mch"><div class="n">Silently Scrolling Adults</div><div class="c">1 creative</div></div>
+      <div class="mch"><div class="n">Young Adults · Grief</div><div class="c">1 creative</div></div>
+
+      <div class="mrh"><div class="n">Art as Therapy</div><div class="c">18 · 1.58×</div></div>
+      <div class="mc c-massive"><div class="tr">◆ Massive</div><div class="r">1.78×</div><div class="ft"><span>12</span><span class="sp">$4,920</span></div></div>
+      <div class="mc c-winner"><div class="tr">Winner</div><div class="r">1.48×</div><div class="ft"><span>4</span><span class="sp">$1,240</span></div></div>
+      <div class="mc c-mild"><div class="tr">Mild</div><div class="r">1.32×</div><div class="ft"><span>2</span><span class="sp">$620</span></div></div>
+      <div class="mc c-empty"><span class="em">—</span></div>
+      <div class="mc c-empty"><span class="em">—</span></div>
+
+      <div class="mrh"><div class="n">Calm / Unwind</div><div class="c">9 · 1.12×</div></div>
+      <div class="mc c-winner"><div class="tr">Winner</div><div class="r">1.41×</div><div class="ft"><span>4</span><span class="sp">$1,420</span></div></div>
+      <div class="mc c-mild"><div class="tr">Mild</div><div class="r">1.22×</div><div class="ft"><span>3</span><span class="sp">$580</span></div></div>
+      <div class="mc c-loser"><div class="tr">Loser</div><div class="r">0.58×</div><div class="ft"><span>2</span><span class="sp">$340</span></div></div>
+      <div class="mc c-empty"><span class="em">—</span></div>
+      <div class="mc c-empty"><span class="em">—</span></div>
+
+      <div class="mrh"><div class="n">Scarcity</div><div class="c">5 · 0.98×</div></div>
+      <div class="mc c-fatigue"><div class="tr">Fatigued</div><div class="r">0.98×<span class="wow">-42%</span></div><div class="ft"><span>4</span><span class="sp">$1,850</span></div></div>
+      <div class="mc c-mild"><div class="tr">Mild</div><div class="r">1.28×</div><div class="ft"><span>1</span><span class="sp">$310</span></div></div>
+      <div class="mc c-empty"><span class="em">—</span></div>
+      <div class="mc c-empty"><span class="em">—</span></div>
+      <div class="mc c-empty"><span class="em">—</span></div>
+
+      <div class="mrh"><div class="n">Therapist-Rec</div><div class="c">5 · 1.38×</div></div>
+      <div class="mc c-winner"><div class="tr">Winner</div><div class="r">1.44×</div><div class="ft"><span>2</span><span class="sp">$560</span></div></div>
+      <div class="mc c-mild"><div class="tr">Mild</div><div class="r">1.30×</div><div class="ft"><span>2</span><span class="sp">$360</span></div></div>
+      <div class="mc c-testing"><div class="tr">Testing</div><div class="r">—</div><div class="ft"><span>1</span><span class="sp">$32</span></div></div>
+      <div class="mc c-empty"><span class="em">—</span></div>
+      <div class="mc c-empty"><span class="em">—</span></div>
+
+      <div class="mrh"><div class="n">Emotional Lit</div><div class="c">3 · 1.50×</div></div>
+      <div class="mc c-winner"><div class="tr">Winner</div><div class="r">1.54×</div><div class="ft"><span>1</span><span class="sp">$806</span></div></div>
+      <div class="mc c-empty"><span class="em">—</span></div>
+      <div class="mc c-empty"><span class="em">—</span></div>
+      <div class="mc c-empty"><span class="em">—</span></div>
+      <div class="mc c-winner"><div class="tr">Winner</div><div class="r">1.46×</div><div class="ft"><span>1</span><span class="sp">$624</span></div></div>
+
+      <div class="mrh"><div class="n">Pattern Interrupt</div><div class="c">2 · 1.22×</div></div>
+      <div class="mc c-empty"><span class="em">—</span></div>
+      <div class="mc c-empty"><span class="em">—</span></div>
+      <div class="mc c-empty"><span class="em">—</span></div>
+      <div class="mc c-mild"><div class="tr">Mild</div><div class="r">1.22×</div><div class="ft"><span>2</span><span class="sp">$284</span></div></div>
+      <div class="mc c-empty"><span class="em">—</span></div>
+
+      <div class="mrh"><div class="n">Social Proof · 18K</div><div class="c">1 · 1.41×</div></div>
+      <div class="mc c-winner"><div class="tr">Winner</div><div class="r">1.41×</div><div class="ft"><span>1</span><span class="sp">$488</span></div></div>
+      <div class="mc c-empty"><span class="em">—</span></div>
+      <div class="mc c-empty"><span class="em">—</span></div>
+      <div class="mc c-empty"><span class="em">—</span></div>
+      <div class="mc c-empty"><span class="em">—</span></div>
+    </div>
+  </div>
+</section>
+
+<section class="insights">
+  <div class="ins-head">
+    <div class="eyebrow"><span style="width:8px;height:8px;background:var(--accent);border-radius:2px"></span>Three moves · this week</div>
+    <h2>What the grid is telling you to do.</h2>
+  </div>
+
+  <div class="insight scale" data-i="1">
+    <div class="spark"></div>
+    <div class="num">01</div>
+    <div class="body">
+      <span class="tag">Scale · highest-conviction cell</span>
+      <h3>Pour into Art as Therapy × Women 25-45.</h3>
+      <p>This single cell is earning 1.78× on $4,920 spend. It's the only Massive tier in the portfolio, and it's trending up. Budget here is underpaying — lift by 40% and fund it with cuts below.</p>
+      <div class="btn">Open the creative bundle →</div>
+    </div>
+    <div class="stats"><span class="v">1.78×</span><span class="l">roas</span><span class="v" style="font-size:18px;margin-top:6px">$4,920</span><span class="l">current spend</span></div>
+  </div>
+
+  <div class="insight refresh" data-i="2">
+    <div class="spark"></div>
+    <div class="num">02</div>
+    <div class="body">
+      <span class="tag">Refresh · fatigue siren</span>
+      <h3>Kill the Scarcity run on Women 25-45.</h3>
+      <p>WoW roas is -42% and the cell is still eating $1,850. Pause the 4 creatives, ship a refreshed pass with a new hook or save it for a window around a genuine drop event. Don't let this burn another week.</p>
+      <div class="btn">Queue the refresh brief →</div>
+    </div>
+    <div class="stats"><span class="v">0.98×</span><span class="l">roas</span><span class="v" style="font-size:18px;margin-top:6px">-42%</span><span class="l">wow</span></div>
+  </div>
+
+  <div class="insight opp" data-i="3">
+    <div class="spark"></div>
+    <div class="num">03</div>
+    <div class="body">
+      <span class="tag">Opportunity · unexplored cells</span>
+      <h3>Sixteen empty cells. Pick one.</h3>
+      <p>Emotional Literacy wins in both cells it touched — extend it into Self-Care Adults and Parents next. Pattern Interrupt is cheap and unexplored outside one persona. The grid is telling you where to point the next shoot.</p>
+      <div class="btn">Open the planning queue →</div>
+    </div>
+    <div class="stats"><span class="v">16</span><span class="l">empty cells</span><span class="v" style="font-size:18px;margin-top:6px">46%</span><span class="l">of grid</span></div>
+  </div>
+</section>
+
+<section class="end">
+  <h3>One number, unpacked.</h3>
+  <p>Your blended ROAS is 1.38× — but the story lives in the cells. Open one, read the creatives, ship the next test.</p>
+  <a class="cta">Go to the tracker →</a>
+</section>
+
+<script>
+  // Count-up animation
+  function countUp(el, target, duration, formatter){
+    let start = null;
+    const initial = 0;
+    function step(ts){
+      if(!start) start = ts;
+      const p = Math.min((ts - start) / duration, 1);
+      const eased = 1 - Math.pow(1 - p, 3);
+      const v = initial + (target - initial) * eased;
+      el.textContent = formatter(v);
+      if(p < 1) requestAnimationFrame(step);
+    }
+    requestAnimationFrame(step);
+  }
+  const heroWrap = document.querySelector('.hero-wrap');
+  const heroIO = new IntersectionObserver((entries)=>{
+    entries.forEach(e=>{
+      if(e.isIntersecting){
+        countUp(document.getElementById('nRoas'), 1.38, 1800, v=>v.toFixed(2));
+        countUp(document.getElementById('nCreat'), 42, 1600, v=>Math.round(v).toString());
+        countUp(document.getElementById('nActive'), 19, 1600, v=>Math.round(v).toString());
+        countUp(document.getElementById('nSpend'), 12400, 1800, v=>'$'+(Math.round(v)/1000).toFixed(1)+'k');
+        countUp(document.getElementById('nWin'), 9, 1400, v=>Math.round(v).toString());
+        document.querySelectorAll('.kpi').forEach((k,i)=>setTimeout(()=>k.classList.add('vis'), 200 + i*120));
+        heroIO.disconnect();
+      }
+    });
+  },{threshold:0.35});
+  heroIO.observe(heroWrap);
+
+  // Insight cards slide in
+  const insIO = new IntersectionObserver((entries)=>{
+    entries.forEach(e=>{
+      if(e.isIntersecting){ e.target.classList.add('vis'); }
+    });
+  },{threshold:0.25});
+  document.querySelectorAll('.insight').forEach(i=>insIO.observe(i));
+</script>
+</body>
+</html>

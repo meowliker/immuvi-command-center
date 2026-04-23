@@ -1,0 +1,755 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Immuvi Command Center — Operator Dark</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:        #09090b;
+    --surface-1: #141416;
+    --surface-2: #1c1c1f;
+    --border:    rgba(255,255,255,0.06);
+    --border-md: rgba(255,255,255,0.10);
+    --text-dim:  #6b7280;
+    --text-mid:  #9ca3af;
+    --text:      #e5e7eb;
+    --accent:    #00d67a;
+    --winner:    #00d67a;
+    --loser:     #ff5555;
+    --testing:   #4da6ff;
+    --production:#f59e0b;
+    --approved:  #a78bfa;
+    --untested:  #6b7280;
+    --mono:      'JetBrains Mono', monospace;
+    --sans:      'Inter', sans-serif;
+  }
+
+  html, body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 12px;
+    line-height: 1.5;
+    min-height: 100vh;
+  }
+
+  /* ─── Shell ─────────────────────────────────────── */
+  .shell {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    overflow: hidden;
+  }
+
+  /* ─── Top Bar ────────────────────────────────────── */
+  .topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 20px;
+    height: 40px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface-1);
+    flex-shrink: 0;
+  }
+  .topbar-brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .topbar-logo {
+    width: 18px; height: 18px;
+    background: var(--accent);
+    clip-path: polygon(50% 0%, 100% 38%, 82% 100%, 18% 100%, 0% 38%);
+  }
+  .topbar-name {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text);
+  }
+  .topbar-meta {
+    font-size: 10px;
+    color: var(--text-dim);
+    letter-spacing: 0.04em;
+  }
+  .topbar-status {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+  .status-pill {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 10px;
+    color: var(--text-dim);
+  }
+  .status-dot {
+    width: 5px; height: 5px;
+    border-radius: 50%;
+    background: var(--accent);
+    animation: pulse 2s ease-in-out infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+  }
+
+  /* ─── Tab Bar ────────────────────────────────────── */
+  .tabbar {
+    display: flex;
+    align-items: flex-end;
+    padding: 0 20px;
+    height: 36px;
+    background: var(--surface-1);
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+    gap: 2px;
+  }
+  .tab {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0 12px;
+    height: 100%;
+    font-size: 11px;
+    font-family: var(--mono);
+    font-weight: 500;
+    color: var(--text-dim);
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    user-select: none;
+    transition: color 0.12s, border-color 0.12s;
+    white-space: nowrap;
+  }
+  .tab:hover { color: var(--text-mid); }
+  .tab.active {
+    color: var(--accent);
+    border-bottom-color: var(--accent);
+  }
+  .tab-count {
+    font-size: 9px;
+    background: var(--surface-2);
+    border: 1px solid var(--border-md);
+    padding: 1px 5px;
+    border-radius: 2px;
+    color: var(--text-dim);
+  }
+  .tab.active .tab-count {
+    background: rgba(0,214,122,0.1);
+    border-color: rgba(0,214,122,0.25);
+    color: var(--accent);
+  }
+
+  /* ─── Content Area ───────────────────────────────── */
+  .content {
+    flex: 1;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+  .panel { display: none; flex-direction: column; height: 100%; overflow: hidden; }
+  .panel.active { display: flex; }
+
+  /* ─── Filter Bar ─────────────────────────────────── */
+  .filterbar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 20px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface-1);
+    flex-shrink: 0;
+  }
+  .filter-label {
+    font-size: 10px;
+    color: var(--text-dim);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    margin-right: 4px;
+  }
+  .filter-select {
+    appearance: none;
+    background: var(--surface-2);
+    border: 1px solid var(--border-md);
+    color: var(--text-mid);
+    font-family: var(--mono);
+    font-size: 10px;
+    padding: 3px 22px 3px 8px;
+    cursor: pointer;
+    border-radius: 2px;
+    outline: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='5' viewBox='0 0 8 5'%3E%3Cpath d='M0 0l4 5 4-5z' fill='%236b7280'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 7px center;
+    transition: border-color 0.12s;
+  }
+  .filter-select:hover { border-color: rgba(255,255,255,0.15); }
+  .filter-select:focus { border-color: var(--accent); }
+  .filter-divider { width: 1px; height: 16px; background: var(--border); margin: 0 4px; }
+  .filter-count {
+    margin-left: auto;
+    font-size: 10px;
+    color: var(--text-dim);
+  }
+  .filter-count span { color: var(--accent); }
+
+  /* ─── Tracker Table ──────────────────────────────── */
+  .table-wrap {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: auto;
+  }
+  .table-wrap::-webkit-scrollbar { width: 4px; height: 4px; }
+  .table-wrap::-webkit-scrollbar-track { background: transparent; }
+  .table-wrap::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 2px; }
+  .table-wrap::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.15); }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    min-width: 900px;
+  }
+  thead {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    background: var(--surface-1);
+  }
+  th {
+    padding: 0 12px;
+    height: 28px;
+    text-align: left;
+    font-size: 9px;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+    user-select: none;
+    cursor: pointer;
+  }
+  th:hover { color: var(--text-mid); }
+  th .sort-indicator {
+    display: inline-block;
+    margin-left: 4px;
+    color: var(--accent);
+    font-size: 9px;
+  }
+  td {
+    padding: 0 12px;
+    height: 32px;
+    border-bottom: 1px solid var(--border);
+    font-size: 11px;
+    white-space: nowrap;
+    vertical-align: middle;
+  }
+  tr:hover td { background: var(--surface-1); }
+  tr:last-child td { border-bottom: none; }
+
+  .col-id { font-weight: 600; color: var(--text); }
+  .col-angle, .col-persona, .col-structure, .col-hook, .col-prod, .col-funnel {
+    color: var(--text-mid);
+  }
+  .col-funnel {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    color: var(--text-dim);
+  }
+  .status-text {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+  .s-winner    { color: var(--winner); }
+  .s-loser     { color: var(--loser); }
+  .s-testing   { color: var(--testing); }
+  .s-production{ color: var(--production); }
+  .s-approved  { color: var(--approved); }
+  .s-untested  { color: var(--untested); }
+
+  /* ─── Matrix Panel ───────────────────────────────── */
+  .matrix-wrap {
+    flex: 1;
+    overflow: auto;
+    padding: 20px;
+  }
+  .matrix-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 16px;
+  }
+  .matrix-title {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+  }
+  .matrix-legend {
+    display: flex;
+    gap: 12px;
+  }
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 9px;
+    color: var(--text-dim);
+    letter-spacing: 0.04em;
+  }
+  .legend-swatch {
+    width: 8px; height: 8px;
+    border-radius: 1px;
+  }
+
+  .matrix-grid {
+    display: grid;
+    grid-template-columns: 180px repeat(4, 1fr);
+    gap: 1px;
+    background: var(--border);
+    border: 1px solid var(--border);
+  }
+  .matrix-corner {
+    background: var(--surface-1);
+    padding: 10px 12px;
+    font-size: 9px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+  }
+  .matrix-col-header {
+    background: var(--surface-1);
+    padding: 10px 12px;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-mid);
+    text-align: center;
+  }
+  .matrix-row-label {
+    background: var(--surface-1);
+    padding: 0 12px;
+    font-size: 10px;
+    font-weight: 500;
+    color: var(--text-mid);
+    display: flex;
+    align-items: center;
+    min-height: 64px;
+    letter-spacing: 0.02em;
+    border-right: 1px solid var(--border-md);
+  }
+  .matrix-cell {
+    background: var(--surface-2);
+    min-height: 64px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    cursor: pointer;
+    transition: all 0.12s;
+  }
+  .matrix-cell:hover {
+    z-index: 2;
+    outline: 1px solid var(--accent);
+    outline-offset: -1px;
+  }
+  .matrix-cell.empty {
+    background: var(--surface-1);
+  }
+  .matrix-cell.c-winner   { background: rgba(0,214,122,0.08); }
+  .matrix-cell.c-testing  { background: rgba(77,166,255,0.08); }
+  .matrix-cell.c-approved { background: rgba(167,139,250,0.08); }
+  .matrix-cell.c-loser    { background: rgba(255,85,85,0.08); }
+  .matrix-cell.c-production { background: rgba(245,158,11,0.08); }
+
+  .matrix-cell.c-winner:hover   { background: rgba(0,214,122,0.14); outline-color: var(--winner); }
+  .matrix-cell.c-testing:hover  { background: rgba(77,166,255,0.14); outline-color: var(--testing); }
+  .matrix-cell.c-approved:hover { background: rgba(167,139,250,0.14); outline-color: var(--approved); }
+  .matrix-cell.c-loser:hover    { background: rgba(255,85,85,0.14); outline-color: var(--loser); }
+  .matrix-cell.c-production:hover { background: rgba(245,158,11,0.14); outline-color: var(--production); }
+
+  .cell-inner {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+  }
+  .cell-count {
+    font-size: 22px;
+    font-weight: 700;
+    line-height: 1;
+    color: var(--accent);
+  }
+  .cell-count.s-winner    { color: var(--winner); }
+  .cell-count.s-testing   { color: var(--testing); }
+  .cell-count.s-approved  { color: var(--approved); }
+  .cell-count.s-loser     { color: var(--loser); }
+  .cell-count.s-production{ color: var(--production); }
+
+  .cell-status {
+    font-size: 8px;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    opacity: 0.7;
+  }
+  .cell-empty-text {
+    font-size: 9px;
+    color: var(--border-md);
+    letter-spacing: 0.04em;
+  }
+
+  /* ─── Summary Bar ────────────────────────────────── */
+  .summary-bar {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 0 20px;
+    height: 28px;
+    border-top: 1px solid var(--border);
+    background: var(--surface-1);
+    flex-shrink: 0;
+  }
+  .summary-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 10px;
+    color: var(--text-dim);
+  }
+  .summary-val {
+    font-weight: 600;
+    font-size: 10px;
+  }
+  .summary-sep { color: var(--border-md); font-size: 10px; }
+</style>
+</head>
+<body>
+<div class="shell">
+
+  <!-- Top Bar -->
+  <header class="topbar">
+    <div class="topbar-brand">
+      <div class="topbar-logo"></div>
+      <span class="topbar-name">Immuvi Command Center</span>
+      <span class="topbar-meta" style="color:var(--border-md)">|</span>
+      <span class="topbar-meta">OPERATOR DARK</span>
+    </div>
+    <div class="topbar-status">
+      <div class="status-pill">
+        <div class="status-dot"></div>
+        <span>LIVE</span>
+      </div>
+      <div class="status-pill" style="color:var(--text-dim)">6 CREATIVES</div>
+      <div class="status-pill" style="color:var(--text-dim)">APR 2026</div>
+    </div>
+  </header>
+
+  <!-- Tab Bar -->
+  <nav class="tabbar">
+    <div class="tab active" data-tab="tracker">
+      Creative Tracker
+      <span class="tab-count">6</span>
+    </div>
+    <div class="tab" data-tab="matrix">
+      Creative Matrix
+      <span class="tab-count">5×4</span>
+    </div>
+  </nav>
+
+  <!-- Content -->
+  <main class="content">
+
+    <!-- TRACKER PANEL -->
+    <div class="panel active" id="panel-tracker">
+      <!-- Filter Bar -->
+      <div class="filterbar">
+        <span class="filter-label">Filter</span>
+        <select class="filter-select">
+          <option>All Statuses</option>
+          <option>Winner</option>
+          <option>Testing</option>
+          <option>Approved</option>
+          <option>In Production</option>
+          <option>Loser</option>
+          <option>Untested</option>
+        </select>
+        <select class="filter-select">
+          <option>All Angles</option>
+          <option>Pain Agitate Solution</option>
+          <option>Before/After</option>
+          <option>Social Proof</option>
+          <option>Fear Appeal</option>
+          <option>Benefits-First</option>
+        </select>
+        <select class="filter-select">
+          <option>All Personas</option>
+          <option>Busy Mom</option>
+          <option>Health Enthusiast</option>
+          <option>Skeptic</option>
+          <option>Value Seeker</option>
+        </select>
+        <select class="filter-select">
+          <option>All Funnels</option>
+          <option>TOF</option>
+          <option>MOF</option>
+          <option>BOF</option>
+        </select>
+        <div class="filter-divider"></div>
+        <select class="filter-select">
+          <option>All Formats</option>
+          <option>UGC</option>
+          <option>Motion</option>
+          <option>Studio</option>
+          <option>Voiceover</option>
+          <option>Documentary</option>
+        </select>
+        <span class="filter-count">Showing <span>6</span> of 6</span>
+      </div>
+
+      <!-- Table -->
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Format Name <span class="sort-indicator">↑</span></th>
+              <th>Angle</th>
+              <th>Persona</th>
+              <th>Structure</th>
+              <th>Hook</th>
+              <th>Production</th>
+              <th>Funnel</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="col-id">AT-001 · Story Loop 30s</td>
+              <td class="col-angle">Pain Agitate Solution</td>
+              <td class="col-persona">Busy Mom</td>
+              <td class="col-structure">Problem-Solution</td>
+              <td class="col-hook">Question</td>
+              <td class="col-prod">UGC</td>
+              <td class="col-funnel">TOF</td>
+              <td><span class="status-text s-winner">Winner</span></td>
+            </tr>
+            <tr>
+              <td class="col-id">AT-002 · Transformation 15s</td>
+              <td class="col-angle">Before/After</td>
+              <td class="col-persona">Health Enthusiast</td>
+              <td class="col-structure">Contrast</td>
+              <td class="col-hook">Stat</td>
+              <td class="col-prod">Motion</td>
+              <td class="col-funnel">MOF</td>
+              <td><span class="status-text s-testing">Testing</span></td>
+            </tr>
+            <tr>
+              <td class="col-id">AT-003 · Testimonial Reel</td>
+              <td class="col-angle">Social Proof</td>
+              <td class="col-persona">Skeptic</td>
+              <td class="col-structure">Authority</td>
+              <td class="col-hook">Quote</td>
+              <td class="col-prod">Studio</td>
+              <td class="col-funnel">BOF</td>
+              <td><span class="status-text s-approved">Approved</span></td>
+            </tr>
+            <tr>
+              <td class="col-id">AT-004 · Value Stack 60s</td>
+              <td class="col-angle">Benefits-First</td>
+              <td class="col-persona">Value Seeker</td>
+              <td class="col-structure">List</td>
+              <td class="col-hook">Statement</td>
+              <td class="col-prod">Voiceover</td>
+              <td class="col-funnel">TOF</td>
+              <td><span class="status-text s-loser">Loser</span></td>
+            </tr>
+            <tr>
+              <td class="col-id">AT-005 · Fear Hook Cut</td>
+              <td class="col-angle">Fear Appeal</td>
+              <td class="col-persona">Busy Mom</td>
+              <td class="col-structure">Problem</td>
+              <td class="col-hook">Fear</td>
+              <td class="col-prod">UGC</td>
+              <td class="col-funnel">TOF</td>
+              <td><span class="status-text s-production">In Production</span></td>
+            </tr>
+            <tr>
+              <td class="col-id">AT-006 · Authority Doc</td>
+              <td class="col-angle">Social Proof</td>
+              <td class="col-persona">Health Enthusiast</td>
+              <td class="col-structure">Authority</td>
+              <td class="col-hook">Stat</td>
+              <td class="col-prod">Documentary</td>
+              <td class="col-funnel">MOF</td>
+              <td><span class="status-text s-untested">Untested</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Summary Bar -->
+      <div class="summary-bar">
+        <div class="summary-item"><span class="summary-val" style="color:var(--winner)">1</span><span>Winner</span></div>
+        <span class="summary-sep">·</span>
+        <div class="summary-item"><span class="summary-val" style="color:var(--loser)">1</span><span>Loser</span></div>
+        <span class="summary-sep">·</span>
+        <div class="summary-item"><span class="summary-val" style="color:var(--testing)">1</span><span>Testing</span></div>
+        <span class="summary-sep">·</span>
+        <div class="summary-item"><span class="summary-val" style="color:var(--approved)">1</span><span>Approved</span></div>
+        <span class="summary-sep">·</span>
+        <div class="summary-item"><span class="summary-val" style="color:var(--production)">1</span><span>In Production</span></div>
+        <span class="summary-sep">·</span>
+        <div class="summary-item"><span class="summary-val" style="color:var(--untested)">1</span><span>Untested</span></div>
+        <span style="margin-left:auto; font-size:10px; color:var(--text-dim);">LAST SYNC: 14:32:07</span>
+      </div>
+    </div>
+
+    <!-- MATRIX PANEL -->
+    <div class="panel" id="panel-matrix">
+      <div class="matrix-wrap">
+
+        <div class="matrix-header">
+          <span class="matrix-title">Angle × Persona Coverage Map</span>
+          <div class="matrix-legend">
+            <div class="legend-item"><div class="legend-swatch" style="background:rgba(0,214,122,0.25)"></div>Winner</div>
+            <div class="legend-item"><div class="legend-swatch" style="background:rgba(77,166,255,0.25)"></div>Testing</div>
+            <div class="legend-item"><div class="legend-swatch" style="background:rgba(167,139,250,0.25)"></div>Approved</div>
+            <div class="legend-item"><div class="legend-swatch" style="background:rgba(245,158,11,0.25)"></div>In Production</div>
+            <div class="legend-item"><div class="legend-swatch" style="background:rgba(255,85,85,0.25)"></div>Loser</div>
+          </div>
+        </div>
+
+        <div class="matrix-grid">
+          <!-- Header row -->
+          <div class="matrix-corner">ANGLE / PERSONA</div>
+          <div class="matrix-col-header">Busy Mom</div>
+          <div class="matrix-col-header">Health Enthusiast</div>
+          <div class="matrix-col-header">Skeptic</div>
+          <div class="matrix-col-header">Value Seeker</div>
+
+          <!-- Row: Pain Agitate Solution -->
+          <div class="matrix-row-label">Pain Agitate Solution</div>
+          <div class="matrix-cell c-winner">
+            <div class="cell-inner">
+              <div class="cell-count s-winner">2</div>
+              <div class="cell-status" style="color:var(--winner)">Winner</div>
+            </div>
+          </div>
+          <div class="matrix-cell empty"><span class="cell-empty-text">—</span></div>
+          <div class="matrix-cell c-testing">
+            <div class="cell-inner">
+              <div class="cell-count s-testing">1</div>
+              <div class="cell-status" style="color:var(--testing)">Testing</div>
+            </div>
+          </div>
+          <div class="matrix-cell empty"><span class="cell-empty-text">—</span></div>
+
+          <!-- Row: Before/After -->
+          <div class="matrix-row-label">Before/After</div>
+          <div class="matrix-cell c-approved">
+            <div class="cell-inner">
+              <div class="cell-count s-approved">1</div>
+              <div class="cell-status" style="color:var(--approved)">Approved</div>
+            </div>
+          </div>
+          <div class="matrix-cell c-testing">
+            <div class="cell-inner">
+              <div class="cell-count s-testing">1</div>
+              <div class="cell-status" style="color:var(--testing)">Testing</div>
+            </div>
+          </div>
+          <div class="matrix-cell empty"><span class="cell-empty-text">—</span></div>
+          <div class="matrix-cell c-winner">
+            <div class="cell-inner">
+              <div class="cell-count s-winner">2</div>
+              <div class="cell-status" style="color:var(--winner)">Winner</div>
+            </div>
+          </div>
+
+          <!-- Row: Social Proof -->
+          <div class="matrix-row-label">Social Proof</div>
+          <div class="matrix-cell empty"><span class="cell-empty-text">—</span></div>
+          <div class="matrix-cell c-approved">
+            <div class="cell-inner">
+              <div class="cell-count s-approved">1</div>
+              <div class="cell-status" style="color:var(--approved)">Approved</div>
+            </div>
+          </div>
+          <div class="matrix-cell c-approved">
+            <div class="cell-inner">
+              <div class="cell-count s-approved">1</div>
+              <div class="cell-status" style="color:var(--approved)">Approved</div>
+            </div>
+          </div>
+          <div class="matrix-cell empty"><span class="cell-empty-text">—</span></div>
+
+          <!-- Row: Fear Appeal -->
+          <div class="matrix-row-label">Fear Appeal</div>
+          <div class="matrix-cell c-production">
+            <div class="cell-inner">
+              <div class="cell-count s-production">1</div>
+              <div class="cell-status" style="color:var(--production)">In Prod</div>
+            </div>
+          </div>
+          <div class="matrix-cell empty"><span class="cell-empty-text">—</span></div>
+          <div class="matrix-cell empty"><span class="cell-empty-text">—</span></div>
+          <div class="matrix-cell empty"><span class="cell-empty-text">—</span></div>
+
+          <!-- Row: Benefits-First -->
+          <div class="matrix-row-label">Benefits-First</div>
+          <div class="matrix-cell empty"><span class="cell-empty-text">—</span></div>
+          <div class="matrix-cell empty"><span class="cell-empty-text">—</span></div>
+          <div class="matrix-cell empty"><span class="cell-empty-text">—</span></div>
+          <div class="matrix-cell c-loser">
+            <div class="cell-inner">
+              <div class="cell-count s-loser">1</div>
+              <div class="cell-status" style="color:var(--loser)">Loser</div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<script>
+  document.querySelectorAll('.tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      const target = tab.dataset.tab;
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+      tab.classList.add('active');
+      document.getElementById('panel-' + target).classList.add('active');
+    });
+  });
+
+  document.querySelectorAll('th').forEach(th => {
+    th.addEventListener('click', () => {
+      document.querySelectorAll('th .sort-indicator').forEach(s => s.remove());
+      const ind = document.createElement('span');
+      ind.className = 'sort-indicator';
+      ind.textContent = ' ↑';
+      th.appendChild(ind);
+    });
+  });
+</script>
+</body>
+</html>

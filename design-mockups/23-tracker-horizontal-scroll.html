@@ -1,0 +1,372 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Creative Tracker · Horizontal Scroll</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --canvas:#faf9f5;--surface:#ffffff;--surface-2:#f3f1e9;--line:#e8e5dc;--line-hi:#d6d1c1;
+  --ink:#1a1814;--ink-2:#585449;--ink-3:#8f8a7c;--ink-4:#b8b3a2;
+  --accent:#c05336;--accent-soft:#f5e3da;--cyan:#00a3b8;--sage:#5e7557;--ochre:#a77c2e;
+  --coral:#c14400;--rust:#a83b28;--dusk:#4f6780;--emerald:#35683f;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{background:var(--canvas);color:var(--ink);font-family:'Inter',system-ui,sans-serif;-webkit-font-smoothing:antialiased;overflow-x:hidden}
+.mono{font-family:'JetBrains Mono',monospace}
+.serif{font-family:'Instrument Serif',serif;font-style:italic}
+
+.nav{position:fixed;top:0;left:0;right:0;z-index:100;display:flex;align-items:center;justify-content:space-between;padding:14px 32px;backdrop-filter:blur(12px);background:rgba(250,249,245,.8);border-bottom:1px solid var(--line)}
+.nav-brand{display:flex;align-items:center;gap:10px}
+.nav-logo{width:22px;height:22px;border-radius:6px;background:linear-gradient(135deg,var(--accent),#e27a5c);display:grid;place-items:center;color:#fff;font-weight:700;font-size:11px}
+.nav-tabs{display:flex;gap:4px;background:var(--surface-2);padding:4px;border-radius:10px;border:1px solid var(--line)}
+.nav-tab{padding:7px 14px;font-size:12.5px;font-weight:500;color:var(--ink-2);border-radius:7px;cursor:pointer}
+.nav-tab.active{background:#fff;color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.08)}
+.nav-user{display:flex;align-items:center;gap:10px;color:var(--ink-2);font-size:12px}
+.nav-avatar{width:28px;height:28px;border-radius:50%;background:linear-gradient(135deg,var(--cyan),#4ac6d4);display:grid;place-items:center;font-weight:700;font-size:12px;color:#fff}
+
+/* Above section */
+.above{padding:180px 60px 120px;max-width:1400px;margin:0 auto}
+.kicker{font-size:11px;letter-spacing:.25em;text-transform:uppercase;color:var(--ink-3);margin-bottom:28px;font-family:'JetBrains Mono',monospace}
+.kicker .dot{display:inline-block;width:6px;height:6px;background:var(--accent);border-radius:50%;vertical-align:middle;margin-right:10px}
+.h1{font-family:'Instrument Serif',serif;font-style:italic;font-size:clamp(64px,9vw,132px);line-height:.92;letter-spacing:-.03em;margin-bottom:36px;max-width:900px}
+.h1 em{color:var(--accent)}
+.sub{font-size:17px;color:var(--ink-2);max-width:600px;line-height:1.6;margin-bottom:50px}
+
+.above-stats{display:grid;grid-template-columns:repeat(5,1fr);gap:1px;background:var(--line);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+.as-cell{background:var(--surface);padding:24px}
+.as-k{font-size:11px;color:var(--ink-3);text-transform:uppercase;letter-spacing:.14em;margin-bottom:12px;font-family:'JetBrains Mono',monospace}
+.as-v{font-family:'Instrument Serif',serif;font-style:italic;font-size:44px;line-height:1;margin-bottom:6px}
+.as-d{font-family:'JetBrains Mono',monospace;font-size:11.5px;color:var(--sage)}
+.as-d.neg{color:var(--rust)}
+
+/* Horizontal section - this is the magic */
+.h-intro{padding:200px 60px 100px;max-width:1400px;margin:0 auto;text-align:center}
+.h-intro-lbl{font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.3em;text-transform:uppercase;color:var(--ink-3);margin-bottom:20px}
+.h-intro-title{font-family:'Instrument Serif',serif;font-style:italic;font-size:clamp(56px,8vw,120px);line-height:.95;letter-spacing:-.03em;margin-bottom:20px}
+.h-intro-title em{color:var(--accent)}
+.h-intro-title .arrow{display:inline-block;transform:translateY(-8px);color:var(--cyan);margin-left:12px}
+.h-intro-sub{font-size:15px;color:var(--ink-3);max-width:540px;margin:0 auto}
+
+/* Pinned horizontal scroll container */
+.pin-outer{height:500vh;position:relative}
+.pin-inner{position:sticky;top:0;height:100vh;overflow:hidden;display:flex;align-items:center}
+.pin-rail{display:flex;gap:28px;padding:0 8vw;will-change:transform}
+.h-card{flex:0 0 440px;height:72vh;background:var(--surface);border:1px solid var(--line);border-radius:24px;padding:30px;display:flex;flex-direction:column;box-shadow:0 2px 12px rgba(0,0,0,.04);position:relative;overflow:hidden}
+.h-card-idx{position:absolute;top:22px;right:26px;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--ink-4);letter-spacing:.15em}
+.h-thumb{width:100%;height:200px;border-radius:16px;margin-bottom:22px;position:relative;overflow:hidden}
+.ht-1{background:linear-gradient(135deg,#c05336,#e27a5c)}
+.ht-2{background:linear-gradient(135deg,#5e7557,#8aaa81)}
+.ht-3{background:linear-gradient(135deg,#a77c2e,#d2a554)}
+.ht-4{background:linear-gradient(135deg,#c14400,#e8734c)}
+.ht-5{background:linear-gradient(135deg,#4f6780,#7d95af)}
+.ht-6{background:linear-gradient(135deg,#35683f,#68a575)}
+.ht-7{background:linear-gradient(135deg,#00a3b8,#4ac6d4)}
+.ht-8{background:linear-gradient(135deg,#a83b28,#d1604c)}
+.h-thumb::after{content:'';position:absolute;inset:0;background:radial-gradient(ellipse at 70% 30%,rgba(255,255,255,.25),transparent 50%)}
+.h-card-name{font-weight:700;font-size:18px;line-height:1.3;margin-bottom:4px}
+.h-card-id{font-family:'JetBrains Mono',monospace;font-size:11.5px;color:var(--ink-3);margin-bottom:18px}
+.h-card-meta{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:auto}
+.h-pill{padding:3px 10px;border-radius:999px;font-size:11px;font-weight:600;background:var(--surface-2);color:var(--ink-2)}
+.h-pill.accent{background:var(--accent-soft);color:var(--accent)}
+.h-pill.massive{background:#dcead0;color:var(--emerald)}
+.h-pill.winner{background:#e1ecd9;color:var(--sage)}
+.h-pill.mild{background:#f5e8c7;color:var(--ochre)}
+.h-pill.fatigued{background:#f8d9c4;color:var(--coral)}
+.h-pill.testing{background:#d9e1ee;color:var(--dusk)}
+.h-pill.loser{background:#f2cfc7;color:var(--rust)}
+.h-card-bot{display:flex;align-items:flex-end;justify-content:space-between;padding-top:22px;border-top:1px solid var(--line);margin-top:22px}
+.h-roas{font-family:'Instrument Serif',serif;font-style:italic;font-size:62px;line-height:.9;letter-spacing:-.02em}
+.h-roas.up{color:var(--sage)}
+.h-roas.down{color:var(--rust)}
+.h-roas.massive{color:var(--emerald)}
+.h-spend{text-align:right}
+.h-spend-v{font-family:'JetBrains Mono',monospace;font-weight:600;font-size:16px;color:var(--ink)}
+.h-spend-l{font-size:10px;text-transform:uppercase;letter-spacing:.2em;color:var(--ink-3);margin-top:4px;font-family:'JetBrains Mono',monospace}
+
+/* mini chart stand-in */
+.h-chart{width:100%;height:42px;margin-top:14px;display:flex;align-items:flex-end;gap:3px}
+.h-chart .bar{flex:1;background:var(--ink-4);border-radius:2px 2px 0 0;opacity:.3}
+.h-chart .bar.on{background:var(--accent);opacity:1}
+.h-chart .bar.cyan{background:var(--cyan);opacity:1}
+
+/* progress indicator */
+.h-progress{position:absolute;bottom:40px;left:50%;transform:translateX(-50%);z-index:5;display:flex;align-items:center;gap:14px;font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--ink-2);background:var(--surface);border:1px solid var(--line);padding:10px 20px;border-radius:999px;box-shadow:0 4px 12px rgba(0,0,0,.06)}
+.h-progress-bar{width:160px;height:3px;background:var(--line);border-radius:2px;overflow:hidden}
+.h-progress-fill{height:100%;background:var(--accent);width:0%;transition:width .1s linear}
+
+/* Below */
+.below{padding:160px 60px 160px;max-width:1400px;margin:0 auto}
+.below-title{font-family:'Instrument Serif',serif;font-style:italic;font-size:64px;line-height:.95;margin-bottom:26px}
+.below-grid{display:grid;grid-template-columns:1fr 1fr;gap:28px;margin-top:40px}
+.below-card{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:26px 28px}
+.below-card h3{font-size:17px;margin-bottom:8px}
+.below-card p{font-size:14px;color:var(--ink-2);line-height:1.5}
+.below-card .num{font-family:'Instrument Serif',serif;font-style:italic;font-size:56px;color:var(--accent);line-height:1;margin-bottom:12px}
+
+.foot{padding:60px 32px;text-align:center;color:var(--ink-3);font-size:12px;letter-spacing:.2em;text-transform:uppercase;font-family:'JetBrains Mono',monospace;border-top:1px solid var(--line)}
+</style>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="nav-brand">
+    <div class="nav-logo">I</div>
+    <span style="font-weight:600;letter-spacing:-.01em">Immuvi</span>
+    <span style="opacity:.5;font-size:12px;margin-left:4px">Command Center</span>
+  </div>
+  <div class="nav-tabs">
+    <div class="nav-tab">Command HQ</div>
+    <div class="nav-tab">Angles</div>
+    <div class="nav-tab">Personas</div>
+    <div class="nav-tab active">Creative Tracker</div>
+    <div class="nav-tab">Creative Matrix</div>
+  </div>
+  <div class="nav-user">
+    <span class="mono" style="font-size:12px">⌘K</span>
+    <div class="nav-avatar">GP</div>
+  </div>
+</nav>
+
+<section class="above">
+  <div class="kicker"><span class="dot"></span>Creative Tracker · 7 day window · updated 8m ago</div>
+  <h1 class="h1">The account,<br><em>one frame at a time.</em></h1>
+  <p class="sub">Sixty-six live creatives. Scroll down — and they'll scroll sideways. Each card a full creative brief: thumbnail, angle, persona, hook, format, spend, ROAS.</p>
+  <div class="above-stats">
+    <div class="as-cell"><div class="as-k">Creatives</div><div class="as-v">66</div><div class="as-d">+3</div></div>
+    <div class="as-cell"><div class="as-k">Winners 7d</div><div class="as-v">18</div><div class="as-d">+2</div></div>
+    <div class="as-cell"><div class="as-k">Fatigued</div><div class="as-v">3</div><div class="as-d neg">+1</div></div>
+    <div class="as-cell"><div class="as-k">Spend 7d</div><div class="as-v">$12.4k</div><div class="as-d">+18%</div></div>
+    <div class="as-cell"><div class="as-k">Blended ROAS</div><div class="as-v">1.38×</div><div class="as-d">+0.04</div></div>
+  </div>
+</section>
+
+<section class="h-intro">
+  <div class="h-intro-lbl">Horizontal scroll · 8 creatives</div>
+  <h2 class="h-intro-title">Scroll through your winners<span class="arrow">→</span></h2>
+  <p class="h-intro-sub">Keep scrolling vertically. The cards will move sideways, one by one, so you see every creative in full before the page releases.</p>
+</section>
+
+<div class="pin-outer" id="pin">
+  <div class="pin-inner">
+    <div class="pin-rail" id="rail">
+      <div class="h-card">
+        <div class="h-card-idx">01 / 08</div>
+        <div class="h-thumb ht-1"></div>
+        <div class="h-card-name">5773-1 old winner</div>
+        <div class="h-card-id">AT-11439-v1</div>
+        <div class="h-card-meta">
+          <span class="h-pill massive">Massive</span>
+          <span class="h-pill accent">Art as Therapy</span>
+          <span class="h-pill">Women 25-45</span>
+          <span class="h-pill">POV · UGC</span>
+          <span class="h-pill">TOF</span>
+        </div>
+        <div class="h-chart"><span class="bar"></span><span class="bar"></span><span class="bar on"></span><span class="bar on"></span><span class="bar on"></span><span class="bar on"></span><span class="bar on"></span><span class="bar on"></span><span class="bar on"></span><span class="bar on"></span><span class="bar on"></span><span class="bar on"></span></div>
+        <div class="h-card-bot">
+          <div class="h-roas massive">1.92×</div>
+          <div class="h-spend"><div class="h-spend-v">$1,842</div><div class="h-spend-l">Spend 7d</div></div>
+        </div>
+      </div>
+
+      <div class="h-card">
+        <div class="h-card-idx">02 / 08</div>
+        <div class="h-thumb ht-2"></div>
+        <div class="h-card-name">4570-1 old winner</div>
+        <div class="h-card-id">AT-10835</div>
+        <div class="h-card-meta">
+          <span class="h-pill winner">Winner</span>
+          <span class="h-pill accent">Emotional Literacy</span>
+          <span class="h-pill">Women 25-45</span>
+          <span class="h-pill">Curiosity · Static</span>
+          <span class="h-pill">TOF</span>
+        </div>
+        <div class="h-chart"><span class="bar"></span><span class="bar"></span><span class="bar on"></span><span class="bar on"></span><span class="bar on"></span><span class="bar on"></span><span class="bar on"></span><span class="bar on"></span><span class="bar on"></span><span class="bar on"></span><span class="bar"></span><span class="bar"></span></div>
+        <div class="h-card-bot">
+          <div class="h-roas up">1.54×</div>
+          <div class="h-spend"><div class="h-spend-v">$806</div><div class="h-spend-l">Spend 7d</div></div>
+        </div>
+      </div>
+
+      <div class="h-card">
+        <div class="h-card-idx">03 / 08</div>
+        <div class="h-thumb ht-3"></div>
+        <div class="h-card-name">4569-2 old winner</div>
+        <div class="h-card-id">AT-10834</div>
+        <div class="h-card-meta">
+          <span class="h-pill mild">Mild</span>
+          <span class="h-pill accent">Scarcity</span>
+          <span class="h-pill">Women 25-45</span>
+          <span class="h-pill">Pattern Interrupt</span>
+          <span class="h-pill">Static · TOF</span>
+        </div>
+        <div class="h-chart"><span class="bar"></span><span class="bar"></span><span class="bar"></span><span class="bar on"></span><span class="bar on"></span><span class="bar on"></span><span class="bar on"></span><span class="bar on"></span><span class="bar"></span><span class="bar on"></span><span class="bar"></span><span class="bar"></span></div>
+        <div class="h-card-bot">
+          <div class="h-roas">1.33×</div>
+          <div class="h-spend"><div class="h-spend-v">$412</div><div class="h-spend-l">Spend 7d</div></div>
+        </div>
+      </div>
+
+      <div class="h-card">
+        <div class="h-card-idx">04 / 08</div>
+        <div class="h-thumb ht-4"></div>
+        <div class="h-card-name">10785-2 old winner</div>
+        <div class="h-card-id">AT-10733</div>
+        <div class="h-card-meta">
+          <span class="h-pill fatigued">Fatigued · WoW -42%</span>
+          <span class="h-pill accent">Scarcity</span>
+          <span class="h-pill">Women 25-45</span>
+          <span class="h-pill">Pattern Interrupt</span>
+          <span class="h-pill">Static · TOF</span>
+        </div>
+        <div class="h-chart"><span class="bar on"></span><span class="bar on"></span><span class="bar on"></span><span class="bar on"></span><span class="bar on"></span><span class="bar on"></span><span class="bar"></span><span class="bar"></span><span class="bar"></span><span class="bar"></span><span class="bar"></span><span class="bar"></span></div>
+        <div class="h-card-bot">
+          <div class="h-roas down">0.98×</div>
+          <div class="h-spend"><div class="h-spend-v">$1,205</div><div class="h-spend-l">Spend 7d</div></div>
+        </div>
+      </div>
+
+      <div class="h-card">
+        <div class="h-card-idx">05 / 08</div>
+        <div class="h-thumb ht-5"></div>
+        <div class="h-card-name">6197-1 old winner</div>
+        <div class="h-card-id">AT-10612</div>
+        <div class="h-card-meta">
+          <span class="h-pill testing">Testing · 19h live</span>
+          <span class="h-pill accent">Scarcity</span>
+          <span class="h-pill">Women 25-45</span>
+          <span class="h-pill">Direct Offer</span>
+          <span class="h-pill">Static · TOF</span>
+        </div>
+        <div class="h-chart"><span class="bar"></span><span class="bar"></span><span class="bar"></span><span class="bar"></span><span class="bar"></span><span class="bar"></span><span class="bar"></span><span class="bar"></span><span class="bar"></span><span class="bar"></span><span class="bar cyan"></span><span class="bar cyan"></span></div>
+        <div class="h-card-bot">
+          <div class="h-roas" style="color:var(--ink-3)">—</div>
+          <div class="h-spend"><div class="h-spend-v">$28</div><div class="h-spend-l">Spend 7d</div></div>
+        </div>
+      </div>
+
+      <div class="h-card">
+        <div class="h-card-idx">06 / 08</div>
+        <div class="h-thumb ht-6"></div>
+        <div class="h-card-name">11591 new concept</div>
+        <div class="h-card-id">AT-11591</div>
+        <div class="h-card-meta">
+          <span class="h-pill winner">Winner</span>
+          <span class="h-pill accent">Emotional Literacy</span>
+          <span class="h-pill">Young Adults · Grief</span>
+          <span class="h-pill">Pain</span>
+          <span class="h-pill">Story · TOF</span>
+        </div>
+        <div class="h-chart"><span class="bar"></span><span class="bar"></span><span class="bar on"></span><span class="bar on"></span><span class="bar on"></span><span class="bar on"></span><span class="bar on"></span><span class="bar on"></span><span class="bar on"></span><span class="bar on"></span><span class="bar on"></span><span class="bar"></span></div>
+        <div class="h-card-bot">
+          <div class="h-roas up">1.46×</div>
+          <div class="h-spend"><div class="h-spend-v">$624</div><div class="h-spend-l">Spend 7d</div></div>
+        </div>
+      </div>
+
+      <div class="h-card">
+        <div class="h-card-idx">07 / 08</div>
+        <div class="h-thumb ht-7"></div>
+        <div class="h-card-name">11542 social proof</div>
+        <div class="h-card-id">AT-11542</div>
+        <div class="h-card-meta">
+          <span class="h-pill winner">Winner</span>
+          <span class="h-pill accent">Social Proof 18K</span>
+          <span class="h-pill">Women 25-45</span>
+          <span class="h-pill">Testimonial</span>
+          <span class="h-pill">UGC · TOF</span>
+        </div>
+        <div class="h-chart"><span class="bar"></span><span class="bar on"></span><span class="bar on"></span><span class="bar on"></span><span class="bar on"></span><span class="bar on"></span><span class="bar on"></span><span class="bar on"></span><span class="bar on"></span><span class="bar on"></span><span class="bar on"></span><span class="bar"></span></div>
+        <div class="h-card-bot">
+          <div class="h-roas up">1.41×</div>
+          <div class="h-spend"><div class="h-spend-v">$488</div><div class="h-spend-l">Spend 7d</div></div>
+        </div>
+      </div>
+
+      <div class="h-card">
+        <div class="h-card-idx">08 / 08</div>
+        <div class="h-thumb ht-8"></div>
+        <div class="h-card-name">11436 new concept</div>
+        <div class="h-card-id">AT-11436</div>
+        <div class="h-card-meta">
+          <span class="h-pill loser">Loser</span>
+          <span class="h-pill accent">Calm / Unwind</span>
+          <span class="h-pill">Self-Care Adults</span>
+          <span class="h-pill">Curiosity</span>
+          <span class="h-pill">Hook+Offer · TOF</span>
+        </div>
+        <div class="h-chart"><span class="bar"></span><span class="bar"></span><span class="bar"></span><span class="bar on" style="background:var(--rust)"></span><span class="bar"></span><span class="bar"></span><span class="bar"></span><span class="bar"></span><span class="bar"></span><span class="bar"></span><span class="bar"></span><span class="bar"></span></div>
+        <div class="h-card-bot">
+          <div class="h-roas down">0.42×</div>
+          <div class="h-spend"><div class="h-spend-v">$187</div><div class="h-spend-l">Spend 7d</div></div>
+        </div>
+      </div>
+    </div>
+    <div class="h-progress">
+      <span id="hProgIdx">01</span>
+      <div class="h-progress-bar"><div class="h-progress-fill" id="hProgFill"></div></div>
+      <span>08</span>
+    </div>
+  </div>
+</div>
+
+<section class="below">
+  <h2 class="below-title">Pinned. Unpinned. Back to scrolling.</h2>
+  <p class="sub" style="margin-bottom:0">The cards gave you the fidelity. The table gives you everything else — 58 more creatives, queued beneath.</p>
+  <div class="below-grid">
+    <div class="below-card">
+      <div class="num">58</div>
+      <h3>Creatives still below the fold</h3>
+      <p>Mild, testing, losers — tap to expand the long list.</p>
+    </div>
+    <div class="below-card">
+      <div class="num">+3</div>
+      <h3>Queued for launch today</h3>
+      <p>New variations from the "Emotional Literacy" winner cluster. Production wrapping this afternoon.</p>
+    </div>
+  </div>
+</section>
+
+<div class="foot">Immuvi Command Center · horizontal-scroll variant</div>
+
+<script>
+// Pin + horizontal scroll logic
+const pin = document.getElementById('pin');
+const rail = document.getElementById('rail');
+const progFill = document.getElementById('hProgFill');
+const progIdx = document.getElementById('hProgIdx');
+
+function onScroll(){
+  const rect = pin.getBoundingClientRect();
+  const pinTop = rect.top;
+  const pinHeight = pin.offsetHeight - window.innerHeight; // scrollable range inside pin
+  if (pinTop > 0 || pinTop < -pinHeight) {
+    // outside pin range
+    if (pinTop > 0) {
+      rail.style.transform = 'translateX(0px)';
+      progFill.style.width = '0%';
+      progIdx.textContent = '01';
+    } else {
+      const maxShift = rail.scrollWidth - window.innerWidth;
+      rail.style.transform = `translateX(-${maxShift}px)`;
+      progFill.style.width = '100%';
+      progIdx.textContent = '08';
+    }
+    return;
+  }
+  const progress = Math.min(Math.max(-pinTop / pinHeight, 0), 1);
+  const maxShift = rail.scrollWidth - window.innerWidth;
+  rail.style.transform = `translateX(-${maxShift * progress}px)`;
+  progFill.style.width = (progress * 100) + '%';
+  progIdx.textContent = String(Math.min(Math.floor(progress * 8) + 1, 8)).padStart(2,'0');
+}
+window.addEventListener('scroll', onScroll, {passive:true});
+window.addEventListener('resize', onScroll);
+onScroll();
+</script>
+</body>
+</html>

@@ -1,0 +1,297 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Creative Tracker · Cinematic Hero</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --canvas:#faf9f5;--surface:#ffffff;--surface-2:#f3f1e9;--line:#e8e5dc;--line-hi:#d6d1c1;
+  --ink:#1a1814;--ink-2:#585449;--ink-3:#8f8a7c;--ink-4:#b8b3a2;
+  --accent:#c05336;--accent-soft:#f5e3da;--cyan:#00a3b8;--sage:#5e7557;--ochre:#a77c2e;
+  --coral:#c14400;--rust:#a83b28;--dusk:#4f6780;--emerald:#35683f;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:var(--canvas);color:var(--ink);font-family:'Inter',system-ui,sans-serif;-webkit-font-smoothing:antialiased;scroll-behavior:smooth}
+body{overflow-x:hidden}
+.mono{font-family:'JetBrains Mono',monospace}
+.serif{font-family:'Instrument Serif',serif;font-style:italic;letter-spacing:-.01em}
+
+/* --- STICKY NAV --- */
+.nav{position:fixed;top:0;left:0;right:0;z-index:50;display:flex;align-items:center;justify-content:space-between;padding:14px 32px;backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);background:rgba(26,24,20,.6);border-bottom:1px solid rgba(255,255,255,.06);transition:background .5s ease,border-color .5s ease,color .5s ease}
+.nav.light{background:rgba(250,249,245,.85);border-bottom:1px solid var(--line)}
+.nav-brand{display:flex;align-items:center;gap:10px;color:#fff;transition:color .5s ease}
+.nav.light .nav-brand{color:var(--ink)}
+.nav-logo{width:22px;height:22px;border-radius:6px;background:linear-gradient(135deg,var(--accent),#e27a5c);display:grid;place-items:center;color:#fff;font-weight:700;font-size:11px}
+.nav-tabs{display:flex;gap:4px;background:rgba(255,255,255,.06);padding:4px;border-radius:10px;border:1px solid rgba(255,255,255,.08)}
+.nav.light .nav-tabs{background:var(--surface-2);border:1px solid var(--line)}
+.nav-tab{padding:7px 14px;font-size:12.5px;font-weight:500;color:rgba(255,255,255,.65);border-radius:7px;cursor:pointer;transition:all .2s}
+.nav.light .nav-tab{color:var(--ink-2)}
+.nav-tab.active{background:#fff;color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.08)}
+.nav-user{display:flex;align-items:center;gap:10px;color:rgba(255,255,255,.8)}
+.nav.light .nav-user{color:var(--ink-2)}
+.nav-avatar{width:28px;height:28px;border-radius:50%;background:linear-gradient(135deg,var(--cyan),#4ac6d4);display:grid;place-items:center;font-weight:700;font-size:12px;color:#fff}
+
+/* --- CINEMATIC HERO --- */
+.hero{position:relative;height:100vh;width:100%;background:radial-gradient(ellipse at top,#221f19 0%,#0f0d0a 70%);overflow:hidden;display:grid;place-items:center;color:#fff}
+.orb{position:absolute;border-radius:50%;filter:blur(80px);opacity:.55;pointer-events:none}
+.orb-a{width:520px;height:520px;background:var(--accent);top:-120px;left:-80px;animation:drift 14s ease-in-out infinite alternate}
+.orb-b{width:420px;height:420px;background:var(--cyan);bottom:-100px;right:-60px;animation:drift 18s ease-in-out infinite alternate-reverse}
+.orb-c{width:300px;height:300px;background:#e27a5c;top:40%;left:55%;opacity:.3;animation:drift 22s ease-in-out infinite alternate}
+@keyframes drift{0%{transform:translate(0,0) scale(1)}100%{transform:translate(60px,-40px) scale(1.1)}}
+.hero-grain{position:absolute;inset:0;background-image:radial-gradient(rgba(255,255,255,.04) 1px,transparent 1px);background-size:3px 3px;opacity:.5;pointer-events:none}
+.hero-inner{position:relative;z-index:2;text-align:center;max-width:1100px;padding:0 32px;animation:fade-in 1.6s cubic-bezier(.2,.8,.2,1) both}
+@keyframes fade-in{0%{opacity:0;filter:blur(24px);transform:translateY(40px)}100%{opacity:1;filter:blur(0);transform:translateY(0)}}
+.hero-kicker{font-size:11px;letter-spacing:.3em;text-transform:uppercase;color:rgba(255,255,255,.55);margin-bottom:28px;font-weight:500}
+.hero-kicker .dot{display:inline-block;width:6px;height:6px;background:var(--accent);border-radius:50%;vertical-align:middle;margin-right:10px;animation:pulse 2s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.4;transform:scale(1.3)}}
+.hero-title{font-family:'Instrument Serif',serif;font-style:italic;font-size:clamp(72px,11vw,164px);line-height:.95;letter-spacing:-.03em;color:#fff;margin-bottom:36px}
+.hero-title em{color:var(--accent);font-style:italic}
+.hero-sub{font-size:17px;color:rgba(255,255,255,.65);max-width:620px;margin:0 auto 48px;line-height:1.6}
+.hero-kpis{display:flex;gap:56px;justify-content:center;margin-top:24px;flex-wrap:wrap}
+.hero-kpi{text-align:left}
+.hero-kpi-label{font-size:11px;text-transform:uppercase;letter-spacing:.2em;color:rgba(255,255,255,.45);margin-bottom:8px;font-family:'JetBrains Mono',monospace}
+.hero-kpi-value{font-family:'Instrument Serif',serif;font-style:italic;font-size:64px;line-height:1;color:#fff;margin-bottom:6px}
+.hero-kpi-delta{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--cyan)}
+.scroll-hint{position:absolute;bottom:32px;left:50%;transform:translateX(-50%);z-index:3;display:flex;flex-direction:column;align-items:center;gap:10px;color:rgba(255,255,255,.5);font-size:11px;letter-spacing:.25em;text-transform:uppercase;animation:bob 2.5s ease-in-out infinite}
+@keyframes bob{0%,100%{transform:translate(-50%,0)}50%{transform:translate(-50%,8px)}}
+.scroll-hint svg{opacity:.7}
+
+/* --- TRANSITION SPACER --- */
+.transition{height:180px;background:linear-gradient(to bottom,#0f0d0a 0%,var(--canvas) 100%)}
+
+/* --- BODY SECTION --- */
+.body-section{padding:80px 32px 160px;max-width:1400px;margin:0 auto}
+.section-head{display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:48px;gap:24px}
+.section-title{font-family:'Instrument Serif',serif;font-style:italic;font-size:64px;line-height:.95;letter-spacing:-.02em;color:var(--ink)}
+.section-sub{font-size:14px;color:var(--ink-3);max-width:360px;line-height:1.5;padding-bottom:10px}
+
+/* summary strip */
+.summary-strip{display:grid;grid-template-columns:repeat(5,1fr);gap:1px;background:var(--line);border:1px solid var(--line);border-radius:14px;overflow:hidden;margin-bottom:64px}
+.strip-cell{background:var(--surface);padding:24px 22px}
+.strip-label{font-size:11px;color:var(--ink-3);text-transform:uppercase;letter-spacing:.14em;margin-bottom:12px;font-family:'JetBrains Mono',monospace}
+.strip-value{font-family:'Instrument Serif',serif;font-style:italic;font-size:44px;line-height:1;color:var(--ink);margin-bottom:6px}
+.strip-delta{font-family:'JetBrains Mono',monospace;font-size:11.5px;color:var(--sage)}
+.strip-delta.neg{color:var(--rust)}
+
+/* --- TRACKER TABLE (10-clickup style) --- */
+.tracker{background:var(--surface);border:1px solid var(--line);border-radius:14px;overflow:hidden;box-shadow:0 1px 2px rgba(0,0,0,.02)}
+.tracker-head{display:grid;grid-template-columns:280px 120px 140px 110px 130px 120px 100px 90px;gap:0;padding:14px 24px;background:var(--surface-2);border-bottom:1px solid var(--line);font-size:11px;text-transform:uppercase;letter-spacing:.12em;color:var(--ink-3);font-family:'JetBrains Mono',monospace;font-weight:500}
+.tracker-row{display:grid;grid-template-columns:280px 120px 140px 110px 130px 120px 100px 90px;gap:0;padding:18px 24px;border-bottom:1px solid var(--line);font-size:13.5px;align-items:center;transition:background .15s}
+.tracker-row:hover{background:#fefdf9}
+.tracker-row:last-child{border-bottom:none}
+.cell-name{display:flex;align-items:center;gap:12px}
+.thumb{width:40px;height:40px;border-radius:8px;flex-shrink:0}
+.thumb-1{background:linear-gradient(135deg,#c05336,#e27a5c)}
+.thumb-2{background:linear-gradient(135deg,#5e7557,#8aaa81)}
+.thumb-3{background:linear-gradient(135deg,#a77c2e,#d2a554)}
+.thumb-4{background:linear-gradient(135deg,#c14400,#e8734c)}
+.thumb-5{background:linear-gradient(135deg,#4f6780,#7d95af)}
+.thumb-6{background:linear-gradient(135deg,#35683f,#68a575)}
+.thumb-7{background:linear-gradient(135deg,#00a3b8,#4ac6d4)}
+.thumb-8{background:linear-gradient(135deg,#a83b28,#d1604c)}
+.nm{display:flex;flex-direction:column;gap:2px}
+.nm-title{font-weight:600;font-size:13.5px;color:var(--ink);line-height:1.2}
+.nm-meta{font-size:11.5px;color:var(--ink-3);font-family:'JetBrains Mono',monospace}
+.pill{display:inline-flex;align-items:center;padding:3px 10px;border-radius:999px;font-size:11.5px;font-weight:600;line-height:1.3;white-space:nowrap}
+.p-massive{background:#dcead0;color:var(--emerald)}
+.p-winner{background:#e1ecd9;color:var(--sage)}
+.p-mild{background:#f5e8c7;color:var(--ochre)}
+.p-fatigued{background:#f8d9c4;color:var(--coral)}
+.p-testing{background:#d9e1ee;color:var(--dusk)}
+.p-loser{background:#f2cfc7;color:var(--rust)}
+.p-accent{background:var(--accent-soft);color:var(--accent)}
+.p-soft{background:var(--surface-2);color:var(--ink-2);font-weight:500}
+.num{font-family:'JetBrains Mono',monospace;font-weight:500}
+.num-big{font-family:'Instrument Serif',serif;font-style:italic;font-size:22px;line-height:1}
+.up{color:var(--sage)}
+.down{color:var(--rust)}
+.spark{width:60px;height:22px}
+
+.foot{padding:60px 32px;text-align:center;color:var(--ink-3);font-size:12px;letter-spacing:.2em;text-transform:uppercase;font-family:'JetBrains Mono',monospace}
+</style>
+</head>
+<body>
+
+<nav class="nav" id="nav">
+  <div class="nav-brand">
+    <div class="nav-logo">I</div>
+    <span style="font-weight:600;letter-spacing:-.01em">Immuvi</span>
+    <span style="opacity:.5;font-size:12px;margin-left:4px">Command Center</span>
+  </div>
+  <div class="nav-tabs">
+    <div class="nav-tab">Command HQ</div>
+    <div class="nav-tab">Angles</div>
+    <div class="nav-tab">Personas</div>
+    <div class="nav-tab active">Creative Tracker</div>
+    <div class="nav-tab">Creative Matrix</div>
+  </div>
+  <div class="nav-user">
+    <span class="mono" style="font-size:12px">⌘K</span>
+    <div class="nav-avatar">GP</div>
+  </div>
+</nav>
+
+<!-- CINEMATIC HERO -->
+<section class="hero">
+  <div class="orb orb-a"></div>
+  <div class="orb orb-b"></div>
+  <div class="orb orb-c"></div>
+  <div class="hero-grain"></div>
+  <div class="hero-inner">
+    <div class="hero-kicker"><span class="dot"></span>Creative Tracker · 7 day window</div>
+    <h1 class="hero-title">Every creative,<br><em>classified.</em></h1>
+    <p class="hero-sub">66 ads. Live Meta performance, pulled every four hours. Angles, personas, hooks — mapped and graded by tier. Scroll to enter.</p>
+    <div class="hero-kpis">
+      <div class="hero-kpi"><div class="hero-kpi-label">Creatives</div><div class="hero-kpi-value" data-count="66">0</div><div class="hero-kpi-delta">+3 this week</div></div>
+      <div class="hero-kpi"><div class="hero-kpi-label">Winners 7d</div><div class="hero-kpi-value" data-count="18">0</div><div class="hero-kpi-delta">+2</div></div>
+      <div class="hero-kpi"><div class="hero-kpi-label">Spend 7d</div><div class="hero-kpi-value" data-prefix="$" data-suffix="k" data-count="12.4" data-dec="1">$0k</div><div class="hero-kpi-delta">+18%</div></div>
+      <div class="hero-kpi"><div class="hero-kpi-label">Blended ROAS</div><div class="hero-kpi-value" data-suffix="×" data-count="1.38" data-dec="2">0×</div><div class="hero-kpi-delta">+0.04</div></div>
+    </div>
+  </div>
+  <div class="scroll-hint">
+    <span>Scroll to enter</span>
+    <svg width="16" height="22" viewBox="0 0 16 22" fill="none"><rect x="1" y="1" width="14" height="20" rx="7" stroke="currentColor" stroke-opacity=".5"/><circle cx="8" cy="7" r="2" fill="currentColor"/></svg>
+  </div>
+</section>
+
+<div class="transition"></div>
+
+<section class="body-section">
+  <div class="section-head">
+    <h2 class="section-title">66 creatives,<br>ranked &amp; ready.</h2>
+    <p class="section-sub">Updated 8 min ago. Status pills reflect live Meta 7d attribution. Click any row for the full creative brief, angle, persona and historical ROAS trace.</p>
+  </div>
+
+  <div class="summary-strip">
+    <div class="strip-cell"><div class="strip-label">Creatives</div><div class="strip-value">66</div><div class="strip-delta">+3</div></div>
+    <div class="strip-cell"><div class="strip-label">Winners 7d</div><div class="strip-value">18</div><div class="strip-delta">+2</div></div>
+    <div class="strip-cell"><div class="strip-label">Fatigued</div><div class="strip-value">3</div><div class="strip-delta neg">+1</div></div>
+    <div class="strip-cell"><div class="strip-label">Spend 7d</div><div class="strip-value">$12.4k</div><div class="strip-delta">+18%</div></div>
+    <div class="strip-cell"><div class="strip-label">Blended ROAS</div><div class="strip-value">1.38×</div><div class="strip-delta">+0.04</div></div>
+  </div>
+
+  <div class="tracker">
+    <div class="tracker-head">
+      <div>Creative</div><div>Angle</div><div>Persona</div><div>Hook</div><div>Format / Funnel</div><div>Status</div><div>Spend</div><div>ROAS</div>
+    </div>
+    <div class="tracker-row">
+      <div class="cell-name"><div class="thumb thumb-1"></div><div class="nm"><div class="nm-title">5773-1 old winner</div><div class="nm-meta">AT-11439-v1</div></div></div>
+      <div><span class="pill p-accent">Art as Therapy</span></div>
+      <div><span class="pill p-soft">Women 25-45</span></div>
+      <div><span class="pill p-soft">POV</span></div>
+      <div><span class="pill p-soft">UGC · TOF</span></div>
+      <div><span class="pill p-massive">Massive</span></div>
+      <div class="num">$1,842</div>
+      <div class="num-big up">1.92×</div>
+    </div>
+    <div class="tracker-row">
+      <div class="cell-name"><div class="thumb thumb-2"></div><div class="nm"><div class="nm-title">4570-1 old winner</div><div class="nm-meta">AT-10835</div></div></div>
+      <div><span class="pill p-accent">Emotional Literacy</span></div>
+      <div><span class="pill p-soft">Women 25-45</span></div>
+      <div><span class="pill p-soft">Curiosity</span></div>
+      <div><span class="pill p-soft">Static · TOF</span></div>
+      <div><span class="pill p-winner">Winner</span></div>
+      <div class="num">$806</div>
+      <div class="num-big up">1.54×</div>
+    </div>
+    <div class="tracker-row">
+      <div class="cell-name"><div class="thumb thumb-3"></div><div class="nm"><div class="nm-title">4569-2 old winner</div><div class="nm-meta">AT-10834</div></div></div>
+      <div><span class="pill p-accent">Scarcity</span></div>
+      <div><span class="pill p-soft">Women 25-45</span></div>
+      <div><span class="pill p-soft">Pattern Int.</span></div>
+      <div><span class="pill p-soft">Static · TOF</span></div>
+      <div><span class="pill p-mild">Mild</span></div>
+      <div class="num">$412</div>
+      <div class="num-big">1.33×</div>
+    </div>
+    <div class="tracker-row">
+      <div class="cell-name"><div class="thumb thumb-4"></div><div class="nm"><div class="nm-title">10785-2 old winner</div><div class="nm-meta">AT-10733</div></div></div>
+      <div><span class="pill p-accent">Scarcity</span></div>
+      <div><span class="pill p-soft">Women 25-45</span></div>
+      <div><span class="pill p-soft">Pattern Int.</span></div>
+      <div><span class="pill p-soft">Static · TOF</span></div>
+      <div><span class="pill p-fatigued">Fatigued</span></div>
+      <div class="num">$1,205</div>
+      <div class="num-big down">0.98×<span style="display:block;font-family:'JetBrains Mono',monospace;font-size:10px;margin-top:3px;font-style:normal">WoW -42%</span></div>
+    </div>
+    <div class="tracker-row">
+      <div class="cell-name"><div class="thumb thumb-5"></div><div class="nm"><div class="nm-title">6197-1 old winner</div><div class="nm-meta">AT-10612</div></div></div>
+      <div><span class="pill p-accent">Scarcity</span></div>
+      <div><span class="pill p-soft">Women 25-45</span></div>
+      <div><span class="pill p-soft">Direct Offer</span></div>
+      <div><span class="pill p-soft">Static · TOF</span></div>
+      <div><span class="pill p-testing">Testing</span></div>
+      <div class="num">$28</div>
+      <div class="num-big" style="color:var(--ink-3)">—</div>
+    </div>
+    <div class="tracker-row">
+      <div class="cell-name"><div class="thumb thumb-6"></div><div class="nm"><div class="nm-title">11591 new concept</div><div class="nm-meta">AT-11591</div></div></div>
+      <div><span class="pill p-accent">Emotional Literacy</span></div>
+      <div><span class="pill p-soft">Young Adults · Grief</span></div>
+      <div><span class="pill p-soft">Pain</span></div>
+      <div><span class="pill p-soft">Story · TOF</span></div>
+      <div><span class="pill p-winner">Winner</span></div>
+      <div class="num">$624</div>
+      <div class="num-big up">1.46×</div>
+    </div>
+    <div class="tracker-row">
+      <div class="cell-name"><div class="thumb thumb-7"></div><div class="nm"><div class="nm-title">11542 social proof</div><div class="nm-meta">AT-11542</div></div></div>
+      <div><span class="pill p-accent">Social Proof 18K</span></div>
+      <div><span class="pill p-soft">Women 25-45</span></div>
+      <div><span class="pill p-soft">Testimonial</span></div>
+      <div><span class="pill p-soft">UGC · TOF</span></div>
+      <div><span class="pill p-winner">Winner</span></div>
+      <div class="num">$488</div>
+      <div class="num-big up">1.41×</div>
+    </div>
+    <div class="tracker-row">
+      <div class="cell-name"><div class="thumb thumb-8"></div><div class="nm"><div class="nm-title">11436 new concept</div><div class="nm-meta">AT-11436</div></div></div>
+      <div><span class="pill p-accent">Calm / Unwind</span></div>
+      <div><span class="pill p-soft">Self-Care Adults</span></div>
+      <div><span class="pill p-soft">Curiosity</span></div>
+      <div><span class="pill p-soft">Hook+Offer · TOF</span></div>
+      <div><span class="pill p-loser">Loser</span></div>
+      <div class="num">$187</div>
+      <div class="num-big down">0.42×</div>
+    </div>
+  </div>
+</section>
+
+<div style="height:40vh"></div>
+
+<div class="foot">Immuvi Command Center · v2.4 · cinematic tracker</div>
+
+<script>
+// Nav color inversion as hero exits
+const nav = document.getElementById('nav');
+window.addEventListener('scroll', () => {
+  const y = window.scrollY;
+  if (y > window.innerHeight * 0.85) nav.classList.add('light');
+  else nav.classList.remove('light');
+}, {passive:true});
+
+// KPI count-up on load
+document.querySelectorAll('[data-count]').forEach(el => {
+  const target = parseFloat(el.dataset.count);
+  const dec = parseInt(el.dataset.dec || 0);
+  const prefix = el.dataset.prefix || '';
+  const suffix = el.dataset.suffix || '';
+  let start = null;
+  const dur = 1800;
+  function step(ts){
+    if (!start) start = ts;
+    const p = Math.min((ts-start)/dur,1);
+    const eased = 1 - Math.pow(1-p,3);
+    const v = target * eased;
+    el.textContent = prefix + v.toFixed(dec) + suffix;
+    if (p < 1) requestAnimationFrame(step);
+  }
+  setTimeout(() => requestAnimationFrame(step), 600);
+});
+</script>
+</body>
+</html>

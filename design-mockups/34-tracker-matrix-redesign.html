@@ -1,0 +1,966 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Immuvi Command Center — Art Therapy</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Instrument+Serif:ital@1&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  /* ── Design tokens ─────────────────────────────── */
+  :root {
+    --canvas:      #faf9f5;
+    --paper:       #ffffff;
+    --paper-2:     #f3f1e9;
+    --paper-3:     #ede9dc;
+    --line:        #e8e5dc;
+    --line-hi:     #d6d1c1;
+    --ink:         #1a1814;
+    --ink-2:       #585449;
+    --ink-3:       #8f8a7c;
+    --ink-4:       #b8b3a2;
+    --accent:      #c05336;
+    --accent-soft: #f5e3da;
+
+    --s-winner:      #5e7557; --s-winner-soft:     #e4ebdc;
+    --s-testing:     #4f6780; --s-testing-soft:    #dde4ec;
+    --s-approved:    #7c5c2e; --s-approved-soft:   #f0e4cc;
+    --s-production:  #c14400; --s-production-soft: #fbe0d0;
+    --s-ready:       #3a6b8a; --s-ready-soft:      #d4e8f0;
+    --s-loser:       #a83b28; --s-loser-soft:      #f2dad6;
+    --s-untested:    #8f8a7c; --s-untested-soft:   #f3f1e9;
+    --s-scale:       #35683f; --s-scale-soft:      #dcecd8;
+
+    --shadow: 0 1px 2px rgba(26,24,20,.04), 0 4px 12px rgba(26,24,20,.06);
+    --r-card: 6px;
+    --r-btn:  4px;
+    --r-pill: 3px;
+  }
+
+  /* ── Reset & base ────────────────────────────── */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; background: var(--canvas); color: var(--ink); font-family: 'Inter', sans-serif; font-size: 13px; line-height: 1.4; }
+  a { color: inherit; text-decoration: none; }
+  button { font-family: inherit; cursor: pointer; border: none; background: none; }
+  input { font-family: inherit; outline: none; border: none; background: none; }
+
+  /* ── Masthead ─────────────────────────────────── */
+  .masthead {
+    position: sticky; top: 0; z-index: 100;
+    height: 40px; background: var(--paper);
+    border-bottom: 1px solid var(--line);
+    display: flex; align-items: center; gap: 0;
+    padding: 0 16px;
+    box-shadow: 0 1px 0 var(--line);
+  }
+  .masthead-brand {
+    display: flex; align-items: center; gap: 6px;
+    font-size: 13px; font-weight: 600; color: var(--ink); white-space: nowrap;
+  }
+  .masthead-brand .mark {
+    width: 20px; height: 20px; background: var(--accent); border-radius: 4px;
+    display: flex; align-items: center; justify-content: center;
+    color: #fff; font-size: 10px; font-weight: 700;
+  }
+  .masthead-sep { width: 1px; height: 16px; background: var(--line); margin: 0 10px; flex-shrink: 0; }
+  .masthead-product { font-size: 12px; color: var(--ink-3); white-space: nowrap; }
+  .tab-nav { display: flex; align-items: center; gap: 0; margin-left: 16px; flex: 1; overflow: hidden; }
+  .tab-nav a {
+    padding: 0 12px; height: 40px; display: flex; align-items: center;
+    font-size: 12px; color: var(--ink-3); white-space: nowrap; position: relative;
+    transition: color .15s; cursor: pointer; border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+  }
+  .tab-nav a:hover { color: var(--ink-2); }
+  .tab-nav a.active { color: var(--ink); border-bottom-color: var(--accent); font-weight: 500; }
+  .sync-dot { width: 6px; height: 6px; border-radius: 50%; background: #5e7557; margin-left: auto; flex-shrink: 0; animation: pulse 2s ease infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+
+  /* ── Tab panels ───────────────────────────────── */
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+
+  /* ── Section header ───────────────────────────── */
+  .section-header {
+    display: flex; align-items: center; gap: 10px;
+    padding: 14px 20px 10px; background: var(--paper);
+    border-bottom: 1px solid var(--line);
+    position: sticky; top: 40px; z-index: 90;
+  }
+  .section-title { font-family: 'Instrument Serif', serif; font-style: italic; font-size: 22px; color: var(--ink); }
+  .count-badge {
+    background: var(--paper-2); border: 1px solid var(--line);
+    border-radius: 10px; padding: 1px 7px; font-size: 11px; font-weight: 500; color: var(--ink-3);
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .section-actions { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+  .btn-ghost {
+    height: 28px; padding: 0 10px; border: 1px solid var(--line); border-radius: var(--r-btn);
+    background: var(--paper); font-size: 12px; color: var(--ink-2); transition: all .15s;
+  }
+  .btn-ghost:hover { border-color: var(--line-hi); color: var(--ink); }
+  .btn-accent {
+    height: 28px; padding: 0 12px; border-radius: var(--r-btn);
+    background: var(--accent); font-size: 12px; color: #fff; font-weight: 500; transition: opacity .15s;
+  }
+  .btn-accent:hover { opacity: .88; }
+
+  /* ── Filter bar ───────────────────────────────── */
+  .filter-bar {
+    background: var(--paper); border-bottom: 1px solid var(--line);
+    padding: 8px 20px; position: sticky; top: 88px; z-index: 89;
+  }
+  .filter-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .filter-sep { width: 1px; height: 18px; background: var(--line); margin: 0 2px; }
+  .filter-chip {
+    height: 28px; padding: 0 10px; border: 1px solid var(--line);
+    border-radius: 14px; background: var(--paper); font-size: 12px; color: var(--ink-2);
+    cursor: pointer; display: flex; align-items: center; gap: 4px; transition: all .15s; white-space: nowrap;
+  }
+  .filter-chip:hover { border-color: var(--line-hi); background: var(--paper-2); }
+  .filter-chip.active { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+  .filter-chip.secondary { color: var(--ink-3); font-size: 11px; }
+  .search-chip {
+    height: 28px; padding: 0 10px; border: 1px solid var(--line);
+    border-radius: 14px; background: var(--paper); display: flex; align-items: center; gap: 6px;
+    min-width: 140px; color: var(--ink-3); font-size: 12px; cursor: text;
+  }
+  .search-chip input { flex: 1; font-size: 12px; color: var(--ink); }
+  .search-chip input::placeholder { color: var(--ink-4); }
+  .filter-row-2 { margin-top: 6px; display: none; }
+  .filter-row-2.visible { display: flex; }
+  .clear-link { font-size: 11px; color: var(--accent); cursor: pointer; margin-left: 4px; }
+  .clear-link:hover { text-decoration: underline; }
+
+  /* ── Tracker table ────────────────────────────── */
+  .tracker-wrap { overflow-x: auto; }
+  .tracker-table {
+    width: 100%; border-collapse: collapse; min-width: 1200px;
+  }
+  .tracker-table th {
+    height: 32px; padding: 0 10px; text-align: left;
+    font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase;
+    color: var(--ink-3); font-weight: 500;
+    border-bottom: 1px solid var(--line);
+    background: var(--paper); white-space: nowrap;
+    position: sticky; top: 136px; z-index: 80;
+  }
+  .tracker-table th .sort { color: var(--ink-4); margin-left: 2px; font-size: 9px; }
+  .tracker-table td {
+    height: 36px; padding: 0 10px; border-bottom: 1px solid var(--line);
+    vertical-align: middle; white-space: nowrap;
+  }
+  .tracker-table tr:hover td { background: #f9f7f2; }
+  .tracker-table tr:last-child td { border-bottom: none; }
+
+  /* Cell styles */
+  .cell-id { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--ink-4); margin-right: 4px; }
+  .cell-name { font-weight: 500; color: var(--ink); }
+  .cell-text { color: var(--ink-2); font-size: 12px; }
+  .cell-cap { text-transform: capitalize; }
+  .cell-hyp { font-style: italic; color: var(--ink-3); font-size: 12px; max-width: 200px; overflow: hidden; text-overflow: ellipsis; }
+  .cell-link { color: var(--ink-3); font-size: 12px; }
+  .cell-link a { color: var(--accent); display: flex; align-items: center; gap: 3px; }
+  .cell-link a:hover { text-decoration: underline; }
+  .cell-date { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--ink-4); }
+  .cell-vars { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--accent); font-weight: 500; }
+  .cell-vars.none { color: var(--ink-4); }
+  .cell-matrix { font-size: 12px; color: var(--ink-3); }
+  .cell-actions { display: flex; align-items: center; gap: 6px; }
+  .cell-actions button { color: var(--ink-4); font-size: 13px; width: 22px; height: 22px; border-radius: 3px; transition: all .12s; display: flex; align-items: center; justify-content: center; }
+  .cell-actions button:hover { background: var(--paper-2); color: var(--ink-2); }
+
+  /* Pills & badges */
+  .pill {
+    display: inline-flex; align-items: center; padding: 1px 7px;
+    border-radius: var(--r-pill); font-size: 11px; font-weight: 500; white-space: nowrap;
+  }
+  .pill-winner    { background: var(--s-winner-soft);     color: var(--s-winner); }
+  .pill-testing   { background: var(--s-testing-soft);    color: var(--s-testing); }
+  .pill-approved  { background: var(--s-approved-soft);   color: var(--s-approved); }
+  .pill-production{ background: var(--s-production-soft); color: var(--s-production); }
+  .pill-ready     { background: var(--s-ready-soft);      color: var(--s-ready); }
+  .pill-loser     { background: var(--s-loser-soft);      color: var(--s-loser); }
+  .pill-untested  { background: var(--s-untested-soft);   color: var(--s-untested); }
+  .pill-scale     { background: var(--s-scale-soft);      color: var(--s-scale); }
+
+  .badge { display: inline-flex; align-items: center; padding: 1px 6px; border-radius: var(--r-pill); font-size: 11px; white-space: nowrap; }
+  .badge-tof  { background: #fdf2e0; color: #8a6020; }
+  .badge-mof  { background: #dde4ec; color: #4f6780; }
+  .badge-bof  { background: #dce8dc; color: #3d6b3d; }
+  .badge-video { background: var(--paper-2); color: var(--ink-3); border: 1px solid var(--line); }
+
+  /* ── MATRIX TAB ───────────────────────────────── */
+  .matrix-section-header {
+    display: flex; align-items: center; gap: 10px;
+    padding: 14px 20px 10px; background: var(--paper);
+    border-bottom: 1px solid var(--line);
+    position: sticky; top: 40px; z-index: 90;
+    flex-wrap: wrap;
+  }
+  .date-chips { margin-left: auto; display: flex; align-items: center; gap: 4px; }
+  .date-chip {
+    height: 26px; padding: 0 10px; border: 1px solid var(--line);
+    border-radius: 13px; font-size: 11px; color: var(--ink-3); cursor: pointer;
+    background: var(--paper); transition: all .15s; white-space: nowrap;
+  }
+  .date-chip:hover { border-color: var(--line-hi); color: var(--ink-2); }
+  .date-chip.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .date-range-inline { display: none; align-items: center; gap: 6px; margin-left: 4px; }
+  .date-range-inline.visible { display: flex; }
+  .date-range-inline input[type=date] {
+    height: 26px; padding: 0 8px; border: 1px solid var(--line); border-radius: 4px;
+    font-size: 11px; background: var(--paper); color: var(--ink-2); cursor: pointer;
+  }
+  .date-range-inline .apply-btn {
+    height: 26px; padding: 0 8px; background: var(--accent); color: #fff;
+    border-radius: 4px; font-size: 11px; cursor: pointer;
+  }
+
+  .matrix-toolbar {
+    display: flex; align-items: center; gap: 10px;
+    padding: 8px 20px; background: var(--paper);
+    border-bottom: 1px solid var(--line);
+    position: sticky; top: 88px; z-index: 89;
+  }
+  .segmented {
+    display: flex; border: 1px solid var(--line); border-radius: 5px; overflow: hidden; background: var(--paper-2);
+  }
+  .seg-btn {
+    height: 26px; padding: 0 12px; font-size: 12px; color: var(--ink-3);
+    background: none; border: none; cursor: pointer; transition: all .15s; white-space: nowrap;
+  }
+  .seg-btn.active { background: var(--paper); color: var(--ink); font-weight: 500; box-shadow: 0 1px 3px rgba(26,24,20,.08); }
+  .toolbar-right { margin-left: auto; display: flex; align-items: center; gap: 6px; }
+
+  /* ── Matrix grid ─────────────────────────────── */
+  .matrix-area { padding: 0 20px 20px; overflow-x: auto; }
+  .matrix-grid {
+    display: grid;
+    grid-template-columns: 150px repeat(4, minmax(190px, 1fr));
+    gap: 1px; background: var(--line);
+    border: 1px solid var(--line);
+    border-radius: var(--r-card);
+    overflow: hidden;
+    min-width: 920px;
+    margin-top: 16px;
+  }
+  .matrix-corner {
+    background: var(--paper-2); padding: 10px 12px;
+    display: flex; align-items: flex-end;
+    font-size: 11px; color: var(--ink-4);
+  }
+  .matrix-col-header {
+    background: var(--paper-2); padding: 10px 12px;
+    font-size: 12px; font-weight: 600; color: var(--ink-2);
+    display: flex; align-items: center; gap: 6px;
+    border-left: 1px solid var(--line);
+  }
+  .matrix-row-header {
+    background: var(--paper-2); padding: 10px 12px;
+    border-top: 1px solid var(--line);
+  }
+  .row-angle-name { font-size: 12px; font-weight: 600; color: var(--ink-2); }
+  .row-angle-count { font-size: 10px; color: var(--ink-4); margin-top: 2px; font-family: 'JetBrains Mono', monospace; }
+
+  /* ── Matrix cell ─────────────────────────────── */
+  .matrix-cell {
+    background: var(--paper); padding: 12px;
+    min-height: 130px; border-left: 1px solid var(--line); border-top: 1px solid var(--line);
+    position: relative; cursor: pointer; transition: all .2s;
+    display: flex; flex-direction: column; gap: 7px;
+  }
+  .matrix-cell:hover { background: #fefcf9; border-color: var(--accent); z-index: 2; }
+  .matrix-cell.empty {
+    background: #f9f8f4; border-style: dashed; cursor: default;
+  }
+  .matrix-cell.empty:hover { background: #f5f3ef; border-color: var(--ink-4); }
+  .matrix-cell.open-cell { outline: 2px solid var(--accent); z-index: 5; }
+
+  /* Cell sections */
+  .cell-top { display: flex; align-items: flex-start; gap: 8px; }
+  .cell-count { font-family: 'Instrument Serif', serif; font-style: italic; font-size: 28px; line-height: 1; color: var(--ink); }
+  .cell-count.empty { color: var(--ink-4); font-size: 22px; }
+  .cell-status-dots { display: flex; flex-direction: column; gap: 3px; margin-top: 2px; }
+  .status-dot-row { display: flex; align-items: center; gap: 5px; font-size: 10px; color: var(--ink-3); white-space: nowrap; }
+  .dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+
+  .status-bar { height: 4px; border-radius: 2px; overflow: hidden; display: flex; }
+  .status-bar.empty-bar { background: var(--line); border: 1px dashed var(--line-hi); border-radius: 2px; }
+  .status-bar-seg { height: 100%; }
+
+  .cell-time { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--ink-4); line-height: 1.4; }
+
+  .cell-view-content { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--ink-3); }
+
+  /* Hover action bar */
+  .cell-hover-bar {
+    position: absolute; bottom: 0; left: 0; right: 0;
+    background: linear-gradient(to top, var(--paper) 80%, transparent);
+    padding: 8px 10px 8px;
+    display: flex; gap: 5px; flex-wrap: wrap;
+    opacity: 0; transform: translateY(4px); transition: all .2s;
+    pointer-events: none;
+  }
+  .matrix-cell:hover .cell-hover-bar { opacity: 1; transform: translateY(0); pointer-events: auto; }
+  .matrix-cell.empty:hover .cell-hover-bar { opacity: 1; transform: translateY(0); }
+  .hover-btn {
+    height: 22px; padding: 0 8px; border: 1px solid var(--line-hi);
+    border-radius: 3px; font-size: 10px; background: var(--paper);
+    color: var(--ink-3); cursor: pointer; display: flex; align-items: center; gap: 3px;
+    transition: all .12s; white-space: nowrap;
+  }
+  .hover-btn:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+  .hover-btn.primary { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+
+  /* ── Drawer ───────────────────────────────────── */
+  .drawer-overlay {
+    position: fixed; inset: 0; z-index: 200;
+    pointer-events: none; display: flex; justify-content: flex-end;
+  }
+  .drawer-backdrop {
+    position: absolute; inset: 0; background: rgba(26,24,20,.15);
+    backdrop-filter: blur(2px); opacity: 0; transition: opacity .25s;
+    pointer-events: none;
+  }
+  .drawer-overlay.open .drawer-backdrop { opacity: 1; pointer-events: auto; }
+  .drawer-panel {
+    position: relative; width: 380px; height: 100%; background: var(--paper);
+    box-shadow: -4px 0 20px rgba(26,24,20,.12);
+    transform: translateX(100%); transition: transform .28s cubic-bezier(.32,.72,0,1);
+    overflow-y: auto; pointer-events: auto; display: flex; flex-direction: column;
+  }
+  .drawer-overlay.open .drawer-panel { transform: translateX(0); }
+  .drawer-header {
+    padding: 16px 16px 14px; border-bottom: 1px solid var(--line);
+    display: flex; align-items: flex-start; gap: 10px; flex-shrink: 0;
+  }
+  .drawer-title { flex: 1; }
+  .drawer-title-main { font-family: 'Instrument Serif', serif; font-style: italic; font-size: 16px; color: var(--ink); }
+  .drawer-title-sub { font-size: 11px; color: var(--ink-4); margin-top: 2px; font-family: 'JetBrains Mono', monospace; }
+  .drawer-close { width: 24px; height: 24px; border-radius: 4px; border: 1px solid var(--line); background: var(--paper); font-size: 14px; color: var(--ink-3); display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; }
+  .drawer-close:hover { background: var(--paper-2); color: var(--ink); }
+  .drawer-body { flex: 1; padding: 14px 16px; display: flex; flex-direction: column; gap: 12px; }
+  .drawer-creative-row {
+    padding: 10px 12px; border: 1px solid var(--line); border-radius: 5px; background: var(--paper-2);
+    display: flex; flex-direction: column; gap: 5px;
+  }
+  .drawer-cr-top { display: flex; align-items: center; gap: 8px; }
+  .drawer-cr-id { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--ink-4); }
+  .drawer-cr-name { font-size: 12px; font-weight: 500; color: var(--ink); flex: 1; }
+  .drawer-cr-time { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--ink-4); margin-top: 2px; }
+  .drawer-section-label { font-size: 10px; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-4); font-weight: 500; }
+  .drawer-actions { display: flex; flex-direction: column; gap: 6px; margin-top: 4px; }
+  .drawer-btn { height: 32px; border-radius: var(--r-btn); font-size: 12px; display: flex; align-items: center; justify-content: center; gap: 6px; cursor: pointer; transition: all .15s; }
+  .drawer-btn-accent { background: var(--accent); color: #fff; font-weight: 500; }
+  .drawer-btn-accent:hover { opacity: .88; }
+  .drawer-btn-ghost { border: 1px solid var(--line); background: var(--paper); color: var(--ink-2); }
+  .drawer-btn-ghost:hover { border-color: var(--line-hi); background: var(--paper-2); }
+
+  /* ── Utility ──────────────────────────────────── */
+  .page-body { background: var(--canvas); min-height: calc(100vh - 40px); }
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════════
+     MASTHEAD (shared)
+══════════════════════════════════════════════════ -->
+<header class="masthead">
+  <div class="masthead-brand">
+    <div class="mark">I</div>
+    Immuvi
+  </div>
+  <div class="masthead-sep"></div>
+  <div class="masthead-product">Art Therapy</div>
+  <nav class="tab-nav" id="mainTabNav">
+    <a data-tab="dashboard">Dashboard</a>
+    <a data-tab="angles">Angles</a>
+    <a data-tab="personas">Personas</a>
+    <a data-tab="tracker" class="active">Creative Tracker</a>
+    <a data-tab="matrix">Creative Matrix</a>
+    <a data-tab="action">Action Plan</a>
+    <a data-tab="production">Production</a>
+  </nav>
+  <div class="sync-dot" title="Live sync active"></div>
+</header>
+
+<!-- ═══════════════════════════════════════════════
+     TAB: CREATIVE TRACKER
+══════════════════════════════════════════════════ -->
+<div class="tab-panel active" id="tab-tracker">
+  <div class="page-body">
+
+    <!-- Section header -->
+    <div class="section-header">
+      <span class="section-title">Creative Tracker</span>
+      <span class="count-badge">8</span>
+      <div class="section-actions">
+        <button class="btn-ghost">↑ Push All to ClickUp</button>
+        <button class="btn-accent">+ Add Creative</button>
+      </div>
+    </div>
+
+    <!-- Filter bar -->
+    <div class="filter-bar">
+      <div class="filter-row" id="filterRow1">
+        <button class="filter-chip" onclick="toggleFilter(this)">Status: All ▾</button>
+        <button class="filter-chip" onclick="toggleFilter(this)">Funnel: All ▾</button>
+        <button class="filter-chip" onclick="toggleFilter(this)">Angle: All ▾</button>
+        <button class="filter-chip" onclick="toggleFilter(this)">Persona: All ▾</button>
+        <div class="filter-sep"></div>
+        <button class="filter-chip" onclick="toggleFilter(this)">Date: All Time ▾</button>
+        <div class="filter-sep"></div>
+        <div class="search-chip">
+          <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><circle cx="7" cy="7" r="5.5" stroke="#b8b3a2" stroke-width="1.5"/><path d="M11 11l3 3" stroke="#b8b3a2" stroke-width="1.5" stroke-linecap="round"/></svg>
+          <input type="text" placeholder="Search...">
+        </div>
+        <button class="filter-chip secondary" id="moreFiltersBtn" onclick="toggleMoreFilters()">More filters +</button>
+      </div>
+      <div class="filter-row filter-row-2" id="filterRow2">
+        <button class="filter-chip" onclick="toggleFilter(this)">Format ▾</button>
+        <button class="filter-chip" onclick="toggleFilter(this)">Structure ▾</button>
+        <button class="filter-chip" onclick="toggleFilter(this)">Hook ▾</button>
+        <button class="filter-chip" onclick="toggleFilter(this)">Production ▾</button>
+        <button class="filter-chip" onclick="toggleFilter(this)">Ad Type ▾</button>
+        <span class="clear-link" onclick="clearFilters()">Clear all</span>
+      </div>
+    </div>
+
+    <!-- Table -->
+    <div class="tracker-wrap">
+      <table class="tracker-table">
+        <thead>
+          <tr>
+            <th>Format Name <span class="sort">↕</span></th>
+            <th>Angle</th>
+            <th>Persona</th>
+            <th>Structure</th>
+            <th>Hook</th>
+            <th>Production</th>
+            <th>Hypothesis</th>
+            <th>Inspiration</th>
+            <th>Drive</th>
+            <th>Ad Type</th>
+            <th>Funnel <span class="sort">↕</span></th>
+            <th>Status <span class="sort">↕</span></th>
+            <th>Created <span class="sort">↕</span></th>
+            <th>Vars</th>
+            <th>Matrix</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="trackerBody"></tbody>
+      </table>
+    </div>
+
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════
+     TAB: CREATIVE MATRIX
+══════════════════════════════════════════════════ -->
+<div class="tab-panel" id="tab-matrix">
+  <div class="page-body">
+
+    <!-- Section header -->
+    <div class="matrix-section-header">
+      <span class="section-title">Creative Matrix</span>
+      <div class="date-chips">
+        <button class="date-chip" onclick="setDateChip(this)">Today</button>
+        <button class="date-chip" onclick="setDateChip(this)">Yesterday</button>
+        <button class="date-chip active" onclick="setDateChip(this)">This Week</button>
+        <button class="date-chip" onclick="setDateChip(this)">This Month</button>
+        <button class="date-chip" id="customDateChip" onclick="toggleCustomDate(this)">Custom ↓</button>
+        <div class="date-range-inline" id="dateRangeInline">
+          <span style="font-size:11px;color:var(--ink-4)">From:</span>
+          <input type="date" id="dateFrom">
+          <span style="font-size:11px;color:var(--ink-4)">To:</span>
+          <input type="date" id="dateTo">
+          <button class="apply-btn" onclick="applyCustomDate()">Apply</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Toolbar -->
+    <div class="matrix-toolbar">
+      <div class="toolbar-right">
+        <button class="filter-chip" onclick="toggleFilter(this)">Show: Active only ▾</button>
+        <button class="filter-chip" onclick="toggleFilter(this)">Filter personas ▾</button>
+      </div>
+    </div>
+
+    <!-- Matrix grid -->
+    <div class="matrix-area">
+      <div class="matrix-grid" id="matrixGrid"></div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════
+     DRAWER
+══════════════════════════════════════════════════ -->
+<div class="drawer-overlay" id="drawerOverlay">
+  <div class="drawer-backdrop" onclick="closeDrawer()"></div>
+  <div class="drawer-panel" id="drawerPanel">
+    <div class="drawer-header">
+      <div class="drawer-title">
+        <div class="drawer-title-main" id="drawerTitle">—</div>
+        <div class="drawer-title-sub" id="drawerSub">—</div>
+      </div>
+      <button class="drawer-close" onclick="closeDrawer()">×</button>
+    </div>
+    <div style="padding:0 16px 10px;border-bottom:1px solid var(--line)">
+      <div class="segmented" id="drawerViewToggle">
+        <button class="seg-btn active" data-dview="status" onclick="setDrawerView(this)">By Status</button>
+        <button class="seg-btn" data-dview="funnel" onclick="setDrawerView(this)">By Funnel</button>
+        <button class="seg-btn" data-dview="type" onclick="setDrawerView(this)">By Type</button>
+      </div>
+    </div>
+    <div class="drawer-body" id="drawerBody"></div>
+  </div>
+</div>
+
+<script>
+/* ─────────────────────────────────────────────────
+   DATA
+───────────────────────────────────────────────── */
+const creatives = [
+  { id:'AT-001', name:'Story Loop 30s', angle:'Pain Agitate Solution', persona:'Busy Mom', structure:'Problem-Solution', hook:'Question', production:'UGC', hypothesis:'Hook opens with pain point, agitates with relatable scenario, presents solution', insLink:'#', driveLink:'#', adType:'Video', funnel:'TOF', status:'Winner', created:'Apr 08', vars:3, matrix:'2 cells' },
+  { id:'AT-002', name:'Transformation 15s', angle:'Before/After', persona:'Health Enthusiast', structure:'Contrast', hook:'Stat', production:'Motion', hypothesis:'Before/after visual transformation with stat overlay reinforcing the change', insLink:null, driveLink:'#', adType:'Video', funnel:'MOF', status:'Testing', created:'Apr 10', vars:1, matrix:'1 cell' },
+  { id:'AT-003', name:'Testimonial Reel', angle:'Social Proof', persona:'Skeptic', structure:'Authority', hook:'Quote', production:'Studio', hypothesis:'Multi-person testimonial cut to counter skeptical objections', insLink:'#', driveLink:'#', adType:'Video', funnel:'BOF', status:'Approved', created:'Apr 11', vars:0, matrix:'1 cell' },
+  { id:'AT-004', name:'Value Stack 60s', angle:'Benefits-First', persona:'Value Seeker', structure:'List', hook:'Statement', production:'Voiceover', hypothesis:'Stack 7 benefits rapidly with kinetic text, price anchor at end', insLink:null, driveLink:null, adType:'Video', funnel:'TOF', status:'Loser', created:'Apr 05', vars:0, matrix:'1 cell' },
+  { id:'AT-005', name:'Fear Hook Cut', angle:'Fear Appeal', persona:'Busy Mom', structure:'Problem', hook:'Fear', production:'UGC', hypothesis:'Opens with fear trigger, validates concern, then pivots to solution', insLink:'#', driveLink:'#', adType:'Video', funnel:'TOF', status:'In Production', created:'Apr 18', vars:0, matrix:'0' },
+  { id:'AT-006', name:'Authority Doc', angle:'Social Proof', persona:'Health Enthusiast', structure:'Authority', hook:'Stat', production:'Documentary', hypothesis:'Documentary-style authority piece with expert validation and proof stacks', insLink:null, driveLink:'#', adType:'Video', funnel:'MOF', status:'Untested', created:'Apr 20', vars:0, matrix:'0' },
+  { id:'AT-007', name:'Price Anchor Reel', angle:'Benefits-First', persona:'Value Seeker', structure:'List', hook:'Statement', production:'Motion', hypothesis:'Compare to competitors then anchor on value, strong CTA', insLink:null, driveLink:null, adType:'Video', funnel:'BOF', status:'Ready to Launch', created:'Apr 17', vars:0, matrix:'1 cell' },
+  { id:'AT-008', name:'UGC Raw Clip', angle:'Pain Agitate Solution', persona:'Skeptic', structure:'Problem-Solution', hook:'Question', production:'UGC', hypothesis:'Raw authentic UGC clip addressing skeptic objections', insLink:'#', driveLink:null, adType:'Video', funnel:'TOF', status:'Scale', created:'Apr 03', vars:5, matrix:'3 cells' },
+];
+
+const statusMap = {
+  'Winner':         { cls:'pill-winner',     dot:'#5e7557' },
+  'Testing':        { cls:'pill-testing',    dot:'#4f6780' },
+  'Approved':       { cls:'pill-approved',   dot:'#7c5c2e' },
+  'In Production':  { cls:'pill-production', dot:'#c14400' },
+  'Ready to Launch':{ cls:'pill-ready',      dot:'#3a6b8a' },
+  'Loser':          { cls:'pill-loser',      dot:'#a83b28' },
+  'Untested':       { cls:'pill-untested',   dot:'#b8b3a2' },
+  'Scale':          { cls:'pill-scale',      dot:'#35683f' },
+};
+const funnelMap = {
+  'TOF':{ cls:'badge-tof', label:'TOF' },
+  'MOF':{ cls:'badge-mof', label:'MOF' },
+  'BOF':{ cls:'badge-bof', label:'BOF' },
+};
+
+/* ─────────────────────────────────────────────────
+   MATRIX CELL DATA
+───────────────────────────────────────────────── */
+// [angle][persona] → { count, statuses:[{label,count,dot}], bar:[{color,pct}], time, funnel, type }
+const personas = ['Busy Mom','Health Enthusiast','Skeptic','Value Seeker'];
+const angles   = ['Pain Agitate Solution','Before/After','Social Proof','Fear Appeal','Benefits-First'];
+
+const matrixData = {
+  'Pain Agitate Solution': {
+    'Busy Mom': {
+      count:2, time:'Scale since Apr 03 · Won Apr 08',
+      statuses:[{l:'Scale',c:1,d:'#35683f'},{l:'Winner',c:1,d:'#5e7557'}],
+      bar:[{color:'#35683f',pct:50},{color:'#5e7557',pct:50}],
+      funnel:'TOF: 2 · MOF: 0 · BOF: 0', type:'UGC: 2',
+      creatives:[{id:'AT-008',name:'UGC Raw Clip',status:'Scale',time:'Scale since Apr 03'},{id:'AT-001',name:'Story Loop 30s',status:'Winner',time:'Won Apr 08'}],
+      hasWinner:true,
+    },
+    'Health Enthusiast':{ count:0 },
+    'Skeptic': {
+      count:1, time:'Testing: 8d',
+      statuses:[{l:'Testing',c:1,d:'#4f6780'}],
+      bar:[{color:'#4f6780',pct:100}],
+      funnel:'TOF: 1 · MOF: 0 · BOF: 0', type:'UGC: 1',
+      creatives:[{id:'AT-002*',name:'Transformation v. (PAS)',status:'Testing',time:'Testing: 8d'}],
+      hasWinner:false,
+    },
+    'Value Seeker':{ count:0 },
+  },
+  'Before/After': {
+    'Busy Mom': {
+      count:1, time:'Approved 5d ago · queued',
+      statuses:[{l:'Approved',c:1,d:'#7c5c2e'}],
+      bar:[{color:'#7c5c2e',pct:100}],
+      funnel:'TOF: 0 · MOF: 1 · BOF: 0', type:'Motion: 1',
+      creatives:[{id:'AT-002v',name:'B/A Busy Mom',status:'Approved',time:'Approved 5d ago · queued'}],
+      hasWinner:false,
+    },
+    'Health Enthusiast': {
+      count:1, time:'Testing: 12d',
+      statuses:[{l:'Testing',c:1,d:'#4f6780'}],
+      bar:[{color:'#4f6780',pct:100}],
+      funnel:'TOF: 0 · MOF: 1 · BOF: 0', type:'Motion: 1',
+      creatives:[{id:'AT-002',name:'Transformation 15s',status:'Testing',time:'Testing: 12d'}],
+      hasWinner:false,
+    },
+    'Skeptic':{ count:0 },
+    'Value Seeker': {
+      count:2, time:'Won Apr 08 · Ran 21d',
+      statuses:[{l:'Winner',c:1,d:'#5e7557'},{l:'Loser',c:1,d:'#a83b28'}],
+      bar:[{color:'#5e7557',pct:50},{color:'#a83b28',pct:50}],
+      funnel:'TOF: 0 · MOF: 0 · BOF: 2', type:'Motion: 2',
+      creatives:[{id:'AT-B1',name:'B/A Value Win',status:'Winner',time:'Won Apr 08'},{id:'AT-B2',name:'B/A Value Lose',status:'Loser',time:'Ran 21d · ended Apr 10'}],
+      hasWinner:true,
+    },
+  },
+  'Social Proof': {
+    'Busy Mom':{ count:0 },
+    'Health Enthusiast': {
+      count:1, time:'Approved 2d ago · not launched',
+      statuses:[{l:'Approved',c:1,d:'#7c5c2e'}],
+      bar:[{color:'#7c5c2e',pct:100}],
+      funnel:'TOF: 0 · MOF: 1 · BOF: 0', type:'Documentary: 1',
+      creatives:[{id:'AT-006',name:'Authority Doc',status:'Approved',time:'Approved 2d ago · not launched'}],
+      hasWinner:false,
+    },
+    'Skeptic': {
+      count:1, time:'Approved Apr 11 · queued 11d',
+      statuses:[{l:'Approved',c:1,d:'#7c5c2e'}],
+      bar:[{color:'#7c5c2e',pct:100}],
+      funnel:'TOF: 0 · MOF: 0 · BOF: 1', type:'Studio: 1',
+      creatives:[{id:'AT-003',name:'Testimonial Reel',status:'Approved',time:'Approved Apr 11 · queued 11d'}],
+      hasWinner:false,
+    },
+    'Value Seeker':{ count:0 },
+  },
+  'Fear Appeal': {
+    'Busy Mom': {
+      count:1, time:'In prod: 4d',
+      statuses:[{l:'In Production',c:1,d:'#c14400'}],
+      bar:[{color:'#c14400',pct:100}],
+      funnel:'TOF: 1 · MOF: 0 · BOF: 0', type:'UGC: 1',
+      creatives:[{id:'AT-005',name:'Fear Hook Cut',status:'In Production',time:'In prod: 4d'}],
+      hasWinner:false,
+    },
+    'Health Enthusiast':{ count:0 },
+    'Skeptic':{ count:0 },
+    'Value Seeker':{ count:0 },
+  },
+  'Benefits-First': {
+    'Busy Mom':{ count:0 },
+    'Health Enthusiast':{ count:0 },
+    'Skeptic':{ count:0 },
+    'Value Seeker': {
+      count:2, time:'Loser Apr 05 · Ready: 5d queued',
+      statuses:[{l:'Loser',c:1,d:'#a83b28'},{l:'Ready to Launch',c:1,d:'#3a6b8a'}],
+      bar:[{color:'#a83b28',pct:50},{color:'#3a6b8a',pct:50}],
+      funnel:'TOF: 1 · MOF: 0 · BOF: 1', type:'Motion: 1 · Voiceover: 1',
+      creatives:[{id:'AT-004',name:'Value Stack 60s',status:'Loser',time:'Loser Apr 05'},{id:'AT-007',name:'Price Anchor Reel',status:'Ready to Launch',time:'Ready: 5d queued'}],
+      hasWinner:false,
+    },
+  },
+};
+
+/* ─────────────────────────────────────────────────
+   RENDER TRACKER
+───────────────────────────────────────────────── */
+function renderTracker() {
+  const tbody = document.getElementById('trackerBody');
+  tbody.innerHTML = creatives.map(c => {
+    const sm = statusMap[c.status] || {};
+    const fm = funnelMap[c.funnel] || {};
+    const hyp = c.hypothesis.length > 80 ? c.hypothesis.slice(0,80)+'…' : c.hypothesis;
+    const ins = c.insLink ? `<a href="${c.insLink}" onclick="return false">↗ Ad</a>` : '<span style="color:var(--ink-4)">—</span>';
+    const drv = c.driveLink ? `<a href="${c.driveLink}" onclick="return false">↗ Drive</a>` : '<span style="color:var(--ink-4)">—</span>';
+    const vars = c.vars > 0 ? `<span class="cell-vars">${c.vars}×</span>` : `<span class="cell-vars none">0</span>`;
+    const mx = c.matrix !== '0' ? c.matrix : '<span style="color:var(--ink-4)">—</span>';
+    return `<tr>
+      <td><span class="cell-id">${c.id} ·</span><span class="cell-name">${c.name}</span></td>
+      <td><span class="cell-text">${c.angle}</span></td>
+      <td><span class="cell-text">${c.persona}</span></td>
+      <td><span class="cell-text cell-cap">${c.structure}</span></td>
+      <td><span class="cell-text">${c.hook}</span></td>
+      <td><span class="cell-text">${c.production}</span></td>
+      <td><span class="cell-hyp" title="${c.hypothesis}">${hyp}</span></td>
+      <td class="cell-link">${ins}</td>
+      <td class="cell-link">${drv}</td>
+      <td><span class="badge badge-video">${c.adType}</span></td>
+      <td><span class="badge ${fm.cls}">${fm.label}</span></td>
+      <td><span class="pill ${sm.cls}">${c.status}</span></td>
+      <td><span class="cell-date">${c.created}</span></td>
+      <td>${vars}</td>
+      <td class="cell-matrix">${mx}</td>
+      <td class="cell-actions">
+        <button title="Edit">✏</button>
+        <button title="Open in ClickUp">↗</button>
+        <button title="Delete" style="color:var(--s-loser)">🗑</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+/* ─────────────────────────────────────────────────
+   RENDER MATRIX
+───────────────────────────────────────────────── */
+let currentView = 'status';
+let drawerView = 'status';
+let drawerAngle = null;
+let drawerPersona = null;
+
+function renderMatrix() {
+  const grid = document.getElementById('matrixGrid');
+  let html = '';
+
+  // Corner
+  html += `<div class="matrix-corner">Angle ↓ / Persona →</div>`;
+
+  // Column headers
+  personas.forEach(p => {
+    html += `<div class="matrix-col-header">${p}</div>`;
+  });
+
+  // Rows
+  angles.forEach(angle => {
+    // Count total creatives for angle
+    let angleTotal = 0;
+    personas.forEach(p => {
+      const d = (matrixData[angle]||{})[p];
+      if(d && d.count) angleTotal += d.count;
+    });
+
+    // Row header
+    html += `<div class="matrix-row-header">
+      <div class="row-angle-name">${angle}</div>
+      <div class="row-angle-count">${angleTotal} creative${angleTotal!==1?'s':''}</div>
+    </div>`;
+
+    // Cells
+    personas.forEach(p => {
+      const d = (matrixData[angle]||{})[p] || { count:0 };
+      html += buildCell(angle, p, d);
+    });
+  });
+
+  grid.innerHTML = html;
+}
+
+function buildCell(angle, persona, d) {
+  if (!d.count) {
+    return `<div class="matrix-cell empty" data-angle="${angle}" data-persona="${persona}">
+      <div class="cell-top"><div class="cell-count empty">—</div></div>
+      <div class="status-bar empty-bar"></div>
+      <div class="cell-hover-bar">
+        <button class="hover-btn primary" onclick="event.stopPropagation()">⊕ Create Task</button>
+        <button class="hover-btn" onclick="event.stopPropagation()">⊕ Find Gap</button>
+      </div>
+    </div>`;
+  }
+
+  // Status dots
+  const dots = d.statuses.map(s =>
+    `<div class="status-dot-row"><span class="dot" style="background:${s.d}"></span>${s.l}: ${s.c}</div>`
+  ).join('');
+
+  // Status bar
+  const barSegs = d.bar.map(b =>
+    `<div class="status-bar-seg" style="background:${b.color};width:${b.pct}%"></div>`
+  ).join('');
+
+  // View-mode content
+  let viewContent = '';
+  if (currentView === 'status') {
+    viewContent = `<div class="cell-view-content">${d.statuses.map(s=>`${s.l}: ${s.c}`).join(' · ')}</div>`;
+  } else if (currentView === 'funnel') {
+    viewContent = `<div class="cell-view-content">${d.funnel||'—'}</div>`;
+  } else {
+    viewContent = `<div class="cell-view-content">${d.type||'—'}</div>`;
+  }
+
+  const hoverBtns = [
+    d.hasWinner ? `<button class="hover-btn primary" onclick="event.stopPropagation()">⊕ Variation</button>` : '',
+    `<button class="hover-btn" onclick="event.stopPropagation()">⊕ Add Creative</button>`,
+    !d.hasWinner ? `<button class="hover-btn" onclick="event.stopPropagation()">⊕ Find Gap</button>` : '',
+  ].filter(Boolean).join('');
+
+  return `<div class="matrix-cell"
+    data-angle="${angle}" data-persona="${persona}"
+    onclick="openDrawer('${angle}','${persona}')">
+    <div class="cell-top">
+      <div class="cell-count">${d.count}</div>
+      <div class="cell-status-dots">${dots}</div>
+    </div>
+    <div class="status-bar">${barSegs}</div>
+    <div class="cell-time">${d.time||''}</div>
+    ${viewContent}
+    <div class="cell-hover-bar">${hoverBtns}</div>
+  </div>`;
+}
+
+/* ─────────────────────────────────────────────────
+   DRAWER
+───────────────────────────────────────────────── */
+function renderDrawerBody(d) {
+  const crHtml = d.creatives.map(cr => {
+    const sm = statusMap[cr.status] || {};
+    return `<div class="drawer-creative-row">
+      <div class="drawer-cr-top">
+        <span class="drawer-cr-id">${cr.id}</span>
+        <span class="drawer-cr-name">${cr.name}</span>
+        <span class="pill ${sm.cls}" style="font-size:10px">${cr.status}</span>
+      </div>
+      <div class="drawer-cr-time">${cr.time}</div>
+    </div>`;
+  }).join('');
+
+  let viewDetailHtml = '';
+  if (drawerView === 'funnel') {
+    const counts = {};
+    d.creatives.forEach(cr => { const k = cr.funnel||'—'; counts[k]=(counts[k]||0)+1; });
+    const funnelColors = {TOF:'badge-tof',MOF:'badge-mof',BOF:'badge-bof'};
+    viewDetailHtml = `<div class="drawer-section-label" style="margin-top:4px">By Funnel</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        ${Object.entries(counts).map(([f,c])=>`<span class="badge ${funnelColors[f]||''}" style="font-size:11px">${f}: ${c}</span>`).join('')}
+      </div>`;
+  } else if (drawerView === 'type') {
+    const counts = {};
+    d.creatives.forEach(cr => { const k = cr.production||'UGC'; counts[k]=(counts[k]||0)+1; });
+    viewDetailHtml = `<div class="drawer-section-label" style="margin-top:4px">By Production Type</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        ${Object.entries(counts).map(([t,c])=>`<span style="font-size:11px;font-family:var(--mono);color:var(--ink-2);background:var(--paper-2);padding:2px 7px;border-radius:3px">${t}: ${c}</span>`).join('')}
+      </div>`;
+  } else {
+    const counts = {};
+    d.creatives.forEach(cr => { counts[cr.status] = (counts[cr.status]||0)+1; });
+    viewDetailHtml = `<div class="drawer-section-label" style="margin-top:4px">By Status</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        ${Object.entries(counts).map(([s,c])=>{
+          const sm = statusMap[s]||{};
+          return `<span style="display:inline-flex;align-items:center;gap:4px;font-size:11px;font-family:var(--mono);color:var(--ink-2)"><span style="width:6px;height:6px;border-radius:50%;background:${sm.dot||'#999'};display:inline-block"></span>${s}: ${c}</span>`;
+        }).join('')}
+      </div>`;
+  }
+
+  const showVariation = d.hasWinner;
+  const actionsHtml = `
+    <div class="drawer-section-label">Actions</div>
+    <div class="drawer-actions">
+      ${showVariation ? `<button class="drawer-btn drawer-btn-accent" onclick="return false">⊕ Make Variation</button>` : ''}
+      <button class="drawer-btn drawer-btn-ghost" onclick="return false">⊕ Add Creative Format</button>
+      ${!d.hasWinner ? `<button class="drawer-btn drawer-btn-ghost" onclick="return false">⊕ Create Gap Task</button>` : ''}
+    </div>`;
+
+  document.getElementById('drawerBody').innerHTML = crHtml + viewDetailHtml + actionsHtml;
+}
+
+function openDrawer(angle, persona) {
+  const d = (matrixData[angle]||{})[persona];
+  if (!d || !d.count) return;
+
+  drawerAngle = angle;
+  drawerPersona = persona;
+  drawerView = 'status';
+
+  // reset toggle to "By Status"
+  document.querySelectorAll('#drawerViewToggle .seg-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.dview === 'status');
+  });
+
+  document.getElementById('drawerTitle').textContent = `${angle} × ${persona}`;
+  document.getElementById('drawerSub').textContent = `${d.count} creative${d.count!==1?'s':''} in this cell`;
+
+  renderDrawerBody(d);
+  document.getElementById('drawerOverlay').classList.add('open');
+
+  // highlight cell
+  document.querySelectorAll('.matrix-cell').forEach(el => el.classList.remove('open-cell'));
+  const cell = document.querySelector(`.matrix-cell[data-angle="${angle}"][data-persona="${persona}"]`);
+  if (cell) cell.classList.add('open-cell');
+}
+
+function setDrawerView(btn) {
+  document.querySelectorAll('#drawerViewToggle .seg-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  drawerView = btn.dataset.dview;
+  const d = (matrixData[drawerAngle]||{})[drawerPersona];
+  if (d) renderDrawerBody(d);
+}
+
+function closeDrawer() {
+  document.getElementById('drawerOverlay').classList.remove('open');
+  document.querySelectorAll('.matrix-cell').forEach(el => el.classList.remove('open-cell'));
+}
+
+/* ─────────────────────────────────────────────────
+   TAB SWITCHING
+───────────────────────────────────────────────── */
+document.getElementById('mainTabNav').addEventListener('click', e => {
+  const a = e.target.closest('a[data-tab]');
+  if (!a) return;
+  const tab = a.dataset.tab;
+
+  document.querySelectorAll('.tab-nav a').forEach(el => el.classList.remove('active'));
+  a.classList.add('active');
+
+  document.querySelectorAll('.tab-panel').forEach(el => el.classList.remove('active'));
+  const panel = document.getElementById(`tab-${tab}`);
+  if (panel) panel.classList.add('active');
+
+  closeDrawer();
+});
+
+/* ─────────────────────────────────────────────────
+   FILTER CHIPS
+───────────────────────────────────────────────── */
+function toggleFilter(btn) {
+  btn.classList.toggle('active');
+}
+
+function toggleMoreFilters() {
+  const row2 = document.getElementById('filterRow2');
+  const btn = document.getElementById('moreFiltersBtn');
+  row2.classList.toggle('visible');
+  btn.classList.toggle('active');
+  btn.textContent = row2.classList.contains('visible') ? 'Fewer filters −' : 'More filters +';
+}
+
+function clearFilters() {
+  document.querySelectorAll('.filter-chip.active').forEach(c => c.classList.remove('active'));
+}
+
+/* ─────────────────────────────────────────────────
+   DATE CHIPS
+───────────────────────────────────────────────── */
+function setDateChip(btn) {
+  document.querySelectorAll('.date-chip').forEach(c => c.classList.remove('active'));
+  btn.classList.add('active');
+
+  // close custom range if not clicking custom
+  if (btn.id !== 'customDateChip') {
+    document.getElementById('dateRangeInline').classList.remove('visible');
+  }
+}
+
+function toggleCustomDate(btn) {
+  const range = document.getElementById('dateRangeInline');
+  const isVisible = range.classList.contains('visible');
+  range.classList.toggle('visible');
+  if (!isVisible) {
+    document.querySelectorAll('.date-chip').forEach(c => c.classList.remove('active'));
+    btn.classList.add('active');
+  }
+}
+
+function applyCustomDate() {
+  const from = document.getElementById('dateFrom').value;
+  const to   = document.getElementById('dateTo').value;
+  // In a real app this would filter data; here we just close
+  document.getElementById('dateRangeInline').classList.remove('visible');
+}
+
+/* matrix cells always render 'status' view by default;
+   view switching (By Status / Funnel / Type) lives inside the cell drawer */
+
+/* ─────────────────────────────────────────────────
+   INIT
+───────────────────────────────────────────────── */
+renderTracker();
+renderMatrix();
+</script>
+</body>
+</html>

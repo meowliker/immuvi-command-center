@@ -1,0 +1,595 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Creative Tracker — Editorial direction</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --paper:         #f7f4ed;     /* warm off-white, not stark white */
+  --paper-deep:    #eeeae1;
+  --card:          #ffffff;
+  --ink:           #1c1916;     /* almost-black, warm */
+  --ink-2:         #5a554e;
+  --ink-3:         #8f8a80;
+  --ink-4:         #b8b3a8;
+  --line:          #e5e0d4;
+  --line-hi:       #d8d2c3;
+  --olive:         #3f5c3a;     /* primary accent — forest/olive */
+  --olive-bg:      #eaf0e4;
+  --claret:        #8b3a2b;     /* critical/losers */
+  --claret-bg:     #f4e4df;
+  --ochre:         #a57820;     /* mild/warning */
+  --ochre-bg:      #f2e7ce;
+  --sky:           #3c6b88;     /* testing */
+  --sky-bg:        #e2ecf2;
+  --coral:         #bb5838;     /* fatigue */
+  --coral-bg:      #f3dcd1;
+  --lavender-bg:   #ece6f1;
+  --lavender-ink:  #574269;
+  --radius:        4px;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; }
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: 'Inter', -apple-system, sans-serif;
+  font-size: 14px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── Header ──────────────────────────────────────────────────────── */
+.masthead {
+  padding: 22px 32px 16px;
+  display: flex; align-items: flex-start; justify-content: space-between;
+  border-bottom: 1px solid var(--line);
+}
+.masthead .title {
+  display: flex; flex-direction: column; gap: 2px;
+}
+.masthead h1 {
+  font-family: 'Instrument Serif', Georgia, serif;
+  font-weight: 400;
+  font-style: italic;
+  font-size: 36px;
+  line-height: 1;
+  color: var(--ink);
+  letter-spacing: -0.01em;
+}
+.masthead .subtitle {
+  font-size: 12px;
+  color: var(--ink-3);
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+.masthead .kicker { color: var(--olive); font-weight: 500; }
+.masthead .right {
+  display: flex; align-items: center; gap: 12px;
+}
+.btn {
+  height: 34px; padding: 0 14px;
+  border-radius: var(--radius);
+  font-size: 13px; font-weight: 500;
+  border: 1px solid var(--line);
+  background: var(--card);
+  color: var(--ink);
+  cursor: pointer;
+  display: inline-flex; align-items: center; gap: 8px;
+}
+.btn:hover { background: var(--paper-deep); }
+.btn-primary {
+  background: var(--ink); color: var(--paper);
+  border-color: var(--ink);
+}
+.btn-primary:hover { background: #2c2923; }
+.live-indicator {
+  font-size: 11px; color: var(--ink-3);
+  display: inline-flex; align-items: center; gap: 6px;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  font-weight: 500;
+}
+.live-indicator::before {
+  content: ''; width: 6px; height: 6px; border-radius: 50%;
+  background: var(--olive);
+  box-shadow: 0 0 6px var(--olive);
+  animation: pulse 2.5s infinite;
+}
+@keyframes pulse { 50% { opacity: 0.4; } }
+
+/* ── Navigation ──────────────────────────────────────────────────── */
+.nav {
+  padding: 0 32px;
+  display: flex;
+  gap: 28px;
+  border-bottom: 1px solid var(--line);
+  background: var(--paper);
+}
+.nav a {
+  padding: 14px 0;
+  font-size: 13px; font-weight: 500;
+  color: var(--ink-3);
+  text-decoration: none;
+  position: relative;
+  display: inline-flex; align-items: center; gap: 6px;
+  cursor: pointer;
+  transition: color .15s;
+}
+.nav a:hover { color: var(--ink); }
+.nav a.active { color: var(--ink); }
+.nav a.active::after {
+  content: ''; position: absolute;
+  left: 0; right: 0; bottom: -1px; height: 1.5px;
+  background: var(--olive);
+}
+.nav a .ct {
+  font-family: 'Instrument Serif', serif;
+  font-style: italic;
+  font-weight: 400;
+  font-size: 16px;
+  color: var(--olive);
+  line-height: 1;
+  margin-left: 2px;
+}
+
+/* ── Main content ────────────────────────────────────────────────── */
+.container { padding: 24px 32px 60px; }
+
+.section-header {
+  display: flex; align-items: baseline; gap: 16px;
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--line);
+}
+.section-header h2 {
+  font-family: 'Instrument Serif', Georgia, serif;
+  font-size: 24px; font-weight: 400;
+  color: var(--ink);
+}
+.section-header .count {
+  font-family: 'Instrument Serif', serif;
+  font-style: italic;
+  font-size: 18px;
+  color: var(--ink-3);
+}
+.section-header .spacer { flex: 1; }
+.section-header .meta {
+  font-size: 12px; color: var(--ink-3);
+  letter-spacing: 0.02em;
+}
+
+/* ── Filters ─────────────────────────────────────────────────────── */
+.filter-row {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+  padding: 10px 12px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  margin-bottom: 16px;
+}
+.search-input {
+  flex: 1; min-width: 240px;
+  position: relative;
+}
+.search-input input {
+  width: 100%; height: 32px;
+  background: transparent;
+  border: none;
+  color: var(--ink);
+  padding: 0 10px 0 28px;
+  font-family: inherit;
+  font-size: 13.5px;
+  outline: none;
+  border-right: 1px solid var(--line);
+}
+.search-input input::placeholder { color: var(--ink-4); font-style: italic; }
+.search-input::before {
+  content: '⌕'; position: absolute; left: 6px; top: 50%;
+  transform: translateY(-50%); color: var(--ink-4);
+}
+.fchip {
+  height: 28px; padding: 0 11px;
+  border-radius: 14px;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  font-size: 12.5px; font-weight: 500;
+  color: var(--ink-2);
+  cursor: pointer;
+  display: inline-flex; align-items: center; gap: 5px;
+  white-space: nowrap;
+  transition: all .15s;
+}
+.fchip:hover { background: var(--paper-deep); color: var(--ink); }
+.fchip.active {
+  background: var(--olive);
+  border-color: var(--olive);
+  color: white;
+}
+.fchip .chev { opacity: 0.6; font-size: 9px; }
+
+/* ── Table ───────────────────────────────────────────────────────── */
+.creative-card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+}
+table.t {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13.5px;
+}
+table.t thead th {
+  text-align: left;
+  padding: 12px 16px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--ink-3);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  border-bottom: 1px solid var(--line);
+  background: var(--paper);
+  white-space: nowrap;
+}
+table.t thead th.num { text-align: right; }
+table.t tbody td {
+  padding: 14px 16px;
+  vertical-align: middle;
+  border-bottom: 1px solid var(--line);
+  color: var(--ink);
+}
+table.t tbody tr { transition: background .12s; cursor: pointer; }
+table.t tbody tr:hover { background: #fbf9f3; }
+table.t tbody tr:last-child td { border-bottom: none; }
+
+/* Creative cell */
+.c-cell { display: flex; align-items: center; gap: 14px; }
+.thumb {
+  width: 44px; height: 44px; border-radius: 6px;
+  flex-shrink: 0;
+  background: linear-gradient(135deg, #d9d3c4 0%, #b5ae9e 100%);
+  position: relative;
+  overflow: hidden;
+  border: 1px solid var(--line-hi);
+}
+.thumb::after {
+  content: '▶'; position: absolute; inset: 0;
+  display: grid; place-items: center;
+  color: rgba(255,255,255,.75); font-size: 12px;
+}
+.thumb.photo { background: linear-gradient(135deg, #c4d0c0 0%, #8fa887 100%); }
+.thumb.photo::after { content: '◈'; }
+.c-title {
+  display: flex; flex-direction: column; gap: 2px;
+  min-width: 0;
+}
+.c-title .name {
+  font-family: 'Instrument Serif', Georgia, serif;
+  font-size: 17px;
+  font-weight: 400;
+  color: var(--ink);
+  letter-spacing: -0.01em;
+  line-height: 1.2;
+}
+.c-title .id {
+  font-size: 11.5px;
+  color: var(--ink-3);
+  letter-spacing: 0.02em;
+}
+.c-title .id a { color: var(--ink-3); text-decoration: underline; text-underline-offset: 2px; }
+.c-title .id a:hover { color: var(--olive); }
+
+/* Tag */
+.tg {
+  display: inline-block;
+  padding: 3px 9px;
+  border-radius: 3px;
+  font-size: 12px;
+  font-weight: 500;
+  background: var(--paper-deep);
+  color: var(--ink-2);
+  border: 1px solid var(--line);
+}
+.tg.angle   { background: var(--olive-bg); color: var(--olive); border-color: transparent; }
+.tg.persona { background: var(--lavender-bg); color: var(--lavender-ink); border-color: transparent; }
+.tg.hook    { background: var(--ochre-bg); color: var(--ochre); border-color: transparent; }
+
+/* Status */
+.status {
+  display: inline-flex; align-items: center; gap: 7px;
+  font-weight: 500; font-size: 12.5px;
+}
+.status::before {
+  content: ''; width: 7px; height: 7px; border-radius: 50%;
+  background: currentColor;
+  flex-shrink: 0;
+}
+.status.massive { color: #1a6a4a; }
+.status.winner  { color: var(--olive); }
+.status.mild    { color: var(--ochre); }
+.status.fatigue { color: var(--coral); }
+.status.testing { color: var(--sky); }
+.status.loser   { color: var(--claret); }
+
+.status.massive::after {
+  content: '◆';
+  color: #1a6a4a;
+  font-size: 9px;
+}
+
+/* Funnel */
+.funnel {
+  display: inline-block;
+  font-family: 'Instrument Serif', serif;
+  font-style: italic;
+  font-size: 15px;
+  color: var(--ink-2);
+}
+
+/* Numbers */
+.num {
+  text-align: right;
+  font-feature-settings: "tnum";
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+.num-big {
+  font-size: 15px;
+  font-weight: 600;
+}
+.num-roas {
+  font-family: 'Instrument Serif', serif;
+  font-style: italic;
+  font-weight: 400;
+  font-size: 18px;
+}
+.num-roas.up { color: var(--olive); }
+.num-roas.down { color: var(--coral); }
+.num-roas.loser { color: var(--claret); }
+
+.date { color: var(--ink-3); font-size: 12px; }
+
+/* Inline icon links */
+.iconset { display: inline-flex; gap: 8px; }
+.iconset a {
+  color: var(--ink-3);
+  text-decoration: none;
+  padding: 4px 6px;
+  border-radius: 3px;
+}
+.iconset a:hover { background: var(--paper-deep); color: var(--olive); }
+
+/* Summary footer */
+.summary {
+  margin-top: 12px;
+  padding: 14px 18px;
+  display: flex; gap: 32px;
+  font-size: 12px;
+  color: var(--ink-3);
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  align-items: baseline;
+}
+.summary strong {
+  font-family: 'Instrument Serif', serif;
+  font-size: 20px;
+  font-style: italic;
+  font-weight: 400;
+  color: var(--ink);
+  margin-right: 6px;
+}
+.summary .spacer { flex: 1; }
+</style>
+</head>
+<body>
+
+<header class="masthead">
+  <div class="title">
+    <h1><em>Immuvi</em> Command Center</h1>
+    <div class="subtitle"><span class="kicker">Art Therapy</span> · Kids Mental Health Creative Ops</div>
+  </div>
+  <div class="right">
+    <span class="live-indicator">Live · 16s ago</span>
+    <button class="btn">↻ Reset</button>
+    <button class="btn btn-primary">Sync ClickUp</button>
+  </div>
+</header>
+
+<nav class="nav">
+  <a>Command HQ</a>
+  <a>Angles <span class="ct">7</span></a>
+  <a>Personas <span class="ct">5</span></a>
+  <a class="active">Creative Tracker <span class="ct">66</span></a>
+  <a>Creative Matrix <span class="ct">19/35</span></a>
+  <a>Action Plan <span class="ct">3</span></a>
+  <a>Production <span class="ct">3</span></a>
+  <a>Inspiration <span class="ct">0</span></a>
+</nav>
+
+<main class="container">
+  <div class="section-header">
+    <h2>Creative Tracker</h2>
+    <span class="count"><em>sixty-six creatives</em></span>
+    <span class="spacer"></span>
+    <span class="meta">Sorted by <strong>created, newest first</strong> · last synced 16 seconds ago</span>
+  </div>
+
+  <div class="filter-row">
+    <div class="search-input">
+      <input placeholder="Search by name, angle, persona, hook…">
+    </div>
+    <div class="fchip active">Winners only <span class="chev">▾</span></div>
+    <div class="fchip">All Angles <span class="chev">▾</span></div>
+    <div class="fchip">All Personas <span class="chev">▾</span></div>
+    <div class="fchip">All Hooks <span class="chev">▾</span></div>
+    <div class="fchip">All Funnels <span class="chev">▾</span></div>
+    <div class="fchip">Today <span class="chev">▾</span></div>
+  </div>
+
+  <div class="creative-card">
+    <table class="t">
+      <thead>
+        <tr>
+          <th>Creative</th>
+          <th>Angle</th>
+          <th>Persona</th>
+          <th>Structure</th>
+          <th>Hook</th>
+          <th>Funnel</th>
+          <th>Status</th>
+          <th class="num">Spend 7d</th>
+          <th class="num">ROAS 7d</th>
+          <th>Links</th>
+          <th>Created</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>
+            <div class="c-cell">
+              <div class="thumb"></div>
+              <div class="c-title">
+                <span class="name">5773-1 <em style="font-style:italic;color:var(--ink-3);">old winner</em></span>
+                <span class="id">AT-11439-v1 · <a href="#">ClickUp</a></span>
+              </div>
+            </div>
+          </td>
+          <td><span class="tg angle">Art as Therapy Alt.</span></td>
+          <td><span class="tg persona">Stressed Women 25-45</span></td>
+          <td>UGC</td>
+          <td><span class="tg hook">POV</span></td>
+          <td><span class="funnel">TOF</span></td>
+          <td><span class="status massive">Massive Winner</span></td>
+          <td class="num num-big">$1,842</td>
+          <td class="num num-roas up">1.92×</td>
+          <td><div class="iconset"><a>↗</a><a>📄</a></div></td>
+          <td class="date">21 Apr</td>
+        </tr>
+        <tr>
+          <td>
+            <div class="c-cell">
+              <div class="thumb photo"></div>
+              <div class="c-title">
+                <span class="name">4570-1 <em style="font-style:italic;color:var(--ink-3);">old winner</em></span>
+                <span class="id">AT-10835 · <a href="#">ClickUp</a></span>
+              </div>
+            </div>
+          </td>
+          <td><span class="tg angle">Emotional Literacy</span></td>
+          <td><span class="tg persona">Stressed Women 25-45</span></td>
+          <td>Static / Photo</td>
+          <td><span class="tg hook">Curiosity</span></td>
+          <td><span class="funnel">TOF</span></td>
+          <td><span class="status winner">Winner</span></td>
+          <td class="num num-big">$806</td>
+          <td class="num num-roas up">1.54×</td>
+          <td><div class="iconset"><a>↗</a><a>📄</a></div></td>
+          <td class="date">19 Apr</td>
+        </tr>
+        <tr>
+          <td>
+            <div class="c-cell">
+              <div class="thumb photo"></div>
+              <div class="c-title">
+                <span class="name">4569-2 <em style="font-style:italic;color:var(--ink-3);">old winner</em></span>
+                <span class="id">AT-10834 · <a href="#">ClickUp</a></span>
+              </div>
+            </div>
+          </td>
+          <td><span class="tg angle">Scarcity</span></td>
+          <td><span class="tg persona">Stressed Women 25-45</span></td>
+          <td>Static / Photo</td>
+          <td><span class="tg hook">Pattern Interrupt</span></td>
+          <td><span class="funnel">TOF</span></td>
+          <td><span class="status mild">Mild Winner</span></td>
+          <td class="num num-big">$412</td>
+          <td class="num num-roas" style="color: var(--ochre)">1.33×</td>
+          <td><div class="iconset"><a>↗</a><a>📄</a></div></td>
+          <td class="date">18 Apr</td>
+        </tr>
+        <tr>
+          <td>
+            <div class="c-cell">
+              <div class="thumb photo"></div>
+              <div class="c-title">
+                <span class="name">10785-2 <em style="font-style:italic;color:var(--ink-3);">old winner</em></span>
+                <span class="id">AT-10733 · <a href="#">ClickUp</a></span>
+              </div>
+            </div>
+          </td>
+          <td><span class="tg angle">Scarcity</span></td>
+          <td><span class="tg persona">Stressed Women 25-45</span></td>
+          <td>Static / Photo</td>
+          <td><span class="tg hook">Pattern Interrupt</span></td>
+          <td><span class="funnel">TOF</span></td>
+          <td><span class="status fatigue">Fatigued</span></td>
+          <td class="num num-big">$1,205</td>
+          <td class="num num-roas down">0.98× ↓</td>
+          <td><div class="iconset"><a>↗</a><a>📄</a></div></td>
+          <td class="date">10 Apr</td>
+        </tr>
+        <tr>
+          <td>
+            <div class="c-cell">
+              <div class="thumb photo"></div>
+              <div class="c-title">
+                <span class="name">6197-1 <em style="font-style:italic;color:var(--ink-3);">old winner</em></span>
+                <span class="id">AT-10612 · <a href="#">ClickUp</a></span>
+              </div>
+            </div>
+          </td>
+          <td><span class="tg angle">Scarcity</span></td>
+          <td><span class="tg persona">Stressed Women 25-45</span></td>
+          <td>Static / Photo</td>
+          <td><span class="tg hook">Direct Offer</span></td>
+          <td><span class="funnel">TOF</span></td>
+          <td><span class="status testing">Testing</span></td>
+          <td class="num num-big" style="color:var(--ink-3)">$28</td>
+          <td class="num num-roas" style="color: var(--ink-4)">—</td>
+          <td><div class="iconset"><a>↗</a><a>📄</a></div></td>
+          <td class="date">21 Apr</td>
+        </tr>
+        <tr>
+          <td>
+            <div class="c-cell">
+              <div class="thumb"></div>
+              <div class="c-title">
+                <span class="name">11436 <em style="font-style:italic;color:var(--ink-3);">new concept</em></span>
+                <span class="id">AT-11436 · <a href="#">ClickUp</a></span>
+              </div>
+            </div>
+          </td>
+          <td><span class="tg angle">Calm / Unwind</span></td>
+          <td><span class="tg persona">Creative Self-Care</span></td>
+          <td>Hook + Offer</td>
+          <td><span class="tg hook">Curiosity</span></td>
+          <td><span class="funnel">TOF</span></td>
+          <td><span class="status loser">Loser</span></td>
+          <td class="num num-big">$187</td>
+          <td class="num num-roas loser">0.42×</td>
+          <td><div class="iconset"><a>↗</a><a>📄</a></div></td>
+          <td class="date">14 Apr</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="summary">
+    <span><strong>66</strong> creatives</span>
+    <span><strong>18</strong> winners</span>
+    <span><strong>3</strong> fatigued</span>
+    <span><strong>2</strong> losers</span>
+    <span class="spacer"></span>
+    <span><strong>$12,418</strong> last 7 days</span>
+    <span><strong>1.38×</strong> blended ROAS</span>
+  </div>
+</main>
+
+</body>
+</html>

@@ -3103,6 +3103,10 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
           <span class="live-sync-lbl" id="statusLbl">Not synced</span>
           <button class="btn-sync-now" id="syncNowBtn" onclick="triggerManualSync()" title="Sync now">&#8635;</button>
         </div>
+        <div id="presence-bar" style="display:flex;align-items:center;gap:6px;font-size:12px;color:#94a3b8;">
+          <span id="presence-dots"></span>
+          <span id="presence-label">&#9679; 1 online</span>
+        </div>
       </div>
     </div>
   </header>
@@ -3451,6 +3455,188 @@ try {
   console.error('[SB] Client init failed:', e);
 }
 
+// ── REALTIME BROADCAST CHANNEL (live sync as you type) ──────────────────────
+var _rtChannel = null;
+var _myClientId = 'client-' + Math.random().toString(36).substr(2, 9);
+// Notes cache — survives ADS array replacement (onChange merge creates new objects).
+// saveAdNotes writes here; render reads here first; cleared when DB confirms the value.
+var _notesCache = {};
+
+function _initRealtimeChannel(productId) {
+  if (_rtChannel) { SB.removeChannel(_rtChannel); _rtChannel = null; }
+  if (!productId || !SB) return;
+
+  _rtChannel = SB.channel('cc-' + productId, {
+    config: { broadcast: { self: false } }
+  });
+
+  // Listen for broadcast field updates from other clients
+  _rtChannel.on('broadcast', { event: 'field-update' }, function(msg) {
+    var p = msg.payload;
+    if (!p || !p.adId || !p.field) return;
+    var ad = ADS.find(function(a) { return a.id === p.adId; });
+    if (!ad) return;
+    ad[p.field] = p.value;
+    // Targeted UI update for notes cell
+    if (p.field === 'notes' || p.field === 'variationNotes') {
+      var el = document.querySelector('[data-ad-id="' + p.adId + '"] .notes-cell');
+      if (el && document.activeElement !== el) el.textContent = p.value || 'Add note...';
+    }
+    // For status changes, trigger full re-render
+    if (p.field === 'status') {
+      if (typeof renderMatrix === 'function') renderMatrix();
+      if (typeof renderActionPlan === 'function') renderActionPlan();
+    }
+  });
+
+  // Listen for broadcast deletes from other clients
+  _rtChannel.on('broadcast', { event: 'ad-deleted' }, function(msg) {
+    var p = msg.payload;
+    if (!p || !p.adId) return;
+    ADS = ADS.filter(function(a) { return a.id !== p.adId; });
+    if (typeof _rememberAdDeletion === 'function') _rememberAdDeletion(p.adId);
+    if (typeof renderMatrix === 'function') renderMatrix();
+    if (typeof renderActionPlan === 'function') renderActionPlan();
+    if (typeof toast === 'function') toast('\uD83D\uDDD1\uFE0F ' + (p.adName || 'Task') + ' deleted by ' + (p.deletedBy || 'teammate'), 'info');
+  });
+
+  // Instant action-plan item deletion from another client
+  _rtChannel.on('broadcast', { event: 'action-deleted' }, function(msg) {
+    var p = msg && msg.payload;
+    if (!p || !p.actionId) return;
+    var before = MANUAL_ACTIONS.length;
+    MANUAL_ACTIONS = MANUAL_ACTIONS.filter(function(a) { return a.id !== p.actionId; });
+    if (MANUAL_ACTIONS.length !== before) {
+      P = process(ADS);
+      if (typeof deriveWinners === 'function') deriveWinners();
+      if (typeof genActions === 'function') genActions();
+      if (typeof buildCreativeUsageIndex === 'function') buildCreativeUsageIndex();
+      if (typeof renderActionPlan === 'function') renderActionPlan();
+      if (typeof renderMatrix === 'function') renderMatrix();
+      if (typeof toast === 'function') toast('\uD83D\uDDD1\uFE0F Action removed by teammate', 'info');
+    }
+  });
+
+  // Generic sync-needed: another client finished saving → we re-fetch
+  _rtChannel.on('broadcast', { event: 'sync-needed' }, function(msg) {
+    var p = msg && msg.payload;
+    // Don't re-fetch if we're mid-save ourselves
+    if (_saveScheduled || _saveInFlight) return;
+    if (_rtMergeTimer) clearTimeout(_rtMergeTimer);
+    _rtMergeTimer = setTimeout(async function() {
+      _rtMergeTimer = null;
+      try {
+        var pid = activeProductId;
+        var st = await DB.loadProductData(pid);
+        if (!st || pid !== activeProductId) return;
+        if (_saveScheduled || _saveInFlight) return;
+        ANGLES = st.ANGLES || ANGLES;
+        PERSONAS = st.PERSONAS || PERSONAS;
+        if (Array.isArray(st.ADS)) {
+          var _localAdById = {};
+          for (var i = 0; i < ADS.length; i++) {
+            if (ADS[i] && ADS[i].id) _localAdById[ADS[i].id] = ADS[i];
+          }
+          var _mergedAds = [];
+          for (var di = 0; di < st.ADS.length; di++) {
+            var _dbAd = st.ADS[di];
+            if (!_dbAd || !_dbAd.id) continue;
+            if (_recentlyDeletedAdIds.has(_dbAd.id)) continue;
+            var _localAd = _localAdById[_dbAd.id];
+            if (_localAd) {
+              for (var mfi = 0; mfi < _META_FIELDS.length; mfi++) {
+                var mf = _META_FIELDS[mfi];
+                if (_localAd[mf] !== undefined && _localAd[mf] !== null && _localAd[mf] !== '') _dbAd[mf] = _localAd[mf];
+              }
+              if (_notesCache[_dbAd.id] !== undefined) {
+                _dbAd.notes = _notesCache[_dbAd.id];
+                delete _notesCache[_dbAd.id];
+              } else if (_localAd.notes) { _dbAd.notes = _localAd.notes; }
+              if (_localAd.variationNotes) _dbAd.variationNotes = _localAd.variationNotes;
+              if (_localAd._clickupId && !_dbAd._clickupId) { _dbAd._clickupId = _localAd._clickupId; _dbAd._clickupUrl = _localAd._clickupUrl || _dbAd._clickupUrl; }
+            }
+            _mergedAds.push(_dbAd);
+          }
+          for (var lo in _localAdById) { if (!st.ADS.some(function(x){return x.id===lo;})) _mergedAds.push(_localAdById[lo]); }
+          ADS = _mergedAds;
+        }
+        MATRIX_CELL_META = st.MATRIX_CELL_META || MATRIX_CELL_META;
+        CELL_CREATIVE_ASSIGNMENTS = st.CELL_CREATIVE_ASSIGNMENTS || CELL_CREATIVE_ASSIGNMENTS;
+        // Full replace for MANUAL_ACTIONS from peer (but keep tombstoned items out)
+        if (Array.isArray(st.MANUAL_ACTIONS)) {
+          var _maById = {};
+          for (var li = 0; li < MANUAL_ACTIONS.length; li++) {
+            if (MANUAL_ACTIONS[li] && MANUAL_ACTIONS[li].id) _maById[MANUAL_ACTIONS[li].id] = MANUAL_ACTIONS[li];
+          }
+          var _mergedMa = [];
+          for (var dai = 0; dai < st.MANUAL_ACTIONS.length; dai++) {
+            var _dbma = st.MANUAL_ACTIONS[dai];
+            if (!_dbma || !_dbma.id) continue;
+            if (_recentlyDeletedMaIds.has(_dbma.id)) continue;
+            _mergedMa.push(_maById[_dbma.id] || _dbma);
+          }
+          // Keep local-only (pending save)
+          for (var lok in _maById) { if (!st.MANUAL_ACTIONS.some(function(x){return x.id===lok;})) _mergedMa.push(_maById[lok]); }
+          MANUAL_ACTIONS = _mergedMa;
+        }
+        P = process(ADS);
+        if (typeof deriveWinners === 'function') deriveWinners();
+        if (typeof genActions === 'function') genActions();
+        if (typeof buildCreativeUsageIndex === 'function') buildCreativeUsageIndex();
+        renderAll();
+      } catch(e) { console.error('[SB] sync-needed merge failed', e); }
+    }, 150); // Fast — this is a targeted peer update
+  });
+
+  // Presence — track who's online
+  _rtChannel.on('presence', { event: 'sync' }, function() {
+    var state = _rtChannel.presenceState();
+    var members = Object.values(state).flat();
+    if (typeof _updatePresenceUI === 'function') _updatePresenceUI(members);
+  });
+
+  _rtChannel.subscribe(function(status) {
+    if (status === 'SUBSCRIBED') {
+      _rtChannel.track({
+        clientId: _myClientId,
+        name: (CFG && CFG.userLabel) || 'Team Member',
+        joinedAt: Date.now(),
+        activeTab: (typeof currentTab !== 'undefined' ? currentTab : null) || 'matrix'
+      });
+    }
+  });
+}
+
+// Broadcast to all other connected clients that our state has changed.
+// Called after every successful DB flush — covers ALL tables (ads, manual_actions,
+// angles, personas, matrix_cells, etc.) with a single mechanism.
+function _broadcastSyncNeeded() {
+  if (typeof _rtChannel !== 'undefined' && _rtChannel) {
+    _rtChannel.send({
+      type: 'broadcast',
+      event: 'sync-needed',
+      payload: { clientId: _myClientId, ts: Date.now(), productId: activeProductId }
+    });
+  }
+}
+
+function _updatePresenceUI(members) {
+  var label = document.getElementById('presence-label');
+  var dots = document.getElementById('presence-dots');
+  if (!label) return;
+  var count = members.length;
+  label.textContent = '\u25CF ' + count + ' online';
+  label.style.color = count > 1 ? '#22c55e' : '#94a3b8';
+  if (dots) {
+    dots.innerHTML = members.slice(0, 5).map(function(m) {
+      var initials = (m.name || 'T').split(' ').map(function(w){ return w[0]; }).join('').toUpperCase().substr(0,2);
+      var colors = ['#6366f1','#8b5cf6','#ec4899','#f59e0b','#10b981'];
+      var color = colors[Math.abs(m.clientId ? m.clientId.charCodeAt(7) : 0) % colors.length];
+      return '<span title="' + (m.name||'Member') + '" style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:' + color + ';color:#fff;font-size:9px;font-weight:700;">' + initials + '</span>';
+    }).join('');
+  }
+}
+
 // Guard: tracks which product the in-memory ADS/ANGLES/etc. currently belong to.
 // Set by loadState() and switchProduct() after they finish loading. Used to bail
 // out of saves/syncs that would otherwise persist the wrong product's data under
@@ -3489,7 +3675,8 @@ var _META_FIELDS = [
   '_fromAction', '_productionStatus', '_crossProductUses',
   'hookType', 'creativeStructure', 'productionStyle', 'creativeHypothesis',
   'uniqueName', 'description', 'dueDate',
-  'dateCreated', 'taskName'
+  'dateCreated', 'taskName',
+  'variationChanges', 'variationAssignee', 'parentTaskName'
 ];
 
 function _adToRow(a, productId) {
@@ -3502,6 +3689,11 @@ function _adToRow(a, productId) {
     var fk = _META_FIELDS[fi];
     if (a[fk] !== undefined && a[fk] !== null && a[fk] !== '') meta[fk] = a[fk];
   }
+  // Always persist notes/variationNotes directly (not via META_FIELDS — they're collaborative)
+  if (a.notes !== undefined && a.notes !== null) meta.notes = a.notes;
+  if (a.variationNotes !== undefined && a.variationNotes !== null) meta.variationNotes = a.variationNotes;
+  // Stamp clientId so onChange can identify self-echoes vs changes from other clients
+  if (typeof _myClientId !== 'undefined' && _myClientId) meta._clientId = _myClientId;
   return {
     id: a.id,
     product_id: productId,
@@ -3601,7 +3793,7 @@ const DB = {
     const [angles, personas, ads, cells, actions] = await Promise.all([
       SB.from('angles').select('*').eq('product_id', productId),
       SB.from('personas').select('*').eq('product_id', productId),
-      SB.from('ads').select('*').eq('product_id', productId),
+      SB.from('ads').select('*').eq('product_id', productId).is('deleted_at', null),
       SB.from('matrix_cells').select('*').eq('product_id', productId),
       SB.from('manual_actions').select('*').eq('product_id', productId)
     ]);
@@ -3649,7 +3841,7 @@ const DB = {
     // Composite-key table: matrix_cells (product_id, angle_id, persona_id).
     // uuid table with stable blob: manual_actions (we track via ma._dbId).
     const [existingAds, existingAngles, existingPersonas, existingCells] = await Promise.all([
-      SB.from('ads').select('id').eq('product_id', productId),
+      SB.from('ads').select('id').eq('product_id', productId).is('deleted_at', null),
       SB.from('angles').select('id').eq('product_id', productId),
       SB.from('personas').select('id').eq('product_id', productId),
       SB.from('matrix_cells').select('id, angle_id, persona_id').eq('product_id', productId)
@@ -3962,6 +4154,7 @@ const DB = {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'inspirations', filter: 'product_id=eq.' + productId }, onChange)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'inspiration_queue', filter: 'product_id=eq.' + productId }, onChange)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'inspiration_results', filter: 'product_id=eq.' + productId }, onChange)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'manual_actions', filter: 'product_id=eq.' + productId }, onChange)
       .subscribe();
     return ch;
   },
@@ -3981,8 +4174,23 @@ function _resubscribeRealtime() {
   if (_activeRTChannel) { DB.unsubscribe(_activeRTChannel); _activeRTChannel = null; }
   if (!activeProductId) return;
   _activeRTChannel = DB.subscribeToProduct(activeProductId, function (payload) {
+    // If row has deleted_at set, treat as deletion immediately (no debounce needed)
+    if (payload && payload.new && payload.new.deleted_at) {
+      var _deletedId = payload.new.id || (payload.new.meta && payload.new.meta.id);
+      if (_deletedId) {
+        ADS = ADS.filter(function(a) { return a.id !== _deletedId; });
+        _rememberAdDeletion(_deletedId);
+        if (typeof renderMatrix === 'function') renderMatrix();
+        if (typeof renderActionPlan === 'function') renderActionPlan();
+        return;
+      }
+    }
+
     // Debounce — coalesce bursts of changes into a single re-fetch + re-render
     if (_rtMergeTimer) clearTimeout(_rtMergeTimer);
+    // Capture payload table NOW (before closure, so debounce uses latest)
+    var _payloadTable = payload && payload.table;
+    var _payloadNew = payload && payload.new;
     _rtMergeTimer = setTimeout(async function () {
       _rtMergeTimer = null;
       try {
@@ -3994,7 +4202,18 @@ function _resubscribeRealtime() {
         // our in-memory state already reflects the changes.
         if (_saveScheduled) return;                    // a save is debounced
         if (_saveInFlight) return;                     // a save is running right now
-        if (Date.now() - _lastSaveCompletedAt < 1500) return; // grace window for echoes
+        // If the change came from OUR OWN client, always skip — our in-memory
+        // state is already up to date. Re-fetching would clobber just-typed values
+        // with stale DB data before the write has committed on the read replica.
+        // Changes from OTHER clients always go through.
+        var _payloadClientId = _payloadNew && _payloadNew.meta && _payloadNew.meta._clientId;
+        var _isSelfEcho = _payloadClientId && _payloadClientId === _myClientId;
+        if (_isSelfEcho) return; // always ignore own echoes
+        // Grace window only for ads table (which stamps clientId). Non-ads tables
+        // (manual_actions, matrix_cells, angles, personas) don't stamp clientId —
+        // we must NOT block those or cross-client changes are silently dropped.
+        var _isAdsTable = _payloadTable === 'ads';
+        if (_isAdsTable && !_payloadClientId && Date.now() - _lastSaveCompletedAt < 3000) return;
 
         // Only merge if we're still on the same product
         const pid = activeProductId;
@@ -4039,6 +4258,19 @@ function _resubscribeRealtime() {
                   _dbAd[_mf] = _localAd[_mf];
                 }
               }
+              // Notes: prefer LOCAL if non-empty. Rationale: re-fetches triggered by
+              // unrelated table changes (angles, personas, matrix_cells) can return
+              // stale DB data BEFORE the notes UPDATE has committed — wiping just-typed
+              // notes. Local is always fresher for notes the user just typed.
+              // Cross-client: if local is empty and DB has notes → DB wins (correct).
+              // Cache wins over both local and DB — it's what the user just typed
+              if (_notesCache[_dbAd.id] !== undefined) {
+                _dbAd.notes = _notesCache[_dbAd.id];
+                delete _notesCache[_dbAd.id]; // clear after applying — new ADS object now has the correct value
+              } else if (_localAd.notes) {
+                _dbAd.notes = _localAd.notes;
+              }
+              if (_localAd.variationNotes) _dbAd.variationNotes = _localAd.variationNotes;
               // Preserve _clickupId link if local has it (covers save-lag window)
               if (_localAd._clickupId && !_dbAd._clickupId) {
                 _dbAd._clickupId = _localAd._clickupId;
@@ -4047,7 +4279,11 @@ function _resubscribeRealtime() {
               _mergedAds.push(_dbAd);
               delete _localAdById[_dbAd.id];
             } else {
-              _mergedAds.push(_dbAd);
+              // DB has this AD but local doesn't — could be:
+              //   (a) deleted by user just now (DB read arrived before DELETE committed) → skip
+              //   (b) added by another tab → keep
+              if (_recentlyDeletedAdIds.has(_dbAd.id)) continue; // (a) skip resurrection
+              _mergedAds.push(_dbAd); // (b) keep
             }
           }
           // Any local-only ads (newly created, save still pending) — keep them
@@ -4071,12 +4307,26 @@ function _resubscribeRealtime() {
         // Safer: union by id, preferring the local copy (which reflects the user's latest
         // in-memory edits). Only add entries from DB that we don't already have locally.
         if (Array.isArray(st.MANUAL_ACTIONS)) {
-          var _localById = {};
-          for (var _li = 0; _li < MANUAL_ACTIONS.length; _li++) {
-            if (MANUAL_ACTIONS[_li] && MANUAL_ACTIONS[_li].id) {
-              _localById[MANUAL_ACTIONS[_li].id] = MANUAL_ACTIONS[_li];
-            }
+          // Build index of DB ids so we can detect deletions made by other clients
+          var _dbMaIds = {};
+          for (var _di2 = 0; _di2 < st.MANUAL_ACTIONS.length; _di2++) {
+            if (st.MANUAL_ACTIONS[_di2] && st.MANUAL_ACTIONS[_di2].id) _dbMaIds[st.MANUAL_ACTIONS[_di2].id] = true;
           }
+          var _localById = {};
+          var _newLocalMa = [];
+          for (var _li = 0; _li < MANUAL_ACTIONS.length; _li++) {
+            var _lma = MANUAL_ACTIONS[_li];
+            if (!_lma || !_lma.id) continue;
+            // If DB no longer has this action AND we didn't just delete it locally → another client deleted it
+            if (!_dbMaIds[_lma.id] && !_recentlyDeletedMaIds.has(_lma.id)) {
+              // Drop it — another client deleted it
+              continue;
+            }
+            _localById[_lma.id] = _lma;
+            _newLocalMa.push(_lma);
+          }
+          MANUAL_ACTIONS = _newLocalMa;
+
           for (var _di = 0; _di < st.MANUAL_ACTIONS.length; _di++) {
             var _dbAct = st.MANUAL_ACTIONS[_di];
             if (!_dbAct || !_dbAct.id) continue;
@@ -4319,6 +4569,16 @@ let MANUAL_ACTIONS = []; // manually created actions from matrix (preserved acro
 // another tab?" heuristic in the merge. Entries self-expire after ~8s.
 var _recentlyDeletedMaIds = new Set();
 
+// Tombstone for deleted AD ids — same pattern as _recentlyDeletedMaIds.
+// Prevents the realtime onChange handler from resurrecting a just-deleted AD
+// when the DB read replica still returns the old row before the DELETE commits.
+var _recentlyDeletedAdIds = new Set();
+function _rememberAdDeletion(adId) {
+  if (!adId) return;
+  _recentlyDeletedAdIds.add(adId);
+  setTimeout(function() { _recentlyDeletedAdIds.delete(adId); }, 120000); // 2 min — covers multiple 30s poll cycles
+}
+
 // Tombstone set for deleted product ids — prevents _flushStateToSupabase's
 // products-upsert loop from resurrecting a product another tab just deleted.
 // Same TTL pattern as MANUAL_ACTIONS tombstones.
@@ -4338,6 +4598,11 @@ var _freshLoadInProgress = false;
 function _rememberManualActionDeletion(id, dbId) {
   if (id) _recentlyDeletedMaIds.add(id);
   setTimeout(function () { if (id) _recentlyDeletedMaIds.delete(id); }, 8000);
+  // Immediately notify other clients so they remove this action without waiting for saveState debounce
+  if (typeof _rtChannel !== 'undefined' && _rtChannel) {
+    _rtChannel.send({ type: 'broadcast', event: 'action-deleted',
+      payload: { actionId: id, dbId: dbId, clientId: _myClientId, productId: activeProductId } });
+  }
   // Fire an IMMEDIATE DB delete so the user's intent reaches Supabase right
   // away — don't wait for the debounced saveState(). Prevents the bug where
   // a realtime echo from some other save arrives before the delete is
@@ -4499,6 +4764,16 @@ function classify(status) {
     'complete':        { cls: 'win',       lbl: 'Complete' }
   };
   return map[s] || { cls: 'notstart', lbl: status || 'Untested' };
+}
+
+// _isUntested — returns true if status means "not yet started / no result yet".
+// Covers 'Untested', 'Not Started', empty/null, and any value not in STATUSES.
+// Used to decide whether to show the "→ Action Plan" button.
+function _isUntested(status) {
+  var s = (status || '').trim();
+  if (!s || s === 'Untested' || s === 'Not Started') return true;
+  // Any value outside the known STATUSES list is treated as untested
+  return STATUSES.indexOf(s) === -1;
 }
 
 // ============================================================
@@ -5197,10 +5472,18 @@ function createVariationAction(varId, angleName, personaName) {
     }
   }
   var actionId = 'manual-' + Date.now();
+  // Build a rich description for the Action Plan card
+  var varDesc = '';
+  if (varAd.variationChanges && varAd.variationChanges.length > 0) {
+    varDesc += 'Changes: ' + varAd.variationChanges.join(', ');
+  }
+  if (varAd.variationNotes && varAd.variationNotes.trim()) {
+    varDesc += (varDesc ? '\n' : '') + 'Notes: ' + varAd.variationNotes.trim();
+  }
   var newAction = {
     id: actionId,
     priority: 'high',
-    title: varId + ' variation',
+    title: varAd.uniqueName || varAd.formatName || (varId + ' variation'),
     reason: 'Manually pushed variation from matrix',
     tag: 'variation',
     angle: angleName,
@@ -5208,7 +5491,7 @@ function createVariationAction(varId, angleName, personaName) {
     format: varAd.formatName,
     funnelStage: varAd.funnelStage || 'TOF',
     dueDate: todayISO(),
-    description: '',
+    description: varDesc,
     adId: varId,
     adLink: varAd.adLink || '',
     _clickupId: null,
@@ -5216,7 +5499,8 @@ function createVariationAction(varId, angleName, personaName) {
     sourceAdId: varId,
     sourceAngle: angleName,
     sourcePersona: personaName,
-    parentAdId: varAd.parentAdId || null
+    parentAdId: varAd.parentAdId || null,
+    parentTaskName: varAd.parentTaskName || null
   };
   MANUAL_ACTIONS.push(newAction);
   genActions();
@@ -6431,11 +6715,13 @@ function renderPersonas() {
 // ── 4d. CREATIVE TRACKER ──
 
 function renderCreatives() {
-  // Apply filters — only show tracker ads (no trackerRefId, no parentAdId)
+  // Apply filters — show tracker ads + winner variations; skip only matrix-cell clones
   var filtered = [];
   for (var i = 0; i < ADS.length; i++) {
     var ad = ADS[i];
-    if (ad.parentAdId || ad.trackerRefId) continue; // skip matrix-cell clones and variations
+    // Include variations that have parentAdId but exclude matrix-cell tracker refs
+    if (ad.trackerRefId) continue; // skip matrix-cell clones only
+    if (ad.parentAdId && ad.adOrigin !== 'Winner Variation') continue; // skip non-winner variations
     if (trackerFilters.angle && ad.angle !== trackerFilters.angle) continue;
     if (trackerFilters.persona && ad.persona !== trackerFilters.persona) continue;
     if (trackerFilters.format && ad.formatName !== trackerFilters.format) continue;
@@ -6584,6 +6870,21 @@ function renderCreatives() {
       }
     }
 
+    // Winner Variation badge
+    var isWinnerVariation = ad.adOrigin === 'Winner Variation' && !!ad.parentAdId;
+    var winVarBadge = '';
+    var winVarParentPill = '';
+    if (isWinnerVariation) {
+      winVarBadge = '<span class="prod-task-badge" style="background:rgba(234,179,8,0.12);color:#b45309;border:1px solid rgba(234,179,8,0.3)" title="Variation of a winner ad">🏆 Winner Variation</span>';
+      var _parentVarAd = ADS.find(function(a) { return a.id === ad.parentAdId; });
+      var _parentVarName = ad.parentTaskName || (_parentVarAd && (_parentVarAd.uniqueName || _parentVarAd.formatName)) || ad.parentAdId;
+      if (_parentVarAd && _parentVarAd._clickupId) {
+        winVarParentPill = '<a href="https://app.clickup.com/t/' + escAttr(_parentVarAd._clickupId) + '" target="_blank" class="prod-source-pill" title="Parent task">📎 Parent: ' + esc(_parentVarName) + '</a>';
+      } else {
+        winVarParentPill = '<span class="prod-source-pill" title="Parent task">📎 Parent: ' + esc(_parentVarName) + '</span>';
+      }
+    }
+
     // Production task indicators
     var isProduction = ad.taskType === 'production';
     var prodBadge = '';
@@ -6606,9 +6907,11 @@ function renderCreatives() {
       ? '<a href="https://app.clickup.com/t/' + escAttr(ad._clickupId) + '" target="_blank" class="cu-jump-link" title="Open in ClickUp">&#8599; ClickUp</a>'
       : '';
 
-    html += '<tr id="ad_row_' + escAttr(ad.id) + '" class="stagger' + (isProduction ? ' prod-task-row' : '') + '" style="--i:' + i + '">' +
+    html += '<tr id="ad_row_' + escAttr(ad.id) + '" class="stagger' + (isProduction ? ' prod-task-row' : '') + (isWinnerVariation ? ' winner-var-row' : '') + '" style="--i:' + i + '">' +
       '<td><div style="display:flex;flex-direction:column;gap:3px">' +
         '<span>' + esc(ad.formatName) + (cuLink ? '&nbsp;' + cuLink : '') + '</span>' +
+        (winVarBadge ? winVarBadge : '') +
+        (winVarParentPill ? winVarParentPill : '') +
         (prodBadge ? prodBadge : '') +
         (prodSourcePill ? prodSourcePill : '') +
         (inspoPill ? inspoPill : '') +
@@ -6794,9 +7097,24 @@ function renderActionPlan() {
         }
       }
 
-      // "From" pill — shows source format task this action was created from
+      // "From" pill — shows source format task this action was created from.
+      // For Winner Variation actions, show the PARENT task name (not the
+      // variation itself — the title already is the variation name).
       var fromLink = '';
-      if (srcAd && !srcAd._fromInspoId) {
+      var _isVarAction = !!(act.parentAdId || act.parentTaskName || (srcAd && srcAd.parentAdId));
+      if (_isVarAction) {
+        // Winner Variation: point back to parent task
+        var _parentName = act.parentTaskName || (srcAd && srcAd.parentTaskName) || act.parentAdId || '';
+        var _parentAd   = ADS.find(function(a){ return a.id === (act.parentAdId || (srcAd && srcAd.parentAdId)); });
+        var _parentCuId = _parentAd && _parentAd._clickupId;
+        if (_parentName) {
+          if (_parentCuId) {
+            fromLink = '<a class="ap-from-pill" href="https://app.clickup.com/t/' + escAttr(_parentCuId) + '" target="_blank" rel="noopener" title="Open parent task in ClickUp">&#128204; From: ' + esc(_parentName) + ' &#8599;</a>';
+          } else {
+            fromLink = '<span class="ap-from-pill no-link" title="Parent task: ' + escAttr(_parentName) + '">&#128204; From: ' + esc(_parentName) + '</span>';
+          }
+        }
+      } else if (srcAd && !srcAd._fromInspoId) {
         var fromName = srcAd.formatName || srcAd.id;
         if (srcAd._clickupId) {
           fromLink = '<a class="ap-from-pill" href="https://app.clickup.com/t/' + escAttr(srcAd._clickupId) + '" target="_blank" rel="noopener" title="Open source format task in ClickUp">&#128204; From: ' + esc(fromName) + ' &#8599;</a>';
@@ -7004,73 +7322,10 @@ function deleteManualAction(id) {
     return;
   }
 
-  // ── Classify the source AD ────────────────────────────────────────────────────
-  // A "tracker format" is an existing winning/testing format that has its own
-  // independent ClickUp task (different from the action's production task).
-  // These should NEVER be deleted when the action plan card is removed — they are
-  // source material that lives independently in the Creative Tracker.
-  var isTrackerFormat = !sourceAd._fromInspoId &&
-                        sourceAd.taskType !== 'production' &&
-                        sourceAd._clickupId && cuId &&
-                        sourceAd._clickupId !== cuId;
-
-  if (isTrackerFormat) {
-    // ── Tracker-format source: delete production clone(s) + action only ─────────
-    // Find any production clones spawned from this format (created via addFormatToCell)
-    var cloneIds = [];
-    ADS.forEach(function(a) {
-      if (a.sourceFormatId === sourceAd.id && a.taskType === 'production') {
-        cloneIds.push(a.id);
-      }
-    });
-
-    // Collect ClickUp IDs to delete: action's own task + any clone tasks
-    var cuIdsToDelete = [];
-    if (cuId) cuIdsToDelete.push(cuId);
-    cloneIds.forEach(function(cid) {
-      var clone = null;
-      for (var ci = 0; ci < ADS.length; ci++) {
-        if (ADS[ci].id === cid) { clone = ADS[ci]; break; }
-      }
-      if (clone && clone._clickupId && clone._clickupId !== sourceAd._clickupId &&
-          cuIdsToDelete.indexOf(clone._clickupId) === -1) {
-        cuIdsToDelete.push(clone._clickupId);
-      }
-    });
-
-    // Remove clones + the action from all arrays
-    ADS            = ADS.filter(function(a) { return cloneIds.indexOf(a.id) === -1; });
-    _rememberManualActionDeletion(act.id, act._dbId);
-    MANUAL_ACTIONS = MANUAL_ACTIONS.filter(function(a) { return a.id !== id; });
-    PROD           = PROD.filter(function(p) {
-      return cloneIds.indexOf(p.adId) === -1 && cloneIds.indexOf(p.sourceAdId) === -1;
-    });
-
-    purgeOrphanedMatrixKeys();
-    P = process(ADS);
-    deriveWinners();
-    genActions();
-    buildCreativeUsageIndex();
-    populateFilterOptions();
-    renderAll();
-    saveState();
-
-    // Delete production ClickUp task(s) — never touch the original tracker task
-    if (cuIdsToDelete.length > 0) {
-      cuIdsToDelete.forEach(function(cid, idx) {
-        setTimeout(function() { apiDeleteTask(cid).catch(function(){}); }, idx * 300);
-      });
-      toast('Action removed + ClickUp task deleted ✓', 'ok');
-    } else {
-      toast('Action removed', 'ok');
-    }
-
-  } else {
-    // ── Inspo-sourced or production-clone: full cleanup via deleteAdEverywhere ───
-    // deleteAdEverywhere handles: ADS removal, MANUAL_ACTIONS cleanup, PROD cleanup,
-    // inspiration unlinking, ClickUp deletion, and full re-render.
-    deleteAdEverywhere(sourceAd.id);
-  }
+  // ── Every task is independent — delete just this one task via deleteAdEverywhere.
+  // deleteAdEverywhere removes: the AD, its Action Plan entry, its ClickUp task,
+  // its cell/meta entries, and unlinks any inspiration. No cascade to other tasks.
+  deleteAdEverywhere(sourceAd.id);
 }
 
 function addRecToplan(recId) {
@@ -7819,83 +8074,102 @@ function saveNewCreative() {
   toast('Creative ' + newAd.id + ' created');
 }
 
-// ── Central delete: removes AD + all linked actions + production cards + ClickUp tasks ──
+// ── Central delete: removes ONE task only — no cascade to clones or variations.
+// Every task (original, production clone, variation) is independent.
+// Deleting one task never touches any other task.
 function deleteAdEverywhere(adId) {
   var ad = null;
   for (var i = 0; i < ADS.length; i++) {
     if (ADS[i].id === adId) { ad = ADS[i]; break; }
   }
 
+  // Collect ClickUp task ID for this specific AD
   var cuIdsToDelete = [];
-
-  // Collect ClickUp task IDs: the AD itself
   if (ad && ad._clickupId) cuIdsToDelete.push(ad._clickupId);
 
-  // Collect IDs of production clones spawned from this AD (they get deleted too)
-  var cloneIds = [];
-  for (var ci = 0; ci < ADS.length; ci++) {
-    if (ADS[ci].sourceFormatId === adId) cloneIds.push(ADS[ci].id);
-  }
-
-  // Collect ClickUp task IDs from action plan items sourced from this AD OR its clones
-  var allSourceIds = [adId].concat(cloneIds);
+  // Collect ClickUp ID from any Action Plan entry tied to this AD
   for (var j = 0; j < MANUAL_ACTIONS.length; j++) {
     var act = MANUAL_ACTIONS[j];
-    if (allSourceIds.indexOf(act.sourceAdId) !== -1 || allSourceIds.indexOf(act.adId) !== -1) {
+    if (act.sourceAdId === adId || act.adId === adId) {
       if (act._clickupId && cuIdsToDelete.indexOf(act._clickupId) === -1) {
         cuIdsToDelete.push(act._clickupId);
       }
     }
   }
 
-  // Also collect ClickUp IDs from the clones themselves
-  for (var ci2 = 0; ci2 < ADS.length; ci2++) {
-    if (cloneIds.indexOf(ADS[ci2].id) !== -1 && ADS[ci2]._clickupId &&
-        cuIdsToDelete.indexOf(ADS[ci2]._clickupId) === -1) {
-      cuIdsToDelete.push(ADS[ci2]._clickupId);
-    }
-  }
-
   // If this AD was spawned from an inspiration, unlink it —
-  // keep the inspiration intact but revert its status to "Classified"
-  // (only if no other ADs still reference that inspiration)
+  // revert inspiration status to "Classified" if nothing else still references it
   var unlinkedInspoId = null;
   if (ad && ad._fromInspoId) {
     unlinkedInspoId = ad._fromInspoId;
   }
 
-  // Remove from all local arrays — includes the AD itself, its clones, and all related actions
-  ADS            = ADS.filter(function(a)  { return a.id !== adId && a.sourceFormatId !== adId; });
+  // Remove this AD only — no cascade to clones or variations
+  ADS = ADS.filter(function(a) { return a.id !== adId; });
 
-  // Filter 1: explicit ID match — remove actions whose sourceAdId/adId is in the deleted set
-  // Tombstone each action being removed so realtime merge doesn't resurrect them.
-  MANUAL_ACTIONS.forEach(function(a){
-    if (allSourceIds.indexOf(a.sourceAdId) !== -1 || allSourceIds.indexOf(a.adId) !== -1) {
+  // Tombstone the AD id so the realtime onChange handler doesn't resurrect it
+  // from a stale DB read before our DELETE has committed on the replica.
+  _rememberAdDeletion(adId);
+
+  // Broadcast delete to other connected clients via realtime channel
+  if (typeof _rtChannel !== 'undefined' && _rtChannel) {
+    _rtChannel.send({ type: 'broadcast', event: 'ad-deleted',
+      payload: { adId: adId, adName: (ad && ad.taskName) || adId,
+                 deletedBy: (CFG && CFG.userLabel) || 'Someone', clientId: _myClientId } });
+  }
+
+  // Immediately delete from Supabase — don't wait for the debounced saveState().
+  // This prevents the "deleted task reappears after refresh" bug where a fast
+  // page reload happens before the 300ms debounce fires (or the beforeunload
+  // async flush gets cancelled by the browser).
+  if (typeof SB !== 'undefined' && SB && activeProductId) {
+    try {
+      // Soft delete — mark as deleted so all clients see it via onChange
+      SB.from('ads').update({ deleted_at: new Date().toISOString() }).eq('id', adId)
+        .then(function(r) {
+          if (r && r.error) console.error('[SB] soft delete error', r.error);
+        });
+
+      // Also insert into deleted_ads table for cross-client tombstone
+      SB.from('deleted_ads').upsert({
+        id: adId,
+        product_id: activeProductId,
+        clickup_task_id: (ad && ad._clickupId) || null,
+        deleted_at: new Date().toISOString(),
+        deleted_by: (CFG && CFG.userLabel) || 'unknown'
+      }, { onConflict: 'id' }).then(function(){});
+    } catch (e) { console.error('[SB] ads soft delete threw', e); }
+  }
+
+  // Record ClickUp IDs AND the local AD id in a localStorage tombstone so
+  // pollFullSync Pass 2 and importTasksFromClickUp won't re-import them even
+  // after a page refresh. TTL is 10 minutes.
+  try {
+    var _tombKey = '_deletedCuIds_' + (activeProductId || 'x');
+    var _tomb = JSON.parse(localStorage.getItem(_tombKey) || '{}');
+    var _now = Date.now();
+    // ClickUp IDs (for ClickUp-synced tasks)
+    cuIdsToDelete.forEach(function(cuid) { _tomb[cuid] = _now; });
+    // Local AD id (for locally-only tasks like Winner Variations without ClickUp task)
+    _tomb[adId] = _now;
+    // Expire entries older than 10 minutes
+    Object.keys(_tomb).forEach(function(k) { if (_now - _tomb[k] > 600000) delete _tomb[k]; });
+    localStorage.setItem(_tombKey, JSON.stringify(_tomb));
+  } catch(e) {}
+
+  // Remove Action Plan entries tied to this AD only
+  MANUAL_ACTIONS.forEach(function(a) {
+    if (a.sourceAdId === adId || a.adId === adId) {
       _rememberManualActionDeletion(a.id, a._dbId);
     }
   });
   MANUAL_ACTIONS = MANUAL_ACTIONS.filter(function(a) {
-    return allSourceIds.indexOf(a.sourceAdId) === -1 && allSourceIds.indexOf(a.adId) === -1;
-  });
-  // Filter 2: orphan cleanup — belt-and-suspenders, removes any action whose source AD
-  // no longer exists in ADS (catches all edge cases not covered by Filter 1).
-  // AI recommendations have sourceAdId=null and adId=null — those are always kept.
-  var _survivingAdIds = {};
-  ADS.forEach(function(a) { _survivingAdIds[a.id] = true; });
-  MANUAL_ACTIONS.forEach(function(a){
-    var srcId = a.sourceAdId != null ? a.sourceAdId : (a.adId != null ? a.adId : null);
-    if (srcId != null && _survivingAdIds[srcId] !== true) {
-      _rememberManualActionDeletion(a.id, a._dbId);
-    }
-  });
-  MANUAL_ACTIONS = MANUAL_ACTIONS.filter(function(a) {
-    var srcId = a.sourceAdId != null ? a.sourceAdId : (a.adId != null ? a.adId : null);
-    if (srcId == null) return true; // AI recommendation — keep it
-    return _survivingAdIds[srcId] === true;
+    return a.sourceAdId !== adId && a.adId !== adId;
   });
 
-  PROD           = PROD.filter(function(p) {
-    return allSourceIds.indexOf(p.adId) === -1 && allSourceIds.indexOf(p.sourceAdId) === -1;
+  // Remove any PROD entries tied to this AD only
+  PROD = PROD.filter(function(p) {
+    return p.adId !== adId && p.sourceAdId !== adId;
   });
 
   // Clean up any orphaned entries in CELL_CREATIVE_ASSIGNMENTS / MATRIX_CELL_META
@@ -7921,7 +8195,13 @@ function deleteAdEverywhere(adId) {
   buildCreativeUsageIndex();
   populateFilterOptions();
   renderAll();
-  saveState();
+
+  // Immediate full flush — bypass the 300ms debounce so the DB is cleaned
+  // up BEFORE the next pollFullSync cycle (every 30s) runs and sees stale data.
+  if (_saveScheduled) { clearTimeout(_saveScheduled); _saveScheduled = null; }
+  _pendingFlushProductId = activeProductId;
+  _saveQueue = _saveQueue.then(function(){ return _flushStateToSupabase(activeProductId); })
+    .catch(function(e){ console.error('[SB] delete flush error', e); });
 
   // Fire ClickUp deletes (fire-and-forget, staggered to avoid rate limits)
   if (cuIdsToDelete.length > 0) {
@@ -8021,10 +8301,14 @@ function createVariationsForWinner(parentId) {
   }
   if (!parent) return;
 
-  // Count existing variations
+  // Count existing variations and find highest variation number used
   var existingVars = 0;
+  var _maxVarNumW = 0;
   for (var i = 0; i < ADS.length; i++) {
-    if (ADS[i].parentAdId === parentId) existingVars++;
+    if (ADS[i].parentAdId === parentId) {
+      existingVars++;
+      if ((ADS[i].variationNumber || 0) > _maxVarNumW) _maxVarNumW = ADS[i].variationNumber || 0;
+    }
   }
   var needed = 5 - existingVars;
   if (needed <= 0) {
@@ -8033,7 +8317,7 @@ function createVariationsForWinner(parentId) {
   }
 
   for (var v = 0; v < needed; v++) {
-    var varNum = existingVars + v + 1;
+    var varNum = _maxVarNumW + v + 1;
     ADS.push({
       id: nextSerialId(),
       formatName: parent.formatName,
@@ -8564,9 +8848,38 @@ function buildTaskDescription(ad) {
     }
   }
 
-  // Tracker-ref scenario: add reference task link
+  // Variation scenario: show parent task + changes + notes
+  if (ad.parentAdId) {
+    var parentAd = ADS.find(function(a){ return a.id === ad.parentAdId; });
+    lines.push('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    lines.push('🔁 Variation of: ' + (ad.parentTaskName || ad.parentAdId));
+    if (parentAd && parentAd._clickupId) {
+      lines.push('🔗 Parent Task: https://app.clickup.com/t/' + parentAd._clickupId);
+    }
+    if (ad.variationChanges && ad.variationChanges.length > 0) {
+      lines.push('📋 Changes: ' + ad.variationChanges.join(', '));
+    }
+    if (ad.variationNotes && ad.variationNotes.trim()) {
+      lines.push('📝 Notes: ' + ad.variationNotes.trim());
+    }
+    lines.push('');
+  }
+
+  // Notes — shown for ALL tasks (variation notes already included above in the
+  // variation block via variationNotes; here we catch non-variation tasks and
+  // also ad.notes set via the matrix Notes column).
+  var _notesForDesc = (ad.notes || '').trim();
+  // For variations, notes is synced to variationNotes in saveAdNotes, so only
+  // add this section when it's a non-variation task (avoids duplicate note block).
+  if (!ad.parentAdId && _notesForDesc) {
+    lines.push('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    lines.push('📝 Notes: ' + _notesForDesc);
+    lines.push('');
+  }
+
+  // Tracker-ref scenario: add reference task link (non-variation)
   var isTrackerRef = !ad._fromInspoId && ad._clickupId;
-  if (!isTrackerRef && ad._fromTrackerAdId) {
+  if (!ad.parentAdId && !isTrackerRef && ad._fromTrackerAdId) {
     var refAd = ADS.find(function(a){ return a.id === ad._fromTrackerAdId; });
     if (refAd && refAd._clickupId) {
       lines.push('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
@@ -9534,9 +9847,12 @@ function pushAllToClickUp() {
 // Rollback: `git reset --hard pre-scoped-autodiscover-2026-04-21`
 // ─────────────────────────────────────────────────────────────────────────────
 function autoDiscoverTaxonomy(sourceAds) {
-  // Guard: if the global ANGLES/PERSONAS arrays are not yet bound to the active
-  // product (mid product-switch), do nothing. The next sync tick will pick it up.
-  if (_adsProductId && activeProductId && _adsProductId !== activeProductId) {
+  // Guard: bail out if ANGLES/PERSONAS aren't yet bound to the active product.
+  // Original bug: `_adsProductId && activeProductId && ≠` only fired when BOTH
+  // were set — if _adsProductId was null (cleared mid product-switch at line
+  // ~10404) the guard silently passed, letting KLS taxonomy leak into KMH and
+  // vice-versa. Fix: require _adsProductId to be set AND match activeProductId.
+  if (!_adsProductId || !activeProductId || _adsProductId !== activeProductId) {
     return { addedAngles: [], addedPersonas: [] };
   }
 
@@ -9602,6 +9918,18 @@ function autoDiscoverTaxonomy(sourceAds) {
 }
 
 function importTasksFromClickUp(tasks) {
+  // Load cross-client tombstone from deleted_ads table
+  var _supabaseTombstone = {};
+  if (typeof SB !== 'undefined' && SB && activeProductId) {
+    SB.from('deleted_ads').select('id,clickup_task_id').eq('product_id', activeProductId)
+      .then(function(r) {
+        if (r && r.data) r.data.forEach(function(row) {
+          _supabaseTombstone[row.id] = true;
+          if (row.clickup_task_id) _supabaseTombstone[row.clickup_task_id] = true;
+        });
+      });
+  }
+
   // ── MERGE STRATEGY (not full replace) ──────────────────────────────────────
   // Matching existing local ADs by _clickupId and updating only the fields that
   // ClickUp owns prevents two critical bugs:
@@ -9683,7 +10011,50 @@ function importTasksFromClickUp(tasks) {
       if (parsed.status) existing.status = parsed.status;
       ad = existing;
     } else {
-      // NEW task (not in local state — imported fresh from ClickUp)
+      // Check ClickUp tombstone — skip tasks deliberately deleted by the user
+      if (parsed._clickupId) {
+        try {
+          var _cuTombImport = JSON.parse(localStorage.getItem('_deletedCuIds_' + (activeProductId || 'x')) || '{}');
+          if (_cuTombImport[parsed._clickupId] && (Date.now() - _cuTombImport[parsed._clickupId]) < 600000) {
+            continue; // within 10-min tombstone window — do not re-import
+          }
+        } catch(e) {}
+        // Also skip if found in cross-client Supabase tombstone
+        if (_supabaseTombstone[parsed._clickupId]) continue;
+      }
+      // Also check in-memory AD tombstone (covers local-only ADs without ClickUp IDs)
+      if (parsed.id && _recentlyDeletedAdIds.has(parsed.id)) continue;
+      // Also check Supabase tombstone by ad id
+      if (parsed.id && _supabaseTombstone[parsed.id]) continue;
+
+      // NEW task (not in local state — imported fresh from ClickUp).
+      // Safety net: scan local ADS for any AD whose clickupTaskId matches —
+      // covers the case where _clickupId wasn't saved to the DB (clickup_task_id
+      // column null), so the O(1) localByClickupId lookup missed it. If found,
+      // copy local META_FIELDS (notes, variationNotes, etc.) onto the parsed AD
+      // so locally-added notes survive the sync.
+      if (parsed._clickupId) {
+        for (var _xi = 0; _xi < ADS.length; _xi++) {
+          var _existingFallback = ADS[_xi];
+          if (_existingFallback.clickupTaskId === parsed._clickupId ||
+              _existingFallback._clickupId   === parsed._clickupId) {
+            // Repair the index so future syncs hit the O(1) path
+            localByClickupId[parsed._clickupId] = _existingFallback;
+            // Copy META_FIELDS from local copy onto the freshly-parsed AD
+            for (var _mfx = 0; _mfx < _META_FIELDS.length; _mfx++) {
+              var _mfk = _META_FIELDS[_mfx];
+              if (_existingFallback[_mfk] !== undefined &&
+                  _existingFallback[_mfk] !== null &&
+                  _existingFallback[_mfk] !== '') {
+                parsed[_mfk] = _existingFallback[_mfk];
+              }
+            }
+            // Preserve local id so MANUAL_ACTIONS.sourceAdId links stay intact
+            parsed.id = _existingFallback.id;
+            break;
+          }
+        }
+      }
       ad = parsed;
     }
 
@@ -9985,11 +10356,34 @@ function pollFullSync() {
       }
 
       // ── Pass 1: update existing ads (diff check) ─────────────────────
+      // Load tombstone once for Pass 1 + Pass 2 checks
+      var _p1Tombstone = {};
+      try {
+        var _p1TombRaw = JSON.parse(localStorage.getItem('_deletedCuIds_' + (activeProductId || 'x')) || '{}');
+        var _p1Now = Date.now();
+        Object.keys(_p1TombRaw).forEach(function(k) {
+          if (_p1Now - _p1TombRaw[k] < 600000) _p1Tombstone[k] = true;
+        });
+      } catch(e) {}
+
+      // Also load cross-client tombstone from deleted_ads table (Supabase)
+      if (typeof SB !== 'undefined' && SB && activeProductId) {
+        SB.from('deleted_ads').select('id,clickup_task_id').eq('product_id', activeProductId)
+          .then(function(r) {
+            if (r && r.data) r.data.forEach(function(row) {
+              _p1Tombstone[row.id] = true;
+              if (row.clickup_task_id) _p1Tombstone[row.clickup_task_id] = true;
+            });
+          });
+      }
+
       var fieldUpdates = 0;
       var existingClickupIds = {};
       for (var i = 0; i < ADS.length; i++) {
         var ad = ADS[i];
         if (!ad._clickupId) continue;
+        // Skip tombstoned ads — user deliberately deleted them, don't restore fields
+        if (_p1Tombstone[ad._clickupId] || _p1Tombstone[ad.id]) continue;
         existingClickupIds[ad._clickupId] = true;
         var fresh = taskMap[ad._clickupId];
         if (!fresh) continue;
@@ -10015,6 +10409,9 @@ function pollFullSync() {
         if (_ma2 && _ma2._clickupId) ownedByManualAction[_ma2._clickupId] = true;
       }
       var newTaskCount = 0;
+      // Reuse tombstone already loaded during Pass 1
+      var _deletedCuTombstone = _p1Tombstone;
+
       for (var cuid in taskMap) {
         if (!existingClickupIds[cuid]) {
           // Skip duplicates that are already represented by a MANUAL_ACTION.
@@ -10022,6 +10419,11 @@ function pollFullSync() {
           // merge-by-_clickupId in Pass 1 will handle any future field updates.
           if (ownedByManualAction[cuid]) {
             existingClickupIds[cuid] = true;
+            continue;
+          }
+          // Skip ClickUp IDs that were recently deleted by the user — prevents
+          // the task from being re-imported before the ClickUp API delete lands.
+          if (_deletedCuTombstone[cuid]) {
             continue;
           }
           var freshAd = taskMap[cuid];
@@ -10250,9 +10652,6 @@ async function _flushStateToSupabase(productIdArg) {
     console.log('[SB] skip flush — fresh load in progress for', pid);
     return;
   }
-  // Hard invariant: the in-memory ADS must belong to the product we're about to
-  // write. If they don't (we're mid-switch, or a sync raced ahead), abort rather
-  // than persist the wrong data under the wrong product_id.
   if (_adsProductId && _adsProductId !== pid) {
     console.warn('[SB] abort save: in-memory data belongs to', _adsProductId, 'but tried to save as', pid);
     return;
@@ -10278,6 +10677,10 @@ async function _flushStateToSupabase(productIdArg) {
   } finally {
     _lastSaveCompletedAt = Date.now();
     _saveInFlight = false;
+    // Notify all other connected clients that we just saved — they will
+    // re-fetch and re-render. This covers ALL tables (ads, manual_actions,
+    // angles, personas, matrix_cells) with one universal mechanism.
+    if (typeof _broadcastSyncNeeded === 'function') _broadcastSyncNeeded();
   }
 }
 
@@ -10507,6 +10910,8 @@ async function switchProduct(productId) {
 
   // Re-wire realtime subscription for the new product
   _resubscribeRealtime();
+  // Re-initialize broadcast channel for the new product
+  _initRealtimeChannel(activeProductId);
   // Auto-fetch field map for new product if API key is set
   if (CFG.key && prod.clickupListId && !getActiveFieldMap()) {
     fetchAndStoreFieldMap(prod.clickupListId);
@@ -11124,6 +11529,8 @@ window.addEventListener('load', async function () {
   updateHeaderProductName();
   // Subscribe to realtime changes for the active product
   _resubscribeRealtime();
+  // Initialize broadcast channel for live sync
+  _initRealtimeChannel(activeProductId);
   // Kick off cross-product caches so the product picker shows counts (non-blocking)
   refreshWinnersCache().catch(function(){});
   refreshInspoCache().catch(function(){});
@@ -11419,6 +11826,12 @@ function changeAdStatusFromMatrix(adId, angleName, personaName, newStatus) {
   renderCreatives();
   saveState();
   toast(adId + ' \u2192 ' + newStatus, 'ok');
+
+  // Broadcast status change to other connected clients
+  if (typeof _rtChannel !== 'undefined' && _rtChannel) {
+    _rtChannel.send({ type: 'broadcast', event: 'field-update',
+      payload: { adId: adId, field: 'status', value: newStatus, clientId: _myClientId } });
+  }
 }
 
 // ================================================
@@ -11734,12 +12147,12 @@ function renderDetailPanel(angleName, personaName) {
   // Table
   html += '<table class="mx-detail-table">';
   html += '<thead><tr>';
-  html += '<th>Ad #</th><th>Task Name</th><th>Ad Link</th><th>Format</th><th>Funnel</th><th>Origin</th><th>Description</th><th>Due Date</th><th>Status</th><th>Action Plan</th><th></th>';
+  html += '<th>Ad #</th><th>Task Name</th><th>Ad Link</th><th>Funnel</th><th>Origin</th><th>Notes</th><th>Due Date</th><th>Status</th><th>Action Plan</th><th></th>';
   html += '</tr></thead>';
   html += '<tbody>';
 
   if (filteredAds.length === 0) {
-    html += '<tr><td colspan="11" style="text-align:center;color:var(--t3);padding:16px">No creatives' +
+    html += '<tr><td colspan="10" style="text-align:center;color:var(--t3);padding:16px">No creatives' +
       (matrixDetailFunnel !== 'All' ? ' for ' + matrixDetailFunnel : '') + '</td></tr>';
   } else {
     filteredAds.forEach(function (ad) {
@@ -11756,8 +12169,10 @@ function renderDetailPanel(angleName, personaName) {
         (isAdExpanded ? 'background:rgba(37,99,235,0.04);' : '') + '">';
       html += '<td class="mx-dt-id"><button onclick="event.stopPropagation();navigateToCreative(\'' + escAttr(ad.id) + '\')" style="background:none;border:none;padding:0;cursor:pointer;font-family:\'JetBrains Mono\',monospace;font-size:inherit;color:var(--inprog);text-decoration:underline;text-underline-offset:2px;font-weight:600" title="Go to Creative Tracker">' + esc(ad.id) + '</button></td>';
 
-      // Task Name (editable) — saves to MATRIX_CELL_META
-      html += '<td><span class="mx-dt-task-name" contenteditable="true" onblur="event.stopPropagation();saveAdField(\'' + escAttr(ad.id) + '\',\'' + escJs(angleName) + '\',\'' + escJs(personaName) + '\',\'uniqueName\',this.textContent)" onclick="event.stopPropagation()">' + esc(ad.uniqueName) + '</span></td>';
+      // Task Name (editable) — saves to MATRIX_CELL_META; ClickUp link moved here (FORMAT col removed)
+      html += '<td><span class="mx-dt-task-name" contenteditable="true" onblur="event.stopPropagation();saveAdField(\'' + escAttr(ad.id) + '\',\'' + escJs(angleName) + '\',\'' + escJs(personaName) + '\',\'uniqueName\',this.textContent)" onclick="event.stopPropagation()">' + esc(ad.uniqueName) + '</span>' +
+        (ad._clickupId ? '&nbsp;<a href="https://app.clickup.com/t/' + escAttr(ad._clickupId) + '" target="_blank" class="cu-jump-link" title="Open in ClickUp" onclick="event.stopPropagation()">&#8599; ClickUp</a>' : '') +
+      '</td>';
 
       // Ad Link + Drive Link
       html += '<td style="white-space:nowrap">';
@@ -11772,9 +12187,6 @@ function renderDetailPanel(angleName, personaName) {
       }
       html += '</td>';
 
-      html += '<td>' + esc(ad.formatName) +
-        (ad._clickupId ? '&nbsp;<a href="https://app.clickup.com/t/' + escAttr(ad._clickupId) + '" target="_blank" class="cu-jump-link" title="Open in ClickUp" onclick="event.stopPropagation()">&#8599; ClickUp</a>' : '') +
-      '</td>';
       html += '<td><span class="bdg ' + ad.funnelStage.toLowerCase() + ' bdg-xs">' + esc(ad.funnelStage) + '</span></td>';
 
       // Origin + usage count
@@ -11784,8 +12196,10 @@ function renderDetailPanel(angleName, personaName) {
       }
       html += '</td>';
 
-      // Description (editable)
-      html += '<td><span class="mx-dt-task-name" contenteditable="true" style="min-width:80px;font-size:0.62rem" onblur="event.stopPropagation();saveAdField(\'' + escAttr(ad.id) + '\',\'' + escJs(angleName) + '\',\'' + escJs(personaName) + '\',\'description\',this.textContent)" onclick="event.stopPropagation()" title="Click to edit">' + esc(ad.description || 'Add note...') + '</span></td>';
+      // Notes (editable) — reads/writes ad.notes directly on the AD (not cell meta),
+      // persisted to Supabase and synced to ClickUp task description on save.
+      var _adNotes = (_notesCache[ad.id] !== undefined ? _notesCache[ad.id] : (ad.notes || ad.variationNotes || ''));
+      html += '<td><span class="mx-dt-task-name notes-cell" contenteditable="true" data-ad-id="' + escAttr(ad.id) + '" style="min-width:80px;font-size:0.62rem" onblur="event.stopPropagation();saveAdNotes(\'' + escAttr(ad.id) + '\',this.textContent)" onclick="event.stopPropagation()" title="Click to edit notes">' + esc(_adNotes || 'Add note...') + '</span></td>';
 
       // Due Date
       html += '<td><input type="date" class="mx-dt-date-inp" value="' + escAttr(ad.dueDate) + '" onchange="event.stopPropagation();saveAdField(\'' + escAttr(ad.id) + '\',\'' + escJs(angleName) + '\',\'' + escJs(personaName) + '\',\'dueDate\',this.value)" onclick="event.stopPropagation()"></td>';
@@ -11798,7 +12212,7 @@ function renderDetailPanel(angleName, personaName) {
       });
       html += '</select></td>';
 
-      // Action Plan
+      // Action Plan — only show for Untested tasks
       html += '<td>';
       if (actionInfo && actionInfo.inActionPlan) {
         if (actionInfo.clickupId) {
@@ -11809,8 +12223,10 @@ function renderDetailPanel(angleName, personaName) {
         } else {
           html += '<span class="mx-dt-action-sent">&#10003; In Action Plan &mdash; ' + esc(actionInfo.status) + '</span>';
         }
-      } else {
+      } else if (_isUntested(ad.status)) {
         html += '<button class="mx-dt-action-btn" onclick="event.stopPropagation();createActionFromMatrix(\'' + escAttr(ad.id) + '\',\'' + escJs(angleName) + '\',\'' + escJs(personaName) + '\', this)">&rarr; Action Plan</button>';
+      } else {
+        html += '<span style="color:var(--t3);font-size:0.62rem">—</span>';
       }
       html += '</td>';
 
@@ -11822,7 +12238,7 @@ function renderDetailPanel(angleName, personaName) {
       // Variation sub-panel
       if (isAdExpanded) {
         var vars = ADS.filter(function (a) { return a.parentAdId === ad.id; });
-        html += '<tr onclick="event.stopPropagation()"><td colspan="11" style="padding:0;border:none">';
+        html += '<tr onclick="event.stopPropagation()"><td colspan="10" style="padding:0;border:none">';
         html += renderVariationSubPanel(ad, vars, angleName, personaName);
         html += '</td></tr>';
       }
@@ -11849,6 +12265,74 @@ function saveCellMeta(angleName, personaName, value) {
   if (!MATRIX_CELL_META[cellKey]) MATRIX_CELL_META[cellKey] = {};
   MATRIX_CELL_META[cellKey].description = value;
   saveState();
+}
+
+// ================================================
+// saveAdNotes — saves the Notes column value directly on the AD object.
+// Unlike saveAdField (which writes to per-cell MATRIX_CELL_META), notes are
+// global to the AD — same note shows no matter which cell you view it from.
+// Persists to Supabase via saveState() and pushes to ClickUp task description.
+// ================================================
+function saveAdNotes(adId, value) {
+  var ad = null;
+  for (var i = 0; i < ADS.length; i++) {
+    if (ADS[i].id === adId) { ad = ADS[i]; break; }
+  }
+  if (!ad) { console.warn('[notes] ad not found:', adId); return; }
+  var trimmed = (value || '').trim();
+  // Don't save the placeholder text as a real note
+  if (trimmed === 'Add note...') trimmed = '';
+  ad.notes = trimmed;
+  // Cache notes by adId so they survive ADS array replacement (onChange merge)
+  _notesCache[adId] = trimmed;
+  // Keep variationNotes in sync for variations (used in buildTaskDescription)
+  if (ad.parentAdId) ad.variationNotes = trimmed;
+
+  // Broadcast to other connected clients
+  if (typeof _rtChannel !== 'undefined' && _rtChannel) {
+    _rtChannel.send({ type: 'broadcast', event: 'field-update',
+      payload: { adId: adId, field: 'notes', value: trimmed, clientId: _myClientId } });
+  }
+
+  // Immediate direct Supabase write — don't rely solely on debounced saveState().
+  // Uses UPDATE (not upsert) since the row always exists by the time the user
+  // edits notes. Also stores clickup_task_id so future syncs match correctly.
+  if (typeof SB !== 'undefined' && SB && activeProductId) {
+    try {
+      var _row = _adToRow(ad, activeProductId);
+      // Try UPDATE first (row exists); fall back to full upsert if it matches 0 rows
+      SB.from('ads')
+        .update({ meta: _row.meta, clickup_task_id: _row.clickup_task_id || null })
+        .eq('id', adId)
+        .eq('product_id', activeProductId)
+        .then(function(r) {
+          if (r && r.error) {
+            console.error('[SB] notes update failed, trying upsert', r.error);
+            SB.from('ads').upsert(_row, { onConflict: 'id' })
+              .then(function(r2) {
+                if (r2 && r2.error) console.error('[SB] notes upsert fallback failed', r2.error);
+                // Don't clear cache here — let merge clear it after applying to new ADS objects
+              });
+          } else {
+            // Don't clear cache here — let merge clear it after applying to new ADS objects
+          }
+        });
+    } catch(e) { console.error('[SB] notes direct write threw', e); }
+  }
+
+  // Bypass debounce — schedule an immediate full flush so the complete state
+  // (including clickup_task_id on this row) reaches Supabase before any refresh.
+  if (_saveScheduled) { clearTimeout(_saveScheduled); _saveScheduled = null; }
+  _pendingFlushProductId = activeProductId;
+  _saveQueue = _saveQueue.then(function(){ return _flushStateToSupabase(activeProductId); })
+    .catch(function(e){ console.error('[SB] notes flush error', e); });
+
+  // Push to ClickUp task description if the task exists in ClickUp
+  if (ad._clickupId && CFG.key) {
+    var newDesc = buildTaskDescription(ad);
+    apiUpdateTask(ad._clickupId, { description: newDesc })
+      .catch(function(e) { console.warn('[CU] notes description push failed', e); });
+  }
 }
 
 // ================================================
@@ -11889,7 +12373,7 @@ function renderVariationSubPanel(parentAd, vars, angleName, personaName) {
   // Existing variations table
   if (vars.length > 0) {
     html += '<table class="mx-var-existing-table">';
-    html += '<thead><tr><th>Var ID</th><th>Link</th><th>Changes</th><th>Status</th><th>Action Plan</th></tr></thead>';
+    html += '<thead><tr><th>Var ID</th><th>Link</th><th>Changes</th><th>Notes</th><th>Status</th><th>Action Plan</th></tr></thead>';
     html += '<tbody>';
     vars.forEach(function (v) {
       var vc = classify(v.status);
@@ -11913,12 +12397,17 @@ function renderVariationSubPanel(parentAd, vars, angleName, personaName) {
         html += '<span style="color:var(--t3);font-size:0.62rem">--</span>';
       }
       html += '</td>';
+      // Notes (editable inline — saves directly to ad.notes and syncs to ClickUp)
+      var _vNotes = (_notesCache[v.id] !== undefined ? _notesCache[v.id] : (v.notes || v.variationNotes || ''));
+      html += '<td><span contenteditable="true" class="notes-cell" data-ad-id="' + escAttr(v.id) + '" style="min-width:60px;font-size:0.6rem;color:' + (_vNotes ? 'var(--t1)' : 'var(--t3)') + '" onblur="event.stopPropagation();saveAdNotes(\'' + escAttr(v.id) + '\',this.textContent)" onclick="event.stopPropagation()" title="Click to edit notes">' + esc(_vNotes || 'Add note...') + '</span></td>';
       html += '<td><span class="bdg ' + vc.cls + ' bdg-xs">' + vc.lbl + '</span></td>';
       html += '<td>';
       if (varActionInfo && varActionInfo.inActionPlan) {
         html += '<span style="font-size:0.62rem;color:var(--win);font-weight:600">&#10003; AP</span>';
-      } else {
+      } else if (_isUntested(v.status)) {
         html += '<button class="mx-dt-action-btn" style="font-size:0.6rem;padding:1px 6px" onclick="event.stopPropagation();createVariationAction(\'' + escAttr(v.id) + '\',\'' + escJs(angleName) + '\',\'' + escJs(personaName) + '\')">&rarr; AP</button>';
+      } else {
+        html += '<span style="color:var(--t3);font-size:0.62rem">—</span>';
       }
       html += '</td>';
       html += '</tr>';
@@ -11928,18 +12417,22 @@ function renderVariationSubPanel(parentAd, vars, angleName, personaName) {
 
   // Variation creator
   var nextVarNum = vars.length + 1;
-  var autoName = parentAd.id + '-V' + nextVarNum;
+  // Derive the parent's display name (cell-scoped uniqueName → formatName → id)
+  var _parentCellKey = parentAd.id + '||' + angleName + '||' + personaName;
+  var _parentCellMeta = MATRIX_CELL_META[_parentCellKey] || {};
+  var _parentDisplayName = _parentCellMeta.uniqueName || parentAd.formatName || parentAd.id;
+  var autoName = _parentDisplayName + ' - V' + nextVarNum;
 
   html += '<div class="mx-var-creator">';
   html += '<div class="mx-var-creator-title">Create New Variation</div>';
-  html += '<div class="mx-var-auto-name">Name: <strong>' + esc(autoName) + '</strong> (auto)</div>';
+  html += '<div class="mx-var-auto-name">Name: <strong id="var-name-preview-' + esc(parentAd.id) + '">' + esc(autoName) + '</strong></div>';
 
-  // Change checkboxes
+  // Change checkboxes — clicking updates the live name preview
   html += '<div style="font-size:0.64rem;color:var(--t3);margin-bottom:3px;text-transform:uppercase;letter-spacing:0.04em">Changes:</div>';
   html += '<div class="mx-var-checks" id="var-checks-' + esc(parentAd.id) + '">';
   var varOptions = ['Hook', 'Title', 'Text', 'CTA', 'Music', 'Thumbnail', 'Full Remake'];
   varOptions.forEach(function (opt) {
-    html += '<div class="mx-var-check" onclick="event.stopPropagation();this.classList.toggle(\'checked\')" data-opt="' + esc(opt) + '">' + esc(opt) + '</div>';
+    html += '<div class="mx-var-check" onclick="event.stopPropagation();this.classList.toggle(\'checked\');updateVarNamePreview(\'' + escJs(parentAd.id) + '\',\'' + escJs(angleName) + '\',\'' + escJs(personaName) + '\')" data-opt="' + esc(opt) + '">' + esc(opt) + '</div>';
   });
   html += '</div>';
 
@@ -11947,14 +12440,14 @@ function renderVariationSubPanel(parentAd, vars, angleName, personaName) {
   html += '<div class="mx-var-form-row">';
   html += '<div><label>Status</label><select class="f-inp" id="var-status-' + esc(parentAd.id) + '" onclick="event.stopPropagation()">';
   STATUSES.forEach(function (s) {
-    html += '<option value="' + esc(s) + '">' + esc(s) + '</option>';
+    html += '<option value="' + esc(s) + '"' + (s === 'Untested' ? ' selected' : '') + '>' + esc(s) + '</option>';
   });
   html += '</select></div>';
   html += '<div><label>Assignee</label><input type="text" class="f-inp" id="var-assignee-' + esc(parentAd.id) + '" placeholder="Name..." onclick="event.stopPropagation()"></div>';
   html += '</div>';
   html += '<div class="mx-var-form-row">';
   html += '<div><label>Link</label><input type="url" class="f-inp" id="var-link-' + esc(parentAd.id) + '" placeholder="https://..." onclick="event.stopPropagation()"></div>';
-  html += '<div><label>Notes</label><textarea class="f-inp" id="var-notes-' + esc(parentAd.id) + '" rows="1" placeholder="Notes..." onclick="event.stopPropagation()"></textarea></div>';
+  html += '<div><label>Notes</label><textarea class="f-inp" id="var-notes-' + esc(parentAd.id) + '" rows="1" placeholder="Describe what changes you are making..." onclick="event.stopPropagation()"></textarea></div>';
   html += '</div>';
 
   // Action buttons
@@ -11966,6 +12459,34 @@ function renderVariationSubPanel(parentAd, vars, angleName, personaName) {
   html += '</div>'; // close mx-var-creator
   html += '</div></div>'; // close mx-var-subpanel-inner + mx-var-subpanel
   return html;
+}
+
+// ================================================
+// updateVarNamePreview — live name preview as chips are toggled
+// ================================================
+function updateVarNamePreview(parentId, angleName, personaName) {
+  var parent = ADS.find(function(a) { return a.id === parentId; });
+  if (!parent) return;
+  var existingVars = ADS.filter(function(a) { return a.parentAdId === parentId; });
+  var _maxN = 0;
+  existingVars.forEach(function(v) { if ((v.variationNumber || 0) > _maxN) _maxN = v.variationNumber || 0; });
+  var nextNum = _maxN + 1;
+  // Derive parent display name same way as renderVariationSubPanel
+  var _cellKey = parentId + '||' + (angleName || '') + '||' + (personaName || '');
+  var _cellMeta = MATRIX_CELL_META[_cellKey] || {};
+  var parentDisplayName = _cellMeta.uniqueName || parent.formatName || parentId;
+  // Gather checked chips
+  var checksEl = document.getElementById('var-checks-' + parentId);
+  var checkedOpts = [];
+  if (checksEl) {
+    checksEl.querySelectorAll('.mx-var-check.checked').forEach(function(c) {
+      checkedOpts.push(c.dataset.opt);
+    });
+  }
+  var name = parentDisplayName + ' - V' + nextNum;
+  if (checkedOpts.length > 0) name += ' - ' + checkedOpts.join(' + ');
+  var preview = document.getElementById('var-name-preview-' + parentId);
+  if (preview) preview.textContent = name;
 }
 
 // ================================================
@@ -12506,7 +13027,7 @@ function addFormatToCell(angle, persona, sourceAdId, formatName, adType) {
     _sourceFormatDriveLink: (sourceAd && sourceAd.driveLink) || '', // stash for ClickUp desc
     adType:             adType || (sourceAd && sourceAd.adType) || '',
     funnelStage:        (sourceAd && sourceAd.funnelStage) || 'TOF',
-    status:             'Not Started',
+    status:             'Untested',
     angle:              angle,
     persona:            persona,
     taskType:           'production',
@@ -12576,15 +13097,28 @@ function createVariationFromMatrix(parentId, count) {
   var varAssignee = assigneeEl ? assigneeEl.value.trim() : '';
   var varLink = linkEl ? linkEl.value.trim() : '';
   var varNotes = notesEl ? notesEl.value.trim() : '';
-  var varLabel = checkedOpts.length > 0 ? checkedOpts.join(', ') : 'Variation';
 
-  // Count existing child variations
+  // Derive parent display name (same logic as preview)
+  // Look up cell meta using angle/persona from current expanded cell context
+  var _expandedKey = matrixExpandedCell || '';
+  var _expandedParts = _expandedKey.split('||');
+  var _ctxAngle = _expandedParts[0] || parent.angle || '';
+  var _ctxPersona = _expandedParts[1] || parent.persona || '';
+  var _parentCellKey = parentId + '||' + _ctxAngle + '||' + _ctxPersona;
+  var _parentCellMeta = MATRIX_CELL_META[_parentCellKey] || {};
+  var parentDisplayName = _parentCellMeta.uniqueName || parent.formatName || parentId;
+
+  // Derive the next variation number by taking max(variationNumber) + 1.
+  // Using .length + 1 breaks if any previous variation was deleted —
+  // you'd get duplicate numbers. variationNumber is persisted to Supabase
+  // so this correctly survives page refreshes and deletions.
   var existingVars = ADS.filter(function (a) { return a.parentAdId === parentId; });
-  var startNum = existingVars.length + 1;
+  var _maxVarNum = 0;
+  existingVars.forEach(function(v) { if ((v.variationNumber || 0) > _maxVarNum) _maxVarNum = v.variationNumber || 0; });
+  var startNum = _maxVarNum + 1;
 
   for (var i = 0; i < count; i++) {
     var varNum = startNum + i;
-    // Use variation ID pattern: AD-001-V1
     var varId = parentId + '-V' + varNum;
 
     // Check if this ID already exists (shouldn't but be safe)
@@ -12593,9 +13127,14 @@ function createVariationFromMatrix(parentId, count) {
       varId = parentId + '-V' + varNum;
     }
 
+    // Build the name: [Parent Task Name] - V[N] - [Changes]
+    var varName = parentDisplayName + ' - V' + varNum;
+    if (checkedOpts.length > 0) varName += ' - ' + checkedOpts.join(' + ');
+
     var newAd = {
       id: varId,
-      formatName: parent.formatName,
+      formatName: varName,          // task name = the computed variation name
+      uniqueName: varName,
       adLink: i === 0 ? varLink : '',
       driveLink: '',
       adType: parent.adType,
@@ -12604,25 +13143,18 @@ function createVariationFromMatrix(parentId, count) {
       angle: parent.angle,
       persona: parent.persona,
       parentAdId: parentId,
+      parentTaskName: parentDisplayName,   // stored for ClickUp description
       variationNumber: varNum,
-      adOrigin: 'New Find',
+      adOrigin: 'Winner Variation',        // marks it as a winner-derived variation
       variationChanges: checkedOpts.slice(),
       variationAssignee: i === 0 ? varAssignee : '',
-      variationNotes: i === 0 ? varNotes : '',
+      variationNotes: i === 0 ? varNotes : '',  // kept for ClickUp description builder
+      notes: i === 0 ? varNotes : '',            // the unified Notes column field
+      _fromTrackerAdId: parentId,           // links inspiration back to parent
       _clickupId: null,
       _clickupStatus: null
     };
     ADS.push(newAd);
-
-    PROD.push({
-      id: 'prod-' + Date.now() + '-' + i,
-      name: 'Var ' + varNum + ': ' + varLabel + ' - ' + parent.formatName,
-      status: 'to do',
-      angle: parent.angle,
-      persona: parent.persona,
-      format: parent.formatName,
-      dueDate: todayISO()
-    });
   }
 
   P = process(ADS);
@@ -14116,7 +14648,7 @@ async function refreshWinnersCache() {
     var pid = PRODUCTS[i].id;
     if (pid === activeProductId) continue;
     try {
-      var res = await SB.from('ads').select('*').eq('product_id', pid).in('status', ['Winner', 'Scale']).is('parent_ad_id', null);
+      var res = await SB.from('ads').select('*').eq('product_id', pid).in('status', ['Winner', 'Scale']).is('parent_ad_id', null).is('deleted_at', null);
       _winnersByProductCache[pid] = (res.data || []).map(_rowToAd);
     } catch (e) { _winnersByProductCache[pid] = []; }
   }

@@ -9333,7 +9333,13 @@ function createClickUpTaskFromAction(actionId, onDone) {
 
     var newId = resp.id;
 
-    // No separate PUT needed — description was included in the POST above
+    // Always do a separate status PUT after creation — ClickUp ignores the
+    // `status` field in the POST body for many list configurations.
+    if (_initCuStatus) {
+      apiUpdateTask(newId, { status: _initCuStatus }).catch(function(e) {
+        console.warn('[ClickUp] post-create status update failed:', e);
+      });
+    }
 
     // Link _clickupId on the action
     act._clickupId = newId;

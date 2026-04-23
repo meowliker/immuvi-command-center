@@ -7526,10 +7526,11 @@ function updateManualActionDate(id, date) {
 }
 
 function updateManualActionStatus(id, newStatus) {
+  var act = null;
   for (var i = 0; i < MANUAL_ACTIONS.length; i++) {
     if (MANUAL_ACTIONS[i].id === id) {
       MANUAL_ACTIONS[i].liveStatus = newStatus;
-      var act = MANUAL_ACTIONS[i];
+      act = MANUAL_ACTIONS[i];
       // Sync status to the source AD so Creative Tracker stays consistent
       var sourceAdId = act.sourceAdId || act.adId;
       if (sourceAdId) {
@@ -7554,6 +7555,34 @@ function updateManualActionStatus(id, newStatus) {
   renderProduction();
   renderCreatives();  // refresh Creative Tracker to reflect new status
   saveState();
+
+  // ── Push status change to ClickUp ──────────────────────────────────────────
+  // If this action has a ClickUp task linked, update its status in ClickUp so
+  // changes made in the app are reflected in ClickUp immediately (no Sync needed).
+  if (act && act._clickupId && CFG.key) {
+    // Map app status → ClickUp status name (lowercase, matches ClickUp list statuses)
+    var cuStatusMap = {
+      'Untested':       'to do',
+      'Approved':       'approved',
+      'In Production':  'in production',
+      'Ready to Launch':'ready to launch',
+      'Testing':        'testing',
+      'Winner':         'winner',
+      'Loser':          'loser',
+      'Scale':          'scale',
+      'Complete':       'complete'
+    };
+    var cuStatus = cuStatusMap[newStatus] || newStatus.toLowerCase();
+    apiUpdateTask(act._clickupId, { status: cuStatus })
+      .then(function() {
+        toast('Status updated in ClickUp ✓', 'ok');
+      })
+      .catch(function(err) {
+        // Don't block the UI — just warn. The status is already saved locally.
+        console.warn('[ClickUp] status update failed:', err && err.message);
+        toast('Saved locally — ClickUp update failed', 'warn');
+      });
+  }
 }
 
 function deleteManualAction(id) {

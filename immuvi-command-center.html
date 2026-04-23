@@ -623,6 +623,43 @@ body::before {
 }
 .ap-from-pill:hover { background: rgba(217,119,6,0.14); text-decoration: none; }
 .ap-from-pill.no-link { cursor: default; }
+
+/* ── Presence panel ── */
+.presence-member-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 14px; transition: background .12s;
+}
+.presence-member-row:hover { background: rgba(255,255,255,0.04); }
+.presence-avatar {
+  width: 32px; height: 32px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px; font-weight: 700; color: #fff;
+  flex-shrink: 0; position: relative;
+}
+.presence-avatar.is-you { box-shadow: 0 0 0 2px var(--card), 0 0 0 4px #6366f1; }
+.presence-member-info { flex: 1; min-width: 0; }
+.presence-member-name {
+  font-size: 0.75rem; font-weight: 600; color: var(--t1);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.presence-member-meta { font-size: 0.65rem; color: var(--t3); margin-top: 1px; }
+.presence-you-badge {
+  font-size: 0.55rem; font-weight: 700; padding: 1px 5px;
+  border-radius: 4px; background: rgba(99,102,241,0.12);
+  color: #6366f1; border: 1px solid rgba(99,102,241,0.2);
+  margin-left: 4px; vertical-align: middle;
+}
+.presence-tab-badge {
+  font-size: 0.6rem; font-weight: 600; padding: 1px 6px;
+  border-radius: 100px; background: rgba(255,255,255,0.06);
+  color: var(--t2); border: 1px solid var(--border);
+  white-space: nowrap;
+}
+.presence-panel-header {
+  font-size: 0.65rem; font-weight: 700; color: var(--t3);
+  text-transform: uppercase; letter-spacing: .05em;
+  padding: 4px 14px 6px; border-bottom: 1px solid var(--border); margin-bottom: 4px;
+}
 .ap-create-progress {
   font-size: 0.62rem; color: var(--inprog); font-weight: 600; margin-left: 6px;
 }
@@ -3103,9 +3140,11 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
           <span class="live-sync-lbl" id="statusLbl">Not synced</span>
           <button class="btn-sync-now" id="syncNowBtn" onclick="triggerManualSync()" title="Sync now">&#8635;</button>
         </div>
-        <div id="presence-bar" style="display:flex;align-items:center;gap:6px;font-size:12px;color:#94a3b8;">
+        <div id="presence-bar" style="position:relative;display:flex;align-items:center;gap:6px;font-size:12px;color:#94a3b8;cursor:pointer;" onclick="_togglePresencePanel(event)">
           <span id="presence-dots"></span>
           <span id="presence-label">&#9679; 1 online</span>
+          <!-- Who's online dropdown panel -->
+          <div id="presence-panel" style="display:none;position:absolute;top:calc(100% + 10px);right:0;min-width:240px;background:var(--card);border:1px solid var(--border);border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,0.18);z-index:9999;padding:10px 0;"></div>
         </div>
       </div>
     </div>
@@ -3599,10 +3638,13 @@ function _initRealtimeChannel(productId) {
     if (status === 'SUBSCRIBED') {
       _rtChannel.track({
         clientId: _myClientId,
-        name: (CFG && CFG.userLabel) || 'Team Member',
+        name:     (CFG && CFG.userLabel) || 'Team Member',
+        color:    (CFG && CFG.userColor) || null,
         joinedAt: Date.now(),
         activeTab: (typeof currentTab !== 'undefined' ? currentTab : null) || 'matrix'
       });
+      // Fetch real name from ClickUp API and re-track with it
+      if (typeof _fetchClickUpUser === 'function') _fetchClickUpUser();
     }
   });
 }
@@ -3620,21 +3662,173 @@ function _broadcastSyncNeeded() {
   }
 }
 
+// Cache of last-known presence members for panel re-render
+var _presenceMembers = [];
+
+function _presenceColor(clientId, clickupColor) {
+  // Use ClickUp profile color if available, else derive from clientId
+  if (clickupColor) return clickupColor;
+  var palette = ['#6366f1','#8b5cf6','#ec4899','#f59e0b','#10b981','#3b82f6','#ef4444','#14b8a6'];
+  var seed = 0;
+  if (clientId) { for (var i = 0; i < clientId.length; i++) seed += clientId.charCodeAt(i); }
+  return palette[seed % palette.length];
+}
+
+function _presenceInitials(name) {
+  if (!name) return 'TM';
+  var parts = name.trim().split(/\s+/);
+  if (parts.length === 1) return parts[0].substring(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+
+function _presenceTabLabel(tab) {
+  var map = {
+    matrix: 'Creative Matrix', creatives: 'Tracker', actions: 'Action Plan',
+    production: 'Production', inspiration: 'Inspiration', settings: 'Settings'
+  };
+  return map[tab] || (tab ? tab.charAt(0).toUpperCase() + tab.slice(1) : 'App');
+}
+
+function _presenceTimeAgo(ts) {
+  if (!ts) return '';
+  var diff = Math.floor((Date.now() - ts) / 1000);
+  if (diff < 60) return 'just now';
+  if (diff < 3600) return Math.floor(diff / 60) + ' min ago';
+  return Math.floor(diff / 3600) + ' hr ago';
+}
+
+function _dedupeMembers(members) {
+  // Collapse stale duplicate sessions from the same person.
+  // Keep the entry with the most recent joinedAt; mark others as dupes.
+  // "Same person" = same name (case-insensitive). Your own clientId always wins.
+  var byName = {};
+  members.forEach(function(m) {
+    var key = (m.name || 'Team Member').toLowerCase();
+    var existing = byName[key];
+    if (!existing) { byName[key] = m; return; }
+    // Prefer our own clientId, otherwise prefer most recent
+    if (m.clientId === _myClientId) { byName[key] = m; }
+    else if (existing.clientId !== _myClientId && (m.joinedAt || 0) > (existing.joinedAt || 0)) {
+      byName[key] = m;
+    }
+  });
+  return Object.values(byName);
+}
+
 function _updatePresenceUI(members) {
+  var deduped = _dedupeMembers(members || []);
+  _presenceMembers = deduped;
   var label = document.getElementById('presence-label');
-  var dots = document.getElementById('presence-dots');
+  var dots  = document.getElementById('presence-dots');
   if (!label) return;
-  var count = members.length;
+  var count = deduped.length;
   label.textContent = '\u25CF ' + count + ' online';
   label.style.color = count > 1 ? '#22c55e' : '#94a3b8';
+  members = deduped; // use deduped for rendering below
+
   if (dots) {
-    dots.innerHTML = members.slice(0, 5).map(function(m) {
-      var initials = (m.name || 'T').split(' ').map(function(w){ return w[0]; }).join('').toUpperCase().substr(0,2);
-      var colors = ['#6366f1','#8b5cf6','#ec4899','#f59e0b','#10b981'];
-      var color = colors[Math.abs(m.clientId ? m.clientId.charCodeAt(7) : 0) % colors.length];
-      return '<span title="' + (m.name||'Member') + '" style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:' + color + ';color:#fff;font-size:9px;font-weight:700;">' + initials + '</span>';
+    dots.innerHTML = members.slice(0, 6).map(function(m) {
+      var initials = _presenceInitials(m.name);
+      var color    = _presenceColor(m.clientId, m.color);
+      var isYou    = m.clientId === _myClientId;
+      var ring     = isYou ? ';box-shadow:0 0 0 2px var(--card),0 0 0 3.5px #6366f1' : '';
+      var tooltip  = escAttr((m.name || 'Team Member') + ' — ' + _presenceTabLabel(m.activeTab));
+      return '<span title="' + tooltip + '" style="display:inline-flex;align-items:center;justify-content:center;' +
+        'width:26px;height:26px;border-radius:50%;background:' + color + ';color:#fff;' +
+        'font-size:9px;font-weight:700;cursor:pointer' + ring + ';">' + initials + '</span>';
     }).join('');
   }
+
+  // Re-render panel if it's open
+  var panel = document.getElementById('presence-panel');
+  if (panel && panel.style.display !== 'none') _renderPresencePanel(members);
+}
+
+function _renderPresencePanel(members) {
+  var panel = document.getElementById('presence-panel');
+  if (!panel) return;
+  var html = '<div class="presence-panel-header">' + members.length + ' online now</div>';
+  members.forEach(function(m) {
+    var isYou    = m.clientId === _myClientId;
+    var color    = _presenceColor(m.clientId, m.color);
+    var initials = _presenceInitials(m.name);
+    var tabLabel = _presenceTabLabel(m.activeTab);
+    var timeAgo  = _presenceTimeAgo(m.joinedAt);
+    html += '<div class="presence-member-row">';
+    html += '<div class="presence-avatar' + (isYou ? ' is-you' : '') + '" style="background:' + color + '">' + initials + '</div>';
+    html += '<div class="presence-member-info">';
+    html += '<div class="presence-member-name">' + esc(m.name || 'Team Member');
+    if (isYou) html += '<span class="presence-you-badge">You</span>';
+    html += '</div>';
+    html += '<div class="presence-member-meta">';
+    html += '<span class="presence-tab-badge">' + esc(tabLabel) + '</span>';
+    if (timeAgo) html += '<span style="margin-left:6px;">' + esc(timeAgo) + '</span>';
+    html += '</div>';
+    html += '</div></div>';
+  });
+  panel.innerHTML = html;
+}
+
+function _togglePresencePanel(e) {
+  e && e.stopPropagation();
+  var panel = document.getElementById('presence-panel');
+  if (!panel) return;
+  if (panel.style.display === 'none') {
+    _renderPresencePanel(_presenceMembers);
+    panel.style.display = 'block';
+    // Close on outside click
+    setTimeout(function() {
+      document.addEventListener('click', function _closePanel() {
+        panel.style.display = 'none';
+        document.removeEventListener('click', _closePanel);
+      });
+    }, 10);
+  } else {
+    panel.style.display = 'none';
+  }
+}
+
+// Fetch ClickUp user profile using their own API key → populate CFG.userLabel + CFG.userColor.
+// Caches result in localStorage keyed by API key so subsequent page loads are instant.
+function _fetchClickUpUser() {
+  if (!CFG.key) return;
+
+  // Load from cache first — show name immediately, no flicker
+  var cacheKey = 'immuvi_cu_user_' + CFG.key.slice(-8);
+  try {
+    var cached = JSON.parse(localStorage.getItem(cacheKey) || 'null');
+    if (cached && cached.name) {
+      CFG.userLabel = cached.name;
+      CFG.userColor = cached.color || null;
+    }
+  } catch(e) {}
+
+  // Always fetch fresh to keep it up to date
+  apiFetch('/user').then(function(resp) {
+    var u = resp && (resp.user || resp);
+    if (!u || (!u.username && !u.email)) return;
+    var fullName = u.username || u.email || 'Team Member';
+    var color    = u.color || null;
+    // ClickUp color is a hex string like "#ff4081" — discard anything else
+    if (color && color.indexOf('#') === -1) color = null;
+    CFG.userLabel = fullName;
+    CFG.userColor = color || null;
+    // Cache it for next page load
+    try { localStorage.setItem(cacheKey, JSON.stringify({ name: fullName, color: color })); } catch(e) {}
+    console.log('[presence] ClickUp user:', fullName, color);
+    // Re-track presence with real name so teammates see it immediately
+    if (typeof _rtChannel !== 'undefined' && _rtChannel) {
+      _rtChannel.track({
+        clientId: _myClientId,
+        name:     CFG.userLabel,
+        color:    CFG.userColor,
+        joinedAt: Date.now(),
+        activeTab: (typeof currentTab !== 'undefined' ? currentTab : null) || 'matrix'
+      });
+    }
+  }).catch(function(e) {
+    console.warn('[presence] Could not fetch ClickUp user:', e && e.message);
+  });
 }
 
 // Guard: tracks which product the in-memory ADS/ANGLES/etc. currently belong to.
@@ -5557,6 +5751,16 @@ function showTab(id, btn) {
   if (id === 'inspiration') checkBridgeStatus();
   // Persist active tab so page refresh lands on the same tab
   try { localStorage.setItem('immuvi_active_tab', id); } catch(e) {}
+  // Update presence so teammates see which tab you're on
+  if (typeof _rtChannel !== 'undefined' && _rtChannel && typeof _myClientId !== 'undefined') {
+    _rtChannel.track({
+      clientId:  _myClientId,
+      name:      (CFG && CFG.userLabel) || 'Team Member',
+      color:     (CFG && CFG.userColor) || null,
+      joinedAt:  Date.now(),
+      activeTab: id
+    });
+  }
 }
 
 function openModal(title, bodyHtml, footHtml) {
@@ -9711,6 +9915,8 @@ function syncClickUp() {
 
   // Save the API key for persistence
   localStorage.setItem('immuvi_api_key', CFG.key);
+  // Fetch ClickUp user profile so presence shows real name
+  if (typeof _fetchClickUpUser === 'function') _fetchClickUpUser();
 
   var activeProd = getActiveProduct();
   if (!activeProd || !activeProd.clickupListId) {
@@ -11650,6 +11856,8 @@ window.addEventListener('load', async function () {
     CFG.key = savedKey;
     var keyInput = document.getElementById('apiKeyInput');
     if (keyInput) keyInput.value = savedKey;
+    // Fetch real ClickUp user profile for presence display
+    if (typeof _fetchClickUpUser === 'function') _fetchClickUpUser();
   }
 
   // Clean up stale CELL_CREATIVE_ASSIGNMENTS / MATRIX_CELL_META keys from past renames

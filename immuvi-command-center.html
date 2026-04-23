@@ -5664,7 +5664,7 @@ function createActionFromMatrix(adId, angleName, personaName, btnEl) {
     adId: adId,
     adLink: ad.adLink || '',
     _clickupId: null,
-    liveStatus: 'Untested',
+    liveStatus: ad.status || 'Untested',  // inherit status already set in the matrix
     sourceAdId: adId,
     sourceAngle: angleName,
     sourcePersona: personaName
@@ -5672,7 +5672,7 @@ function createActionFromMatrix(adId, angleName, personaName, btnEl) {
   MANUAL_ACTIONS.push(newAction);
   // Update cell meta to reflect action status
   if (!MATRIX_CELL_META[cellAdKey]) MATRIX_CELL_META[cellAdKey] = {};
-  MATRIX_CELL_META[cellAdKey].actionStatus = 'Untested';
+  MATRIX_CELL_META[cellAdKey].actionStatus = ad.status || 'Untested';
   genActions();
   // Defensive: ensure the AD is still in CELL_CREATIVE_ASSIGNMENTS for this cell.
   var _cellKey = angleName + '||' + personaName;
@@ -5685,7 +5685,7 @@ function createActionFromMatrix(adId, angleName, personaName, btnEl) {
   // open cell popup to tear down + rebuild, producing a jarring blank flash).
   // The button's parent <td> is in the cell detail popup.
   if (btnEl && btnEl.parentNode) {
-    btnEl.parentNode.innerHTML = '<span class="mx-dt-action-sent">&#10003; In Action Plan &mdash; Untested</span>';
+    btnEl.parentNode.innerHTML = '<span class="mx-dt-action-sent">&#10003; In Action Plan &mdash; ' + (ad.status || 'Untested') + '</span>';
   }
   renderActionPlan();                    // refresh Action Plan tab content
   updateTabCounts();                     // update "Action Plan N" badge in nav
@@ -5731,7 +5731,7 @@ function createVariationAction(varId, angleName, personaName) {
     adId: varId,
     adLink: varAd.adLink || '',
     _clickupId: null,
-    liveStatus: 'Untested',
+    liveStatus: varAd.status || 'Untested',  // inherit status from matrix
     sourceAdId: varId,
     sourceAngle: angleName,
     sourcePersona: personaName,

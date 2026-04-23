@@ -3676,7 +3676,8 @@ var _META_FIELDS = [
   'hookType', 'creativeStructure', 'productionStyle', 'creativeHypothesis',
   'uniqueName', 'description', 'dueDate',
   'dateCreated', 'taskName',
-  'variationChanges', 'variationAssignee', 'parentTaskName'
+  'variationChanges', 'variationAssignee', 'parentTaskName',
+  'briefUrl'
 ];
 
 function _adToRow(a, productId) {
@@ -7079,12 +7080,23 @@ function renderActionPlan() {
         if (ADS[si].id === (act.sourceAdId || act.adId)) { srcAd = ADS[si]; break; }
       }
 
-      // Inspo brief link
+      // Brief link — inspo-sourced (from inspiration doc) OR tracker-sourced (fetched from comments)
       var briefLink = '';
       if (srcAd && srcAd._fromInspoId) {
         var srcIns = INSPIRATIONS.find(function(ins){ return ins.id === srcAd._fromInspoId; });
         if (srcIns && srcIns._clickupDocPageUrl) {
           briefLink = '<a class="ap-brief-pill" href="' + escAttr(srcIns._clickupDocPageUrl) + '" target="_blank" rel="noopener">&#128204; Brief</a>';
+        }
+      }
+      // Tracker-format: use briefUrl stored on the AD after push (Scenario 3)
+      if (!briefLink && srcAd && srcAd.briefUrl) {
+        briefLink = '<a class="ap-brief-pill" href="' + escAttr(srcAd.briefUrl) + '" target="_blank" rel="noopener">&#128204; Brief</a>';
+      }
+      // Also check source format AD for briefUrl (in case the clone doesn't have it yet)
+      if (!briefLink && srcAd && srcAd.sourceFormatId) {
+        var _bSrcFmt = ADS.find(function(a){ return a.id === srcAd.sourceFormatId; });
+        if (_bSrcFmt && _bSrcFmt.briefUrl) {
+          briefLink = '<a class="ap-brief-pill" href="' + escAttr(_bSrcFmt.briefUrl) + '" target="_blank" rel="noopener">&#128204; Brief</a>';
         }
       }
 
@@ -7115,10 +7127,22 @@ function renderActionPlan() {
           }
         }
       } else if (srcAd && !srcAd._fromInspoId) {
-        var fromName = srcAd.formatName || srcAd.id;
-        if (srcAd._clickupId) {
-          fromLink = '<a class="ap-from-pill" href="https://app.clickup.com/t/' + escAttr(srcAd._clickupId) + '" target="_blank" rel="noopener" title="Open source format task in ClickUp">&#128204; From: ' + esc(fromName) + ' &#8599;</a>';
-        } else {
+        // Look up the original source FORMAT (not the production clone itself).
+        // Production clones have sourceFormatId pointing to the original tracker format AD.
+        // Fall back to _sourceFormatName/_sourceClickupId stored at clone-creation time.
+        var _srcFmtAd = srcAd.sourceFormatId
+          ? ADS.find(function(a) { return a.id === srcAd.sourceFormatId; })
+          : null;
+        var fromName = (_srcFmtAd && _srcFmtAd.formatName)
+          || srcAd._sourceFormatName
+          || srcAd.formatName
+          || srcAd.id;
+        var fromCuId = (_srcFmtAd && _srcFmtAd._clickupId)
+          || srcAd._sourceClickupId
+          || null;
+        if (fromCuId) {
+          fromLink = '<a class="ap-from-pill" href="https://app.clickup.com/t/' + escAttr(fromCuId) + '" target="_blank" rel="noopener" title="Open source format task in ClickUp">&#128204; From: ' + esc(fromName) + ' &#8599;</a>';
+        } else if (fromName) {
           fromLink = '<span class="ap-from-pill no-link" title="Source format: ' + escAttr(fromName) + '">&#128204; From: ' + esc(fromName) + '</span>';
         }
       }
@@ -9150,31 +9174,143 @@ function createClickUpTaskFromAction(actionId, onDone) {
       }
     }
 
-    // Scenario 2 — Tracker-format AD: link new task to the tracker format's ClickUp task
-    if (sourceAd && !sourceAd._fromInspoId && prevSourceClickupId && prevSourceClickupId !== newId) {
-      var srcTaskUrl = 'https://app.clickup.com/t/' + prevSourceClickupId;
-      var newTaskUrl = 'https://app.clickup.com/t/' + newId;
-      var srcFmtName = sourceAd.formatName || sourceAd.id;
+    // Scenario 2 — Tracker-format AD: link new task to the tracker format's ClickUp task.
+    // Get the source FORMAT's ClickUp ID — for production clones created by addFormatToCell,
+    // prevSourceClickupId is null (clone starts with no _clickupId), so we read from
+    // _sourceClickupId (stored at clone-creation time) or walk up via sourceFormatId.
+    if (sourceAd && !sourceAd._fromInspoId) {
+      var _srcFmtForLink = sourceAd.sourceFormatId
+        ? ADS.find(function(a){ return a.id === sourceAd.sourceFormatId; })
+        : null;
+      var srcFmtClickupId = (_srcFmtForLink && _srcFmtForLink._clickupId)
+        || sourceAd._sourceClickupId
+        || prevSourceClickupId
+        || null;
+      var srcFmtName2 = (_srcFmtForLink && _srcFmtForLink.formatName)
+        || sourceAd._sourceFormatName
+        || sourceAd.formatName
+        || sourceAd.id;
 
-      // 1. Create ClickUp relationship (shows in Related Items panel)
-      apiFetch('/task/' + newId + '/link/' + prevSourceClickupId, { method: 'POST', body: {} })
-        .then(function(){ console.log('[S2] Task relationship created ✓'); })
-        .catch(function(e){ console.warn('[S2] Task link failed:', e && e.message); });
+      if (srcFmtClickupId && srcFmtClickupId !== newId) {
+        var srcTaskUrl = 'https://app.clickup.com/t/' + srcFmtClickupId;
+        var newTaskUrl = 'https://app.clickup.com/t/' + newId;
 
-      // 2. Comment on the NEW task — links back to the source format
-      apiFetch('/task/' + newId + '/comment', {
-        method: 'POST',
-        body: { comment_text: '📎 Created from format: ' + srcFmtName + '\n' + srcTaskUrl }
-      }).catch(function(){});
+        // 1. Create ClickUp relationship (shows in Related Items panel)
+        apiFetch('/task/' + newId + '/link/' + srcFmtClickupId, { method: 'POST', body: {} })
+          .then(function(){ console.log('[S2] Task relationship created ✓'); })
+          .catch(function(e){ console.warn('[S2] Task link failed:', e && e.message); });
 
-      // 3. Comment on the SOURCE task — announces the new production task
-      apiFetch('/task/' + prevSourceClickupId + '/comment', {
-        method: 'POST',
-        body: { comment_text: '📋 Production task created: ' + newTaskUrl }
-      }).catch(function(){});
+        // 2. Comment on the NEW task — links back to the source format
+        apiFetch('/task/' + newId + '/comment', {
+          method: 'POST',
+          body: { comment_text: '📎 Created from format: ' + srcFmtName2 + '\n' + srcTaskUrl }
+        }).catch(function(){});
 
-    } else if (sourceAd && !sourceAd._fromInspoId && !prevSourceClickupId) {
-      console.warn('[S2] Source AD has no prior ClickUp task — cannot create relationship');
+        // 3. Comment on the SOURCE task — announces the new production task
+        apiFetch('/task/' + srcFmtClickupId + '/comment', {
+          method: 'POST',
+          body: { comment_text: '📋 Production task created: ' + newTaskUrl }
+        }).catch(function(){});
+
+        // Scenario 3 — Brief inheritance: fetch source format's ClickUp comments,
+        // look for a brief link, copy it to the new task description + comment.
+        // Also store briefUrl on the AD so the 📌 Brief pill shows in the app.
+        apiFetch('/task/' + srcFmtClickupId + '/comment')
+          .then(function(commentResp) {
+            var comments = (commentResp && commentResp.comments) || [];
+            var briefUrl = '';
+
+            // Scan comments for a brief/doc URL
+            for (var ci = 0; ci < comments.length; ci++) {
+              var cText = (comments[ci].comment_text || comments[ci].text_content || '');
+              // Look for URLs in the comment that suggest a brief (doc, brief, drive keywords)
+              var urlMatch = cText.match(/https?:\/\/[^\s\)\"\'<>]+/g);
+              if (urlMatch) {
+                for (var ui = 0; ui < urlMatch.length; ui++) {
+                  var u = urlMatch[ui];
+                  if (/brief|doc|drive|notion|gdoc|clickup.*doc/i.test(u) ||
+                      /app\.clickup\.com\/\d+\/v\/dc\//i.test(u)) {
+                    briefUrl = u;
+                    break;
+                  }
+                }
+              }
+              // Also check if the comment itself mentions "brief" with any URL
+              if (!briefUrl && /brief/i.test(cText)) {
+                var anyUrl = cText.match(/https?:\/\/[^\s\)\"\'<>]+/g);
+                if (anyUrl && anyUrl.length > 0) { briefUrl = anyUrl[0]; }
+              }
+              if (briefUrl) break;
+            }
+
+            // Fallback: search ClickUp Docs by source format name
+            var applyBrief = function(url) {
+              if (!url) return;
+              // Store on AD so 📌 Brief pill appears in-app
+              if (sourceAd) sourceAd.briefUrl = url;
+              saveState();
+              // Add Brief row to description of new task
+              apiFetch('/task/' + newId)
+                .then(function(taskData) {
+                  var existingDesc = (taskData && taskData.description) || '';
+                  var briefRow = '\n| 📌 Brief | ' + url + ' |';
+                  if (existingDesc.indexOf(url) === -1) {
+                    apiFetch('/task/' + newId, {
+                      method: 'PUT',
+                      body: { description: existingDesc + briefRow }
+                    }).then(function(){ console.log('[S3] Brief added to description ✓'); })
+                      .catch(function(e){ console.warn('[S3] Brief desc update failed:', e && e.message); });
+                  }
+                }).catch(function(){});
+              // Post brief as comment on new task
+              apiFetch('/task/' + newId + '/comment', {
+                method: 'POST',
+                body: { comment_text: '📌 Brief: ' + url }
+              }).then(function(){ console.log('[S3] Brief comment posted ✓'); })
+                .catch(function(e){ console.warn('[S3] Brief comment failed:', e && e.message); });
+              // Re-render so the pill appears immediately
+              renderActionPlan();
+              renderCreatives();
+            };
+
+            if (briefUrl) {
+              console.log('[S3] Brief found in comments:', briefUrl);
+              applyBrief(briefUrl);
+            } else {
+              // Fallback: search ClickUp Docs for a doc matching the source format name
+              var workspaceId = '9016762494'; // from CFG or hardcoded
+              var activeProdLocal = getActiveProduct && getActiveProduct();
+              var wsId = (activeProdLocal && activeProdLocal.workspaceId) || workspaceId;
+              apiFetch('/team/' + wsId + '/doc?search=' + encodeURIComponent(srcFmtName2))
+                .then(function(docResp) {
+                  var docs = (docResp && (docResp.docs || docResp.data || []));
+                  if (docs && docs.length > 0) {
+                    var matchDoc = docs.find(function(d) {
+                      return (d.name || d.title || '').toLowerCase().indexOf(srcFmtName2.toLowerCase()) !== -1;
+                    }) || docs[0];
+                    var docUrl = matchDoc && (matchDoc.url || matchDoc.page_url ||
+                      ('https://app.clickup.com/' + wsId + '/v/dc/' + (matchDoc.id || '')));
+                    if (docUrl) {
+                      console.log('[S3] Brief found via doc search:', docUrl);
+                      applyBrief(docUrl);
+                    } else {
+                      console.log('[S3] No brief found — skipping');
+                    }
+                  } else {
+                    console.log('[S3] No brief found in comments or docs — skipping');
+                  }
+                }).catch(function(e) {
+                  console.warn('[S3] Doc search failed:', e && e.message);
+                });
+            }
+          })
+          .catch(function(e) {
+            console.warn('[S3] Could not fetch source task comments:', e && e.message);
+          });
+
+      } else {
+        console.warn('[S2] Source format has no ClickUp task ID — skipping link + brief');
+      }
     }
 
     // Release the in-flight lock before re-rendering so the idle "↗ ClickUp"
@@ -13037,6 +13173,11 @@ function addFormatToCell(angle, persona, sourceAdId, formatName, adType) {
     taskType:           'production',
     adOrigin:           'Production',
     sourceFormatId:     sourceAdId,
+    // Store source format's ClickUp ID and name at creation time so the
+    // "From:" pill and brief lookup always have the right reference,
+    // even after the production clone gets its own _clickupId on push.
+    _sourceClickupId:   (sourceAd && sourceAd._clickupId) || '',
+    _sourceFormatName:  (sourceAd && sourceAd.formatName) || formatName,
     parentAdId:         null,
     variationNumber:    null,
     _clickupId:         null,

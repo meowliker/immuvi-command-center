@@ -4432,6 +4432,16 @@ function _resubscribeRealtime() {
         var _payloadClientId = _payloadNew && _payloadNew.meta && _payloadNew.meta._clientId;
         var _isSelfEcho = _payloadClientId && _payloadClientId === _myClientId;
         if (_isSelfEcho) return; // always ignore own echoes from ads table
+
+        // Fast path: inspiration table change — just reload inspirations and re-render that tab
+        if (_payloadTable === 'inspirations' || _payloadTable === 'inspiration_queue' || _payloadTable === 'inspiration_results') {
+          // Self-echo guard: skip if we saved inspirations locally within last 3s
+          if (typeof _insSaveTs !== 'undefined' && Date.now() - _insSaveTs < 3000) return;
+          loadInspirations().then(function() {
+            if (typeof renderInspirations === 'function') renderInspirations();
+          });
+          return;
+        }
         // Self-echo detection for manual_actions (stamps _clientId in payload)
         var _maPayloadClientId = _payloadNew && _payloadNew.payload && _payloadNew.payload._clientId;
         var _isMaSelfEcho = _maPayloadClientId && _maPayloadClientId === _myClientId;
@@ -7044,6 +7054,7 @@ function renderCreatives() {
     var structureOptsRow = buildInlineOpts(getFieldNames('creativeStructure'), ad.creativeStructure);
     var hookOptsRow      = buildInlineOpts(getFieldNames('hookType'), ad.hookType);
     var prodStyleOptsRow = buildInlineOpts(getFieldNames('productionStyle'), ad.productionStyle);
+    var adTypeOptsRow    = buildInlineOpts(AD_TYPES, ad.adType);
 
     // Find the original index in ADS
     var origIdx = ADS.indexOf(ad);
@@ -7170,7 +7181,7 @@ function renderCreatives() {
       '<td style="min-width:160px;max-width:220px">' + hypHtml + '</td>' +
       '<td>' + (effectiveAdLink ? '<a class="link-cell" href="' + escAttr(effectiveAdLink) + '" target="_blank" rel="noopener">' + esc(truncateUrl(effectiveAdLink)) + extIcon + '</a>' : '-') + '</td>' +
       '<td>' + (ad.driveLink ? '<a class="drive-link-cell" href="' + escAttr(ad.driveLink) + '" target="_blank" rel="noopener" title="Open Google Drive file"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" style="vertical-align:middle;margin-right:3px"><path d="M12 2L2 19h20L12 2z" fill="#4285F4"/><path d="M2 19l5-9 7 12H2z" fill="#0F9D58"/><path d="M19 19l-7-12-5 9h12z" fill="#FBBC05"/></svg>Drive Link</a>' : '<span style="color:var(--t3);font-size:0.62rem">—</span>') + '</td>' +
-      '<td>' + esc(ad.adType) + '</td>' +
+      '<td><select class="fs fs-dim' + (ad.adType ? ' fs-filled' : '') + '" onchange="updateCreativeFieldInline(' + adIdQ + ', \'adType\', this.value)">' + adTypeOptsRow + '</select></td>' +
       '<td><span class="bdg ' + funnelCls + '">' + esc(ad.funnelStage) + '</span></td>' +
       '<td><select class="fs ' + c.cls + '" onchange="updateCreativeStatus(' + origIdx + ', this.value)">' + opts + '</select></td>' +
       '<td class="ai-date">' + (ad.dateCreated ? (function(ts){ var d=new Date(ts); return String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0')+'/'+d.getFullYear(); })(ad.dateCreated) : '—') + '</td>' +
@@ -9398,7 +9409,8 @@ function createClickUpTaskFromAction(actionId, onDone) {
         ['hookType',         sourceAd.hookType],
         ['creativeStructure',sourceAd.creativeStructure],
         ['productionStyle',  sourceAd.productionStyle],
-        ['adLink',           sourceAd.adLink]
+        ['adLink',           sourceAd.adLink],
+        ['productName',      (getActiveProduct() && getActiveProduct().name) || '']
       ];
 
       console.log('[fieldSync] newId:', newId, '| sourceAd:', sourceAd.id, '| values:', {
@@ -9959,6 +9971,7 @@ function fetchAndStoreFieldMap(listId) {
       'persona': 'persona_dropdown',  // drop_down — secondary (matched when option exists)
       'funnel type': 'funnelStage',
       'photo/video': 'adType',
+      'product': 'productName',
       'notes': 'notes_field',         // short_text — general notes field (separate from hypothesis)
       // Inspiration Link field (various possible names)
       'inspiration link': 'adLink',
@@ -10129,6 +10142,32 @@ function _setTaskField(adClickupId, fieldId, payload, adId) {
 //   1. Always push to short_text "Angle Tag" / "Persona Tag" field (instant, any value)
 //   2. Also try dropdown "Angle" / "Persona" field — if option already exists, match it
 // Returns a promise.
+// Fuzzy match a string against a list of option names.
+// Returns the best matching option name if similarity >= threshold (0–1), else null.
+function fuzzyMatchOption(input, options, threshold) {
+  if (!input || !options || !options.length) return null;
+  threshold = threshold || 0.7;
+  var inputL = input.toLowerCase().trim();
+  var best = null, bestScore = 0;
+  for (var i = 0; i < options.length; i++) {
+    var optL = (options[i].name || '').toLowerCase().trim();
+    // Exact match wins immediately
+    if (optL === inputL) return options[i].name;
+    // Word overlap score
+    var aWords = inputL.split(/\s+/);
+    var bWords = optL.split(/\s+/);
+    var matches = 0;
+    for (var a = 0; a < aWords.length; a++) {
+      for (var b = 0; b < bWords.length; b++) {
+        if (aWords[a] === bWords[b] && aWords[a].length > 1) { matches++; break; }
+      }
+    }
+    var score = (2 * matches) / (aWords.length + bWords.length);
+    if (score > bestScore) { bestScore = score; best = options[i].name; }
+  }
+  return bestScore >= threshold ? best : null;
+}
+
 function pushFieldToClickUp(ad, fieldKey, value) {
   if (!ad || !ad._clickupId || !CFG.key) return Promise.resolve();
   if (!value || value === '—') return Promise.resolve();
@@ -10204,8 +10243,12 @@ function pushFieldToClickUp(ad, fieldKey, value) {
       .catch(function(err) { toast('ClickUp sync failed: ' + (err.message || String(err)), 'err'); });
   } else if (fieldDef.fieldType === 'drop_down') {
     var oi = -1;
+    // For productName use fuzzy matching; all others use exact match
+    var matchName = (fieldKey === 'productName')
+      ? fuzzyMatchOption(value, fieldDef.options, 0.7)
+      : value;
     for (var j = 0; j < fieldDef.options.length; j++) {
-      if (fieldDef.options[j].name === value) { oi = fieldDef.options[j].orderindex; break; }
+      if (fieldDef.options[j].name === matchName) { oi = fieldDef.options[j].orderindex; break; }
     }
     if (oi !== -1) {
       return _setTaskField(ad._clickupId, fieldId, { value: oi }, ad.id)
@@ -14430,12 +14473,46 @@ function toggleDupeBanner(id) {
 }
 
 // ── Inline field update ─────────────────────────────
+var _insSaveTs = 0; // timestamp of last local inspiration save — used for self-echo guard
+
 function updateInsField(id, field, value) {
   var ins = INSPIRATIONS.find(function(i){ return i.id === id; });
   if (!ins) return;
   ins[field] = value;
+  _insSaveTs = Date.now();
   saveInspirations();
+  // Push adType to ClickUp if this inspiration has a linked task
+  if (field === 'adType' && ins._sourceClickupId && CFG.key) {
+    var _insProxy = { _clickupId: ins._sourceClickupId, id: ins.id };
+    pushFieldToClickUp(_insProxy, 'adType', value)
+      .then(function() { toast('AD Type updated in ClickUp ✓', 'ok'); })
+      .catch(function() { toast('Saved locally — ClickUp update failed', 'warn'); });
+  }
   // Don't re-render to avoid losing focus — just update silently
+}
+
+// Edit format name — keeps the detail part of creativeUSP intact
+function updateInsFormatName(id, newName) {
+  if (!newName) return;
+  var ins = INSPIRATIONS.find(function(i){ return i.id === id; });
+  if (!ins) return;
+  ins.formatName = newName;
+  // Rebuild creativeUSP: keep existing detail if present
+  var parts = (ins.creativeUSP || '').split(' \u2014 ');
+  var detail = parts.slice(1).join(' \u2014 ');
+  ins.creativeUSP = detail ? newName + ' \u2014 ' + detail : newName;
+  _insSaveTs = Date.now();
+  saveInspirations();
+}
+
+// Edit the detail line below the format name — saves back into creativeUSP
+function updateInsDetail(id, newDetail) {
+  var ins = INSPIRATIONS.find(function(i){ return i.id === id; });
+  if (!ins) return;
+  var name = ins.formatName || ((ins.creativeUSP || '').split(' \u2014 ')[0]) || '';
+  ins.creativeUSP = newDetail ? name + ' \u2014 ' + newDetail : name;
+  _insSaveTs = Date.now();
+  saveInspirations();
 }
 
 // ── Approved inspirations helper ────────────────────
@@ -14810,8 +14887,8 @@ function renderInspirations() {
         (isQueued
           ? '<span class="ins-usp-detail" style="color:var(--t3);font-style:italic">Pending classification...</span>' +
             '<a href="'+escAttr(ins.sourceUrl)+'" target="_blank" class="ins-link" style="font-size:0.65rem;display:block;margin-top:2px">'+esc(ins.sourceUrl.length>50?ins.sourceUrl.substring(0,50)+'...':ins.sourceUrl)+'</a>'
-          : '<span class="ins-usp-format" contenteditable="true" onblur="updateInsField('+insIdQ+',\'formatName\',this.textContent.trim())">'+esc(fmtName)+'</span>' +
-            (fmtDetail ? '<span class="ins-usp-detail ins-txt-clamp" data-tooltip="'+escAttr(fmtDetail)+'" onmouseenter="showInsTip(this)" onmouseleave="hideInsTooltip()">'+esc(fmtDetail)+'</span>' : '')
+          : '<span class="ins-usp-format" contenteditable="true" onblur="updateInsFormatName('+insIdQ+',this.textContent.trim())">'+esc(fmtName)+'</span>' +
+            '<span class="ins-usp-detail ins-txt-clamp" contenteditable="true" placeholder="Add detail..." onblur="updateInsDetail('+insIdQ+',this.textContent.trim())" onfocus="this.classList.remove(\'ins-txt-clamp\')" onblur="this.classList.add(\'ins-txt-clamp\');updateInsDetail('+insIdQ+',this.textContent.trim())" data-tooltip="'+escAttr(fmtDetail)+'" onmouseenter="showInsTip(this)" onmouseleave="hideInsTooltip()" style="cursor:text;min-height:14px;outline:none">'+esc(fmtDetail || '')+'</span>'
         ) +
       '</td>' +
       // 3-16: show dashes for queued rows, editable fields for classified rows

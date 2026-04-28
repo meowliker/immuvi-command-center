@@ -600,6 +600,12 @@ body::before {
   border: 1px solid rgba(5,150,105,0.2); text-decoration: none;
 }
 .ap-cu-done-link:hover { background: rgba(5,150,105,0.15); text-decoration: none; }
+.ap-cu-deleted-badge {
+  display: inline-flex; align-items: center; gap: 3px;
+  padding: 3px 8px; border-radius: 6px; font-size: 0.65rem; font-weight: 600;
+  background: rgba(245,158,11,0.1); color: #b45309;
+  border: 1px solid rgba(245,158,11,0.3);
+}
 .ap-brief-pill {
   display: inline-flex; align-items: center; gap: 3px;
   padding: 3px 8px; border-radius: 6px; font-size: 0.63rem; font-weight: 600;
@@ -3556,6 +3562,34 @@ function _initRealtimeChannel(productId) {
     }
   });
 
+  // Instant action re-link from another client (Recreate flow)
+  _rtChannel.on('broadcast', { event: 'action-relinked' }, function(msg) {
+    var p = msg && msg.payload;
+    if (!p || !p.actionId || !p.newClickupId) return;
+    for (var i = 0; i < MANUAL_ACTIONS.length; i++) {
+      if (MANUAL_ACTIONS[i].id === p.actionId) {
+        MANUAL_ACTIONS[i]._clickupId = p.newClickupId;
+        MANUAL_ACTIONS[i]._clickupUrl = 'https://app.clickup.com/t/' + p.newClickupId;
+        MANUAL_ACTIONS[i]._clickupTaskDeleted = false;
+        break;
+      }
+    }
+    // Also clear the flag on the linked source AD
+    if (p.oldClickupId) {
+      for (var j = 0; j < ADS.length; j++) {
+        if (ADS[j]._clickupId === p.oldClickupId || ADS[j].clickupTaskId === p.oldClickupId) {
+          ADS[j]._clickupId = p.newClickupId;
+          ADS[j].clickupTaskId = p.newClickupId;
+          ADS[j]._clickupUrl = 'https://app.clickup.com/t/' + p.newClickupId;
+          ADS[j]._clickupTaskDeleted = false;
+          break;
+        }
+      }
+    }
+    if (typeof renderActionPlan === 'function') renderActionPlan();
+    if (typeof renderCreatives === 'function') renderCreatives();
+  });
+
   // Generic sync-needed: another client finished saving → we re-fetch
   _rtChannel.on('broadcast', { event: 'sync-needed' }, function(msg) {
     var p = msg && msg.payload;
@@ -4156,7 +4190,10 @@ const DB = {
       // Build final rows, stamping clientId into payload for self-echo detection
       const finalRows = (state.MANUAL_ACTIONS || []).map(function (ma) {
         var payload = {};
-        for (var k in ma) { if (k !== '_dbId') payload[k] = ma[k]; }
+        // _dbId is internal DB row id, _clickupTaskDeleted is runtime-only flag
+        // (recalculated on every sync) — never persist either to DB
+        var _skipKeys = { '_dbId': true, '_clickupTaskDeleted': true };
+        for (var k in ma) { if (!_skipKeys[k]) payload[k] = ma[k]; }
         if (_saveClientId) payload._clientId = _saveClientId;
         var row = { product_id: productId, payload: payload, live_status: ma.liveStatus || null };
         if (ma._dbId) row.id = ma._dbId;
@@ -7414,12 +7451,16 @@ function renderActionPlan() {
       }
 
       // ClickUp link or create button.
-      // Three mutually-exclusive render states:
-      //   1. Task already in ClickUp  → open-link pill
-      //   2. Create-in-flight          → animated spinner button (disabled — survives re-render mid-fetch)
-      //   3. Idle                      → "+ ClickUp" create button
+      // Four mutually-exclusive render states:
+      //   1. Task deleted in ClickUp   → warning badge + Recreate button
+      //   2. Task already in ClickUp  → open-link pill
+      //   3. Create-in-flight          → animated spinner button (disabled — survives re-render mid-fetch)
+      //   4. Idle                      → "+ ClickUp" create button
       var cuControl = '';
-      if (act._clickupId) {
+      if (act._clickupId && act._clickupTaskDeleted) {
+        cuControl = '<span class="ap-cu-deleted-badge" title="This ClickUp task was deleted. Click Recreate to create a fresh one.">&#9888; Deleted in ClickUp</span>' +
+          '<button class="ap-cu-create-btn" style="margin-left:4px" onclick="recreateClickUpTask(\'' + escAttr(act.id) + '\')">&#8635; Recreate</button>';
+      } else if (act._clickupId) {
         cuControl = '<a class="ap-cu-done-link" href="https://app.clickup.com/t/' + escAttr(act._clickupId) + '" target="_blank" rel="noopener">&#8599; ClickUp</a>';
       } else if (act._cu_creating) {
         cuControl = '<button class="ap-cu-create-btn loading" id="ap_cu_btn_' + escAttr(act.id) + '" disabled aria-busy="true">Creating</button>';
@@ -9222,7 +9263,185 @@ function buildTaskDescription(ad) {
 }
 
 // Per-card: create a single action plan task in ClickUp
-function createClickUpTaskFromAction(actionId, onDone) {
+// Recreate a ClickUp task that was deleted in ClickUp.
+// Clears the stale _clickupId from memory + DB, then creates a fresh task.
+function recreateClickUpTask(actionId) {
+  var act = null;
+  for (var i = 0; i < MANUAL_ACTIONS.length; i++) {
+    if (MANUAL_ACTIONS[i].id === actionId) { act = MANUAL_ACTIONS[i]; break; }
+  }
+  if (!act) return;
+  if (!CFG.key) { toast('Enter ClickUp API key first', 'err'); return; }
+
+  var activeProd = getActiveProduct();
+  var listId = activeProd && activeProd.clickupListId;
+  if (!listId) { toast('Link a ClickUp list first', 'err'); return; }
+
+  var oldClickupId = act._clickupId;
+  var taskTitle = act.title || '';
+
+  // Find the linked source AD. Try three strategies in order:
+  // 1. By sourceAdId/adId (the action's stored id)
+  // 2. By _clickupId match (if the action had a ClickUp ID that matches an AD's)
+  // 3. By formatName === act.title (legacy actions can have stale sourceAdId
+  //    that no longer match ADS after ClickUp sync re-hydrated the IDs)
+  var sourceAd = null;
+  var lookupKey = act.sourceAdId || act.adId;
+  for (var j = 0; j < ADS.length; j++) {
+    if (ADS[j].id === lookupKey) { sourceAd = ADS[j]; break; }
+  }
+  if (!sourceAd && oldClickupId) {
+    for (var j = 0; j < ADS.length; j++) {
+      if (ADS[j]._clickupId === oldClickupId || ADS[j].clickupTaskId === oldClickupId) {
+        sourceAd = ADS[j]; break;
+      }
+    }
+  }
+  if (!sourceAd && taskTitle) {
+    for (var j = 0; j < ADS.length; j++) {
+      if ((ADS[j].formatName || '') === taskTitle) { sourceAd = ADS[j]; break; }
+    }
+  }
+
+  toast('Searching ClickUp for existing task…', 'info');
+
+  // Step 1 — Search the linked list by task name
+  fetchAllTasks(listId).then(function(tasks) {
+    var foundTask = null;
+
+    // Exact match first
+    for (var i = 0; i < tasks.length; i++) {
+      if ((tasks[i].name || '').trim() === taskTitle.trim()) {
+        foundTask = tasks[i];
+        break;
+      }
+    }
+
+    // Contains check — ClickUp task name starts with our title (e.g. "AR-090-INS-010 (13254)" starts with "AR-090-INS-010")
+    if (!foundTask) {
+      var titleLower = taskTitle.toLowerCase().trim();
+      for (var i = 0; i < tasks.length; i++) {
+        var cuName = (tasks[i].name || '').toLowerCase().trim();
+        if (cuName.startsWith(titleLower) || titleLower.startsWith(cuName)) {
+          foundTask = tasks[i];
+          break;
+        }
+      }
+    }
+
+    // Fuzzy fallback (80% threshold) if still no match
+    if (!foundTask) {
+      var bestScore = 0;
+      var titleL = taskTitle.toLowerCase().trim();
+      var titleWords = titleL.split(/\s+/);
+      for (var i = 0; i < tasks.length; i++) {
+        var tL = (tasks[i].name || '').toLowerCase().trim();
+        var tWords = tL.split(/\s+/);
+        var matches = 0;
+        for (var a = 0; a < titleWords.length; a++) {
+          for (var b = 0; b < tWords.length; b++) {
+            if (titleWords[a] === tWords[b] && titleWords[a].length > 1) { matches++; break; }
+          }
+        }
+        var score = (2 * matches) / (titleWords.length + tWords.length);
+        if (score > bestScore && score >= 0.8) { bestScore = score; foundTask = tasks[i]; }
+      }
+    }
+
+    if (foundTask) {
+      // ── Scenario A: task found — re-link ──
+      var newId = foundTask.id;
+      act._clickupId = newId;
+      act._clickupUrl = 'https://app.clickup.com/t/' + newId;
+      act._clickupTaskDeleted = false;
+
+      if (sourceAd) {
+        sourceAd._clickupId = newId;
+        sourceAd.clickupTaskId = newId;
+        sourceAd._clickupUrl = 'https://app.clickup.com/t/' + newId;
+        sourceAd._clickupTaskDeleted = false;
+      }
+
+      saveState();
+      renderActionPlan();
+
+      // Broadcast to all other clients instantly
+      if (typeof _rtChannel !== 'undefined' && _rtChannel) {
+        _rtChannel.send({
+          type: 'broadcast', event: 'action-relinked',
+          payload: { actionId: actionId, newClickupId: newId, oldClickupId: oldClickupId, clientId: _myClientId }
+        });
+      }
+
+      toast('Re-linked to existing ClickUp task ✓', 'ok');
+
+    } else {
+      // ── Scenario B: task not found — clear stale link + create fresh ──
+      act._clickupId = null;
+      act._clickupUrl = null;
+      act._clickupTaskDeleted = false;
+
+      if (sourceAd && sourceAd._clickupId === oldClickupId) {
+        sourceAd._clickupId = null;
+        sourceAd.clickupTaskId = null;
+        sourceAd._clickupUrl = null;
+        sourceAd._clickupTaskDeleted = false;
+      }
+
+      // Stamp sourceAd fields onto act so createClickUpTaskFromAction has full data
+      // even if its own internal sourceAd lookup produces a null (e.g. stale adId).
+      if (sourceAd) {
+        act.sourceAdId = sourceAd.id; // ensure internal lookup finds the right AD
+        if (!act.angle)            act.angle            = sourceAd.angle            || '';
+        if (!act.persona)          act.persona          = sourceAd.persona          || '';
+        if (!act.funnelStage)      act.funnelStage      = sourceAd.funnelStage      || '';
+        // Stash the old ClickUp ID onto _sourceClickupId so the brief inheritance
+        // logic inside createClickUpTaskFromAction (Scenario 2) can still find
+        // the parent task via its fallback chain even after we null _clickupId.
+        if (oldClickupId && !sourceAd._sourceClickupId) {
+          sourceAd._sourceClickupId = oldClickupId;
+        }
+      }
+      // Defensive: clear any leftover in-flight lock from a prior failed attempt
+      // so createClickUpTaskFromAction doesn't silently early-return.
+      act._cu_creating = false;
+
+      saveState();
+      toast('Task not found in ClickUp — creating new one…', 'info');
+      createClickUpTaskFromAction(actionId, function(newClickupId) {
+        if (newClickupId && typeof _rtChannel !== 'undefined' && _rtChannel) {
+          _rtChannel.send({
+            type: 'broadcast', event: 'action-relinked',
+            payload: { actionId: actionId, newClickupId: newClickupId, oldClickupId: oldClickupId, clientId: _myClientId }
+          });
+        }
+      }, sourceAd);
+    }
+
+  }).catch(function(err) {
+    toast('Search failed — creating new task instead…', 'warn');
+    // Fallback: clear and create
+    act._clickupId = null;
+    act._clickupUrl = null;
+    act._clickupTaskDeleted = false;
+    if (sourceAd && sourceAd._clickupId === oldClickupId) {
+      sourceAd._clickupId = null;
+      sourceAd.clickupTaskId = null;
+      sourceAd._clickupUrl = null;
+      sourceAd._clickupTaskDeleted = false;
+    }
+    if (sourceAd) {
+      act.sourceAdId = sourceAd.id;
+      if (!act.angle)       act.angle       = sourceAd.angle       || '';
+      if (!act.persona)     act.persona     = sourceAd.persona     || '';
+      if (!act.funnelStage) act.funnelStage = sourceAd.funnelStage || '';
+    }
+    saveState();
+    createClickUpTaskFromAction(actionId, null, sourceAd);
+  });
+}
+
+function createClickUpTaskFromAction(actionId, onDone, sourceAdOverride) {
   if (!CFG.key) { toast('Enter ClickUp API key first', 'err'); return; }
 
   var act = null;
@@ -9242,10 +9461,21 @@ function createClickUpTaskFromAction(actionId, onDone) {
   var listId = activeProd && activeProd.clickupListId;
   if (!listId) { toast('Link a ClickUp list first', 'err'); return; }
 
-  // Find source AD
-  var sourceAd = null;
-  for (var i = 0; i < ADS.length; i++) {
-    if (ADS[i].id === (act.sourceAdId || act.adId)) { sourceAd = ADS[i]; break; }
+  // Find source AD — prefer explicit override (from recreate flow) so we don't
+  // lose the reference if act.sourceAdId somehow got cleared or mismatched.
+  var sourceAd = sourceAdOverride || null;
+  if (!sourceAd) {
+    var _lk = act.sourceAdId || act.adId;
+    for (var i = 0; i < ADS.length; i++) {
+      if (ADS[i].id === _lk) { sourceAd = ADS[i]; break; }
+    }
+    // Fallback: match by formatName (handles legacy actions whose sourceAdId
+    // predates a ClickUp sync that re-keyed AD ids to ClickUp task IDs).
+    if (!sourceAd && act.title) {
+      for (var i = 0; i < ADS.length; i++) {
+        if ((ADS[i].formatName || '') === act.title) { sourceAd = ADS[i]; break; }
+      }
+    }
   }
 
   // Save source AD's existing ClickUp ID BEFORE anything overwrites it
@@ -9651,7 +9881,7 @@ function createClickUpTaskFromAction(actionId, onDone) {
     buildCreativeUsageIndex();
     renderCreatives();
     toast('Task created in ClickUp ✓', 'ok');
-    if (onDone) onDone(true);
+    if (onDone) onDone(newId);
   })
   .catch(function(err) {
     // IMPORTANT: clear the action-level lock so a subsequent retry can proceed.

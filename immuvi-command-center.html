@@ -1447,6 +1447,9 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   border-radius: var(--r);
   margin-bottom: 20px;
   overflow: hidden;
+  /* BUG-001 fix: the Add-Persona dropdown is now portaled to <body> with
+     position: fixed (see openAddPersonaPopup). overflow: hidden is safe
+     here — the dropdown lives outside this container so it can't be clipped. */
   animation: mxFadeUp 0.35s var(--spring) both;
   box-shadow: 0 2px 8px rgba(15, 23, 42, 0.06), 0 1px 3px rgba(15, 23, 42, 0.04);
 }
@@ -4027,10 +4030,21 @@ const DB = {
       SB.from('manual_actions').select('*').eq('product_id', productId)
     ]);
     const meta = {}, assigns = {};
+    // Build ANGLE_PERSONAS from the matrix_cells rows themselves: every cell
+    // row implies "this persona is assigned to this angle" — including empty
+    // assignment-only rows we now write for manually-assigned personas with
+    // 0 creatives. This is the persistence half of BUG-003.
+    const anglePersonasFromCells = {};
     (cells.data || []).forEach(function (c) {
       const cellKey2 = (c.meta && c.meta.cell_key) || (c.angle_id + '||' + c.persona_id);
       meta[cellKey2] = (c.meta && c.meta.meta) || {};
       assigns[cellKey2] = c.creative_assignments || [];
+      if (c.angle_id && c.persona_id) {
+        if (!anglePersonasFromCells[c.angle_id]) anglePersonasFromCells[c.angle_id] = [];
+        if (anglePersonasFromCells[c.angle_id].indexOf(c.persona_id) === -1) {
+          anglePersonasFromCells[c.angle_id].push(c.persona_id);
+        }
+      }
       // ── Rehydrate 3-part per-ad metadata back into MATRIX_CELL_META ──
       // On save, keys like "adId||angle||persona" get folded into meta.per_ad
       // as { adId: {...meta} }. Without this rehydration step, task names,
@@ -4053,7 +4067,7 @@ const DB = {
       CELL_CREATIVE_ASSIGNMENTS: assigns,
       MANUAL_ACTIONS: (actions.data || []).map(function (m) { return Object.assign({}, m.payload || {}, { _dbId: m.id, liveStatus: m.live_status }); }),
       PROD: [], // derived from ads, no dedicated table
-      ANGLE_PERSONAS: [] // populated elsewhere
+      ANGLE_PERSONAS: anglePersonasFromCells // hydrated from matrix_cells rows
     };
   },
 
@@ -4148,6 +4162,21 @@ const DB = {
     });
     Object.keys(assigns).forEach(function (k) {
       if (k.split('||').length === 2) cellKeys2.add(k);
+    });
+
+    // ── ANGLE_PERSONAS persistence (BUG-003) ─────────────────────
+    // For every (angle, persona) explicitly assigned in ANGLE_PERSONAS but
+    // not already represented by a meta or creative-assignment cell row,
+    // write a synthetic empty cell. This makes assignments survive refresh
+    // — previously ANGLE_PERSONAS was runtime-only and re-empty every load,
+    // so manual "+ Add Persona" picks vanished after F5.
+    const _ap = state.ANGLE_PERSONAS || {};
+    Object.keys(_ap).forEach(function (angName) {
+      (_ap[angName] || []).forEach(function (perName) {
+        if (!angName || !perName) return;
+        const apKey = angName + '||' + perName;
+        cellKeys2.add(apKey);
+      });
     });
 
     const cellRows = [];
@@ -7632,15 +7661,7 @@ function updateManualActionStatus(id, newStatus) {
       'Complete':       'complete'
     };
     var cuStatus = cuStatusMap[newStatus] || newStatus.toLowerCase();
-    apiUpdateTask(act._clickupId, { status: cuStatus })
-      .then(function() {
-        toast('Status updated in ClickUp ✓', 'ok');
-      })
-      .catch(function(err) {
-        // Don't block the UI — just warn. The status is already saved locally.
-        console.warn('[ClickUp] status update failed:', err && err.message);
-        toast('Saved locally — ClickUp update failed', 'warn');
-      });
+    _syncToClickUp(act._clickupId, { status: cuStatus }, 'status → ' + newStatus);
   }
 }
 
@@ -8641,25 +8662,80 @@ function openEditCreative(id) {
 }
 
 function saveEditCreative(id) {
+  var ad = null, idx = -1;
   for (var i = 0; i < ADS.length; i++) {
-    if (ADS[i].id === id) {
-      ADS[i].formatName = document.getElementById('ecFormatName').value;
-      ADS[i].adLink = document.getElementById('ecAdLink').value.trim();
-      ADS[i].driveLink = document.getElementById('ecDriveLink') ? document.getElementById('ecDriveLink').value.trim() : (ADS[i].driveLink || '');
-      ADS[i].adType = document.getElementById('ecAdType').value;
-      ADS[i].funnelStage = document.getElementById('ecFunnelStage').value;
-      ADS[i].status = document.getElementById('ecStatus').value;
-      ADS[i].angle = document.getElementById('ecAngle').value;
-      ADS[i].persona = document.getElementById('ecPersona').value;
-      break;
-    }
+    if (ADS[i].id === id) { ad = ADS[i]; idx = i; break; }
   }
+  if (!ad) { closeModal(); return; }
+
+  // Capture OLD values to detect what actually changed
+  var oldName        = ad.formatName;
+  var oldAdLink      = ad.adLink;
+  var oldDriveLink   = ad.driveLink;
+  var oldAdType      = ad.adType;
+  var oldFunnelStage = ad.funnelStage;
+  var oldStatus      = ad.status;
+  var oldAngle       = ad.angle;
+  var oldPersona     = ad.persona;
+
+  // Apply new values from form
+  ad.formatName  = document.getElementById('ecFormatName').value;
+  ad.adLink      = document.getElementById('ecAdLink').value.trim();
+  ad.driveLink   = document.getElementById('ecDriveLink') ? document.getElementById('ecDriveLink').value.trim() : (ad.driveLink || '');
+  ad.adType      = document.getElementById('ecAdType').value;
+  ad.funnelStage = document.getElementById('ecFunnelStage').value;
+  ad.status      = document.getElementById('ecStatus').value;
+  ad.angle       = document.getElementById('ecAngle').value;
+  ad.persona     = document.getElementById('ecPersona').value;
+  ADS[idx] = ad;
+
   closeModal();
   P = process(ADS);
   deriveWinners();
   genActions();
   renderAll();
   toast('Creative ' + id + ' updated');
+
+  // ── NAME-CHANGE PROPAGATION (local mirroring) ──
+  if (ad.formatName !== oldName && ad.formatName) {
+    Object.keys(MATRIX_CELL_META).forEach(function(k) {
+      if (k.indexOf(ad.id + '||') === 0) {
+        MATRIX_CELL_META[k].uniqueName = ad.formatName;
+      }
+    });
+    for (var mai4 = 0; mai4 < MANUAL_ACTIONS.length; mai4++) {
+      var _ma4 = MANUAL_ACTIONS[mai4];
+      if (_ma4.sourceAdId === ad.id || _ma4.adId === ad.id || _ma4._clickupId === ad._clickupId) {
+        _ma4.title = ad.formatName;
+      }
+    }
+    try { renderActionPlan(); } catch(e) {}
+  }
+
+  // ── PUSH every changed field to ClickUp (the missing piece) ──
+  if (ad._clickupId && CFG.key) {
+    var taskBody = {};
+    if (ad.formatName !== oldName)   taskBody.name = ad.formatName;
+    if (ad.adLink !== oldAdLink && ad.adLink) taskBody.url = ad.adLink;
+    if (ad.status !== oldStatus) {
+      var cuStatusMap = {
+        'Untested':'to do','Approved':'approved','In Production':'in production',
+        'Ready to Launch':'ready to launch','Testing':'testing','Winner':'winner',
+        'Loser':'loser','Scale':'scale','Complete':'complete'
+      };
+      taskBody.status = cuStatusMap[ad.status] || ad.status.toLowerCase();
+    }
+    if (Object.keys(taskBody).length) {
+      _syncToClickUp(ad._clickupId, taskBody, 'edit ' + (ad.formatName || id));
+    }
+    // Custom fields — angle, persona, funnel, type, ad link, drive link
+    if (ad.adType !== oldAdType         && ad.adType)      pushFieldToClickUp(ad, 'adType', ad.adType);
+    if (ad.funnelStage !== oldFunnelStage && ad.funnelStage) pushFieldToClickUp(ad, 'funnelStage', ad.funnelStage);
+    if (ad.angle !== oldAngle           && ad.angle)       pushFieldToClickUp(ad, 'angle', ad.angle);
+    if (ad.persona !== oldPersona       && ad.persona)     pushFieldToClickUp(ad, 'persona', ad.persona);
+    if (ad.adLink !== oldAdLink         && ad.adLink)      pushFieldToClickUp(ad, 'adLink', ad.adLink);
+    if (ad.driveLink !== oldDriveLink   && ad.driveLink)   pushFieldToClickUp(ad, 'driveLink', ad.driveLink);
+  }
 }
 
 // ============================================================
@@ -10728,6 +10804,9 @@ function importTasksFromClickUp(tasks) {
     var ad;
 
     if (existing) {
+      // Capture old formatName BEFORE overwrite so we can detect a rename
+      var _prevFormatName = existing.formatName;
+
       // UPDATE in-place: overwrite ClickUp-controlled fields, keep local metadata
       for (var f = 0; f < CLICKUP_FIELDS.length; f++) {
         var fk = CLICKUP_FIELDS[f];
@@ -10739,6 +10818,25 @@ function importTasksFromClickUp(tasks) {
       }
       // Always sync status regardless (reflects ClickUp state changes)
       if (parsed.status) existing.status = parsed.status;
+
+      // ── NAME-CHANGE PROPAGATION (manual sync path) ──
+      // Mirror the new formatName to all linked surfaces so the matrix cell
+      // display, expanded cell input, AND Action Plan card title update
+      // immediately — no need to wait for the next 30s pollFullSync.
+      if (existing.formatName && existing.formatName !== _prevFormatName) {
+        Object.keys(MATRIX_CELL_META).forEach(function(k) {
+          if (k.indexOf(existing.id + '||') === 0) {
+            MATRIX_CELL_META[k].uniqueName = existing.formatName;
+          }
+        });
+        for (var maiX = 0; maiX < MANUAL_ACTIONS.length; maiX++) {
+          var _maX = MANUAL_ACTIONS[maiX];
+          if (_maX.sourceAdId === existing.id || _maX.adId === existing.id || _maX._clickupId === existing._clickupId) {
+            _maX.title = existing.formatName;
+          }
+        }
+      }
+
       ad = existing;
     } else {
       // Check ClickUp tombstone — skip tasks deliberately deleted by the user
@@ -11203,6 +11301,7 @@ function pollFullSync() {
         existingClickupIds[ad._clickupId] = true;
         var fresh = taskMap[ad._clickupId];
         if (!fresh) continue;
+        var oldFormatNameForMeta = ad.formatName;  // capture for cell-meta sync below
         for (var f = 0; f < _SYNC_DIFF_FIELDS.length; f++) {
           var field = _SYNC_DIFF_FIELDS[f];
           var freshVal = fresh[field];
@@ -11210,6 +11309,23 @@ function pollFullSync() {
             ADS[i][field] = freshVal;
             changed = true;
             fieldUpdates++;
+          }
+        }
+        // ── NAME-CHANGE PROPAGATION ──
+        // If formatName just changed via ClickUp poll, sync the new name to:
+        //   1) every MATRIX_CELL_META[adId||*].uniqueName (so matrix cell display + expanded view both show fresh name)
+        //   2) every linked MANUAL_ACTION.title (so Action Plan card title also matches)
+        if (ad.formatName !== oldFormatNameForMeta && ad.formatName) {
+          Object.keys(MATRIX_CELL_META).forEach(function(k) {
+            if (k.indexOf(ad.id + '||') === 0) {
+              MATRIX_CELL_META[k].uniqueName = ad.formatName;
+            }
+          });
+          for (var mai3 = 0; mai3 < MANUAL_ACTIONS.length; mai3++) {
+            var _ma3 = MANUAL_ACTIONS[mai3];
+            if (_ma3.sourceAdId === ad.id || _ma3.adId === ad.id || _ma3._clickupId === ad._clickupId) {
+              _ma3.title = ad.formatName;
+            }
           }
         }
       }
@@ -11300,12 +11416,28 @@ function pollFullSync() {
         }
       }
 
-      // ── Pass 3: sync MANUAL_ACTIONS liveStatus ───────────────────────
+      // ── Pass 3: sync MANUAL_ACTIONS liveStatus + title from ClickUp ──
+      // External ClickUp renames now propagate to action plan task titles
+      // (and the linked source ad's formatName).
       for (var i = 0; i < MANUAL_ACTIONS.length; i++) {
-        if (MANUAL_ACTIONS[i]._clickupId && taskMap[MANUAL_ACTIONS[i]._clickupId]) {
-          var newLive = taskMap[MANUAL_ACTIONS[i]._clickupId].status;
-          if (newLive && MANUAL_ACTIONS[i].liveStatus !== newLive) {
-            MANUAL_ACTIONS[i].liveStatus = newLive;
+        var _ma = MANUAL_ACTIONS[i];
+        if (!_ma._clickupId || !taskMap[_ma._clickupId]) continue;
+        var fresh = taskMap[_ma._clickupId];
+
+        // Status sync
+        var newLive = fresh.status;
+        if (newLive && _ma.liveStatus !== newLive) {
+          _ma.liveStatus = newLive;
+          changed = true;
+        }
+
+        // Title sync — only if user just edited it externally (don't fight a local edit)
+        var newName = fresh.formatName;
+        if (newName && _ma.title !== newName) {
+          // Skip if user changed status locally in last 5s (likely also editing title)
+          var localGuard = _ma._liveStatusChangedAt && (Date.now() - _ma._liveStatusChangedAt) < 5000;
+          if (!localGuard) {
+            _ma.title = newName;
             changed = true;
           }
         }
@@ -11480,7 +11612,8 @@ async function _flushStateToSupabase(productIdArg) {
       ADS: ADS,
       MATRIX_CELL_META: MATRIX_CELL_META,
       CELL_CREATIVE_ASSIGNMENTS: CELL_CREATIVE_ASSIGNMENTS,
-      MANUAL_ACTIONS: MANUAL_ACTIONS
+      MANUAL_ACTIONS: MANUAL_ACTIONS,
+      ANGLE_PERSONAS: ANGLE_PERSONAS  // BUG-003: persist explicit assignments
     });
     // Keep products list in sync (catches rename / color / clickup list changes).
     // Skip any id in the recent-delete tombstone — otherwise if this tab still
@@ -12452,11 +12585,19 @@ function deriveMasterPersonas() {
 
 // ================================================
 // isPersonaActive — true if persona has ≥1 creative in any angle cell
+// OR is explicitly assigned to any angle via ANGLE_PERSONAS. The explicit-
+// assignment branch is critical for manually-added personas: a user adds
+// "Military wife" via the Personas tab → assigns it to an angle via
+// "+ Add Persona" → it has 0 creatives yet, but should still surface as a
+// column so the user can drop the first creative into it. Without this,
+// the active-only filter swallows the column the moment it's created.
 // ================================================
 function isPersonaActive(personaName) {
   for (var ai = 0; ai < ANGLES.length; ai++) {
-    var key = ANGLES[ai].name + '||' + personaName;
+    var aname = ANGLES[ai].name;
+    var key = aname + '||' + personaName;
     if ((CELL_CREATIVE_ASSIGNMENTS[key] || []).length > 0) return true;
+    if (ANGLE_PERSONAS[aname] && ANGLE_PERSONAS[aname].indexOf(personaName) !== -1) return true;
   }
   return false;
 }
@@ -12570,22 +12711,55 @@ function openAddPersonaPopup(angleName, btnEl) {
   }
   html += '</div>';
 
-  var wrapper = btnEl.closest('.mx-angle-section-hdr');
-  if (wrapper) {
-    wrapper.style.position = 'relative';
-    wrapper.insertAdjacentHTML('beforeend', html);
+  // ── Portal to <body> with position: fixed ──
+  // Previously this dropdown was inserted into .mx-angle-section-hdr with
+  // position: absolute. Any ancestor with overflow: hidden / overflow: scroll
+  // (matrix grid, panels, etc.) would clip the dropdown — sometimes hiding
+  // the LAST persona in the list. By portaling to <body> and using fixed
+  // positioning we guarantee the full list is always visible and clickable,
+  // regardless of where the button sits inside the document.
+  document.body.insertAdjacentHTML('beforeend', html);
+  var dd = document.body.lastElementChild;
+
+  // Compute coordinates from the button's bounding rect
+  var rect = btnEl.getBoundingClientRect();
+  dd.style.position = 'fixed';
+  dd.style.top      = (rect.bottom + 6) + 'px';
+  dd.style.left     = rect.left + 'px';
+  dd.style.zIndex   = '9999';
+
+  // If dropdown would extend beyond viewport bottom, flip it above the button
+  var ddRect = dd.getBoundingClientRect();
+  var viewportH = window.innerHeight;
+  if (rect.bottom + ddRect.height + 12 > viewportH && rect.top > ddRect.height + 12) {
+    dd.style.top = (rect.top - ddRect.height - 6) + 'px';
+  }
+  // If it would extend beyond right edge, snap to right of button
+  var viewportW = window.innerWidth;
+  if (rect.left + ddRect.width + 12 > viewportW) {
+    dd.style.left = Math.max(8, viewportW - ddRect.width - 12) + 'px';
   }
 
+  // Close on outside click / scroll / Escape
   setTimeout(function () {
-    document.addEventListener('click', closePersonaDropdown);
+    document.addEventListener('click',  closePersonaDropdown);
+    document.addEventListener('keydown', _personaDropdownKey);
+    window.addEventListener('scroll',    closePersonaDropdown, true);
+    window.addEventListener('resize',    closePersonaDropdown);
   }, 10);
 }
 
+function _personaDropdownKey(e) {
+  if (e.key === 'Escape') closePersonaDropdown({ target: document.body });
+}
+
 function closePersonaDropdown(e) {
-  if (!e.target.closest('.mx-persona-dropdown') && !e.target.closest('.mx-add-persona-btn')) {
-    document.querySelectorAll('.mx-persona-dropdown').forEach(function (d) { d.remove(); });
-    document.removeEventListener('click', closePersonaDropdown);
-  }
+  if (e && e.target && (e.target.closest && (e.target.closest('.mx-persona-dropdown') || e.target.closest('.mx-add-persona-btn')))) return;
+  document.querySelectorAll('.mx-persona-dropdown').forEach(function (d) { d.remove(); });
+  document.removeEventListener('click',  closePersonaDropdown);
+  document.removeEventListener('keydown', _personaDropdownKey);
+  window.removeEventListener('scroll',   closePersonaDropdown, true);
+  window.removeEventListener('resize',   closePersonaDropdown);
 }
 
 // ================================================
@@ -12923,7 +13097,10 @@ function renderDetailPanel(angleName, personaName) {
       funnelStage: dTrackerAd.funnelStage || 'TOF',
       status: dMeta.status || dTrackerAd.status || 'Untested',
       adOrigin: dTrackerAd.adOrigin || 'New Find',
-      uniqueName: dMeta.uniqueName || dTrackerAd.formatName,
+      // Always use the canonical formatName — single source of truth across
+      // matrix cell, expanded cell input, Action Plan card title, and ClickUp.
+      // Stale per-cell uniqueName values (from legacy edits) are ignored.
+      uniqueName: dTrackerAd.formatName || dMeta.uniqueName || '',
       description: dMeta.description || '',
       dueDate: dMeta.dueDate || '',
       _cellAdKey: dCellAdKey
@@ -12987,8 +13164,10 @@ function renderDetailPanel(angleName, personaName) {
         (isAdExpanded ? 'background:rgba(37,99,235,0.04);' : '') + '">';
       html += '<td class="mx-dt-id"><button onclick="event.stopPropagation();navigateToCreative(\'' + escAttr(ad.id) + '\')" style="background:none;border:none;padding:0;cursor:pointer;font-family:\'JetBrains Mono\',monospace;font-size:inherit;color:var(--inprog);text-decoration:underline;text-underline-offset:2px;font-weight:600" title="Go to Creative Tracker">' + esc(ad.id) + '</button></td>';
 
-      // Task Name (editable) — saves to MATRIX_CELL_META; ClickUp link moved here (FORMAT col removed)
-      html += '<td><span class="mx-dt-task-name" contenteditable="true" onblur="event.stopPropagation();saveAdField(\'' + escAttr(ad.id) + '\',\'' + escJs(angleName) + '\',\'' + escJs(personaName) + '\',\'uniqueName\',this.textContent)" onclick="event.stopPropagation()">' + esc(ad.uniqueName) + '</span>' +
+      // Task Name (editable) — writes directly to ad.formatName (canonical name)
+      // and propagates to all surfaces: matrix cell display, Action Plan card,
+      // ClickUp task name. No more dual-name divergence.
+      html += '<td><span class="mx-dt-task-name" contenteditable="true" onblur="event.stopPropagation();saveCellTaskName(\'' + escAttr(ad.id) + '\', this.textContent)" onclick="event.stopPropagation()">' + esc(ad.uniqueName) + '</span>' +
         (ad._clickupId ? '&nbsp;<a href="https://app.clickup.com/t/' + escAttr(ad._clickupId) + '" target="_blank" class="cu-jump-link" title="Open in ClickUp" onclick="event.stopPropagation()">&#8599; ClickUp</a>' : '') +
       '</td>';
 
@@ -13175,15 +13354,130 @@ function saveAdField(adId, angleName, personaName, field, value) {
   var cellAdKey = adId + '||' + angleName + '||' + personaName;
   if (!MATRIX_CELL_META[cellAdKey]) MATRIX_CELL_META[cellAdKey] = {};
   MATRIX_CELL_META[cellAdKey][field] = value;
+
+  // ── NAME EDIT: when user changes uniqueName in the expanded cell, mirror to
+  // the AD's formatName + linked manual action title + ClickUp task name.
+  // This makes the matrix cell display, Action Plan card title, and ClickUp
+  // task name all stay in sync. Single edit → propagates everywhere.
+  if (field === 'uniqueName' && value && value.trim()) {
+    var pushAd = null;
+    for (var i = 0; i < ADS.length; i++) { if (ADS[i].id === adId) { pushAd = ADS[i]; break; } }
+    if (pushAd && pushAd.formatName !== value) {
+      pushAd.formatName = value;
+      // Mirror to linked manual_action so Action Plan title updates too
+      for (var mi = 0; mi < MANUAL_ACTIONS.length; mi++) {
+        if (MANUAL_ACTIONS[mi].sourceAdId === adId || MANUAL_ACTIONS[mi].adId === adId || MANUAL_ACTIONS[mi]._clickupId === pushAd._clickupId) {
+          MANUAL_ACTIONS[mi].title = value;
+        }
+      }
+      // Push to ClickUp via the new sync queue (gives retry banner on failure)
+      if (pushAd._clickupId && CFG.key && typeof _syncToClickUp === 'function') {
+        _syncToClickUp(pushAd._clickupId, { name: value }, 'rename → ' + value);
+      }
+      // Re-render so Action Plan + Tracker pick up the new name immediately
+      try { renderActionPlan(); renderCreatives(); } catch (e) {}
+    }
+  }
+
   saveState();
   // Auto-push to ClickUp if this is a taxonomy field
   var cuFieldMap = { creativeStructure: 'creativeStructure', hookType: 'hookType', productionStyle: 'productionStyle', angle: 'angle', persona: 'persona' };
   if (cuFieldMap[field]) {
-    var pushAd = null;
-    for (var i = 0; i < ADS.length; i++) { if (ADS[i].id === adId) { pushAd = ADS[i]; break; } }
-    if (pushAd) pushFieldToClickUp(pushAd, cuFieldMap[field], value);
+    var pushAd2 = null;
+    for (var j = 0; j < ADS.length; j++) { if (ADS[j].id === adId) { pushAd2 = ADS[j]; break; } }
+    if (pushAd2) pushFieldToClickUp(pushAd2, cuFieldMap[field], value);
   }
 }
+
+// ════════════════════════════════════════════════════════════════
+//  saveCellTaskName — replaces the saveAdField('uniqueName',...) path.
+//  Single source of truth: ad.formatName. Edit propagates to:
+//    1. ad.formatName (canonical)
+//    2. Every MATRIX_CELL_META[adId||*].uniqueName (so legacy reads still work)
+//    3. Every linked MANUAL_ACTIONS.title (Action Plan card title)
+//    4. ClickUp task name (PUT /task/{id} with {name})
+//  Eliminates the dual-name divergence that caused stale "ttt" / mismatched
+//  names across matrix cell, expanded cell, and action plan.
+// ════════════════════════════════════════════════════════════════
+function saveCellTaskName(adId, value) {
+  if (!adId) return;
+  value = String(value || '').trim();
+  if (!value) return;
+
+  var ad = null;
+  for (var i = 0; i < ADS.length; i++) {
+    if (ADS[i].id === adId) { ad = ADS[i]; break; }
+  }
+  if (!ad) return;
+  if (ad.formatName === value) return; // no-op
+
+  // 1. Canonical update
+  ad.formatName = value;
+
+  // 2. Mirror to every cell-meta entry for this ad (so any legacy fallback chain
+  //    that reads cellMeta.uniqueName resolves to the right name everywhere).
+  Object.keys(MATRIX_CELL_META).forEach(function(k) {
+    if (k.indexOf(adId + '||') === 0) {
+      MATRIX_CELL_META[k].uniqueName = value;
+    }
+  });
+
+  // 3. Mirror to linked Action Plan tasks
+  for (var mi = 0; mi < MANUAL_ACTIONS.length; mi++) {
+    var _ma = MANUAL_ACTIONS[mi];
+    if (_ma.sourceAdId === adId || _ma.adId === adId || (_ma._clickupId && _ma._clickupId === ad._clickupId)) {
+      _ma.title = value;
+    }
+  }
+
+  // 4. Push to ClickUp via the sync queue (visible retry banner on failure)
+  if (ad._clickupId && CFG.key && typeof _syncToClickUp === 'function') {
+    _syncToClickUp(ad._clickupId, { name: value }, 'rename → ' + value);
+  }
+
+  // Persist + re-render every surface
+  saveState();
+  P = process(ADS);
+  try { renderActionPlan(); } catch(e) {}
+  try { renderCreatives(); }  catch(e) {}
+  try { renderMatrix(); }     catch(e) {}
+  toast('Renamed to "' + value + '"', 'ok');
+}
+
+// ════════════════════════════════════════════════════════════════
+//  Self-healing pass — collapse stale uniqueName ≠ formatName drift
+//  Runs once on app boot. Touches MATRIX_CELL_META in memory only;
+//  the next saveState flushes the cleaned-up state to Supabase.
+// ════════════════════════════════════════════════════════════════
+function _healUniqueNameDrift() {
+  if (typeof MATRIX_CELL_META !== 'object' || !MATRIX_CELL_META) return;
+  var healed = 0;
+  Object.keys(MATRIX_CELL_META).forEach(function(k) {
+    var parts = k.split('||');
+    if (parts.length !== 3) return; // only adId||angle||persona keys
+    var adId = parts[0];
+    var meta = MATRIX_CELL_META[k];
+    if (!meta || !meta.uniqueName) return;
+    var ad = null;
+    for (var i = 0; i < ADS.length; i++) {
+      if (ADS[i].id === adId) { ad = ADS[i]; break; }
+    }
+    if (!ad || !ad.formatName) return;
+    if (meta.uniqueName !== ad.formatName) {
+      meta.uniqueName = ad.formatName;
+      healed++;
+    }
+  });
+  if (healed > 0) {
+    console.log('[heal] collapsed', healed, 'stale uniqueName values to canonical formatName');
+    if (typeof saveState === 'function') saveState();
+  }
+}
+
+// Run once after initial data load — picks up after Supabase fetch finishes
+setTimeout(function() {
+  if (typeof ADS !== 'undefined' && ADS && ADS.length > 0) _healUniqueNameDrift();
+}, 1500);
 
 // ================================================
 // renderVariationSubPanel — variation tracker inside detail table
@@ -15937,6 +16231,128 @@ function renderMatrixSummary() {
   html += '</div>';
   return html;
 }
+
+// ════════════════════════════════════════════════════════════════
+//  ClickUp SYNC QUEUE + OUT-OF-SYNC BANNER
+//  Robust outbound writes. Failed pushes queue + show yellow banner.
+//  Click banner to see details. Click Retry to attempt again.
+// ════════════════════════════════════════════════════════════════
+window._pendingCu = window._pendingCu || [];
+
+function _syncBannerHtml() {
+  var n = window._pendingCu.length;
+  if (n === 0) return '';
+  var details = window._pendingCu.map(function(w, i) {
+    var ago = Math.round((Date.now() - w.at) / 1000);
+    return '<div style="font-size:0.7rem;padding:4px 0;border-bottom:1px solid rgba(0,0,0,0.06)">' +
+      '<strong>' + esc(w.label || 'update') + '</strong> · task ' + esc(w.taskId.slice(0, 10)) +
+      ' <span style="color:var(--t3)">' + ago + 's ago</span>' +
+      '<div style="color:#B91C1C;font-size:0.65rem">' + esc(w.error || '') + '</div>' +
+    '</div>';
+  }).join('');
+  return '<div style="display:flex;align-items:center;gap:10px;padding:10px 16px;background:#FEF3C7;border-bottom:1px solid #F59E0B;color:#92400E;font-size:0.78rem;font-weight:500;position:sticky;top:0;z-index:1000;cursor:pointer" id="syncBannerHost">' +
+    '<span>⚠</span>' +
+    '<span><strong>' + n + '</strong> ClickUp write' + (n === 1 ? '' : 's') + ' out of sync</span>' +
+    '<button class="btn-ghost btn-sm" style="margin-left:auto;padding:4px 10px;background:#92400E;color:#FEF3C7;border:none;border-radius:6px" onclick="event.stopPropagation();_retryPendingCu()">Retry all</button>' +
+    '<button class="btn-ghost btn-sm" style="padding:4px 10px;border:1px solid #92400E;color:#92400E;border-radius:6px" onclick="event.stopPropagation();_clearPendingCu()">Dismiss</button>' +
+  '</div>' +
+  '<div id="syncBannerDetails" style="max-height:0;overflow:hidden;background:#FFFBEB;transition:max-height 0.18s ease-out"></div>';
+}
+
+function _renderSyncBanner() {
+  var existing = document.getElementById('syncBanner');
+  var html = _syncBannerHtml();
+  if (!html) {
+    if (existing) existing.remove();
+    return;
+  }
+  if (!existing) {
+    existing = document.createElement('div');
+    existing.id = 'syncBanner';
+    existing.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:1000;';
+    document.body.insertBefore(existing, document.body.firstChild);
+  }
+  existing.innerHTML = html;
+  // Toggle details on click
+  var host = document.getElementById('syncBannerHost');
+  var det = document.getElementById('syncBannerDetails');
+  if (host && det) {
+    host.onclick = function(e) {
+      if (e.target.tagName === 'BUTTON') return;
+      var open = det.style.maxHeight !== '0px' && det.style.maxHeight !== '';
+      if (open) { det.style.maxHeight = '0px'; det.innerHTML = ''; }
+      else {
+        det.innerHTML = '<div style="padding:10px 16px;border-bottom:1px solid rgba(0,0,0,0.08)">' +
+          window._pendingCu.map(function(w) {
+            var ago = Math.round((Date.now() - w.at) / 1000);
+            return '<div style="font-size:0.72rem;padding:6px 0;border-bottom:1px dashed rgba(0,0,0,0.08)">' +
+              '<strong>' + esc(w.label || 'update') + '</strong> · task ' + esc(w.taskId.slice(0, 10)) +
+              ' <span style="color:var(--t3);margin-left:8px">' + ago + 's ago</span>' +
+              '<div style="color:#B91C1C;font-size:0.65rem;margin-top:2px">' + esc(w.error || '') + '</div>' +
+            '</div>';
+          }).join('') +
+        '</div>';
+        det.style.maxHeight = '300px';
+      }
+    };
+  }
+}
+
+function _syncToClickUp(taskId, body, label) {
+  if (!taskId || !CFG.key) return Promise.resolve();
+  // Dedupe — if a write for the same field is already pending, replace it
+  var dedupeKey = taskId + '|' + Object.keys(body).sort().join(',');
+  window._pendingCu = window._pendingCu.filter(function(w) { return w.dedupeKey !== dedupeKey; });
+
+  return apiUpdateTask(taskId, body)
+    .then(function() {
+      // Success — remove from queue (in case it was retried)
+      window._pendingCu = window._pendingCu.filter(function(w) { return w.dedupeKey !== dedupeKey; });
+      _renderSyncBanner();
+      toast('✓ Synced to ClickUp', 'ok');
+    })
+    .catch(function(err) {
+      var msg = (err && err.message) || String(err);
+      console.warn('[sync] failed', label, msg);
+      window._pendingCu.push({
+        dedupeKey: dedupeKey,
+        taskId: taskId,
+        body: body,
+        label: label || 'update',
+        error: msg,
+        at: Date.now()
+      });
+      _renderSyncBanner();
+      toast('ClickUp write failed — queued for retry', 'warn');
+    });
+}
+
+function _retryPendingCu() {
+  if (!window._pendingCu.length) return;
+  var queue = window._pendingCu.slice();
+  window._pendingCu = [];
+  _renderSyncBanner();
+  toast('Retrying ' + queue.length + ' write' + (queue.length === 1 ? '' : 's') + '…');
+  // Stagger 200ms apart to avoid rate limit
+  queue.forEach(function(w, i) {
+    setTimeout(function() {
+      _syncToClickUp(w.taskId, w.body, w.label);
+    }, i * 200);
+  });
+}
+
+function _clearPendingCu() {
+  if (!confirm('Discard ' + window._pendingCu.length + ' pending ClickUp write' + (window._pendingCu.length === 1 ? '' : 's') + '?\n\nLocal changes are preserved — ClickUp just won\'t reflect them.')) return;
+  window._pendingCu = [];
+  _renderSyncBanner();
+}
+
+// Auto-refresh banner every 5s so "ago" timestamps stay fresh
+setInterval(function() { if (window._pendingCu.length) _renderSyncBanner(); }, 5000);
+
+window._syncToClickUp = _syncToClickUp;
+window._retryPendingCu = _retryPendingCu;
+window._clearPendingCu = _clearPendingCu;
 
 </script>
 </body>

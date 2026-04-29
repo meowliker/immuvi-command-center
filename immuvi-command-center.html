@@ -231,7 +231,11 @@ body::before {
 
 .tabs-wrap {
   position: sticky;
-  top: 44px;
+  /* --hdr-h is measured at runtime (see end of <body>). 60px fallback covers
+     first paint before JS runs. The old hard-coded 44px was shorter than the
+     actual rendered header → tabs-wrap slid BEHIND it on scroll, making the
+     nav vanish. */
+  top: var(--hdr-h, 60px);
   z-index: 99;
   background: rgba(243,244,246,0.95);
   border-bottom: 1px solid var(--b);
@@ -12532,7 +12536,33 @@ document.addEventListener('visibilitychange', function () {
   if (document.visibilityState === 'hidden') { try { flushPendingSave(); } catch(e){} }
 });
 
+// ─────────────────────────────────────────────────────────────────────────
+// Sticky-nav header-height sync. The tabs-wrap is `position: sticky;
+// top: var(--hdr-h)` so it parks RIGHT under the real header. We measure
+// the header on load + resize + when its content mutates (presence dots,
+// API key input wrap, sync-bar appearing). Without this, when the header
+// renders taller than the static fallback, the tabs slide behind it.
+// ─────────────────────────────────────────────────────────────────────────
+function _syncHeaderHeightVar() {
+  try {
+    var h = document.querySelector('header.hdr');
+    if (!h) return;
+    var px = Math.round(h.getBoundingClientRect().height);
+    if (px > 0) document.documentElement.style.setProperty('--hdr-h', px + 'px');
+  } catch (_) {}
+}
+window.addEventListener('resize', _syncHeaderHeightVar);
+document.addEventListener('DOMContentLoaded', _syncHeaderHeightVar);
+// ResizeObserver catches dynamic content (presence panel, status bar text changes).
+try {
+  if (typeof ResizeObserver !== 'undefined') {
+    var _hdrEl = document.querySelector('header.hdr');
+    if (_hdrEl) new ResizeObserver(_syncHeaderHeightVar).observe(_hdrEl);
+  }
+} catch (_) {}
+
 window.addEventListener('load', async function () {
+  _syncHeaderHeightVar();
   initFieldOptions();
   loadFieldMaps();
 

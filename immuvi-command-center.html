@@ -3606,8 +3606,17 @@ function _initRealtimeChannel(productId) {
         var st = await DB.loadProductData(pid);
         if (!st || pid !== activeProductId) return;
         if (_saveScheduled || _saveInFlight) return;
-        ANGLES = st.ANGLES || ANGLES;
-        PERSONAS = st.PERSONAS || PERSONAS;
+        // BUG-004: drop any taxonomy rows the user tombstoned locally but a
+        // peer / read-replica still has. Without this, "deleted" angles flash
+        // back in on every realtime sync.
+        var _rtAngTomb = _readTaxonomyTombstone('angle',   pid);
+        var _rtPerTomb = _readTaxonomyTombstone('persona', pid);
+        ANGLES = (st.ANGLES || ANGLES).filter(function (a) {
+          return !(a && a.name && _rtAngTomb[a.name.toLowerCase().trim()]);
+        });
+        PERSONAS = (st.PERSONAS || PERSONAS).filter(function (p) {
+          return !(p && p.name && _rtPerTomb[p.name.toLowerCase().trim()]);
+        });
         if (Array.isArray(st.ADS)) {
           var _localAdById = {};
           for (var i = 0; i < ADS.length; i++) {
@@ -4527,8 +4536,15 @@ function _resubscribeRealtime() {
         if (_saveScheduled || _saveInFlight) return;
         // And don't clobber data that doesn't belong here (mid-switch guard)
         if (_adsProductId && _adsProductId !== activeProductId) return;
-        ANGLES = st.ANGLES || ANGLES;
-        PERSONAS = st.PERSONAS || PERSONAS;
+        // BUG-004: drop tombstoned taxonomy from peer state.
+        var _mAngTomb = _readTaxonomyTombstone('angle',   pid);
+        var _mPerTomb = _readTaxonomyTombstone('persona', pid);
+        ANGLES = (st.ANGLES || ANGLES).filter(function (a) {
+          return !(a && a.name && _mAngTomb[a.name.toLowerCase().trim()]);
+        });
+        PERSONAS = (st.PERSONAS || PERSONAS).filter(function (p) {
+          return !(p && p.name && _mPerTomb[p.name.toLowerCase().trim()]);
+        });
         // ── ADS: union-merge preserving LOCAL provenance fields ──
         //
         // Same class of bug as MANUAL_ACTIONS below: a realtime event on one
@@ -4896,6 +4912,69 @@ function _rememberProductDeletion(productId) {
   if (!productId) return;
   _recentlyDeletedProductIds.add(productId);
   setTimeout(function () { _recentlyDeletedProductIds.delete(productId); }, 15000);
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// TAXONOMY TOMBSTONE (deleted angle / persona names) — BUG-004
+// Why: deleteAngle() clears the angle locally, but the underlying ClickUp
+// tasks still hold the angle value in their custom field. On the next poll:
+//   1. Pass 1 of pollFullSync overwrites the cleared local ad.angle with the
+//      stale ClickUp value.
+//   2. autoDiscoverTaxonomy sees an ad with that angle, doesn't find it in
+//      ANGLES, and re-creates it.
+// Result: deleted angles keep coming back (e.g. "Future Consequence" loop).
+// Persona deletion has the exact same latent bug — it only "works" right
+// now when no ClickUp task happens to carry that persona value.
+//
+// Fix: per-product localStorage tombstone of deleted names (case-insensitive).
+// 24h TTL — long enough that any ClickUp poll cycle within a normal session
+// is covered, short enough that genuinely re-added names eventually unlock.
+// Honored by: autoDiscoverTaxonomy, pollFullSync Pass 1 (treats tombstoned
+// fresh-from-ClickUp value as empty), and realtime/sync merge handlers.
+// ─────────────────────────────────────────────────────────────────────────
+var _TAXONOMY_TOMB_TTL_MS = 86400000; // 24 hours
+function _taxonomyTombKey(kind, productId) {
+  return '_deletedTaxonomy_' + kind + '_' + (productId || 'x');
+}
+function _readTaxonomyTombstone(kind, productId) {
+  try {
+    var raw = JSON.parse(localStorage.getItem(_taxonomyTombKey(kind, productId)) || '{}');
+    var now = Date.now();
+    var live = {};
+    Object.keys(raw).forEach(function (k) {
+      if (now - raw[k] < _TAXONOMY_TOMB_TTL_MS) live[k] = raw[k];
+    });
+    // Re-write pruned set so old entries don't accumulate.
+    if (Object.keys(live).length !== Object.keys(raw).length) {
+      try { localStorage.setItem(_taxonomyTombKey(kind, productId), JSON.stringify(live)); } catch (_) {}
+    }
+    return live;
+  } catch (_) { return {}; }
+}
+function _rememberTaxonomyDeletion(kind, productId, name) {
+  if (!name || !productId) return;
+  try {
+    var key = _taxonomyTombKey(kind, productId);
+    var raw = JSON.parse(localStorage.getItem(key) || '{}');
+    raw[name.toLowerCase().trim()] = Date.now();
+    localStorage.setItem(key, JSON.stringify(raw));
+  } catch (_) {}
+}
+function _isTaxonomyTombstoned(kind, productId, name) {
+  if (!name) return false;
+  var tomb = _readTaxonomyTombstone(kind, productId);
+  return !!tomb[name.toLowerCase().trim()];
+}
+function _forgetTaxonomyDeletion(kind, productId, name) {
+  // Called when the user explicitly RE-ADDS a name we'd tombstoned, so the
+  // tombstone doesn't keep blocking it on subsequent polls.
+  if (!name || !productId) return;
+  try {
+    var key = _taxonomyTombKey(kind, productId);
+    var raw = JSON.parse(localStorage.getItem(key) || '{}');
+    delete raw[name.toLowerCase().trim()];
+    localStorage.setItem(key, JSON.stringify(raw));
+  } catch (_) {}
 }
 
 // Flag set for the duration of a fresh DB load inside switchProduct. While
@@ -7926,6 +8005,9 @@ function updateAngleName(idx, text) {
 }
 
 function addAngleRow() {
+  // BUG-004: if the user is re-creating something they tombstoned, drop the
+  // tombstone so the new row isn't filtered back out by the merge handlers.
+  _forgetTaxonomyDeletion('angle', activeProductId, 'New Angle');
   ANGLES.push({
     id: 'ang-' + (ANGLES.length + 1),
     name: 'New Angle',
@@ -7943,6 +8025,9 @@ function addAngleRow() {
 function deleteAngle(idx) {
   var name = ANGLES[idx].name;
   if (!confirm('Delete angle "' + name + '"? This will clear it from all creatives and inspirations.')) return;
+  // BUG-004: tombstone this name so the next ClickUp poll can't resurrect it
+  // via Pass 1 (overwriting cleared ad.angle) → autoDiscoverTaxonomy.
+  _rememberTaxonomyDeletion('angle', activeProductId, name);
   ANGLES.splice(idx, 1);
   // Clear from ADS
   for (var i = 0; i < ADS.length; i++) {
@@ -8048,6 +8133,7 @@ function updatePersonaName(idx, text) {
 }
 
 function addPersonaRow() {
+  _forgetTaxonomyDeletion('persona', activeProductId, 'New Persona');
   PERSONAS.push({
     id: 'per-' + (PERSONAS.length + 1),
     name: 'New Persona',
@@ -8065,6 +8151,8 @@ function addPersonaRow() {
 function deletePersona(idx) {
   var name = PERSONAS[idx].name;
   if (!confirm('Delete persona "' + name + '"? This will clear it from all creatives and inspirations.')) return;
+  // BUG-004: tombstone — same reasoning as deleteAngle.
+  _rememberTaxonomyDeletion('persona', activeProductId, name);
   PERSONAS.splice(idx, 1);
   // Clear from ADS
   for (var i = 0; i < ADS.length; i++) {
@@ -10672,6 +10760,9 @@ function autoDiscoverTaxonomy(sourceAds) {
     var pname = (PERSONAS[pi] && PERSONAS[pi].name) ? PERSONAS[pi].name : '';
     if (pname) existingPersonaNamesLC[pname.toLowerCase().trim()] = true;
   }
+  // BUG-004: tombstone of names the user just deleted — DON'T re-discover.
+  var _angTomb = _readTaxonomyTombstone('angle',   activeProductId);
+  var _perTomb = _readTaxonomyTombstone('persona', activeProductId);
 
   var angleSeen   = {}; // preserve first-seen casing
   var personaSeen = {};
@@ -10683,7 +10774,7 @@ function autoDiscoverTaxonomy(sourceAds) {
     if (!ad) continue;
 
     var ang = (ad.angle || '').trim();
-    if (ang && !angleSeen[ang.toLowerCase()] && !existingAngleNamesLC[ang.toLowerCase()]) {
+    if (ang && !angleSeen[ang.toLowerCase()] && !existingAngleNamesLC[ang.toLowerCase()] && !_angTomb[ang.toLowerCase().trim()]) {
       angleSeen[ang.toLowerCase()] = true;
       ANGLES.push({
         id: 'ang-auto-' + Date.now() + '-' + addedAngles.length,
@@ -10699,7 +10790,7 @@ function autoDiscoverTaxonomy(sourceAds) {
     }
 
     var per = (ad.persona || '').trim();
-    if (per && !personaSeen[per.toLowerCase()] && !existingPersonaNamesLC[per.toLowerCase()]) {
+    if (per && !personaSeen[per.toLowerCase()] && !existingPersonaNamesLC[per.toLowerCase()] && !_perTomb[per.toLowerCase().trim()]) {
       personaSeen[per.toLowerCase()] = true;
       PERSONAS.push({
         id: 'per-auto-' + Date.now() + '-' + addedPersonas.length,
@@ -11291,6 +11382,10 @@ function pollFullSync() {
           });
       }
 
+      // BUG-004: load taxonomy tombstones once per poll cycle.
+      var _p1AngTomb = _readTaxonomyTombstone('angle',   activeProductId);
+      var _p1PerTomb = _readTaxonomyTombstone('persona', activeProductId);
+
       var fieldUpdates = 0;
       var existingClickupIds = {};
       for (var i = 0; i < ADS.length; i++) {
@@ -11305,6 +11400,12 @@ function pollFullSync() {
         for (var f = 0; f < _SYNC_DIFF_FIELDS.length; f++) {
           var field = _SYNC_DIFF_FIELDS[f];
           var freshVal = fresh[field];
+          // BUG-004: if ClickUp's angle/persona is one the user just deleted,
+          // don't restore it onto the local ad — clear it instead. Without this,
+          // the deleted taxonomy gets re-introduced on every poll and
+          // autoDiscoverTaxonomy resurrects the row.
+          if (field === 'angle'   && freshVal && _p1AngTomb[String(freshVal).toLowerCase().trim()]) freshVal = '';
+          if (field === 'persona' && freshVal && _p1PerTomb[String(freshVal).toLowerCase().trim()]) freshVal = '';
           if (freshVal !== undefined && freshVal !== null && freshVal !== '' && freshVal !== ad[field]) {
             ADS[i][field] = freshVal;
             changed = true;
@@ -12304,10 +12405,12 @@ function updateCreativeFieldInline(adId, field, val) {
   // Auto-add to ANGLES/PERSONAS arrays if new value not seen before
   var addedNew = false;
   if (field === 'angle' && val && !ANGLES.some(function(a) { return a.name === val; })) {
+    _forgetTaxonomyDeletion('angle', activeProductId, val); // BUG-004
     ANGLES.push({ id: 'ang-' + Date.now(), name: val, status: 'Untested', sourceLink: '', notes: '', _localNew: true });
     addedNew = true;
   }
   if (field === 'persona' && val && !PERSONAS.some(function(p) { return p.name === val; })) {
+    _forgetTaxonomyDeletion('persona', activeProductId, val); // BUG-004
     PERSONAS.push({ id: 'per-' + Date.now(), name: val, status: 'Untested', sourceLink: '', notes: '', _localNew: true });
     addedNew = true;
   }

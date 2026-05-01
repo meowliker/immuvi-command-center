@@ -14,7 +14,9 @@ End-to-end automated pipeline for **any ClickUp list** containing ad creatives:
 5. Create a full 7-section Creative Brief as a ClickUp Doc page per task
 6. Update every task: description (doc link + hypothesis), comment (summary), and all custom fields
 
-## Step 0 — Auto-update (always run this first)
+## Step 0 — Auto-update + self-healing setup (always run this first)
+
+### 0a. Auto-update skill files
 
 Silently refresh the skill files from origin using HTTP ETags — unchanged files are a 304 (zero bytes, ~90ms). Next run picks up any updates.
 
@@ -50,19 +52,96 @@ done
 
 Fails silently on network errors. Continues with whatever is on disk.
 
+### 0b. Self-healing dependency check (runs silently — only installs what's missing)
+
+**This is what makes the skill zero-setup for new teammates.** Run these checks every time before STEP 1. Each check is a no-op if the dependency is already present (~1ms). Only triggers an install when something is genuinely missing.
+
+```bash
+# ffmpeg (frames + audio probe)
+if ! command -v ffmpeg &>/dev/null; then
+  echo "📦 Installing ffmpeg..."
+  brew install ffmpeg 2>&1 | tail -3
+fi
+
+# yt-dlp (fallback video downloader)
+if ! command -v yt-dlp &>/dev/null; then
+  echo "📦 Installing yt-dlp..."
+  brew install yt-dlp 2>&1 | tail -3
+fi
+
+# Python packages (gdown, requests, psycopg2-binary, playwright)
+python3 -c "import gdown, requests, psycopg2, playwright" 2>/dev/null || {
+  echo "📦 Installing Python packages..."
+  pip3 install --quiet --user gdown requests psycopg2-binary playwright
+}
+
+# Playwright Chromium browser (needed for Facebook Ad Library scraping)
+python3 -c "
+from playwright.sync_api import sync_playwright
+with sync_playwright() as p:
+    try: p.chromium.launch(headless=True).close()
+    except Exception: exit(1)
+" 2>/dev/null || {
+  echo "📦 Installing Playwright Chromium..."
+  python3 -m playwright install chromium 2>&1 | tail -2
+}
+```
+
+If `brew` is not available (non-Mac), fall back to:
+- `apt-get install -y ffmpeg` (Linux/WSL)
+- `pip3 install yt-dlp` (yt-dlp via pip as fallback)
+
+### 0c. Env loader + ClickUp API key check (ask once, save forever)
+
+Load the shared env file. **Supabase credentials are pre-filled for the team** — teammates never need to touch Supabase.
+
+```bash
+ENV_FILE="$HOME/.classify-inspiration.env"
+
+# Bootstrap the env file with shared Supabase creds if it doesn't exist yet
+if [ ! -f "$ENV_FILE" ]; then
+  cat > "$ENV_FILE" << 'EOF'
+# Shared team credentials — do not change Supabase values
+SUPABASE_URL=https://hdniumnkprkadlrrataz.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imhkbml1bW5rcHJrYWRscnJhdGF6Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc0MDI0OTg2OCwiZXhwIjoyMDU1ODI1ODY4fQ.4Ob5jbrz0yMdwN9P1yGJMd5CWv7XqrW7p0YbO3KLSCU
+SUPABASE_DB_URL=postgresql://postgres.hdniumnkprkadlrrataz:@aws-0-ap-south-1.pooler.supabase.com:6543/postgres
+SUPABASE_DB_PASSWORD=
+CLICKUP_API_KEY=
+EOF
+  echo "✅ Created ~/.classify-inspiration.env with shared team credentials"
+fi
+
+# Load it
+set -a; source "$ENV_FILE"; set +a
+
+# If CLICKUP_API_KEY is still empty, ask once and save it
+if [ -z "$CLICKUP_API_KEY" ]; then
+  echo ""
+  echo "👋 First-time setup: What's your ClickUp API key?"
+  echo "   (Find it at: app.clickup.com → Profile → Apps → API Token)"
+  echo "   It will be saved to ~/.classify-inspiration.env and never asked again."
+  echo ""
+  read -r -p "ClickUp API key: " CU_KEY
+  # Save it into the env file
+  sed -i '' "s/^CLICKUP_API_KEY=.*/CLICKUP_API_KEY=$CU_KEY/" "$ENV_FILE"
+  export CLICKUP_API_KEY="$CU_KEY"
+  echo "✅ Saved. You're all set!"
+fi
+```
+
+**After 0a + 0b + 0c, the pipeline has everything it needs.** Proceed to STEP 0.5 (product resolution) → STEP 1.
+
 ---
 
 ## Env loader helper (referenced in every shell step)
 
-Whenever a step uses Supabase credentials or a ClickUp token persisted in the env file, load them from the portable env file first:
+Whenever a step uses Supabase credentials or a ClickUp token, load from the env file:
 
 ```bash
 for _p in "$HOME/.classify-inspiration.env" "$PWD/.env" "$HOME/.env"; do
   [ -f "$_p" ] && { set -a; source "$_p"; set +a; break; }
 done
 ```
-
-This matches what `/classify-inspiration` uses, so teammates who have that skill installed share the same env file. The ClickUp API key can live there as `CLICKUP_API_KEY` (or will be asked on first use).
 
 ---
 
@@ -113,6 +192,164 @@ Workspace ID:  9016762494
 Known Angles:  Dysregulated Kids, Sextortion, Raising Kids, ADHD Kids, Anger Issues, Teacher Angle, WAR angle
 Known Personas: Female Teachers 25-44, Moms Raising Kids 35-44, Mom's POV, Elementary Teachers
 ```
+
+---
+
+## STEP 0.5 — Product resolution (Supabase lookup)
+
+**Always run this BEFORE STEP 1.** It resolves a ClickUp list ID or product name into a fully-populated product record from Supabase — including `doc_id`, `ins_prefix`, angles, and personas. This eliminates manual config and auto-detects whether the list is a known product or a new one.
+
+### How invocation works
+
+| What the user says | Resolution path |
+|---|---|
+| `list ID` only | Query `products` WHERE `config->>'clickup_list_id' = '<ID>'` |
+| `product name` only | Query `products` WHERE `name ILIKE '%<name>%'`, then read `clickup_list_id` from config |
+| both `name` + `list ID` | Cross-check: if name matches a product with a **different** list_id → stop and ask (see §0.5c) |
+| neither | Fall through to STEP 0 manual gather (old behaviour) |
+
+### 0.5a — Look up by list ID
+
+```bash
+for _p in "$HOME/.classify-inspiration.env" "$PWD/.env" "$HOME/.env"; do
+  [ -f "$_p" ] && { set -a; source "$_p"; set +a; break; }
+done
+
+LIST_ID="<from user or parsed from URL>"
+
+ROW=$(PGPASSWORD="$SUPABASE_DB_PASSWORD" psql "$SUPABASE_DB_URL" -At -F$'\t' -c "
+  SELECT id, name, config
+  FROM public.products
+  WHERE config->>'clickup_list_id' = '$LIST_ID'
+  LIMIT 1
+" 2>/dev/null)
+```
+
+**If a row is found → existing product:**
+- Extract `id`, `name`, `config` (parse JSON for `doc_id`, `ins_prefix`, `master_tracker_page_id`, `workspace_id`)
+- Load angles: `SELECT string_agg(name, ', ') FROM public.angles WHERE product_id = '<id>'`
+- Load personas: `SELECT string_agg(name, ', ') FROM public.personas WHERE product_id = '<id>'`
+- If `config` is missing `doc_id`, create one (see §0.5d Step 3) and UPDATE `products` config
+- Print: `✅ Product found: {name} (list {LIST_ID}, doc {doc_id}, prefix {ins_prefix})`
+- Skip to STEP 1 with all values populated — **do not ask the user for any of these manually**
+
+**If no row found → might be a new product.** Continue to §0.5b.
+
+### 0.5b — Look up by product name (name-based invocation)
+
+If the user said a product name (not a list ID), or if §0.5a returned no results, search by name:
+
+```bash
+NAME_QUERY="<product name the user mentioned>"
+
+ROWS=$(PGPASSWORD="$SUPABASE_DB_PASSWORD" psql "$SUPABASE_DB_URL" -At -F$'\t' -c "
+  SELECT id, name, config->>'clickup_list_id', config
+  FROM public.products
+  WHERE name ILIKE '%$NAME_QUERY%'
+  ORDER BY name
+" 2>/dev/null)
+```
+
+**If exactly one match:** use it — extract list_id from `config->>'clickup_list_id'` and treat as existing product (same as §0.5a match).
+
+**If multiple matches:** show the user the list and ask which one:
+```
+Multiple products match "yoga":
+  1. Yoga for Kids (list: 901600001234)
+  2. Yoga Moms (list: 901600005678)
+Which one? (1/2):
+```
+
+**If no match by name AND no list ID was given either:** continue to §0.5d (new product flow).
+
+### 0.5c — Suspicious overlap check (STOP AND ASK)
+
+If the user provided BOTH a name and a list ID, and:
+- The name fuzzy-matches an existing product (word_overlap_ratio ≥ 0.6), BUT
+- That product's `config->>'clickup_list_id'` ≠ the user-provided list ID
+
+**→ STOP. Do not proceed. Ask the user:**
+
+```
+⚠️ Suspicious match detected.
+
+You said: list {USER_LIST_ID}, product name "{USER_NAME}"
+But "{EXISTING_PRODUCT_NAME}" in Supabase is mapped to list {EXISTING_LIST_ID} — a different list.
+
+Options:
+  [u] Update — remap "{EXISTING_PRODUCT_NAME}" to list {USER_LIST_ID} in Supabase
+  [n] New — treat {USER_LIST_ID} as a brand-new product (keep {EXISTING_PRODUCT_NAME} unchanged)
+  [c] Cancel — stop here, I'll double-check the list ID
+```
+
+Wait for the user's choice before doing anything.
+
+### 0.5d — New product flow (no Supabase record found)
+
+When the list ID has no Supabase match (and no name match either):
+
+**Step 1: Ask for product name** (if not already provided):
+```
+No product found for list {LIST_ID}. What's the product name?
+```
+
+**Step 2: Auto-derive `ins_prefix`** — initials of all words ≥ 3 chars, uppercased:
+```python
+def derive_ins_prefix(product_name):
+    words = [w for w in product_name.split() if len(w) >= 3]
+    prefix = ''.join(w[0].upper() for w in words)
+    return prefix if len(prefix) >= 2 else product_name[:3].upper()
+
+# Examples:
+# "Yoga for Kids"     → words ≥3: ["Yoga","Kids"]    → "YK"
+# "Astro Rekha"       → words ≥3: ["Astro","Rekha"]  → "AR"
+# "Kids Mental Health"→ words ≥3: ["Kids","Mental","Health"] → "KMH"
+# "Canva Mastery"     → words ≥3: ["Canva","Mastery"] → "CM"
+```
+
+Show the user: `Auto-derived prefix: {PREFIX} — is that OK, or enter a different one?`
+
+**Step 3: Create ClickUp Inspiration Library doc** using the `clickup_create_document` MCP tool:
+```
+clickup_create_document(
+  name=f"{product_name.upper()} — Inspiration Library",
+  workspaceId="9016762494",
+  parent={"id": "90169348848", "type": 5},
+  createPage=True
+)
+```
+Then list pages in the new doc, rename the default page to `"📋 Master Tracker"` and seed it with the empty tracker table.
+
+**Step 4: INSERT into `public.products`** via Supabase REST:
+```bash
+curl -s -X POST "$SUPABASE_URL/rest/v1/products" \
+  -H "apikey: $SUPABASE_SERVICE_ROLE_KEY" \
+  -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY" \
+  -H "Content-Type: application/json" \
+  -H "Prefer: return=representation" \
+  --data "{
+    \"name\": \"$PRODUCT_NAME\",
+    \"config\": {
+      \"clickup_list_id\": \"$LIST_ID\",
+      \"doc_id\": \"$DOC_ID\",
+      \"master_tracker_page_id\": \"$MASTER_TRACKER_PAGE_ID\",
+      \"ins_prefix\": \"$INS_PREFIX\",
+      \"workspace_id\": \"9016762494\"
+    }
+  }"
+```
+
+**Step 5: Confirm to user:**
+```
+✅ New product created: {product_name}
+   List:    {LIST_ID}
+   Doc:     https://app.clickup.com/9016762494/docs/{doc_id}
+   Prefix:  {INS_PREFIX}
+
+Proceeding with classification (angles and personas will be proposed during this first run).
+```
+
+Now continue to STEP 1 with all values populated.
 
 ---
 
@@ -533,81 +770,153 @@ If any task has `success=true` but a missing required field, halt and ask the us
 
 ## STEP 3 — Per-task pipeline (each agent does this for its tasks)
 
-### 3a. Download from Google Drive
+### 3a. Download from Google Drive (self-fixing — 6-method fallback chain)
+
+**Never fail on the first "private" error.** Try all 6 methods before giving up.
 
 ```python
-import subprocess, re, os, glob, shutil
+import subprocess, re, os, glob, shutil, requests
 
-# Normalize Drive URLs. Google sometimes puts /u/0/ or /u/1/ in the path
-# (account-scoped view). The account-scoped URLs only work if the folder
-# is actually shared publicly; stripping /u/N/ doesn't grant access to
-# private folders — it just gives cleaner errors. If gdown returns an
-# empty folder for a /u/1/ URL, that folder is private and the task
-# should be skipped with status "private_folder_or_access_denied".
 def normalize_drive_url(u):
     return re.sub(r'/drive/u/\d+/', '/drive/', u or '')
 
-def video_or_image(path):
-    """Return type tag or None if neither."""
-    lo = path.lower()
-    if lo.endswith(('.mp4', '.mov', '.mkv', '.webm')): return 'video'
-    if lo.endswith(('.jpg', '.jpeg', '.png', '.webp')): return 'image'
-    return None
+def is_html(path):
+    """Return True if the file is an HTML error page (Google sign-in / auth wall)."""
+    if not os.path.exists(path) or os.path.getsize(path) < 100:
+        return True
+    with open(path, "rb") as f:
+        head = f.read(512)
+    return head.startswith(b"<!DOCTYPE") or head.lower().startswith(b"<html")
+
+def pick_best_media(directory):
+    """Scan directory recursively; prefer video over image; require >10KB."""
+    all_files = sorted(glob.glob(f"{directory}/**/*", recursive=True))
+    vids = [f for f in all_files
+            if f.lower().endswith(('.mp4','.mov','.mkv','.webm'))
+            and os.path.getsize(f) > 10000]
+    imgs = [f for f in all_files
+            if f.lower().endswith(('.jpg','.jpeg','.png','.webp'))
+            and os.path.getsize(f) > 10000]
+    return vids[0] if vids else (imgs[0] if imgs else None)
 
 work_dir = f"/tmp/cu_work_{task_id}"
 os.makedirs(work_dir, exist_ok=True)
 url = normalize_drive_url(drive_url)
 
-# Case A — folder URL: use gdown --folder to download everything at once.
-# (There is NO --dry-run flag in gdown; we were wrong to use it before.)
-# gdown creates a subdirectory inside work_dir named after the folder,
-# so we glob the whole work_dir recursively to find files.
 m_folder = re.search(r'/folders/([a-zA-Z0-9_-]+)', url)
 m_file   = re.search(r'/file/d/([a-zA-Z0-9_-]+)', url)
+fid = (m_file.group(1) if m_file else
+       (m_folder.group(1) if m_folder else None))
 
 downloaded = None
-if m_folder:
+download_log = []  # records every attempt for verification_notes
+
+# ── METHOD 1: gdown --folder (primary path for folder links) ──────────────────
+if m_folder and not downloaded:
     try:
-        subprocess.run(
-            ["python3", "-m", "gdown", "--folder", url,
+        r = subprocess.run(
+            ["python3", "-m", "gdown", "--folder", url, "-O", work_dir, "--quiet"],
+            capture_output=True, text=True, timeout=300, check=False)
+        downloaded = pick_best_media(work_dir)
+        download_log.append(f"M1(gdown-folder): {'ok' if downloaded else 'empty'}")
+    except subprocess.TimeoutExpired:
+        download_log.append("M1(gdown-folder): timeout")
+
+# ── METHOD 2: gdown --folder --fuzzy (handles some redirect formats) ──────────
+if m_folder and not downloaded:
+    try:
+        r = subprocess.run(
+            ["python3", "-m", "gdown", "--folder", "--fuzzy", url,
              "-O", work_dir, "--quiet"],
             capture_output=True, text=True, timeout=300, check=False)
+        downloaded = pick_best_media(work_dir)
+        download_log.append(f"M2(gdown-fuzzy): {'ok' if downloaded else 'empty'}")
     except subprocess.TimeoutExpired:
-        pass
-    # Pick the first video, else the first image, else give up
-    all_files = sorted(glob.glob(f"{work_dir}/**/*", recursive=True))
-    vids = [f for f in all_files if video_or_image(f) == 'video' and os.path.getsize(f) > 10000]
-    imgs = [f for f in all_files if video_or_image(f) == 'image' and os.path.getsize(f) > 10000]
-    if vids:
-        downloaded = vids[0]
-    elif imgs:
-        downloaded = imgs[0]
-elif m_file:
-    # Single-file share link — download directly via requests (not gdown).
-    import requests
-    fid = m_file.group(1)
-    for ext in ('.mp4', '.mov', '.jpg', '.jpeg', '.png'):
-        dest = f"{work_dir}/creative{ext}"
-        r = requests.get(
-            f"https://drive.usercontent.google.com/download?id={fid}&export=download&authuser=0&confirm=t",
-            stream=True, timeout=120)
+        download_log.append("M2(gdown-fuzzy): timeout")
+
+# ── METHOD 3: gdown single-file via uc?id= URL ────────────────────────────────
+if fid and not downloaded:
+    dest = os.path.join(work_dir, "creative_m3.mp4")
+    try:
+        r = subprocess.run(
+            ["python3", "-m", "gdown", "--fuzzy",
+             f"https://drive.google.com/uc?id={fid}",
+             "-O", dest, "--quiet"],
+            capture_output=True, text=True, timeout=180, check=False)
+        if os.path.exists(dest) and not is_html(dest) and os.path.getsize(dest) > 10000:
+            downloaded = dest
+        download_log.append(f"M3(gdown-single): {'ok' if downloaded else 'html/empty'}")
+    except subprocess.TimeoutExpired:
+        download_log.append("M3(gdown-single): timeout")
+
+# ── METHOD 4: yt-dlp ──────────────────────────────────────────────────────────
+if fid and not downloaded:
+    dest = os.path.join(work_dir, "creative_m4.mp4")
+    try:
+        r = subprocess.run(
+            ["yt-dlp", "--quiet", "-f", "mp4/best[height<=720]/best",
+             "-o", dest, url],
+            capture_output=True, text=True, timeout=180, check=False)
+        if os.path.exists(dest) and not is_html(dest) and os.path.getsize(dest) > 10000:
+            downloaded = dest
+        download_log.append(f"M4(yt-dlp): {'ok' if downloaded else 'failed'}")
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        download_log.append("M4(yt-dlp): timeout/missing")
+
+# ── METHOD 5: requests to drive.usercontent.google.com ───────────────────────
+if fid and not downloaded:
+    for confirm_token in ("t", "1", ""):
+        dest = os.path.join(work_dir, f"creative_m5_{confirm_token or 'empty'}.mp4")
+        try:
+            params = {"id": fid, "export": "download", "authuser": "0"}
+            if confirm_token:
+                params["confirm"] = confirm_token
+            resp = requests.get(
+                "https://drive.usercontent.google.com/download",
+                params=params, stream=True, timeout=120,
+                headers={"User-Agent": "Mozilla/5.0"})
+            size = 0
+            with open(dest, "wb") as f:
+                for chunk in resp.iter_content(65536):
+                    if chunk: f.write(chunk); size += len(chunk)
+            if size > 10000 and not is_html(dest):
+                downloaded = dest
+                download_log.append(f"M5(usercontent confirm={confirm_token!r}): ok")
+                break
+            os.remove(dest)
+        except Exception as e:
+            download_log.append(f"M5(usercontent confirm={confirm_token!r}): {e}")
+    if not downloaded:
+        download_log.append("M5(usercontent): all tokens failed")
+
+# ── METHOD 6: requests to docs.google.com/uc ─────────────────────────────────
+if fid and not downloaded:
+    dest = os.path.join(work_dir, "creative_m6.mp4")
+    try:
+        resp = requests.get(
+            f"https://docs.google.com/uc?export=download&id={fid}&confirm=t",
+            stream=True, timeout=120, allow_redirects=True,
+            headers={"User-Agent": "Mozilla/5.0"})
         size = 0
         with open(dest, "wb") as f:
-            for chunk in r.iter_content(65536):
+            for chunk in resp.iter_content(65536):
                 if chunk: f.write(chunk); size += len(chunk)
-        # Detect HTML-return (private/error) by first bytes
-        with open(dest, "rb") as f: head = f.read(200)
-        if size > 10000 and not head.startswith(b"<!DOCTYPE") and not head.lower().startswith(b"<html"):
+        if size > 10000 and not is_html(dest):
             downloaded = dest
-            break
-        os.remove(dest)
+        download_log.append(f"M6(docs-uc): {'ok' if downloaded else 'html/empty'}")
+    except Exception as e:
+        download_log.append(f"M6(docs-uc): {e}")
 
-# If still nothing, mark as private/missing and skip this task
+# ── FAIL ONLY after all 6 methods exhausted ───────────────────────────────────
 if not downloaded:
-    result = {"task_id": task_id, "success": False,
-              "error": "private_folder_or_empty_or_no_media",
-              "drive_url": drive_url}
+    result = {
+        "task_id": task_id, "success": False,
+        "error": "private_folder_or_empty_or_no_media",
+        "verification_notes": "; ".join(download_log),
+        "drive_url": drive_url,
+    }
     # write result JSON and continue to next task
+# Otherwise proceed to 3b with `downloaded` pointing to the media file
 ```
 
 ### 3b. Extract frames + audio probe (NEW — audio-aware)

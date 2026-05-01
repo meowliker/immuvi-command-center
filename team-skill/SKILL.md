@@ -238,6 +238,7 @@ from fb_ad_classifier import fetch_ad_snapshot, download_video, extract_frames, 
 def detect_platform(url):
     u = url.lower()
     if "facebook.com/ads/library" in u: return "facebook"
+    if "fbcdn.net" in u or "video.xx.fbcdn" in u or "scontent." in u: return "fbcdn_direct"
     if "instagram.com" in u: return "instagram"
     if "tiktok.com" in u: return "tiktok"
     if "youtube.com" in u or "youtu.be" in u: return "youtube"
@@ -285,6 +286,26 @@ try:
             frames = [ip]
         else:
             raise RuntimeError("No media found")
+    elif platform == "fbcdn_direct":
+        # Raw Facebook CDN URL (video.xx.fbcdn.net / scontent.*.fbcdn.net).
+        # These are short-lived signed URLs but if still alive, download directly
+        # using the same UA + helper as the Ads-Library path.
+        is_image = any(url.lower().split("?",1)[0].endswith(ext) for ext in (".jpg",".jpeg",".png",".webp"))
+        if is_image:
+            ip = os.path.join(work_dir, "frame_001.jpg")
+            req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT, "Referer":"https://www.facebook.com/"})
+            with urllib.request.urlopen(req, timeout=30) as r, open(ip,"wb") as f: f.write(r.read())
+            frames = [ip]
+        else:
+            vp = os.path.join(work_dir, "video.mp4")
+            try:
+                download_video(url, vp)
+            except Exception:
+                req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT, "Referer":"https://www.facebook.com/"})
+                with urllib.request.urlopen(req, timeout=60) as r, open(vp,"wb") as f: f.write(r.read())
+            duration = get_duration(vp)
+            frames = extract_frames(vp, work_dir)
+            os.remove(vp)
     else:
         vp = download_ytdlp(url, work_dir)
         duration = get_duration(vp)

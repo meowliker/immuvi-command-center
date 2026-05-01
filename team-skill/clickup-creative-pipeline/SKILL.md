@@ -85,6 +85,8 @@ Invoke this skill when the user says things like:
 | `--task-ids A,B,C` | Processes only the named tasks. Overrides all other filters. |
 | `--since YYYY-MM-DD` | Only tasks created or updated after the given date. |
 | `--skip-consolidation` | Skips the new-angle/persona approval checkpoint and writes straight through. Use only when you trust the existing dropdown will absorb everything. |
+| `--retry-failed` | Re-processes only tasks that failed in the prior run (read from `/tmp/<pipeline>/cu_result_<id>.json` where `success=false`). Re-fetches their current Drive URLs from ClickUp first — useful after the user re-shares Drive folders. Skips the full list re-scan. |
+| `--skip-preflight` | Skips the bulk Drive-access preflight in STEP 1.5. Use only for very small runs or when you know the Drive is reliable. |
 
 ---
 
@@ -301,6 +303,113 @@ PROD_OPTS = {
 ```
 
 **For a NEW list:** Re-fetch all UUIDs fresh. Never reuse UUIDs across different ClickUp lists — they are list-specific.
+
+---
+
+## STEP 1.5 — Drive access pre-flight (NEW — do this BEFORE spawning agents)
+
+**Why this exists:** historically, the pipeline didn't know a Drive folder was private until the per-task worker tried to download it 20 minutes into the run. By then, 20 agents had already been dispatched, burned compute, and returned failures. Pre-flight does a fast parallel HEAD-style check up front so the user can fix Drive sharing *before* the expensive classification stage.
+
+**Skip this step only if** `--skip-preflight` was passed (rare — only for very small runs or known-good lists).
+
+### 1.5a — Parallel preflight
+
+For every task in `tasks_to_process`, in parallel (ThreadPoolExecutor(12)), attempt `gdown --folder <url>` into a throwaway tempdir and categorize:
+
+| Category | Heuristic | Severity |
+|---|---|---|
+| `accessible` | gdown returns ≥1 file >5KB | OK — proceed |
+| `account_scoped_ok` | URL contained `/drive/u/N/` AND download succeeded | ⚠️ warn — works today but flaky for automation |
+| `empty_folder` | gdown returns 0 files, or all <5KB | ❌ folder exists but has no media |
+| `html_response` | gdown downloaded HTML (sign-in page) | ❌ private — folder not publicly shared |
+| `timeout` | gdown >180s | ❓ retry once with 300s; if still timeout, large folder — warn but still dispatch (the agent will timeout too but with more context) |
+| `not_folder_url` | URL doesn't contain `/folders/` or `/file/d/` | ❌ malformed Drive URL |
+| `no_drive_link` | task had no Drive Link value at all | ❌ skip task |
+
+```python
+def preflight(task):
+    tid = task["task_id"]
+    url = re.sub(r'/drive/u/\d+/', '/drive/', task["drive_url"] or "")
+    is_account_scoped = '/drive/u/' in (task["drive_url"] or "")
+    w = f"/tmp/<pipeline>/pf_{tid}"
+    shutil.rmtree(w, ignore_errors=True); os.makedirs(w, exist_ok=True)
+    if '/folders/' not in url and '/file/d/' not in url:
+        return {"task_id": tid, "status": "not_folder_url"}
+    try:
+        subprocess.run(["python3","-m","gdown","--folder", url, "-O", w, "--quiet"],
+                       capture_output=True, text=True, timeout=180, check=False)
+    except subprocess.TimeoutExpired:
+        return {"task_id": tid, "status": "timeout"}
+    files = [f for f in glob.glob(f"{w}/**/*", recursive=True)
+             if os.path.isfile(f) and os.path.getsize(f) > 5000]
+    vids = [f for f in files if f.lower().endswith(('.mp4','.mov','.mkv','.webm'))]
+    imgs = [f for f in files if f.lower().endswith(('.jpg','.jpeg','.png','.webp'))]
+    shutil.rmtree(w, ignore_errors=True)
+    if not (vids or imgs):
+        return {"task_id": tid, "status": "empty_folder"}
+    if is_account_scoped:
+        return {"task_id": tid, "status": "account_scoped_ok",
+                "vids": len(vids), "imgs": len(imgs)}
+    return {"task_id": tid, "status": "accessible",
+            "vids": len(vids), "imgs": len(imgs)}
+```
+
+Save the preflight result to `/tmp/<pipeline>/preflight_report.json` — the orchestrator may need it during retries.
+
+### 1.5b — Present the preflight report to the user
+
+Always show the counts, even if every task passed:
+
+```
+📋 Drive access pre-flight (all 140 tasks checked in parallel, ~60s)
+
+✅ Accessible:            108 tasks — ready for classification
+⚠️  Account-scoped (/u/N/): 14 tasks — works today but may break silently later
+❌ Private / HTML return:  12 tasks — folders not publicly shared
+❌ Empty folder:            3 tasks — no media files
+❓ Timeout:                 2 tasks — large folders or network blip
+❌ Malformed URL:           1 task — no /folders/ in URL
+```
+
+If any tasks are in non-OK categories, present the user with these options BEFORE dispatching agents:
+
+```
+── What should I do with the 18 problematic tasks? ──
+  [p] Pause — give the user time to fix Drive sharing, then re-run preflight
+  [s] Skip — proceed with only the 108 accessible + 14 account-scoped tasks
+      (the 18 will be marked success=false in their result files and
+       appear in the final skip-list — you can retry later with --retry-failed)
+  [c] Comment — auto-post a ClickUp comment on each problematic task asking
+      the Drive owner to re-share as "Anyone with the link can view", then pause
+  [a] All — still dispatch agents for every task; those with bad Drive URLs
+      will fail per task as before (the old behavior)
+```
+
+Default is `[s] Skip` for unattended runs. For interactive runs, pause for the user's pick.
+
+### 1.5c — Auto-post "please re-share" comments (option [c])
+
+When the user picks `[c]`, post this templated comment on every problematic task (the comment does NOT block the pipeline — it's a nudge to the owner). Then switch to option `[s]` and proceed with the accessible subset.
+
+```python
+COMMENT_TEMPLATE = (
+    "🚫 Automated classification could not access this Drive folder.\n\n"
+    "**Reason:** {reason}\n\n"
+    "**Fix:** open the folder in Google Drive → Share → set to "
+    "'Anyone with the link can view'. Paste the resulting "
+    "`https://drive.google.com/drive/folders/...?usp=sharing` URL into the "
+    "Drive Link field (avoid `/u/0/`, `/u/1/`, `/u/3/` — those are "
+    "account-scoped and won't work for automation).\n\n"
+    "Once re-shared, the next pipeline run in **incremental mode** will "
+    "auto-retry this task."
+)
+```
+
+### 1.5d — `--retry-failed` mode
+
+When the user passes `--retry-failed`, STEP 1 changes: instead of fetching the whole list, read `/tmp/<pipeline>/cu_result_*.json` from the prior run, filter `success=false`, then re-fetch each task's **current** Drive URL from ClickUp (the user likely updated it), and run STEP 1.5 preflight on only those. This is the "user re-shared, let's try again" workflow.
+
+If the previous run's JSON directory is missing, fall back to fetching the whole list and filtering to tasks where Angle/Hook/Creative-Structure are still empty (the incremental-mode criteria).
 
 ---
 
@@ -1227,7 +1336,10 @@ Example invocations:
 
 | Error | Fix |
 |---|---|
-| Drive download returns HTML (~10KB) | Folder is private — note in result, skip task, continue |
+| **High bulk-fail rate (>15% of tasks) with `download_failed_or_private`** | Drive folders are likely shared only to the owner's Google account. Ask the owner to open each folder → Share → "Anyone with the link can view". Then re-run with `--retry-failed` — the pipeline re-fetches current Drive URLs from ClickUp and only retries the previously-failed set. This is the canonical recovery path. |
+| **Drive URL contains `/drive/u/0/`, `/u/1/`, `/u/3/`** | Account-scoped URL. Even if it works today (owner is signed in that session), it will fail silently for automation later. Ask the owner to reshare with a clean `/drive/folders/<id>?usp=sharing` URL. STEP 1.5 preflight flags these as `account_scoped_ok` warnings. |
+| **Folder exists but empty after download** | Media may have been deleted, or the folder contains only Google-native docs (Docs/Sheets) that gdown can't export. Check the folder manually. |
+| Drive download returns HTML (~10KB) | Folder is private — STEP 1.5 preflight catches this upfront; fall-through: mark result `download_failed_or_private`, continue. |
 | gdown `--dry-run` not supported | Remove flag, use folder listing without dry-run |
 | 401 on ClickUp API | API key expired — check `$CLICKUP_API_KEY` in `~/.classify-inspiration.env` or ask user for a fresh one. |
 | Dropdown UUID rejected (400) | Run fix-up pass in Step 7 with verified UUIDs |
@@ -1257,6 +1369,7 @@ Google Drive folders must be set to "Anyone with the link can view".
 
 ## Changelog
 
+- **2026-04-21** — v2.1: Added **STEP 1.5 Drive-access preflight** (parallel gdown test before dispatching agents) + new flags `--retry-failed` and `--skip-preflight` + auto-comment option on inaccessible tasks + error-handling entries for high-bulk-fail / account-scoped / empty-folder. Fixes the Canva Mastery run where 39/140 tasks failed silently mid-pipeline on private Drive folders; the owner had to manually list failures, re-share, then get told "re-run in incremental mode" — now the preflight surfaces this upfront and `--retry-failed` gives a dedicated recovery path.
 - **2026-04-21** — v2: Added `creative_modality` field + audio probe (§3b) + VO/OSD transcript split (§3c) + 12-section brief template (§3d) + strict result schema (§2a) + validator (§2c) + policy lint (§3d.7). Fixes the AT-VID-001 misclassification bug (VO-driven treated as music-style) and the Apr 20 writeback crash (parallel agents writing `id` instead of `task_id`).
 - **2026-04-20** — v1.1: Fixed `gdown --dry-run` flag (doesn't exist), added incremental mode, consolidation checkpoint, env loader.
 - **2026-04-19** — v1.0: Merged `/clickup-creative-classifier` + `/clickup-creative-data-fill` into `/clickup-creative-pipeline`.

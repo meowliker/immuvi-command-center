@@ -3660,6 +3660,106 @@ button.mx-dt-action-sent .open { color:#0a84ff; font-weight:700; margin-left:4px
 }
 /* source-link cell */
 .tr-src { padding:6px 10px; border-right:1px solid var(--b2); overflow:hidden; }
+
+/* ─────────────────────────────────────────────────────────────────────────
+   Bug 11 (UX) — Angles & Personas tables, restyled to feel like Action Plan.
+   Overrides the legacy "card-per-row" tracker look with a flat tabular feel:
+   sticky header, single bottom-rule per row, hover tint instead of lift,
+   mono font on stats, taller comfortable row height, no column dividers.
+   Same markup as before — purely visual.
+   ───────────────────────────────────────────────────────────────────────── */
+.tracker-grid {
+  border:1px solid var(--b);
+  border-radius:14px;
+  background:var(--card,#fff);
+  overflow:hidden;
+  gap:0;
+  box-shadow:0 1px 0 rgba(15,23,42,0.02);
+}
+.tracker-header {
+  position:sticky; top:0; z-index:2;
+  background:linear-gradient(180deg,rgba(255,255,255,0.98) 0%,rgba(250,250,251,0.95) 100%);
+  backdrop-filter:saturate(140%) blur(6px);
+  -webkit-backdrop-filter:saturate(140%) blur(6px);
+  padding:11px 0;
+  border-bottom:1px solid var(--b);
+  font-size:0.62rem; letter-spacing:0.08em;
+  color:var(--t3); font-weight:700; text-transform:uppercase;
+}
+.tracker-header > span { padding:0 14px; }
+.tracker-header > span:first-child { padding:0 6px; text-align:center; }
+
+.tracker-row {
+  border:none;
+  border-radius:0;
+  border-bottom:1px solid rgba(15,23,42,0.06);
+  background:transparent;
+  box-shadow:none;
+  transition:background .12s ease;
+  animation: fadeUp .35s cubic-bezier(0.16,1,0.3,1) both;
+}
+.tracker-row:last-child { border-bottom:none; }
+.tracker-row:hover { background:rgba(14,14,16,0.025); box-shadow:none; border-color:rgba(15,23,42,0.06); }
+
+/* Status accent rail — thin, on the left, like Action Plan's row-age rail */
+.tracker-row.status-winner    { box-shadow: inset 3px 0 0 var(--win); background:transparent; }
+.tracker-row.status-testing   { box-shadow: inset 3px 0 0 var(--test); background:transparent; }
+.tracker-row.status-inprog    { box-shadow: inset 3px 0 0 var(--inprog); background:transparent; }
+.tracker-row.status-notstart  { box-shadow: inset 3px 0 0 transparent; }
+.tracker-row.status-loser     { box-shadow: inset 3px 0 0 var(--loser); background:transparent; }
+.tracker-row.status-winner:hover,
+.tracker-row.status-testing:hover,
+.tracker-row.status-inprog:hover,
+.tracker-row.status-loser:hover { background:rgba(14,14,16,0.025); }
+
+/* Cell internals — drop the column dividers, breathe more */
+.tr-num {
+  background:transparent; border-right:none;
+  font-family:'JetBrains Mono',monospace;
+  font-size:0.7rem; color:var(--t3); font-weight:500;
+  padding:14px 6px;
+}
+.tr-name { padding:13px 14px; border-right:none; font-size:0.84rem; font-weight:600; color:var(--t1); }
+.tr-status { padding:10px 12px; border-right:none; }
+.tr-status .tr-status-badge {
+  display:inline-flex; align-items:center; gap:4px;
+  padding:3px 9px; border-radius:100px; font-size:0.66rem; font-weight:600;
+  background:var(--bg); border:1px solid var(--b);
+}
+.tr-status .tr-status-badge.win   { background:rgba(16,185,129,0.10); color:var(--win); border-color:rgba(16,185,129,0.25); }
+.tr-status .tr-status-badge.test  { background:rgba(99,102,241,0.10); color:var(--test); border-color:rgba(99,102,241,0.25); }
+.tr-status .tr-status-badge.inprog{ background:rgba(59,130,246,0.10); color:var(--inprog); border-color:rgba(59,130,246,0.25); }
+.tr-status .tr-status-badge.loser { background:rgba(239,68,68,0.08); color:var(--loser); border-color:rgba(239,68,68,0.22); }
+.tr-status .tr-status-badge.notstart { color:var(--t3); }
+
+.tr-src { padding:13px 14px; border-right:none; }
+.tr-stats { padding:10px 14px; border-right:none; gap:6px; }
+.tr-stat-pill {
+  font-family:'JetBrains Mono',monospace;
+  font-size:0.65rem; padding:3px 8px;
+  background:rgba(15,23,42,0.04); color:var(--t2);
+  border:1px solid rgba(15,23,42,0.06);
+}
+.tr-stat-pill.tr-clickable { cursor:pointer; transition:background .12s, color .12s; }
+.tr-stat-pill.tr-clickable:hover { background:var(--b-ink,#0E0E10); color:var(--b-card,#fff); border-color:var(--b-ink,#0E0E10); }
+
+.tr-notes { padding:13px 14px; border-right:none; font-size:0.74rem; color:var(--t2); }
+.tr-actions { padding:8px 14px; }
+.tr-actions button { width:26px; height:26px; border-radius:6px; }
+.tr-win-badge {
+  background:rgba(16,185,129,0.10); color:var(--win);
+  border:1px solid rgba(16,185,129,0.25);
+  padding:2px 8px; font-size:0.6rem; margin-left:8px;
+}
+
+/* Summary strip above the table — plain text row, mono numbers */
+.tracker-summary {
+  display:flex; flex-wrap:wrap; gap:14px;
+  padding:8px 0 14px;
+  font-size:0.74rem; color:var(--t2);
+}
+.tracker-summary-stat strong { font-family:'JetBrains Mono',monospace; color:var(--t1); margin-left:2px; }
+.tracker-summary-divider { color:var(--t3); opacity:.4; }
 .tr-src-link {
   display:inline-flex; align-items:center; gap:4px; font-size:0.65rem; color:var(--inprog);
   text-decoration:none; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:100%;
@@ -8282,12 +8382,20 @@ function _initRealtimeChannel(productId) {
     // tab counts all read from the same AD object — refreshing all of them
     // keeps cross-tab parity instant for ANY field change. Each render is
     // wrapped in try/catch so a missing renderer never breaks the listener.
+    // Bug 12: skip the cascading re-render if the user is mid-edit so the
+    // peer's broadcast can't blow away the user's open input / dropdown.
+    // Also preserve scroll position so the page doesn't snap to top.
+    if (typeof _userIsActivelyEditing === 'function' && _userIsActivelyEditing()) return;
+    var _fuPrevY = (typeof window !== 'undefined') ? (window.scrollY || 0) : 0;
     try { if (typeof renderMatrix === 'function')      renderMatrix(); } catch (e) {}
     try { if (typeof renderActionPlan === 'function')  renderActionPlan(); } catch (e) {}
     try { if (typeof renderCreatives === 'function')   renderCreatives(); } catch (e) {}
     try { if (typeof renderProduction === 'function')  renderProduction(); } catch (e) {}
     try { if (typeof renderMxv4Modal === 'function' && _mxv4 && !_mxv4.usersPickerOpen) renderMxv4Modal(); } catch (e) {}
     try { if (typeof updateTabCounts === 'function')   updateTabCounts(); } catch (e) {}
+    if (typeof requestAnimationFrame === 'function') {
+      requestAnimationFrame(function () { try { window.scrollTo(0, _fuPrevY); } catch (e) {} });
+    }
   });
 
   // Listen for broadcast deletes from other clients
@@ -8521,7 +8629,10 @@ function _initRealtimeChannel(productId) {
         if (typeof deriveWinners === 'function') deriveWinners();
         if (typeof genActions === 'function') genActions();
         if (typeof buildCreativeUsageIndex === 'function') buildCreativeUsageIndex();
-        renderAll();
+        // Bug 12: silent variant — skip if user is editing or has a picker
+        // open, otherwise render with scroll-position preserved. No more
+        // every-30s blink + scroll reset.
+        (typeof _renderAllSilent === 'function' ? _renderAllSilent() : renderAll());
       } catch(e) { console.error('[SB] sync-needed merge failed', e); }
     };
     _rtMergeTimer = setTimeout(_runMerge, _initialDelay);
@@ -9701,7 +9812,8 @@ function _resubscribeRealtime() {
         if (typeof deriveWinners === 'function') deriveWinners();
         if (typeof genActions === 'function') genActions();
         if (typeof buildCreativeUsageIndex === 'function') buildCreativeUsageIndex();
-        renderAll();
+        // Bug 12: silent variant — preserves scroll, skips if user is editing.
+        (typeof _renderAllSilent === 'function' ? _renderAllSilent() : renderAll());
       } catch (e) { console.error('[SB] realtime merge failed', e); }
     }, 350);
   });
@@ -10476,6 +10588,15 @@ function deletePersonaFromMatrixKeys(name) {
 function executeMergeAngles(losingNames, survivorName) {
   if (!survivorName || losingNames.length === 0) return;
 
+  // Bug 11: tombstone every losing angle name BEFORE merge work so the next
+  // ClickUp poll's autoDiscoverTaxonomy can't resurrect it from stale CU
+  // custom-field values that haven't been overwritten yet.
+  if (typeof _rememberTaxonomyDeletion === 'function' && typeof activeProductId !== 'undefined' && activeProductId) {
+    losingNames.forEach(function (n) {
+      try { _rememberTaxonomyDeletion('angle', activeProductId, n); } catch (e) {}
+    });
+  }
+
   // Track which ADs changed angle so we can push to ClickUp
   var changedAds = [];
 
@@ -10584,6 +10705,18 @@ function executeMergeAngles(losingNames, survivorName) {
 // ── MERGE PERSONAS ─────────────────────────────────────────────────────────────
 function executeMergePersonas(losingNames, survivorName) {
   if (!survivorName || losingNames.length === 0) return;
+
+  // Bug 11: tombstone every losing persona name BEFORE the merge work runs.
+  // Without this, the next 30s ClickUp poll's autoDiscoverTaxonomy sees any
+  // ClickUp task whose persona custom field still carries the old name (push
+  // hasn't propagated yet, was rate-limited, or never had a _clickupId), and
+  // re-creates the persona row from that stale value — so the merged-away
+  // persona keeps reappearing after refresh. Same fix as deletePersona uses.
+  if (typeof _rememberTaxonomyDeletion === 'function' && typeof activeProductId !== 'undefined' && activeProductId) {
+    losingNames.forEach(function (n) {
+      try { _rememberTaxonomyDeletion('persona', activeProductId, n); } catch (e) {}
+    });
+  }
 
   var changedAds = [];
 
@@ -11853,7 +11986,29 @@ function genActions() {
 //  4. RENDER FUNCTIONS
 // ============================================================
 
-function renderAll() {
+// Bug 12: scroll-preserving + edit-aware render wrapper. The previous
+// renderAll() blew away every panel's innerHTML on every realtime poll →
+// blink + scroll-reset. Now we:
+//   1. Skip the render entirely if the user is mid-edit (focused
+//      contenteditable / input / select / textarea) — their own blur/change
+//      handler will re-render at the right time.
+//   2. Skip if a matrix v4 picker is open (would close it mid-interaction).
+//   3. Capture window.scrollY before the render and restore it on the next
+//      animation frame so the page doesn't snap to top.
+// User-initiated renders (e.g. clicking a tab) always run; the skip path is
+// only for autoref-driven calls — tagged via _renderAllSilent() vs the
+// regular renderAll() entry.
+function _userIsActivelyEditing() {
+  var ae = document.activeElement;
+  if (!ae) return false;
+  if (ae === document.body) return false;
+  var tag = (ae.tagName || '').toLowerCase();
+  if (tag === 'input' || tag === 'textarea' || tag === 'select') return true;
+  if (ae.isContentEditable) return true;
+  return false;
+}
+
+function _renderAllInternal() {
   renderHQ();
   renderProductProfile();
   renderAngles();
@@ -11865,6 +12020,28 @@ function renderAll() {
   renderMatrix();
   renderInspirations();
   updateTabCounts();
+}
+
+function renderAll() {
+  // Capture scroll BEFORE any DOM swap so we can restore even when the
+  // browser would otherwise reset scrollTop to 0 after a big innerHTML write.
+  var prevY = (typeof window !== 'undefined') ? (window.scrollY || window.pageYOffset || 0) : 0;
+  _renderAllInternal();
+  if (typeof requestAnimationFrame === 'function') {
+    requestAnimationFrame(function () {
+      try { window.scrollTo(0, prevY); } catch (e) {}
+    });
+  }
+}
+
+// Silent variant — used by realtime sync-needed merges + field-update echoes.
+// Skips the render entirely when the user is editing or has a picker open,
+// preserves scroll, and only refreshes panels that aren't holding the user's
+// active focus. Prevents the every-30s blink the user reported.
+function _renderAllSilent() {
+  if (_userIsActivelyEditing()) return;
+  if (typeof _mxv4 !== 'undefined' && _mxv4 && _mxv4.usersPickerOpen) return;
+  renderAll();
 }
 
 // ── 4a. COMMAND HQ ──
@@ -19693,13 +19870,17 @@ function saveAdFieldUnified(adId, kind, fieldKey, value) {
   // locally so the user sees the change instantly across tabs/panels of the
   // same browser. The broadcast above covers OTHER browsers; this covers the
   // current one. Wrapped in try/catch so a missing renderer never breaks the
-  // save.
+  // save. Bug 12: preserve scroll so a save mid-page doesn't snap to top.
+  var _saPrevY = (typeof window !== 'undefined') ? (window.scrollY || 0) : 0;
   try { if (typeof renderMatrix === 'function')      renderMatrix(); } catch (e) {}
   try { if (typeof renderActionPlan === 'function')  renderActionPlan(); } catch (e) {}
   try { if (typeof renderCreatives === 'function')   renderCreatives(); } catch (e) {}
   try { if (typeof renderProduction === 'function')  renderProduction(); } catch (e) {}
   try { if (typeof renderMxv4Modal === 'function' && _mxv4 && !_mxv4.usersPickerOpen) renderMxv4Modal(); } catch (e) {}
   try { if (typeof updateTabCounts === 'function')   updateTabCounts(); } catch (e) {}
+  if (typeof requestAnimationFrame === 'function') {
+    requestAnimationFrame(function () { try { window.scrollTo(0, _saPrevY); } catch (e) {} });
+  }
 }
 
 var _persistAdTimers = {};

@@ -709,3 +709,105 @@ Found one orphan cell-assignment in production — `matrix_cells` row `650936e3-
 - No console errors.
 
 **Behavioral change:** Status changes propagate to the cell modal instantly, no refresh needed, even when the cached `MATRIX_CELL_META` hasn't been updated yet.
+
+## Bug 11 — Merged personas/angles re-appear after refresh + Personas/Angles UI redesign
+**Status:** ✅ done — shipped 2026-05-03 (LOCAL ONLY, NOT pushed to git or Vercel per user request)
+**Reported:** 2026-05-03
+**Surface:** Angles tab + Personas tab — Merge button · table styling
+
+### Symptom 1 — re-population after refresh
+Selecting two personas (or angles) and clicking Merge correctly merges them on the surface (the losing names disappear from the list, ADs are remapped to the survivor). After refresh, the losing names reappear.
+
+### Root cause
+`executeMergePersonas` and `executeMergeAngles` removed the losing names from the in-memory PERSONAS/ANGLES arrays and updated ADs to the survivor, but did NOT call `_rememberTaxonomyDeletion(...)`. So the next 30s ClickUp poll's `autoDiscoverTaxonomy` saw a fetched task whose `persona` (or `angle`) custom field still carried the old name (push hadn't propagated yet, was rate-limited, or the AD never had a `_clickupId`) — and re-created the row from that stale value. Same vector that `deleteAngle` / `deletePersona` already protect against.
+
+### Fix
+Added a tombstone pass at the top of both merge functions:
+```js
+if (typeof _rememberTaxonomyDeletion === 'function' && activeProductId) {
+  losingNames.forEach(function (n) {
+    try { _rememberTaxonomyDeletion('angle' /* or 'persona' */, activeProductId, n); } catch (e) {}
+  });
+}
+```
+Mirrors the existing `deleteAngle` / `deletePersona` pattern. The next poll's `autoDiscoverTaxonomy` checks the tombstone before adding a name.
+
+### Symptom 2 — UI request
+"Make the UI of angle and persona section inspired by the Action plan section table structure."
+
+### Fix
+Added a CSS overlay below the legacy `.tracker-row` rules that flattens the card-per-row look into an Action-Plan-style flat table:
+- `.tracker-grid` is now a single rounded container with a sticky header (matches `.ap-table-wrap`).
+- `.tracker-header` is sticky-on-scroll with backdrop blur and uppercase label styling (matches AP's `thead th`).
+- `.tracker-row` loses its individual border + shadow, gets a single bottom-rule, and uses a 3px inset box-shadow rail on the left for status accent (matches AP's `age-red/yellow/green` rail).
+- Hover is a subtle background tint instead of a lift — Action-Plan-style.
+- Stat pills use `JetBrains Mono` like AP's numeric cells; clickable pills invert to dark on hover.
+- Status badges use the same pill shape and color tokens used elsewhere in the app.
+- Same markup, no JS changes — visual upgrade only. If the user wants to roll back, the original rules above the override remain unchanged.
+
+### Verified
+- JS parses cleanly (Node `new Function()` check).
+- Live preview after reload:
+  - `executeMergePersonas` source contains `_rememberTaxonomyDeletion('persona'`.
+  - `executeMergeAngles` source contains `_rememberTaxonomyDeletion('angle'`.
+  - Synthetic call to `_rememberTaxonomyDeletion` followed by `_isTaxonomyTombstoned` returns true → tombstone storage and lookup both work.
+  - Stylesheet inspection confirms `.tracker-header { position: sticky; ... }` rule is applied.
+- Pre-existing `[SB] getResults` console-noise was already there before this turn — unrelated.
+
+### Behavioral change for the user
+- Merging personas/angles now sticks across refresh — the merged-away rows do not come back via the next ClickUp poll.
+- Personas + Angles tables visually match the Action Plan table (sticky header, flat rows with status rail, hover tint, mono stat pills) without any markup changes.
+
+### NOT pushed
+Per the user's explicit request, this fix lives only in the local file. Not committed, not pushed to GitHub, not deployed to Vercel.
+
+## Bug 12 — Page blinks + scroll snaps to top every 30s on live sync
+**Status:** ✅ done — shipped 2026-05-03 (LOCAL ONLY, NOT pushed to git or Vercel per user request)
+**Reported:** 2026-05-03
+**Surface:** Every panel (Matrix / Action Plan / Tracker / Personas / Angles) — perceptible flash + scroll reset every poll cycle, especially when user is interacting (scrolling, hovering, clicking).
+
+### Symptom
+1. Every 30s when the foreground ClickUp poll fires, the page "blinks" — visible flash as multiple panels rebuild via `innerHTML =`.
+2. Scroll position snaps back to top after a sync-needed merge or a peer's field-update broadcast.
+3. Clicking on something during a render causes the click target to disappear / move because the rendered DOM was about to get replaced.
+
+### Root cause
+Realtime + poll handlers all called `renderAll()` (or a cascade of `renderMatrix() / renderActionPlan() / …`) unconditionally. Each renderer wipes its container with `innerHTML = …`. That kills:
+- the user's scroll position (browser resets `scrollTop` after a big DOM swap unless it's an anchor scroll),
+- focus on any open input / contenteditable / select,
+- mid-flight click targets,
+- any open dropdown / picker.
+
+### Fix (4 layers)
+1. **`_userIsActivelyEditing()`** helper — returns true if `document.activeElement` is an `input`, `textarea`, `select`, or contenteditable. Lets event handlers skip cascading re-renders while the user is mid-edit.
+2. **`renderAll()` now wraps `_renderAllInternal()` with scroll-preservation** — captures `window.scrollY` before, restores via `requestAnimationFrame` after.
+3. **`_renderAllSilent()`** — variant used by autoref-driven entry points (sync-needed merge, realtime DB-change merge). Skips entirely if `_userIsActivelyEditing()` is true OR if a matrix v4 picker is open. Otherwise calls `renderAll()` (which preserves scroll).
+4. **`field-update` receiver + `saveAdFieldUnified` cascading renders** now both:
+   - `return` early when `_userIsActivelyEditing()` is true (peer broadcasts can't blow away the user's open input mid-typing).
+   - Capture `window.scrollY` before the cascade and restore on `requestAnimationFrame`.
+
+Sites updated:
+- `_initRealtimeChannel` sync-needed handler (line ~8624) → uses `_renderAllSilent()`.
+- `_initRealtimeChannel` realtime DB-change merge (line ~9807) → uses `_renderAllSilent()`.
+- `_initRealtimeChannel` field-update broadcast handler — early-return + scroll preservation.
+- `saveAdFieldUnified` cascading renders — scroll preservation.
+- `renderAll()` — top-level scroll preservation around `_renderAllInternal()`.
+
+### Verified
+- JS parses cleanly (Node `new Function()` check).
+- Live preview after reload, six assertions all green:
+  - `_userIsActivelyEditing` exists ✓
+  - `_renderAllSilent` exists ✓
+  - `renderAll()` source contains `window.scrollTo` ✓
+  - sync-needed handler references `_renderAllSilent` ✓
+  - `saveAdFieldUnified` source contains scroll-preservation marker ✓
+  - Synthetic edit-mode test: focusing a `<input>` makes `_userIsActivelyEditing()` return true; blurring returns false ✓
+- Pre-existing `[SB] getResults` console-noise is unrelated to this change.
+
+### Behavioral change for the user
+- Every-30s poll no longer triggers a visible blink — the renderers either skip entirely (user is interacting) or run with scroll preserved.
+- Clicking, scrolling, or typing during a sync interval no longer gets interrupted by a DOM swap.
+- Peer broadcasts (other browsers' edits) no longer blow away the local user's open input / dropdown.
+
+### NOT pushed
+Per the user's request, this fix lives only in the local file. Not committed, not pushed to GitHub, not deployed to Vercel.

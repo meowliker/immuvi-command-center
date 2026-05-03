@@ -1095,12 +1095,96 @@ body::before {
 
 .toast-wrap {
   position: fixed;
-  bottom: 20px;
-  right: 20px;
+  /* Moved from bottom-right to top-center: keeps the table edges /
+     drawer / live-sync controls clear, and leaves the bottom-right
+     corner free for the inline retry-banner. */
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
   z-index: 300;
   display: flex;
   flex-direction: column;
   gap: 8px;
+  align-items: center;
+  pointer-events: none;
+}
+.toast-wrap > * { pointer-events: auto; }
+/* ── Activity log button + slide-in panel (replaces routine toasts) ─── */
+.activity-pill {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: var(--card, #fff);
+  border: 1px solid var(--border, #e5e7eb);
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 0.7rem;
+  cursor: pointer;
+  color: var(--t2, #374151);
+  user-select: none;
+  transition: background 0.15s, transform 0.12s;
+}
+.activity-pill:hover { background: var(--bg, #f9fafb); transform: translateY(-1px); }
+.activity-pill .ap-bell { font-size: 0.85rem; line-height: 1; }
+.activity-pill .ap-cnt {
+  background: var(--inprog, #3b82f6);
+  color: #fff;
+  border-radius: 999px;
+  padding: 1px 7px;
+  font-size: 0.62rem;
+  font-weight: 700;
+  min-width: 16px;
+  text-align: center;
+}
+.activity-pill.empty .ap-cnt { display: none; }
+.activity-panel-backdrop {
+  position: fixed; inset: 0;
+  background: rgba(15, 17, 26, 0.35);
+  backdrop-filter: blur(2px);
+  z-index: 9998;
+  animation: fadeUp 0.2s ease-out both;
+}
+.activity-panel {
+  position: fixed; top: 0; right: 0; bottom: 0;
+  width: 380px;
+  background: var(--card, #fff);
+  border-left: 1px solid var(--border, #e5e7eb);
+  box-shadow: -8px 0 32px rgba(0,0,0,0.12);
+  z-index: 9999;
+  display: flex; flex-direction: column;
+  animation: slideIn 0.25s cubic-bezier(0.16,1,0.3,1) both;
+}
+@keyframes slideIn { from { transform: translateX(100%); } to { transform: translateX(0); } }
+.activity-panel-hdr {
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border, #e5e7eb);
+  display: flex; justify-content: space-between; align-items: center;
+}
+.activity-panel-hdr h3 { margin: 0; font-size: 0.95rem; font-weight: 700; color: var(--t1, #111827); }
+.activity-panel-hdr .ap-actions { display: flex; gap: 8px; }
+.activity-panel-hdr button {
+  background: transparent; border: 1px solid var(--border, #e5e7eb);
+  border-radius: 6px; padding: 4px 10px; font-size: 0.7rem;
+  cursor: pointer; color: var(--t2, #374151);
+}
+.activity-panel-hdr button:hover { background: var(--bg, #f9fafb); }
+.activity-panel-body { flex: 1; overflow-y: auto; padding: 8px 0; }
+.activity-panel-empty {
+  text-align: center; padding: 60px 20px;
+  color: var(--t3, #9ca3af); font-size: 0.78rem;
+}
+.activity-row {
+  padding: 10px 18px;
+  border-bottom: 1px solid rgba(0,0,0,0.04);
+  font-size: 0.74rem;
+  display: flex; flex-direction: column; gap: 3px;
+}
+.activity-row.lvl-info { background: transparent; }
+.activity-row.lvl-warn { background: rgba(245,158,11,0.06); }
+.activity-row.lvl-err  { background: rgba(239,68,68,0.06); }
+.activity-row .ar-msg { color: var(--t1, #111827); line-height: 1.4; }
+.activity-row .ar-meta { color: var(--t3, #9ca3af); font-size: 0.65rem; font-family: 'JetBrains Mono', monospace; }
+@media (prefers-reduced-motion: reduce) {
+  .activity-panel { animation: none; }
+  .activity-panel-backdrop { animation: none; }
 }
 .toast {
   background: var(--t1);
@@ -8175,6 +8259,55 @@ button.mx-dt-action-sent .open { color:#0a84ff; font-weight:700; margin-left:4px
 }
 .mxv4-mini-hdr-back.show { display: inline-flex; opacity: 1; }
 .mxv4-mini-hdr-back:hover { transform: translateY(-1px); }
+
+/* ─────────────────────────────────────────────────────────────────
+   ROW DIFF ANIMATIONS — Phase 2
+   Entering rows fade in + green tint pulse. Exiting rows (ghost
+   clones) fade out + collapse. Updated rows: subtle amber pulse.
+   Honors prefers-reduced-motion.
+   ───────────────────────────────────────────────────────────────── */
+@keyframes rowAnimEnter {
+  0%   { opacity: 0; transform: translateY(-4px); background-color: rgba(34,197,94,0.14); }
+  60%  { opacity: 1; transform: translateY(0);    background-color: rgba(34,197,94,0.08); }
+  100% { opacity: 1; transform: none;             background-color: transparent; }
+}
+@keyframes rowAnimFlash {
+  0%   { background-color: rgba(245,158,11,0.16); }
+  100% { background-color: transparent; }
+}
+@keyframes rowAnimGhostExit {
+  0%   { opacity: 1; transform: translateX(0)   scaleY(1); }
+  60%  { opacity: 0.4; transform: translateX(-8px) scaleY(1); }
+  100% { opacity: 0; transform: translateX(-8px) scaleY(0); height: 0; }
+}
+.row-anim-enter > td,
+.row-anim-enter {
+  animation: rowAnimEnter 0.7s cubic-bezier(0.16,1,0.3,1) both;
+}
+.row-anim-flash > td,
+.row-anim-flash {
+  animation: rowAnimFlash 0.9s ease-out both;
+}
+.row-anim-ghost-wrap {
+  position: fixed;
+  pointer-events: none;
+  z-index: 9999;
+  overflow: hidden;
+  animation: rowAnimGhostExit 0.35s ease-out both;
+  transform-origin: top left;
+}
+.row-anim-ghost-wrap > * {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  background: var(--bg, #fff);
+}
+@media (prefers-reduced-motion: reduce) {
+  .row-anim-enter, .row-anim-enter > td,
+  .row-anim-flash, .row-anim-flash > td,
+  .row-anim-ghost-wrap { animation: none !important; }
+  .row-anim-ghost-wrap { display: none !important; }
+}
 
 </style>
 </head>
@@ -16060,6 +16193,11 @@ function updateManualActionDate(id, date) {
 }
 
 function updateManualActionStatus(id, newStatus) {
+  // Heal orphan AD-id refs first so the linkedAd lookup below finds the AD
+  // even if its id was rekeyed by ClickUp sync after the action was created.
+  // Without this, _cuTaskId stays null and the status PUT to ClickUp never
+  // fires — exactly the "matrix syncs but AP doesn't" symptom.
+  try { if (typeof _reconcileCellAssignments === 'function') _reconcileCellAssignments(); } catch (e) {}
   var act = null;
   var linkedAd = null; // hoisted so the post-loop ClickUp push can use it
   for (var i = 0; i < MANUAL_ACTIONS.length; i++) {
@@ -18476,6 +18614,41 @@ function createClickUpTaskFromAction(actionId, onDone, sourceAdOverride) {
           doFieldPushes();
         });
       }
+
+      // ── Post-create user-field PUTs ─────────────────────────────
+      // ClickUp's POST /list/{id}/task accepts plain text/dropdown custom
+      // fields but silently drops users-type CFs sent with {add, rem} in the
+      // initial payload. The per-field PUT endpoint always honors them.
+      // Re-push every users-type CF (e.g. Reviewer) and Approved Date that
+      // the AD has values for, so editor/reviewer/dates picked in the AP
+      // BEFORE +ClickUp actually land on the new task.
+      // Editor (native assignees) is already handled via createPayload.assignees.
+      try {
+        if (sourceAd && sourceAd._customFieldsRaw && typeof CLICKUP_FIELD_META !== 'undefined' && typeof _setTaskField === 'function') {
+          Object.keys(sourceAd._customFieldsRaw).forEach(function (lcName, idx) {
+            var meta = CLICKUP_FIELD_META[lcName];
+            if (!meta || !meta.fieldId) return;
+            if (meta._native || meta.fieldId === '__assignees__') return;
+            var raw = sourceAd._customFieldsRaw[lcName];
+            if (raw == null || raw === '') return;
+            var payload = null;
+            if (meta.type === 'users') {
+              var ids = Array.isArray(raw) ? raw.map(function (u) { return (u && u.id != null) ? u.id : u; }).filter(function (x) { return x != null; }) : [];
+              if (!ids.length) return;
+              payload = { value: { add: ids, rem: [] } };
+            } else if (meta.type === 'date') {
+              payload = { value: raw };
+            } else {
+              return; // text/dropdown already handled in initial POST
+            }
+            // Stagger so we don't slam ClickUp's rate limiter.
+            setTimeout(function () {
+              _setTaskField(newId, meta.fieldId, payload, sourceAd.id)
+                .catch(function (err) { console.warn('[post-create CF] failed', lcName, err && err.message); });
+            }, 200 + idx * 150);
+          });
+        }
+      } catch (e) { console.warn('[post-create CF] block error', e); }
     }
 
     // Scenario 1 — Inspo-sourced AD: link the inspiration brief doc to this task
@@ -18901,7 +19074,7 @@ function apiFetch(path, opts) {
 }
 
 function apiCreateTask(listId, taskPayload) {
-  // taskPayload: { name, description, due_date, priority, custom_fields, tags }
+  // taskPayload: { name, description, due_date, priority, custom_fields, tags, assignees }
   var body = { name: taskPayload.name || taskPayload };
   if (taskPayload.description) body.description = taskPayload.description;
   if (taskPayload.due_date)    body.due_date = taskPayload.due_date;
@@ -18911,6 +19084,12 @@ function apiCreateTask(listId, taskPayload) {
   }
   if (taskPayload.tags && taskPayload.tags.length > 0) {
     body.tags = taskPayload.tags;
+  }
+  // Forward assignees so editor (= ClickUp assignee) picked in the AP
+  // before +ClickUp actually lands on the new task. Earlier this field was
+  // silently stripped and the new task was created with no assignees.
+  if (Array.isArray(taskPayload.assignees) && taskPayload.assignees.length) {
+    body.assignees = taskPayload.assignees;
   }
   return apiFetch('/list/' + listId + '/task', { method: 'POST', body: body });
 }
@@ -20305,6 +20484,57 @@ function saveAdFieldUnified(adId, kind, fieldKey, value) {
   else if (kind === 'status') {
     if (typeof _stampAdStatusChange === 'function') _stampAdStatusChange(ad, value);
     else ad.status = value;
+    // Mirror status onto any linked MANUAL_ACTION + MATRIX_CELL_META so the
+    // Action Plan row and matrix cell stamp reflect the change without a
+    // round-trip. This was previously only done in changeAdStatusFromMatrix
+    // and updateManualActionStatus — picking status from the AP picker
+    // bypassed both, leaving the matrix stale until the next sync.
+    if (typeof MANUAL_ACTIONS !== 'undefined' && Array.isArray(MANUAL_ACTIONS)) {
+      for (var _smI = 0; _smI < MANUAL_ACTIONS.length; _smI++) {
+        var _sma = MANUAL_ACTIONS[_smI];
+        if (!_sma) continue;
+        var _smaMatch = (_sma.sourceAdId === ad.id) || (_sma.adId === ad.id) ||
+                        (ad._clickupId && _sma._clickupId === ad._clickupId);
+        if (_smaMatch) {
+          _sma.liveStatus = value;
+          _sma._liveStatusChangedAt = Date.now();
+        }
+      }
+    }
+    if (typeof MATRIX_CELL_META !== 'undefined' && ad.angle && ad.persona) {
+      var _smCellKey = ad.id + '||' + ad.angle + '||' + ad.persona;
+      if (!MATRIX_CELL_META[_smCellKey]) MATRIX_CELL_META[_smCellKey] = {};
+      MATRIX_CELL_META[_smCellKey].status = value;
+      MATRIX_CELL_META[_smCellKey].actionStatus = value;
+    }
+    // Push to ClickUp so the change is reflected in CU immediately —
+    // mirrors changeAdStatusFromMatrix's CU push. Without this, AP status
+    // edits stayed local until manual sync, and ClickUp would later
+    // overwrite the local value with its stale status on the next poll.
+    if (cuId && typeof _syncToClickUp === 'function') {
+      var _cuStatusMap = {
+        'Untested':       'untested',
+        'Approved':       'approved',
+        'In Production':  'in production',
+        'Ready to Launch':'ready to launch',
+        'Testing':        'testing',
+        'Winner':         'winner',
+        'Loser':          'loser',
+        'Scale':          'scale',
+        'Complete':       'complete'
+      };
+      var _cuStatus = _cuStatusMap[value] || String(value || '').toLowerCase();
+      try { _syncToClickUp(cuId, { status: _cuStatus }, 'AP status → ' + value); } catch (e) {}
+    }
+    // Broadcast field-update so other tabs / users see the change instantly.
+    if (typeof _rtChannel !== 'undefined' && _rtChannel) {
+      try {
+        _rtChannel.send({
+          type: 'broadcast', event: 'field-update',
+          payload: { adId: ad.id, field: 'status', value: value, clientId: _myClientId }
+        });
+      } catch (e) {}
+    }
   }
 
   // 3. Persist row to Supabase (debounced per-ad fast path).
@@ -29559,13 +29789,18 @@ function executeMxv4Add(angleName, personaName) {
       var _parentRaw = (parent && parent._customFieldsRaw) ? parent._customFieldsRaw : {};
       var _cloneSeed = _seedCuRawFromTypedFields(prodAd);
       var _merged = {};
+      // Per-cell child creative starts blank for these — never inherit from parent.
+      var _SKIP_INHERIT = { 'drive link': 1, 'editor': 1, 'reviewer': 1, 'approved date': 1, 'due date': 1 };
       Object.keys(_parentRaw).forEach(function (k) {
-        // Skip drive link inheritance — clone's Drive Link CF must start empty.
-        if (k === 'drive link') return;
+        if (_SKIP_INHERIT[k]) return;
         _merged[k] = _parentRaw[k];
       });
       Object.keys(_cloneSeed).forEach(function (k) { _merged[k] = _cloneSeed[k]; });
       prodAd._customFieldsRaw = _merged;
+      // Defensive: ensure native task fields don't drag parent values either.
+      prodAd.assignees = [];
+      prodAd.dueDate = '';
+      prodAd._dueDateMs = null;
       ADS.push(prodAd);
       CELL_CREATIVE_ASSIGNMENTS[cellKey].push(serial);
       // Per-cell metadata so the cell label/status starts right.
@@ -32146,7 +32381,7 @@ function renderInspirations() {
       ? '<button class="ins-dupe-dot ' + ins._dupeType + '" onclick="toggleDupeBanner(' + insIdQ + ')" title="' + ({ winner:'Similar ad WON — click to see', loser:'Similar ad LOST — click to see', tested:'Similar ad exists — click to see' }[ins._dupeType]||'Duplicate detected') + '">!</button>'
       : '';
 
-    var mainRow = '<tr>' +
+    var mainRow = '<tr data-ins-id="' + escAttr(ins.id) + '">' +
       // 1. #
       '<td style="font-family:\'JetBrains Mono\',monospace;font-size:0.65rem;color:var(--t3);white-space:nowrap">'+esc(ins.id)+dupeDot+'</td>' +
       // 2. Format Name
@@ -33096,6 +33331,515 @@ setInterval(function() { if (window._pendingCu.length) _renderSyncBanner(); }, 5
 window._syncToClickUp = _syncToClickUp;
 window._retryPendingCu = _retryPendingCu;
 window._clearPendingCu = _clearPendingCu;
+
+// ════════════════════════════════════════════════════════════════════
+// ACTIVITY LOG + ROUTINE-TOAST SUPPRESSION
+// ────────────────────────────────────────────────────────────────────
+// Replaces the bottom-right toast pile-up for routine sync chatter
+// (Adopted N legacy tasks, N fields updated, Synced N tasks…) with a
+// silent counter pill in the header. Click the pill → slide-in panel
+// shows the chronological log. Errors / warnings still toast (now
+// top-center) so you don't miss real problems. User-action toasts
+// (e.g. "Added to Action Plan", "AD-001 → Approved") still toast too.
+// ════════════════════════════════════════════════════════════════════
+(function _installActivityLog() {
+  if (window._activityLogInstalled) return;
+  window._activityLogInstalled = true;
+
+  var ROUTINE_PATTERNS = [
+    /^Synced \d+ tasks? from ClickUp/i,
+    /^Adopted \d+ legacy production task/i,
+    /^\d+ fields? updated from ClickUp/i,
+    /^Refreshing \d+ timestamps? from ClickUp/i,
+    /^Refreshing… \d+ \/ \d+/i,
+    /^Searching ClickUp for existing task/i,
+    /^Task not found in ClickUp — creating new one/i,
+    /^✓ Synced to ClickUp/i,
+    /^All fields already mapped /i
+  ];
+
+  function isRoutine(msg, type) {
+    if (type === 'err' || type === 'warn') return false;
+    if (typeof msg !== 'string') return false;
+    // Strip leading emoji + whitespace before matching.
+    var stripped = msg.replace(/^[\s -　\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]+/u, '').trim();
+    for (var i = 0; i < ROUTINE_PATTERNS.length; i++) {
+      if (ROUTINE_PATTERNS[i].test(stripped)) return true;
+    }
+    return false;
+  }
+
+  window._activityLog = window._activityLog || [];
+  window._activityUnreadCount = 0;
+  var MAX_LOG = 200;
+
+  function pushActivity(msg, type) {
+    var lvl = (type === 'err') ? 'err' : (type === 'warn') ? 'warn' : 'info';
+    var plain = (typeof msg === 'string') ? msg.replace(/<[^>]+>/g, '') : String(msg);
+    window._activityLog.unshift({ ts: Date.now(), msg: plain, type: type || 'ok', lvl: lvl });
+    if (window._activityLog.length > MAX_LOG) window._activityLog.length = MAX_LOG;
+    window._activityUnreadCount++;
+    renderActivityPill();
+    if (_activityPanelOpen) renderActivityPanel();
+  }
+
+  // Wrap toast() to divert routine ones into the activity log.
+  if (typeof window.toast === 'function' && !window.toast.__actLogWrapped) {
+    var _origToast = window.toast;
+    var wrapped = function (msg, type, durationMs) {
+      try {
+        if (isRoutine(msg, type)) {
+          pushActivity(msg, type);
+          return; // silent — no toast bubble
+        }
+        // Important — log AND show.
+        pushActivity(msg, type);
+      } catch (e) {}
+      return _origToast.call(this, msg, type, durationMs);
+    };
+    wrapped.__actLogWrapped = true;
+    window.toast = wrapped;
+  }
+
+  function relTime(ts) {
+    var s = Math.floor((Date.now() - ts) / 1000);
+    if (s < 5) return 'just now';
+    if (s < 60) return s + 's ago';
+    var m = Math.floor(s / 60);
+    if (m < 60) return m + 'm ago';
+    var h = Math.floor(m / 60);
+    if (h < 24) return h + 'h ago';
+    return new Date(ts).toLocaleString();
+  }
+
+  function renderActivityPill() {
+    var bar = document.getElementById('liveSyncBar');
+    if (!bar) return;
+    var pill = document.getElementById('activityPill');
+    if (!pill) {
+      pill = document.createElement('span');
+      pill.id = 'activityPill';
+      pill.className = 'activity-pill empty';
+      pill.title = 'Activity log';
+      pill.onclick = function (e) { e.stopPropagation(); toggleActivityPanel(); };
+      pill.innerHTML = '<span class="ap-bell">🔔</span><span class="ap-cnt">0</span>';
+      bar.parentNode.insertBefore(pill, bar.nextSibling);
+    }
+    var n = window._activityUnreadCount || 0;
+    pill.classList.toggle('empty', n === 0);
+    var cnt = pill.querySelector('.ap-cnt');
+    if (cnt) cnt.textContent = n > 99 ? '99+' : String(n);
+  }
+
+  var _activityPanelOpen = false;
+  function toggleActivityPanel() {
+    _activityPanelOpen = !_activityPanelOpen;
+    if (_activityPanelOpen) {
+      window._activityUnreadCount = 0;
+      renderActivityPill();
+      renderActivityPanel();
+    } else {
+      closeActivityPanel();
+    }
+  }
+  function closeActivityPanel() {
+    _activityPanelOpen = false;
+    var bd = document.getElementById('activityPanelBackdrop');
+    var pn = document.getElementById('activityPanel');
+    if (bd && bd.parentNode) bd.parentNode.removeChild(bd);
+    if (pn && pn.parentNode) pn.parentNode.removeChild(pn);
+  }
+  window.closeActivityPanel = closeActivityPanel;
+  window._clearActivityLog = function () {
+    window._activityLog = [];
+    window._activityUnreadCount = 0;
+    renderActivityPill();
+    renderActivityPanel();
+  };
+
+  function renderActivityPanel() {
+    var bd = document.getElementById('activityPanelBackdrop');
+    var pn = document.getElementById('activityPanel');
+    if (!bd) {
+      bd = document.createElement('div');
+      bd.id = 'activityPanelBackdrop';
+      bd.className = 'activity-panel-backdrop';
+      bd.onclick = closeActivityPanel;
+      document.body.appendChild(bd);
+    }
+    if (!pn) {
+      pn = document.createElement('aside');
+      pn.id = 'activityPanel';
+      pn.className = 'activity-panel';
+      pn.setAttribute('role', 'dialog');
+      pn.setAttribute('aria-label', 'Activity log');
+      document.body.appendChild(pn);
+    }
+    var rows = window._activityLog || [];
+    var bodyHtml = rows.length
+      ? rows.map(function (r) {
+          var safeMsg = String(r.msg || '').replace(/[<>&]/g, function (c) { return c === '<' ? '&lt;' : c === '>' ? '&gt;' : '&amp;'; });
+          return '<div class="activity-row lvl-' + r.lvl + '">' +
+                   '<div class="ar-msg">' + safeMsg + '</div>' +
+                   '<div class="ar-meta">' + relTime(r.ts) + '</div>' +
+                 '</div>';
+        }).join('')
+      : '<div class="activity-panel-empty">No recent activity</div>';
+    pn.innerHTML =
+      '<div class="activity-panel-hdr">' +
+        '<h3>Activity</h3>' +
+        '<div class="ap-actions">' +
+          '<button onclick="_clearActivityLog()">Clear</button>' +
+          '<button onclick="closeActivityPanel()">Close</button>' +
+        '</div>' +
+      '</div>' +
+      '<div class="activity-panel-body">' + bodyHtml + '</div>';
+  }
+
+  // Initial pill mount + periodic relative-time refresh.
+  function ensurePill() { renderActivityPill(); }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', ensurePill);
+  } else {
+    ensurePill();
+  }
+  setInterval(function () {
+    if (_activityPanelOpen) renderActivityPanel();
+  }, 30000);
+})();
+
+// ════════════════════════════════════════════════════════════════════
+// SCROLL & ROW-DIFF PRESERVATION (Phase 1 + Phase 2)
+// ────────────────────────────────────────────────────────────────────
+// Wraps the four big renderers so:
+//   • scroll position holds across innerHTML wipes (live-sync, sort,
+//     edit, +ClickUp push, etc.)
+//   • new rows fade-in (green tint)
+//   • removed rows ghost-fade out
+// Updated rows currently skip the flash to avoid visual noise on every
+// render — most renders touch every row even when nothing changed.
+// All animation work is best-effort: if a snapshot or container is
+// missing, the wrapper just runs the original renderer untouched.
+// ════════════════════════════════════════════════════════════════════
+(function _installRenderPreservation(){
+  if (window._renderPreserveInstalled) return;
+  window._renderPreserveInstalled = true;
+
+  function capScroll() {
+    // Capture by selector + index, NOT by element ref — innerHTML wipes
+    // destroy the original element. After render we re-query the same
+    // selector and restore to the n-th match.
+    var caps = [{ kind: 'win', left: window.scrollX || window.pageXOffset || 0, top: window.scrollY || window.pageYOffset || 0 }];
+    var sels = ['.ap-table-wrap', '.ins-table-wrap', '#matrixGrid', '#actionsContainer', '.mx-angle-grid'];
+    sels.forEach(function (sel) {
+      var nodes = document.querySelectorAll(sel);
+      for (var i = 0; i < nodes.length; i++) {
+        var el = nodes[i];
+        if (!el) continue;
+        // Always capture, even when scroll is 0 — so a render that grows
+        // the table doesn't accidentally jump us off a 0,0 position the
+        // user just scrolled to (rare, but cheap to be correct).
+        caps.push({ kind: 'sel', sel: sel, idx: i, left: el.scrollLeft, top: el.scrollTop });
+      }
+    });
+    return caps;
+  }
+
+  function restoreScroll(caps) {
+    if (!caps || !caps.length) return;
+    var apply = function () {
+      caps.forEach(function (c) {
+        try {
+          if (c.kind === 'win') {
+            window.scrollTo(c.left, c.top);
+            return;
+          }
+          // Re-query the selector — the original ref may have been wiped.
+          var nodes = document.querySelectorAll(c.sel);
+          var el = nodes[c.idx];
+          if (!el) return;
+          if (c.left) el.scrollLeft = c.left;
+          if (c.top)  el.scrollTop  = c.top;
+        } catch (e) {}
+      });
+    };
+    if (typeof requestAnimationFrame === 'function') requestAnimationFrame(apply);
+    // Two follow-up applications cover late-laying-out tables (custom
+    // column widths, flex content, fonts) and the moment when a bottom-
+    // right toast/banner mounts and reflows the page.
+    setTimeout(apply, 60);
+    setTimeout(apply, 240);
+  }
+
+  function captureRowMeta(rootSel, rowSel, idAttr, idPrefix) {
+    var root = document.querySelector(rootSel);
+    if (!root) return null;
+    var info = { ids: {}, rows: [] };
+    root.querySelectorAll(rowSel).forEach(function (row) {
+      var id = idAttr === 'id'
+             ? (row.id || '').replace(idPrefix || '', '')
+             : row.getAttribute(idAttr);
+      if (!id) return;
+      info.ids[id] = true;
+      info.rows.push({ id: id, el: row });
+    });
+    return info;
+  }
+
+  // Build a positioned ghost overlay of a removed row and animate it out.
+  // We do this BEFORE the innerHTML wipe so the bounding rect is still valid.
+  function ghostExitRow(rowEl) {
+    if (!rowEl || !rowEl.getBoundingClientRect) return;
+    var rect = rowEl.getBoundingClientRect();
+    if (rect.width < 1 || rect.height < 1) return;
+    var clone = rowEl.cloneNode(true);
+    // Strip onclick so the ghost is purely visual
+    clone.removeAttribute('onclick');
+    Array.prototype.forEach.call(clone.querySelectorAll('[onclick]'), function (n) { n.removeAttribute('onclick'); });
+    var wrap = document.createElement('div');
+    wrap.className = 'row-anim-ghost-wrap';
+    wrap.style.left   = rect.left + 'px';
+    wrap.style.top    = rect.top + 'px';
+    wrap.style.width  = rect.width + 'px';
+    wrap.style.height = rect.height + 'px';
+    var tbl = document.createElement('table');
+    var tb  = document.createElement('tbody');
+    tb.appendChild(clone);
+    tbl.appendChild(tb);
+    wrap.appendChild(tbl);
+    document.body.appendChild(wrap);
+    setTimeout(function () { if (wrap.parentNode) wrap.parentNode.removeChild(wrap); }, 360);
+  }
+
+  function flashEnterRows(beforeIds, rootSel, rowSel, idAttr, idPrefix) {
+    if (!beforeIds) return;
+    var root = document.querySelector(rootSel);
+    if (!root) return;
+    root.querySelectorAll(rowSel).forEach(function (row) {
+      var id = idAttr === 'id'
+             ? (row.id || '').replace(idPrefix || '', '')
+             : row.getAttribute(idAttr);
+      if (!id) return;
+      if (!beforeIds[id]) {
+        row.classList.add('row-anim-enter');
+        setTimeout(function () { row.classList.remove('row-anim-enter'); }, 800);
+      }
+    });
+  }
+
+  // ── Fingerprint helpers ──────────────────────────────────────────
+  // Cheap stringy fingerprint over the data each renderer actually consumes.
+  // If the fingerprint is unchanged from the previous render, skip the
+  // innerHTML wipe entirely → no flash on no-op sync polls. Each fingerprint
+  // includes everything that visibly affects that surface; if a field is
+  // missing here, the corresponding edit won't trigger a re-render until
+  // some other mutation kicks in. Err toward including more.
+  var _lastFp = {};
+  function _adsCoreFp() {
+    if (typeof ADS === 'undefined' || !Array.isArray(ADS)) return '';
+    var s = ADS.length + '|';
+    for (var i = 0; i < ADS.length; i++) {
+      var a = ADS[i]; if (!a) continue;
+      s += (a.id||'') + ',' + (a.angle||'') + ',' + (a.persona||'') + ',' + (a.status||'') + ',' +
+           (a.formatName||'') + ',' + (a.taskType||'') + ',' + (a.adType||'') + ',' +
+           (a.funnelStage||'') + ',' + (a._clickupId||'') + ',' + (a.parentAdId||'') + ',' +
+           (a.sourceFormatId||'') + ',' + (a.hookType||'') + ',' + (a.creativeStructure||'') + ',' +
+           (a.productionStyle||'') + ',' + (a.dueDate||'') + ',' + (a.adLink||'') + ',' +
+           (a.driveLink||'') + ',' + (a.lastStatusChangeAt||'') + ',' + (a._localNew?'N':'') + ';';
+    }
+    return s;
+  }
+  function _matrixFp() {
+    var s = (typeof ANGLES !== 'undefined' ? ANGLES.length : 0) + ':' +
+            (typeof PERSONAS !== 'undefined' ? PERSONAS.length : 0) + ':' + _adsCoreFp() + '#';
+    if (typeof ANGLES !== 'undefined') for (var i=0;i<ANGLES.length;i++) s += (ANGLES[i].id||'') + ',' + (ANGLES[i].name||'') + ';';
+    s += '#';
+    if (typeof PERSONAS !== 'undefined') for (var j=0;j<PERSONAS.length;j++) s += (PERSONAS[j].id||'') + ',' + (PERSONAS[j].name||'') + ';';
+    s += '#';
+    if (typeof MATRIX_CELL_META !== 'undefined' && MATRIX_CELL_META) {
+      var ks = Object.keys(MATRIX_CELL_META);
+      for (var k=0;k<ks.length;k++) {
+        var mm = MATRIX_CELL_META[ks[k]] || {};
+        s += ks[k] + '=' + (mm.status||'') + '|' + (mm.actionStatus||'') + '|' + (mm.uniqueName||'') + '|' + (mm.dueDate||'') + ';';
+      }
+    }
+    s += '#';
+    if (typeof CELL_CREATIVE_ASSIGNMENTS !== 'undefined' && CELL_CREATIVE_ASSIGNMENTS) {
+      var cks = Object.keys(CELL_CREATIVE_ASSIGNMENTS);
+      for (var c=0;c<cks.length;c++) s += cks[c] + '=' + (CELL_CREATIVE_ASSIGNMENTS[cks[c]]||[]).join(',') + ';';
+    }
+    s += '#';
+    if (typeof _mxv4 !== 'undefined' && _mxv4) {
+      s += 'tab=' + (_mxv4.tab||'') + '|exp=' + (_mxv4.expandedCell||'') +
+           '|hl=' + (_mxv4.highlight||'') + '|fm=' + (_mxv4.filterMode||'') +
+           '|dr=' + (_mxv4.dateRange||'') + '|sort=' + (_mxv4.angleSort||'');
+    }
+    return s;
+  }
+  function _apFp() {
+    if (typeof MANUAL_ACTIONS === 'undefined' || !Array.isArray(MANUAL_ACTIONS)) return '';
+    var s = MANUAL_ACTIONS.length + ':';
+    for (var i = 0; i < MANUAL_ACTIONS.length; i++) {
+      var m = MANUAL_ACTIONS[i]; if (!m) continue;
+      s += (m.id||'') + ',' + (m.title||'') + ',' + (m.liveStatus||'') + ',' + (m.dueDate||'') + ',' +
+           (m._clickupId||'') + ',' + (m.sourceAdId||'') + ',' + (m._highlightNew?'H':'') + ';';
+    }
+    s += '#' + _adsCoreFp() + '#';
+    if (typeof _apState !== 'undefined' && _apState) {
+      s += 'view=' + (_apState.view||'') + '|sort=' + (_apState.sortCol||'') + ':' + (_apState.sortDir||'');
+      if (_apState.filters) s += '|f=' + JSON.stringify(_apState.filters || {});
+      if (_apState.selected) s += '|sel=' + Object.keys(_apState.selected).length;
+    }
+    return s;
+  }
+  function _creativesFp() {
+    var s = _adsCoreFp() + '#';
+    if (typeof trackerFilters !== 'undefined' && trackerFilters) s += JSON.stringify(trackerFilters);
+    if (typeof trackerSort !== 'undefined' && trackerSort) s += '|' + JSON.stringify(trackerSort);
+    return s;
+  }
+  function _inspirationsFp() {
+    if (typeof INSPIRATIONS === 'undefined' || !Array.isArray(INSPIRATIONS)) return '';
+    var s = INSPIRATIONS.length + ':';
+    for (var i = 0; i < INSPIRATIONS.length; i++) {
+      var v = INSPIRATIONS[i]; if (!v) continue;
+      s += (v.id||'') + ',' + (v.status||'') + ',' + (v.title||'') + ',' + (v.brand||'') + ',' +
+           (v.platform||'') + ',' + (v.formatName||'') + ',' + (v.hookType||'') + ',' +
+           (v.angle||'') + ',' + (v.persona||'') + ',' + (v.notes||'') + ';';
+    }
+    // Filter inputs read from DOM each render — include their values.
+    function _v(id){ var el=document.getElementById(id); return el ? el.value || '' : ''; }
+    s += '#flt=' + _v('insFiltPlatform') + '|' + _v('insFiltFormat') + '|' + _v('insFiltStatus') + '|' + _v('insFiltHook') + '|' + _v('insFiltSearch');
+    return s;
+  }
+  var _fpComputers = {
+    renderMatrix:        _matrixFp,
+    renderActionPlan:    _apFp,
+    renderCreatives:     _creativesFp,
+    renderInspirations:  _inspirationsFp
+  };
+
+  // Wrap a renderer with scroll-preserve + row-diff animations.
+  // rowSpec is { rootSel, rowSel, idAttr, idPrefix? } — pass null/undefined to
+  // skip row diffing (e.g. matrix, where cells aren't rows).
+  function wrapRenderer(name, rowSpec) {
+    var orig = window[name];
+    if (typeof orig !== 'function') return;
+    if (orig.__preserveWrapped) return;
+    var wrapped = function () {
+      // No-op suppression: if the data this renderer consumes hasn't changed
+      // since last call, skip the entire render. Eliminates the flash on
+      // sync polls that brought no actual changes (matrix was the worst
+      // offender; AP/Creatives/Inspirations get the same benefit).
+      var fpFn = _fpComputers[name];
+      if (fpFn) {
+        try {
+          var fp = fpFn();
+          if (fp && _lastFp[name] === fp) {
+            // Nothing changed — skip render. Reconcile is also redundant.
+            return undefined;
+          }
+          _lastFp[name] = fp;
+        } catch (e) { /* fingerprint error → fall through to render */ }
+      }
+      // Heal orphan AD-id references (Bug 7/8/9 family) before every render.
+      // Cheap, idempotent — no-op when nothing's stale. This closes the
+      // race window where ClickUp sync rekeys an AD's id between
+      // _reconcileCellAssignments's existing 4 trigger points and the next
+      // render, leaving Matrix cells empty + Action Plan rows with
+      // Origin = Manual.
+      try { if (typeof _reconcileCellAssignments === 'function') _reconcileCellAssignments(); } catch (e) {}
+      var caps = capScroll();
+      var beforeMeta = rowSpec ? captureRowMeta(rowSpec.rootSel, rowSpec.rowSel, rowSpec.idAttr, rowSpec.idPrefix) : null;
+      var ret;
+      try {
+        ret = orig.apply(this, arguments);
+      } catch (e) {
+        console.error('[render-preserve] ' + name + ' threw, propagating', e);
+        throw e;
+      }
+      // Detect removed rows: rows present in beforeMeta but not in current DOM.
+      // Note: by the time this runs, orig() already wiped innerHTML, so the
+      // beforeMeta DOM nodes are detached. Their getBoundingClientRect returns
+      // zeros. For ghost-exit to look right we need to capture rects BEFORE the
+      // wipe — we already have them in beforeMeta.rows.el (still detached, but
+      // their pre-wipe rect was captured implicitly when we saw them). Without
+      // a pre-wipe rect snapshot, we skip the ghost. To get a real ghost we'd
+      // need to capture rects in the pre-render hook. Doing that now:
+      // (handled in beforeMeta capture below).
+      restoreScroll(caps);
+      if (rowSpec && beforeMeta) {
+        var afterMeta = captureRowMeta(rowSpec.rootSel, rowSpec.rowSel, rowSpec.idAttr, rowSpec.idPrefix) || { ids: {} };
+        // Ghost-exit removed rows using the rects we cached pre-render.
+        if (beforeMeta.rects) {
+          Object.keys(beforeMeta.rects).forEach(function (id) {
+            if (!afterMeta.ids[id]) {
+              var r = beforeMeta.rects[id];
+              if (!r || r.width < 1 || r.height < 1) return;
+              // Build a ghost from the cached HTML clone.
+              var wrap = document.createElement('div');
+              wrap.className = 'row-anim-ghost-wrap';
+              wrap.style.left   = r.left + 'px';
+              wrap.style.top    = r.top + 'px';
+              wrap.style.width  = r.width + 'px';
+              wrap.style.height = r.height + 'px';
+              var tbl = document.createElement('table');
+              var tb  = document.createElement('tbody');
+              if (r.html) tb.innerHTML = r.html;
+              tbl.appendChild(tb);
+              wrap.appendChild(tbl);
+              document.body.appendChild(wrap);
+              setTimeout(function () { if (wrap.parentNode) wrap.parentNode.removeChild(wrap); }, 360);
+            }
+          });
+        }
+        // Enter-flash new rows (in afterMeta but not beforeMeta).
+        flashEnterRows(beforeMeta.ids, rowSpec.rootSel, rowSpec.rowSel, rowSpec.idAttr, rowSpec.idPrefix);
+      }
+      return ret;
+    };
+    wrapped.__preserveWrapped = true;
+    window[name] = wrapped;
+  }
+
+  // Augment captureRowMeta to also stash bounding rects + outerHTML for each
+  // existing row, so we can build ghost-exit clones AFTER the innerHTML wipe.
+  // Done by overriding captureRowMeta with a richer version (closure above).
+  var _origCapture = captureRowMeta;
+  captureRowMeta = function (rootSel, rowSel, idAttr, idPrefix) {
+    var info = _origCapture(rootSel, rowSel, idAttr, idPrefix);
+    if (!info) return null;
+    info.rects = {};
+    info.rows.forEach(function (r) {
+      try {
+        var rect = r.el.getBoundingClientRect();
+        info.rects[r.id] = {
+          left: rect.left,
+          top: rect.top,
+          width: rect.width,
+          height: rect.height,
+          html: r.el.outerHTML
+        };
+      } catch (e) {}
+    });
+    return info;
+  };
+
+  // Defer wrapping until DOMContentLoaded so the original function definitions
+  // are guaranteed to be on window. (They are, since this script tag runs at
+  // end-of-body, but defer keeps things tidy.)
+  function doInstall() {
+    wrapRenderer('renderActionPlan', { rootSel: '#actionsContainer', rowSel: 'tr.ap-row[data-action-id]', idAttr: 'data-action-id' });
+    wrapRenderer('renderCreatives',  { rootSel: '#creativesBody',    rowSel: 'tr[id^="ad_row_"]',          idAttr: 'id', idPrefix: 'ad_row_' });
+    wrapRenderer('renderInspirations', { rootSel: '#insTbody',       rowSel: 'tr[data-ins-id]',            idAttr: 'data-ins-id' });
+    wrapRenderer('renderMatrix',     null); // matrix gets scroll-preserve only — cells aren't rows
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', doInstall);
+  } else {
+    doInstall();
+  }
+})();
 
 </script>
 </body>

@@ -1,0 +1,562 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Action Plan — Mockup 4: Daily Briefing</title>
+<link href="https://api.fontshare.com/v2/css?f[]=satoshi@400,500,600,700,800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg: #FAFAF8;
+  --ink: #1A1A18;
+  --ink2: #6B6B60;
+  --ink3: #ABABAA;
+  --rule: rgba(26,26,24,0.10);
+  --card: #FFFFFF;
+  --holo: linear-gradient(107deg,#3e86c6 0%,#a666aa 25%,#ec4492 50%,#ee4454 73%,#f05427 100%);
+  --red: #C41D1D;    --redb: #FEF2F2;
+  --amber: #92400E;  --amberb: #FFFBEB;
+  --green: #065F46;  --greenb: #ECFDF5;
+  --violet: #5B21B6; --violetb: #F5F3FF;
+  --blue: #1E40AF;   --blueb: #EFF6FF;
+}
+
+body {
+  font-family: 'Satoshi', system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--ink);
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── PAGE LAYOUT ── */
+.page { display: grid; grid-template-columns: 280px 1fr; min-height: 100vh; }
+
+/* ── LEFT BRIEFING PANEL ── */
+.brief-panel {
+  background: var(--ink);
+  color: #F1F0EC;
+  padding: 28px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow-y: auto;
+}
+
+.bp-date {
+  font-family: 'Instrument Serif', Georgia, serif;
+  font-style: italic;
+  font-size: 0.85rem;
+  color: rgba(241,240,236,0.45);
+  letter-spacing: 0.01em;
+}
+
+.bp-heading {
+  font-family: 'Instrument Serif', Georgia, serif;
+  font-size: 1.9rem;
+  line-height: 1.15;
+  font-weight: 400;
+  color: #F1F0EC;
+}
+
+.bp-divider {
+  height: 1px;
+  background: rgba(241,240,236,0.10);
+}
+
+/* Stat rows */
+.bp-stat-group { display: flex; flex-direction: column; gap: 12px; }
+.bp-stat-label {
+  font-size: 0.6rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: rgba(241,240,236,0.35);
+  margin-bottom: 4px;
+}
+
+.bp-stat-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding: 10px 0;
+  border-bottom: 1px solid rgba(241,240,236,0.07);
+}
+.bp-stat-row:last-child { border-bottom: none; }
+
+.bsr-name { font-size: 0.8rem; color: rgba(241,240,236,0.7); }
+.bsr-val  { font-size: 1.1rem; font-weight: 700; color: #F1F0EC; }
+.bsr-val.red    { color: #FCA5A5; }
+.bsr-val.amber  { color: #FCD34D; }
+.bsr-val.green  { color: #6EE7B7; }
+.bsr-val.violet { color: #C4B5FD; }
+
+/* Today deliveries */
+.bp-deliveries { display: flex; flex-direction: column; gap: 8px; }
+.bp-delivery {
+  padding: 10px 12px;
+  background: rgba(241,240,236,0.05);
+  border-radius: 8px;
+  border-left: 2px solid rgba(241,240,236,0.15);
+  font-size: 0.75rem;
+  color: rgba(241,240,236,0.8);
+  line-height: 1.4;
+}
+.bp-delivery strong { color: #F1F0EC; font-weight: 600; display: block; margin-bottom: 1px; }
+
+/* Summary */
+.bp-week-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.bwg-item {
+  background: rgba(241,240,236,0.05);
+  border-radius: 8px;
+  padding: 10px;
+  text-align: center;
+}
+.bwg-num { font-size: 1.4rem; font-weight: 700; color: #F1F0EC; }
+.bwg-lbl { font-size: 0.58rem; text-transform: uppercase; letter-spacing: 0.07em; color: rgba(241,240,236,0.35); margin-top: 2px; }
+
+.range-row { display: flex; gap: 4px; }
+.rr-btn {
+  flex: 1;
+  padding: 6px 0;
+  font-size: 0.68rem;
+  font-weight: 600;
+  border: 1px solid rgba(241,240,236,0.12);
+  border-radius: 6px;
+  background: transparent;
+  color: rgba(241,240,236,0.45);
+  cursor: pointer;
+  font-family: inherit;
+  transition: all .12s;
+  text-align: center;
+}
+.rr-btn.on {
+  background: rgba(241,240,236,0.10);
+  color: #F1F0EC;
+  border-color: rgba(241,240,236,0.25);
+}
+
+/* ── RIGHT TASK LIST ── */
+.task-panel { padding: 28px 32px; display: flex; flex-direction: column; gap: 0; }
+
+/* Phase section */
+.phase-section { margin-bottom: 32px; }
+.phase-section:last-child { margin-bottom: 0; }
+
+.phase-heading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--rule);
+}
+
+.ph-accent { width: 4px; height: 20px; border-radius: 2px; flex-shrink: 0; }
+.ph-name {
+  font-size: 0.7rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  flex: 1;
+}
+.ph-count {
+  font-size: 0.68rem;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 20px;
+}
+.ph-desc { font-size: 0.68rem; color: var(--ink3); }
+
+.phase-section.aging   .ph-accent { background: var(--red); }
+.phase-section.aging   .ph-name   { color: var(--red); }
+.phase-section.aging   .ph-count  { background: var(--redb); color: var(--red); }
+
+.phase-section.learning .ph-accent { background: #D97706; }
+.phase-section.learning .ph-name   { color: #92400E; }
+.phase-section.learning .ph-count  { background: var(--amberb); color: #92400E; }
+
+.phase-section.launched .ph-accent { background: #059669; }
+.phase-section.launched .ph-name   { color: var(--green); }
+.phase-section.launched .ph-count  { background: var(--greenb); color: var(--green); }
+
+.phase-section.pending  .ph-accent { background: #7C3AED; }
+.phase-section.pending  .ph-name   { color: var(--violet); }
+.phase-section.pending  .ph-count  { background: var(--violetb); color: var(--violet); }
+
+/* ── TASK ROW ── */
+.task-rows { display: flex; flex-direction: column; gap: 6px; }
+
+.trow {
+  display: grid;
+  grid-template-columns: 52px 1fr auto auto auto;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 16px;
+  background: var(--card);
+  border: 1px solid var(--rule);
+  border-radius: 10px;
+  transition: box-shadow .12s;
+  cursor: pointer;
+}
+.trow:hover { box-shadow: 0 2px 12px rgba(26,26,24,0.07); }
+
+.trow-age {
+  text-align: center;
+}
+.trow-age-num {
+  font-size: 1.3rem;
+  font-weight: 800;
+  line-height: 1;
+}
+.trow-age-unit {
+  font-size: 0.55rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ink3);
+  margin-top: 1px;
+}
+.phase-section.aging   .trow-age-num { color: var(--red); }
+.phase-section.learning .trow-age-num { color: #D97706; }
+.phase-section.launched .trow-age-num { color: #059669; }
+.phase-section.pending  .trow-age-num { color: #7C3AED; }
+
+.trow-main { min-width: 0; }
+.trow-name {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.trow-sub {
+  display: flex;
+  gap: 6px;
+  margin-top: 3px;
+}
+.trow-tag {
+  font-size: 0.62rem;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: rgba(26,26,24,0.05);
+  color: var(--ink2);
+}
+
+/* Progress arc — simple linear for now */
+.trow-progress {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  min-width: 70px;
+}
+.prog-track {
+  width: 70px; height: 4px;
+  background: rgba(26,26,24,0.07);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.prog-fill { height: 100%; border-radius: 2px; }
+.phase-section.aging    .prog-fill { background: var(--red); }
+.phase-section.learning .prog-fill { background: #D97706; }
+.phase-section.launched .prog-fill { background: #059669; }
+.prog-label { font-size: 0.6rem; color: var(--ink3); }
+
+.trow-link {
+  width: 28px; height: 28px;
+  border-radius: 7px;
+  border: 1px solid var(--rule);
+  background: transparent;
+  color: var(--ink3);
+  font-size: 0.78rem;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: all .12s;
+  font-family: inherit;
+}
+.trow-link:hover { background: var(--ink); color: #fff; border-color: var(--ink); }
+
+/* Pending — no age number */
+.trow-pending-badge {
+  font-size: 0.65rem;
+  font-weight: 700;
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: var(--violetb);
+  color: var(--violet);
+  white-space: nowrap;
+}
+
+</style>
+</head>
+<body>
+<div class="page">
+
+  <!-- LEFT: BRIEFING -->
+  <aside class="brief-panel">
+
+    <div>
+      <div class="bp-date">Thursday, April 24</div>
+      <div class="bp-heading">Daily<br>Briefing</div>
+    </div>
+
+    <div class="range-row">
+      <button class="rr-btn on">Today</button>
+      <button class="rr-btn">Week</button>
+      <button class="rr-btn">Month</button>
+      <button class="rr-btn">Custom</button>
+    </div>
+
+    <div class="bp-divider"></div>
+
+    <div class="bp-stat-group">
+      <div class="bp-stat-label">Live Overview</div>
+      <div class="bp-stat-row">
+        <span class="bsr-name">Delivering today</span>
+        <span class="bsr-val">4</span>
+      </div>
+      <div class="bp-stat-row">
+        <span class="bsr-name">In production</span>
+        <span class="bsr-val green">11</span>
+      </div>
+      <div class="bp-stat-row">
+        <span class="bsr-name">Aging (7d+)</span>
+        <span class="bsr-val red">2</span>
+      </div>
+      <div class="bp-stat-row">
+        <span class="bsr-name">In learning</span>
+        <span class="bsr-val amber">5</span>
+      </div>
+      <div class="bp-stat-row">
+        <span class="bsr-name">Pending launch</span>
+        <span class="bsr-val violet">3</span>
+      </div>
+    </div>
+
+    <div class="bp-divider"></div>
+
+    <div>
+      <div class="bp-stat-label">Due Today</div>
+      <div class="bp-deliveries">
+        <div class="bp-delivery"><strong>Hook Test — Fear Angle</strong>Busy Mom · Hook</div>
+        <div class="bp-delivery"><strong>UGC v3 — Busy Mom</strong>Fear · UGC</div>
+        <div class="bp-delivery"><strong>VSL Short — Pain Point</strong>Gen Pop · VSL</div>
+        <div class="bp-delivery"><strong>Static — Before/After</strong>Health Nut · Static</div>
+      </div>
+    </div>
+
+    <div class="bp-divider"></div>
+
+    <div>
+      <div class="bp-stat-label">This Week</div>
+      <div class="bp-week-grid">
+        <div class="bwg-item"><div class="bwg-num">8</div><div class="bwg-lbl">Launched</div></div>
+        <div class="bwg-item"><div class="bwg-num">3</div><div class="bwg-lbl">Paused</div></div>
+        <div class="bwg-item"><div class="bwg-num">2</div><div class="bwg-lbl">Killed</div></div>
+        <div class="bwg-item"><div class="bwg-num">11</div><div class="bwg-lbl">Running</div></div>
+      </div>
+    </div>
+
+  </aside>
+
+  <!-- RIGHT: TASKS -->
+  <main class="task-panel">
+
+    <!-- AGING -->
+    <div class="phase-section aging">
+      <div class="phase-heading">
+        <div class="ph-accent"></div>
+        <span class="ph-name">Aging</span>
+        <span class="ph-count">2</span>
+        <span class="ph-desc">Running 7+ days — review or kill</span>
+      </div>
+      <div class="task-rows">
+
+        <div class="trow">
+          <div class="trow-age">
+            <div class="trow-age-num">12</div>
+            <div class="trow-age-unit">days</div>
+          </div>
+          <div class="trow-main">
+            <div class="trow-name">VSL Long — Skeptic Angle — Dr. Linda</div>
+            <div class="trow-sub">
+              <span class="trow-tag">VSL</span><span class="trow-tag">Skeptic</span><span class="trow-tag">Dr. Linda</span>
+            </div>
+          </div>
+          <div class="trow-progress">
+            <div class="prog-track"><div class="prog-fill" style="width:86%"></div></div>
+            <span class="prog-label">Day 12 / ~14</span>
+          </div>
+          <button class="trow-link">↗</button>
+        </div>
+
+        <div class="trow">
+          <div class="trow-age">
+            <div class="trow-age-num">9</div>
+            <div class="trow-age-unit">days</div>
+          </div>
+          <div class="trow-main">
+            <div class="trow-name">Hook Test — Curiosity — Gen Pop</div>
+            <div class="trow-sub">
+              <span class="trow-tag">Hook</span><span class="trow-tag">Curiosity</span><span class="trow-tag">Gen Pop</span>
+            </div>
+          </div>
+          <div class="trow-progress">
+            <div class="prog-track"><div class="prog-fill" style="width:64%"></div></div>
+            <span class="prog-label">Day 9 / ~14</span>
+          </div>
+          <button class="trow-link">↗</button>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- LEARNING -->
+    <div class="phase-section learning">
+      <div class="phase-heading">
+        <div class="ph-accent"></div>
+        <span class="ph-name">Learning Phase</span>
+        <span class="ph-count">5</span>
+        <span class="ph-desc">Days 3–6 — in the algorithm</span>
+      </div>
+      <div class="task-rows">
+
+        <div class="trow">
+          <div class="trow-age"><div class="trow-age-num">6</div><div class="trow-age-unit">days</div></div>
+          <div class="trow-main">
+            <div class="trow-name">UGC v2 — Fear Angle — Busy Mom</div>
+            <div class="trow-sub"><span class="trow-tag">UGC</span><span class="trow-tag">Fear</span><span class="trow-tag">Busy Mom</span></div>
+          </div>
+          <div class="trow-progress">
+            <div class="prog-track"><div class="prog-fill" style="width:43%"></div></div>
+            <span class="prog-label">Day 6 / ~14</span>
+          </div>
+          <button class="trow-link">↗</button>
+        </div>
+
+        <div class="trow">
+          <div class="trow-age"><div class="trow-age-num">5</div><div class="trow-age-unit">days</div></div>
+          <div class="trow-main">
+            <div class="trow-name">Static — Pain Point — Health Nut</div>
+            <div class="trow-sub"><span class="trow-tag">Static</span><span class="trow-tag">Pain Point</span></div>
+          </div>
+          <div class="trow-progress">
+            <div class="prog-track"><div class="prog-fill" style="width:36%"></div></div>
+            <span class="prog-label">Day 5 / ~14</span>
+          </div>
+          <button class="trow-link">↗</button>
+        </div>
+
+        <div class="trow">
+          <div class="trow-age"><div class="trow-age-num">4</div><div class="trow-age-unit">days</div></div>
+          <div class="trow-main">
+            <div class="trow-name">Testimonial — Trust — 50+ Woman</div>
+            <div class="trow-sub"><span class="trow-tag">Testimonial</span><span class="trow-tag">Trust</span></div>
+          </div>
+          <div class="trow-progress">
+            <div class="prog-track"><div class="prog-fill" style="width:28%"></div></div>
+            <span class="prog-label">Day 4 / ~14</span>
+          </div>
+          <button class="trow-link">↗</button>
+        </div>
+
+        <div class="trow">
+          <div class="trow-age"><div class="trow-age-num">3</div><div class="trow-age-unit">days</div></div>
+          <div class="trow-main">
+            <div class="trow-name">Carousel — Social Proof — Athlete</div>
+            <div class="trow-sub"><span class="trow-tag">Carousel</span><span class="trow-tag">Social Proof</span></div>
+          </div>
+          <div class="trow-progress">
+            <div class="prog-track"><div class="prog-fill" style="width:21%"></div></div>
+            <span class="prog-label">Day 3 / ~14</span>
+          </div>
+          <button class="trow-link">↗</button>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- LAUNCHED -->
+    <div class="phase-section launched">
+      <div class="phase-heading">
+        <div class="ph-accent"></div>
+        <span class="ph-name">Just Launched</span>
+        <span class="ph-count">4</span>
+        <span class="ph-desc">Days 1–2 — brand new</span>
+      </div>
+      <div class="task-rows">
+
+        <div class="trow">
+          <div class="trow-age"><div class="trow-age-num">2</div><div class="trow-age-unit">days</div></div>
+          <div class="trow-main">
+            <div class="trow-name">Hook Test — Fear — Busy Mom</div>
+            <div class="trow-sub"><span class="trow-tag">Hook</span><span class="trow-tag">Fear</span></div>
+          </div>
+          <div class="trow-progress">
+            <div class="prog-track"><div class="prog-fill" style="width:14%"></div></div>
+            <span class="prog-label">Day 2 / ~14</span>
+          </div>
+          <button class="trow-link">↗</button>
+        </div>
+
+        <div class="trow">
+          <div class="trow-age"><div class="trow-age-num">1</div><div class="trow-age-unit">day</div></div>
+          <div class="trow-main">
+            <div class="trow-name">VSL Short — Curiosity — Gen Pop</div>
+            <div class="trow-sub"><span class="trow-tag">VSL</span><span class="trow-tag">Curiosity</span></div>
+          </div>
+          <div class="trow-progress">
+            <div class="prog-track"><div class="prog-fill" style="width:7%"></div></div>
+            <span class="prog-label">Day 1 / ~14</span>
+          </div>
+          <button class="trow-link">↗</button>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- PENDING -->
+    <div class="phase-section pending">
+      <div class="phase-heading">
+        <div class="ph-accent"></div>
+        <span class="ph-name">Pending Launch</span>
+        <span class="ph-count">3</span>
+        <span class="ph-desc">Ready — awaiting go-live</span>
+      </div>
+      <div class="task-rows">
+
+        <div class="trow">
+          <div><span class="trow-pending-badge">Ready</span></div>
+          <div class="trow-main">
+            <div class="trow-name">UGC v3 — Social Proof — Athlete</div>
+            <div class="trow-sub"><span class="trow-tag">UGC</span><span class="trow-tag">Social Proof</span></div>
+          </div>
+          <div></div>
+          <button class="trow-link">↗</button>
+        </div>
+
+        <div class="trow">
+          <div><span class="trow-pending-badge">Ready</span></div>
+          <div class="trow-main">
+            <div class="trow-name">Static — Before/After — Health Nut</div>
+            <div class="trow-sub"><span class="trow-tag">Static</span><span class="trow-tag">Before/After</span></div>
+          </div>
+          <div></div>
+          <button class="trow-link">↗</button>
+        </div>
+
+      </div>
+    </div>
+
+  </main>
+</div>
+</body>
+</html>

@@ -1,0 +1,1183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Action Plan V2 — Clinical Calm</title>
+<link href="https://api.fontshare.com/v2/css?f[]=satoshi@400,500,600,700,800&f[]=inter-tight@400,500,600,700,800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg: #FAFAF7;
+  --paper: #FFFFFF;
+  --ink: #1A1A1A;
+  --ink2: #52525B;
+  --ink3: #A1A1AA;
+  --rule: rgba(26,26,26,0.08);
+  --rule-strong: rgba(26,26,26,0.14);
+
+  --signal: #FF6B35;        /* Decisions needed */
+  --signalb: #FFF1EB;
+  --signald: #D94D17;
+
+  --green: #047857;
+  --greenb: #ECFDF5;
+  --clay: #B45309;
+  --clayb: #FFFBEB;
+  --slate: #475569;
+  --slateb: #F1F5F9;
+  --violet: #6D28D9;
+  --violetb: #F5F3FF;
+  --rose: #BE123C;
+  --roseb: #FFF1F2;
+}
+
+body {
+  font-family: 'Satoshi', system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--ink);
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+  padding: 32px 40px 80px;
+}
+
+.num { font-family: 'Inter Tight', sans-serif; font-feature-settings: 'ss01', 'cv11'; letter-spacing: -0.01em; }
+.serif-i { font-family: 'Instrument Serif', Georgia, serif; font-style: italic; font-weight: 400; }
+
+/* ── HEADER ── */
+.header {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: end;
+  gap: 20px;
+  padding-bottom: 24px;
+  border-bottom: 1px solid var(--rule-strong);
+  margin-bottom: 28px;
+}
+
+.hdr-title-group { display: flex; flex-direction: column; gap: 2px; }
+.hdr-eyebrow {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--ink3);
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+}
+.hdr-title {
+  font-family: 'Instrument Serif', Georgia, serif;
+  font-weight: 400;
+  font-size: 2.6rem;
+  line-height: 1;
+  letter-spacing: -0.01em;
+}
+.hdr-title .italic { font-style: italic; color: var(--signal); }
+
+.hdr-right { display: flex; align-items: center; gap: 14px; }
+
+.range-pill-group {
+  display: flex;
+  background: var(--paper);
+  border: 1px solid var(--rule-strong);
+  border-radius: 999px;
+  padding: 3px;
+}
+.rpg-btn {
+  padding: 6px 14px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  border: none;
+  background: transparent;
+  color: var(--ink2);
+  cursor: pointer;
+  font-family: inherit;
+  transition: all .15s;
+}
+.rpg-btn.on { background: var(--ink); color: var(--paper); }
+
+.search-pill {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  background: var(--paper);
+  border: 1px solid var(--rule-strong);
+  border-radius: 999px;
+  font-size: 0.75rem;
+  color: var(--ink3);
+  width: 220px;
+}
+.search-pill kbd {
+  margin-left: auto;
+  font-family: 'Inter Tight', sans-serif;
+  font-size: 0.65rem;
+  padding: 1px 5px;
+  border: 1px solid var(--rule-strong);
+  border-radius: 4px;
+  color: var(--ink2);
+  background: var(--bg);
+}
+
+/* ── SECTION HEADER ── */
+.section {
+  margin-bottom: 36px;
+}
+.section-head {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+.sh-num {
+  font-family: 'Instrument Serif', Georgia, serif;
+  font-style: italic;
+  font-size: 1.2rem;
+  color: var(--ink3);
+  line-height: 1;
+}
+.sh-title {
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+}
+.sh-desc {
+  font-size: 0.75rem;
+  color: var(--ink3);
+  margin-left: 4px;
+}
+.sh-action {
+  margin-left: auto;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--ink2);
+  border: none;
+  background: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.sh-action:hover { color: var(--ink); }
+
+/* ════════════════════════════════════════════ */
+/* ROW 1 — HOT QUEUE                            */
+/* ════════════════════════════════════════════ */
+.hot-queue {
+  background: var(--paper);
+  border: 1px solid var(--rule-strong);
+  border-radius: 14px;
+  overflow: hidden;
+  box-shadow: 0 1px 0 rgba(26,26,26,0.02);
+}
+
+.hq-header {
+  padding: 14px 20px;
+  background: linear-gradient(180deg, var(--signalb) 0%, transparent 100%);
+  border-bottom: 1px solid var(--rule);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.hq-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--signal);
+  box-shadow: 0 0 0 4px rgba(255,107,53,0.18);
+  animation: pulse-dot 2s ease-in-out infinite;
+}
+@keyframes pulse-dot {
+  0%,100% { box-shadow: 0 0 0 4px rgba(255,107,53,0.18); }
+  50%     { box-shadow: 0 0 0 8px rgba(255,107,53,0.08); }
+}
+.hq-title {
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--signald);
+}
+.hq-count {
+  background: var(--signal);
+  color: var(--paper);
+  font-size: 0.68rem;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+.hq-sub {
+  font-size: 0.72rem;
+  color: var(--ink3);
+  margin-left: auto;
+}
+
+.hq-list { display: flex; flex-direction: column; }
+.hq-row {
+  display: grid;
+  grid-template-columns: 36px 1fr auto;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--rule);
+  transition: background .12s;
+}
+.hq-row:last-child { border-bottom: none; }
+.hq-row:hover { background: rgba(255,107,53,0.03); }
+
+.hq-icon {
+  width: 32px; height: 32px;
+  border-radius: 8px;
+  background: var(--signalb);
+  color: var(--signald);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 0.85rem;
+}
+
+.hq-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.hq-name { font-size: 0.88rem; font-weight: 600; color: var(--ink); }
+.hq-name .age { color: var(--signald); font-weight: 700; }
+.hq-why { font-size: 0.72rem; color: var(--ink2); }
+
+.hq-actions { display: flex; gap: 6px; }
+.hq-btn {
+  padding: 6px 12px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  border-radius: 7px;
+  border: 1px solid var(--rule-strong);
+  background: var(--paper);
+  color: var(--ink2);
+  cursor: pointer;
+  font-family: inherit;
+  transition: all .12s;
+}
+.hq-btn:hover { border-color: var(--ink); color: var(--ink); }
+.hq-btn.primary { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+.hq-btn.primary:hover { background: var(--signal); border-color: var(--signal); }
+.hq-btn.kill:hover { background: var(--rose); color: var(--paper); border-color: var(--rose); }
+.hq-btn.scale:hover { background: var(--green); color: var(--paper); border-color: var(--green); }
+
+/* ════════════════════════════════════════════ */
+/* ROW 2 — LIVE PULSE                           */
+/* ════════════════════════════════════════════ */
+.pulse-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 14px;
+}
+
+.pulse-col {
+  background: var(--paper);
+  border: 1px solid var(--rule-strong);
+  border-radius: 14px;
+  overflow: hidden;
+}
+
+.pc-header {
+  padding: 12px 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-bottom: 1px solid var(--rule);
+}
+.pc-phase-dot { width: 7px; height: 7px; border-radius: 50%; }
+.pulse-col.aging .pc-phase-dot   { background: var(--rose); }
+.pulse-col.learn .pc-phase-dot   { background: var(--clay); }
+.pulse-col.fresh .pc-phase-dot   { background: var(--green); }
+
+.pc-name {
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--ink);
+}
+.pc-count {
+  margin-left: auto;
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+.pulse-col.aging .pc-count { color: var(--rose); }
+.pulse-col.learn .pc-count { color: var(--clay); }
+.pulse-col.fresh .pc-count { color: var(--green); }
+
+.pc-body { display: flex; flex-direction: column; }
+
+.pulse-card {
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--rule);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  transition: background .12s;
+  cursor: pointer;
+}
+.pulse-card:last-child { border-bottom: none; }
+.pulse-card:hover { background: var(--bg); }
+
+.pc-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.pc-day {
+  font-family: 'Inter Tight', sans-serif;
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 5px;
+  white-space: nowrap;
+}
+.pulse-col.aging .pc-day { background: var(--roseb);   color: var(--rose); }
+.pulse-col.learn .pc-day { background: var(--clayb);   color: var(--clay); }
+.pulse-col.fresh .pc-day { background: var(--greenb);  color: var(--green); }
+
+.pc-blocked {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.62rem;
+  font-weight: 600;
+  padding: 3px 7px;
+  border-radius: 4px;
+  background: var(--slateb);
+  color: var(--slate);
+}
+
+.pc-title {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--ink);
+  line-height: 1.3;
+}
+.pc-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.pc-tag {
+  font-size: 0.62rem;
+  font-weight: 500;
+  color: var(--ink2);
+  padding: 2px 6px;
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+}
+
+.pc-twin-warn {
+  font-size: 0.65rem;
+  color: var(--clay);
+  font-weight: 600;
+  background: var(--clayb);
+  padding: 4px 8px;
+  border-radius: 5px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+/* ════════════════════════════════════════════ */
+/* ROW 3 — PIPELINE (Weekly calendar)           */
+/* ════════════════════════════════════════════ */
+.pipeline {
+  background: var(--paper);
+  border: 1px solid var(--rule-strong);
+  border-radius: 14px;
+  padding: 20px 24px;
+}
+
+.pipeline-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 10px;
+}
+
+.day-col {
+  border: 1px solid var(--rule);
+  border-radius: 10px;
+  padding: 12px;
+  min-height: 130px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  transition: background .12s;
+  cursor: pointer;
+}
+.day-col:hover { background: var(--bg); }
+.day-col.today {
+  background: var(--ink);
+  color: var(--paper);
+  border-color: var(--ink);
+}
+.day-col.today .dc-count { color: var(--paper); }
+.day-col.today .dc-item-row { color: rgba(255,255,255,0.85); border-color: rgba(255,255,255,0.12); }
+
+.dc-header { display: flex; justify-content: space-between; align-items: baseline; }
+.dc-weekday {
+  font-size: 0.62rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink3);
+}
+.day-col.today .dc-weekday { color: rgba(255,255,255,0.6); }
+.dc-date {
+  font-family: 'Inter Tight', sans-serif;
+  font-size: 1.1rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.dc-count {
+  font-size: 0.65rem;
+  font-weight: 600;
+  color: var(--ink2);
+}
+
+.dc-items { display: flex; flex-direction: column; gap: 4px; margin-top: auto; }
+.dc-item-row {
+  font-size: 0.68rem;
+  font-weight: 500;
+  color: var(--ink2);
+  padding: 4px 6px;
+  border: 1px solid var(--rule);
+  border-radius: 5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ════════════════════════════════════════════ */
+/* ROW 4 — DAILY LOG                            */
+/* ════════════════════════════════════════════ */
+.log-grid {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 14px;
+}
+
+.log-card {
+  background: var(--paper);
+  border: 1px solid var(--rule-strong);
+  border-radius: 14px;
+  padding: 20px 24px;
+}
+
+.log-stats-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0;
+  margin-bottom: 20px;
+}
+.lsr-item {
+  padding: 0 16px;
+  border-right: 1px solid var(--rule);
+}
+.lsr-item:last-child { border-right: none; }
+.lsr-item:first-child { padding-left: 0; }
+.lsr-num {
+  font-family: 'Inter Tight', sans-serif;
+  font-size: 2.2rem;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.02em;
+}
+.lsr-num.plus  { color: var(--green); }
+.lsr-num.minus { color: var(--rose); }
+.lsr-lbl {
+  font-size: 0.68rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink3);
+  margin-top: 4px;
+}
+.lsr-trend {
+  font-size: 0.65rem;
+  color: var(--green);
+  font-weight: 600;
+  margin-top: 2px;
+}
+
+/* Timeline inside log */
+.timeline {
+  position: relative;
+  padding-left: 20px;
+}
+.timeline::before {
+  content: '';
+  position: absolute;
+  left: 6px; top: 6px; bottom: 6px;
+  width: 1px;
+  background: var(--rule);
+}
+.tl-event {
+  position: relative;
+  padding: 8px 0;
+  display: grid;
+  grid-template-columns: 60px 1fr;
+  gap: 12px;
+  align-items: baseline;
+}
+.tl-event::before {
+  content: '';
+  position: absolute;
+  left: -17px;
+  top: 14px;
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: var(--paper);
+  border: 2px solid var(--ink3);
+}
+.tl-event.launch::before { border-color: var(--green); background: var(--green); }
+.tl-event.kill::before   { border-color: var(--rose); background: var(--rose); }
+.tl-event.scale::before  { border-color: var(--signal); background: var(--signal); }
+
+.tl-time {
+  font-family: 'Inter Tight', sans-serif;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--ink3);
+}
+.tl-text { font-size: 0.78rem; color: var(--ink); }
+.tl-text strong { font-weight: 600; }
+
+/* Velocity card */
+.velocity-card {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+.velocity-hero {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.vh-num {
+  font-family: 'Instrument Serif', Georgia, serif;
+  font-size: 4rem;
+  line-height: 1;
+  font-style: italic;
+  font-weight: 400;
+  color: var(--ink);
+}
+.vh-unit { font-size: 0.95rem; color: var(--ink2); font-weight: 500; }
+.velocity-delta {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--green);
+  background: var(--greenb);
+  padding: 4px 10px;
+  border-radius: 6px;
+  width: fit-content;
+}
+
+.spark-wrap { height: 48px; }
+
+.velocity-meta {
+  font-size: 0.73rem;
+  color: var(--ink2);
+  line-height: 1.55;
+}
+
+/* ════════════════════════════════════════════ */
+/* ROW 5 — PATTERNS                             */
+/* ════════════════════════════════════════════ */
+.patterns-card {
+  background: var(--paper);
+  border: 1px solid var(--rule-strong);
+  border-radius: 14px;
+  padding: 20px 24px;
+}
+
+.matrix-wrap { overflow-x: auto; }
+.matrix {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 4px;
+  font-family: 'Inter Tight', sans-serif;
+}
+.matrix th {
+  font-size: 0.65rem;
+  font-weight: 600;
+  color: var(--ink3);
+  padding: 6px 10px;
+  text-align: left;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.matrix th.col-h { text-align: center; }
+.matrix td {
+  padding: 8px 10px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  border-radius: 6px;
+  text-align: center;
+  color: var(--ink);
+}
+.matrix td.row-label {
+  text-align: left;
+  font-weight: 500;
+  color: var(--ink2);
+  padding-left: 0;
+}
+.heat-0 { background: var(--bg); color: var(--ink3); }
+.heat-1 { background: #FFEDE3; color: var(--signald); }
+.heat-2 { background: #FFCFB3; color: var(--signald); }
+.heat-3 { background: #FFA678; color: var(--paper); }
+.heat-4 { background: var(--signal); color: var(--paper); }
+
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<header class="header">
+  <div class="hdr-title-group">
+    <span class="hdr-eyebrow">Thursday · April 24, 2026</span>
+    <h1 class="hdr-title">Action <span class="italic">Plan.</span></h1>
+  </div>
+  <div class="hdr-right">
+    <div class="search-pill">
+      <span>🔍</span>
+      <span>Search tasks, angles…</span>
+      <kbd>/</kbd>
+    </div>
+    <div class="range-pill-group">
+      <button class="rpg-btn on">Today</button>
+      <button class="rpg-btn">Week</button>
+      <button class="rpg-btn">Month</button>
+      <button class="rpg-btn">Custom</button>
+    </div>
+  </div>
+</header>
+
+<!-- ═══════════════════════════════════════ -->
+<!-- ROW 1 — HOT QUEUE                       -->
+<!-- ═══════════════════════════════════════ -->
+<section class="section">
+  <div class="section-head">
+    <span class="sh-num">01</span>
+    <span class="sh-title">Decisions Needed</span>
+    <span class="sh-desc">— things demanding your call today</span>
+    <button class="sh-action">Mark all reviewed →</button>
+  </div>
+
+  <div class="hot-queue">
+    <div class="hq-header">
+      <span class="hq-dot"></span>
+      <span class="hq-title">Hot Queue</span>
+      <span class="hq-count">5</span>
+      <span class="hq-sub">Auto-surfaced by age, deadline, and block status</span>
+    </div>
+
+    <div class="hq-list">
+      <div class="hq-row">
+        <div class="hq-icon">⏱</div>
+        <div class="hq-main">
+          <div class="hq-name">VSL Long · Skeptic · Dr. Linda <span class="age">— Day 12, past review window</span></div>
+          <div class="hq-why">Below CPA target for 5 days. Kill, rework, or scale winning variant?</div>
+        </div>
+        <div class="hq-actions">
+          <button class="hq-btn kill">Kill</button>
+          <button class="hq-btn scale">Scale</button>
+          <button class="hq-btn primary">Review →</button>
+        </div>
+      </div>
+
+      <div class="hq-row">
+        <div class="hq-icon">⏱</div>
+        <div class="hq-main">
+          <div class="hq-name">Hook Test · Curiosity · Gen Pop <span class="age">— Day 9</span></div>
+          <div class="hq-why">Hit 7-day review threshold. Performance flat — decision pending.</div>
+        </div>
+        <div class="hq-actions">
+          <button class="hq-btn kill">Kill</button>
+          <button class="hq-btn scale">Scale</button>
+          <button class="hq-btn primary">Review →</button>
+        </div>
+      </div>
+
+      <div class="hq-row">
+        <div class="hq-icon">📦</div>
+        <div class="hq-main">
+          <div class="hq-name">UGC v3 · Social Proof · Athlete <span class="age">— Delivered by editor 2h ago</span></div>
+          <div class="hq-why">Ready for launch. Review creative and push live.</div>
+        </div>
+        <div class="hq-actions">
+          <button class="hq-btn">Preview</button>
+          <button class="hq-btn primary">Push Live →</button>
+        </div>
+      </div>
+
+      <div class="hq-row">
+        <div class="hq-icon">⚠</div>
+        <div class="hq-main">
+          <div class="hq-name">Static · Before/After · Health Nut <span class="age">— Stuck in approval, 48h</span></div>
+          <div class="hq-why">Waiting on: Gaurav — last comment Apr 22.</div>
+        </div>
+        <div class="hq-actions">
+          <button class="hq-btn">Ping approver</button>
+          <button class="hq-btn primary">Approve →</button>
+        </div>
+      </div>
+
+      <div class="hq-row">
+        <div class="hq-icon">🆕</div>
+        <div class="hq-main">
+          <div class="hq-name">Testimonial · Skeptic · Dr. Linda <span class="age">— New brief created yesterday</span></div>
+          <div class="hq-why">Sitting unassigned. Assign editor and set delivery date.</div>
+        </div>
+        <div class="hq-actions">
+          <button class="hq-btn">Skip</button>
+          <button class="hq-btn primary">Assign →</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════ -->
+<!-- ROW 2 — LIVE PULSE                      -->
+<!-- ═══════════════════════════════════════ -->
+<section class="section">
+  <div class="section-head">
+    <span class="sh-num">02</span>
+    <span class="sh-title">Live Pulse</span>
+    <span class="sh-desc">— everything currently in production</span>
+    <button class="sh-action">Group by angle →</button>
+  </div>
+
+  <div class="pulse-grid">
+
+    <!-- AGING -->
+    <div class="pulse-col aging">
+      <div class="pc-header">
+        <span class="pc-phase-dot"></span>
+        <span class="pc-name">Aging · 7+ days</span>
+        <span class="pc-count">2</span>
+      </div>
+      <div class="pc-body">
+
+        <div class="pulse-card">
+          <div class="pc-top">
+            <span class="pc-day">Day 12</span>
+          </div>
+          <div class="pc-title">VSL Long — Skeptic Angle — Dr. Linda</div>
+          <div class="pc-meta">
+            <span class="pc-tag">VSL</span>
+            <span class="pc-tag">Skeptic</span>
+            <span class="pc-tag">Dr. Linda</span>
+          </div>
+          <div class="pc-twin-warn">⚠ Twin of: VSL Short · Skeptic · Dr. Linda (Day 9)</div>
+        </div>
+
+        <div class="pulse-card">
+          <div class="pc-top">
+            <span class="pc-day">Day 9</span>
+          </div>
+          <div class="pc-title">Hook Test — Curiosity — Gen Pop</div>
+          <div class="pc-meta">
+            <span class="pc-tag">Hook</span>
+            <span class="pc-tag">Curiosity</span>
+            <span class="pc-tag">Gen Pop</span>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- LEARNING -->
+    <div class="pulse-col learn">
+      <div class="pc-header">
+        <span class="pc-phase-dot"></span>
+        <span class="pc-name">Learning · 3–6 days</span>
+        <span class="pc-count">5</span>
+      </div>
+      <div class="pc-body">
+
+        <div class="pulse-card">
+          <div class="pc-top">
+            <span class="pc-day">Day 6</span>
+            <span class="pc-blocked">Waiting: editor</span>
+          </div>
+          <div class="pc-title">UGC v2 — Fear Angle — Busy Mom</div>
+          <div class="pc-meta">
+            <span class="pc-tag">UGC</span>
+            <span class="pc-tag">Fear</span>
+            <span class="pc-tag">Busy Mom</span>
+          </div>
+        </div>
+
+        <div class="pulse-card">
+          <div class="pc-top">
+            <span class="pc-day">Day 5</span>
+          </div>
+          <div class="pc-title">Static — Pain Point — Health Nut</div>
+          <div class="pc-meta">
+            <span class="pc-tag">Static</span>
+            <span class="pc-tag">Pain Point</span>
+          </div>
+        </div>
+
+        <div class="pulse-card">
+          <div class="pc-top">
+            <span class="pc-day">Day 4</span>
+          </div>
+          <div class="pc-title">Testimonial — Trust — 50+ Woman</div>
+          <div class="pc-meta">
+            <span class="pc-tag">Testimonial</span>
+            <span class="pc-tag">Trust</span>
+          </div>
+        </div>
+
+        <div class="pulse-card">
+          <div class="pc-top">
+            <span class="pc-day">Day 3</span>
+          </div>
+          <div class="pc-title">Carousel — Social Proof — Athlete</div>
+          <div class="pc-meta">
+            <span class="pc-tag">Carousel</span>
+            <span class="pc-tag">Social Proof</span>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- FRESH -->
+    <div class="pulse-col fresh">
+      <div class="pc-header">
+        <span class="pc-phase-dot"></span>
+        <span class="pc-name">Fresh · 1–2 days</span>
+        <span class="pc-count">4</span>
+      </div>
+      <div class="pc-body">
+
+        <div class="pulse-card">
+          <div class="pc-top">
+            <span class="pc-day">Day 2</span>
+          </div>
+          <div class="pc-title">Hook Test — Fear — Busy Mom</div>
+          <div class="pc-meta">
+            <span class="pc-tag">Hook</span>
+            <span class="pc-tag">Fear</span>
+            <span class="pc-tag">Busy Mom</span>
+          </div>
+        </div>
+
+        <div class="pulse-card">
+          <div class="pc-top">
+            <span class="pc-day">Day 1</span>
+          </div>
+          <div class="pc-title">VSL Short — Curiosity — Gen Pop</div>
+          <div class="pc-meta">
+            <span class="pc-tag">VSL</span>
+            <span class="pc-tag">Curiosity</span>
+          </div>
+        </div>
+
+        <div class="pulse-card">
+          <div class="pc-top">
+            <span class="pc-day">Day 1</span>
+          </div>
+          <div class="pc-title">Static — Pain Point — 50+ Woman</div>
+          <div class="pc-meta">
+            <span class="pc-tag">Static</span>
+            <span class="pc-tag">Pain Point</span>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════ -->
+<!-- ROW 3 — PIPELINE                        -->
+<!-- ═══════════════════════════════════════ -->
+<section class="section">
+  <div class="section-head">
+    <span class="sh-num">03</span>
+    <span class="sh-title">Pipeline · Next 7 days</span>
+    <span class="sh-desc">— deliveries, launches, and approvals</span>
+    <button class="sh-action">Open calendar →</button>
+  </div>
+
+  <div class="pipeline">
+    <div class="pipeline-grid">
+
+      <div class="day-col today">
+        <div class="dc-header">
+          <span class="dc-weekday">Thu</span>
+          <span class="dc-date num">24</span>
+        </div>
+        <span class="dc-count">4 delivering · today</span>
+        <div class="dc-items">
+          <div class="dc-item-row">Hook · Fear</div>
+          <div class="dc-item-row">UGC v3 · Busy Mom</div>
+          <div class="dc-item-row">+2 more</div>
+        </div>
+      </div>
+
+      <div class="day-col">
+        <div class="dc-header">
+          <span class="dc-weekday">Fri</span>
+          <span class="dc-date num">25</span>
+        </div>
+        <span class="dc-count">2 delivering</span>
+        <div class="dc-items">
+          <div class="dc-item-row">VSL Short · Skeptic</div>
+          <div class="dc-item-row">Static · Before/After</div>
+        </div>
+      </div>
+
+      <div class="day-col">
+        <div class="dc-header">
+          <span class="dc-weekday">Sat</span>
+          <span class="dc-date num">26</span>
+        </div>
+        <span class="dc-count">—</span>
+      </div>
+
+      <div class="day-col">
+        <div class="dc-header">
+          <span class="dc-weekday">Sun</span>
+          <span class="dc-date num">27</span>
+        </div>
+        <span class="dc-count">1 delivering</span>
+        <div class="dc-items">
+          <div class="dc-item-row">Carousel · Trust</div>
+        </div>
+      </div>
+
+      <div class="day-col">
+        <div class="dc-header">
+          <span class="dc-weekday">Mon</span>
+          <span class="dc-date num">28</span>
+        </div>
+        <span class="dc-count">3 delivering</span>
+        <div class="dc-items">
+          <div class="dc-item-row">UGC v4 · Athlete</div>
+          <div class="dc-item-row">VSL · Skeptic v2</div>
+          <div class="dc-item-row">+1 more</div>
+        </div>
+      </div>
+
+      <div class="day-col">
+        <div class="dc-header">
+          <span class="dc-weekday">Tue</span>
+          <span class="dc-date num">29</span>
+        </div>
+        <span class="dc-count">1 delivering</span>
+        <div class="dc-items">
+          <div class="dc-item-row">Hook v2 · Curiosity</div>
+        </div>
+      </div>
+
+      <div class="day-col">
+        <div class="dc-header">
+          <span class="dc-weekday">Wed</span>
+          <span class="dc-date num">30</span>
+        </div>
+        <span class="dc-count">2 delivering</span>
+        <div class="dc-items">
+          <div class="dc-item-row">Testimonial v2</div>
+          <div class="dc-item-row">Static · Social Proof</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════ -->
+<!-- ROW 4 — DAILY LOG                       -->
+<!-- ═══════════════════════════════════════ -->
+<section class="section">
+  <div class="section-head">
+    <span class="sh-num">04</span>
+    <span class="sh-title">Daily Log</span>
+    <span class="sh-desc">— what happened today</span>
+    <button class="sh-action">Export summary →</button>
+  </div>
+
+  <div class="log-grid">
+
+    <!-- Left: timeline of today -->
+    <div class="log-card">
+      <div class="log-stats-row">
+        <div class="lsr-item">
+          <div class="lsr-num num plus">+3</div>
+          <div class="lsr-lbl">Launched</div>
+          <div class="lsr-trend">↑ vs yesterday</div>
+        </div>
+        <div class="lsr-item">
+          <div class="lsr-num num">2</div>
+          <div class="lsr-lbl">Paused</div>
+        </div>
+        <div class="lsr-item">
+          <div class="lsr-num num minus">−1</div>
+          <div class="lsr-lbl">Killed</div>
+        </div>
+        <div class="lsr-item">
+          <div class="lsr-num num">4</div>
+          <div class="lsr-lbl">Delivered</div>
+        </div>
+      </div>
+
+      <div class="timeline">
+        <div class="tl-event launch">
+          <span class="tl-time num">09:42</span>
+          <span class="tl-text"><strong>Launched</strong> Hook Test · Fear · Busy Mom</span>
+        </div>
+        <div class="tl-event launch">
+          <span class="tl-time num">10:15</span>
+          <span class="tl-text"><strong>Launched</strong> VSL Short · Curiosity · Gen Pop</span>
+        </div>
+        <div class="tl-event scale">
+          <span class="tl-time num">11:30</span>
+          <span class="tl-text"><strong>Scaled</strong> UGC v2 · Fear · Busy Mom — budget +50%</span>
+        </div>
+        <div class="tl-event kill">
+          <span class="tl-time num">13:05</span>
+          <span class="tl-text"><strong>Killed</strong> Static · Trust · 50+ Woman — 14 days, no lift</span>
+        </div>
+        <div class="tl-event">
+          <span class="tl-time num">14:22</span>
+          <span class="tl-text">Editor delivered: UGC v3 · Social Proof · Athlete</span>
+        </div>
+        <div class="tl-event launch">
+          <span class="tl-time num">15:48</span>
+          <span class="tl-text"><strong>Launched</strong> Static · Pain Point · 50+ Woman</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right: velocity -->
+    <div class="log-card velocity-card">
+      <div>
+        <div class="hdr-eyebrow" style="margin-bottom:10px;">Weekly Velocity</div>
+        <div class="velocity-hero">
+          <span class="vh-num">12</span>
+          <span class="vh-unit">ads this week</span>
+        </div>
+        <div class="velocity-delta">↗ +40% vs last week</div>
+      </div>
+
+      <svg class="spark-wrap" viewBox="0 0 260 48" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <linearGradient id="sparkGrad" x1="0" x2="0" y1="0" y2="1">
+            <stop offset="0%"  stop-color="#FF6B35" stop-opacity="0.22"/>
+            <stop offset="100%" stop-color="#FF6B35" stop-opacity="0"/>
+          </linearGradient>
+        </defs>
+        <path d="M0,40 L30,36 L60,30 L90,34 L120,24 L150,20 L180,26 L210,14 L240,10 L260,6 L260,48 L0,48 Z" fill="url(#sparkGrad)"/>
+        <path d="M0,40 L30,36 L60,30 L90,34 L120,24 L150,20 L180,26 L210,14 L240,10 L260,6" fill="none" stroke="#FF6B35" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+
+      <div class="velocity-meta">
+        Top angle this week: <strong>Fear × Busy Mom</strong><br>
+        Avg test duration: <strong>6.2 days</strong><br>
+        Kill rate: <strong>18%</strong> · Scale rate: <strong>22%</strong>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════ -->
+<!-- ROW 5 — PATTERNS                        -->
+<!-- ═══════════════════════════════════════ -->
+<section class="section">
+  <div class="section-head">
+    <span class="sh-num">05</span>
+    <span class="sh-title">Patterns</span>
+    <span class="sh-desc">— what you've tested · heatmap</span>
+    <button class="sh-action">Open analytics →</button>
+  </div>
+
+  <div class="patterns-card">
+    <div class="matrix-wrap">
+      <table class="matrix">
+        <thead>
+          <tr>
+            <th></th>
+            <th class="col-h">Busy Mom</th>
+            <th class="col-h">Health Nut</th>
+            <th class="col-h">Gen Pop</th>
+            <th class="col-h">Dr. Linda</th>
+            <th class="col-h">50+ Woman</th>
+            <th class="col-h">Athlete</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="row-label">Fear</td>
+            <td class="heat-4">8</td>
+            <td class="heat-2">3</td>
+            <td class="heat-1">2</td>
+            <td class="heat-0">0</td>
+            <td class="heat-1">1</td>
+            <td class="heat-0">0</td>
+          </tr>
+          <tr>
+            <td class="row-label">Curiosity</td>
+            <td class="heat-1">2</td>
+            <td class="heat-1">1</td>
+            <td class="heat-3">5</td>
+            <td class="heat-0">0</td>
+            <td class="heat-0">0</td>
+            <td class="heat-0">0</td>
+          </tr>
+          <tr>
+            <td class="row-label">Pain Point</td>
+            <td class="heat-2">3</td>
+            <td class="heat-3">4</td>
+            <td class="heat-0">0</td>
+            <td class="heat-0">0</td>
+            <td class="heat-2">3</td>
+            <td class="heat-0">0</td>
+          </tr>
+          <tr>
+            <td class="row-label">Skeptic</td>
+            <td class="heat-0">0</td>
+            <td class="heat-0">0</td>
+            <td class="heat-1">1</td>
+            <td class="heat-4">7</td>
+            <td class="heat-0">0</td>
+            <td class="heat-0">0</td>
+          </tr>
+          <tr>
+            <td class="row-label">Social Proof</td>
+            <td class="heat-0">0</td>
+            <td class="heat-0">0</td>
+            <td class="heat-0">0</td>
+            <td class="heat-0">0</td>
+            <td class="heat-1">1</td>
+            <td class="heat-3">4</td>
+          </tr>
+          <tr>
+            <td class="row-label">Trust</td>
+            <td class="heat-1">1</td>
+            <td class="heat-0">0</td>
+            <td class="heat-0">0</td>
+            <td class="heat-0">0</td>
+            <td class="heat-3">4</td>
+            <td class="heat-0">0</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+</body>
+</html>

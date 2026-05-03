@@ -1,0 +1,789 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Matrix — Calm B / C / D mockups</title>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;600;700&family=Satoshi:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --bg:        #F6F5F0;
+    --card:      #FFFFFF;
+    --ink:       #0E0E10;
+    --ink2:      #54565B;
+    --ink3:      #9A9CA3;
+    --rule:      rgba(14,14,16,0.08);
+    --rule2:     rgba(14,14,16,0.16);
+    --lime:      #D6FF4B;  --limed:   #6F9311;
+    --peach:     #FFB796;  --peachd:  #B85A2C;
+    --rose:      #FFB3C8;  --rosed:   #B72D54;
+    --violet:    #C8B8FF;  --violetd: #4D31B8;
+    --butter:    #FFE066;  --butterd: #8C6500;
+    --sky:       #B5E2FF;  --skyd:    #145A8C;
+    --r:         14px;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: 'Satoshi', system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--ink);
+    padding: 32px 28px 80px;
+    line-height: 1.4;
+  }
+  h1 {
+    font-family: 'Fraunces', serif;
+    font-weight: 600;
+    font-size: 32px;
+    letter-spacing: -0.02em;
+    margin: 0 0 4px;
+  }
+  .lede { color: var(--ink2); font-size: 14px; max-width: 780px; margin: 0 0 28px; }
+
+  .section {
+    margin-bottom: 44px;
+    background: var(--card);
+    border: 1px solid var(--rule);
+    border-radius: 18px;
+    padding: 22px 24px 26px;
+  }
+  .section-hdr { display: flex; align-items: baseline; gap: 14px; margin-bottom: 4px; }
+  .section-tag {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.10em;
+    text-transform: uppercase;
+    color: var(--ink3);
+    font-weight: 600;
+  }
+  .section-tag.tag-bcd { color: var(--limed); }
+  .section h2 {
+    font-family: 'Fraunces', serif;
+    font-weight: 600;
+    font-size: 22px;
+    letter-spacing: -0.02em;
+    margin: 0;
+  }
+  .section-sub { color: var(--ink2); font-size: 13px; margin: 6px 0 18px; max-width: 780px; }
+
+  /* ── Matrix grid layout (matches the live file roughly) ─────────── */
+  .matrix {
+    display: grid;
+    grid-template-columns: 200px repeat(3, 1fr);
+    border: 1px solid var(--rule);
+    border-radius: var(--r);
+    overflow: hidden;
+    background: var(--card);
+  }
+  .matrix > div { border-right: 1px solid var(--rule); border-bottom: 1px solid var(--rule); padding: 14px 14px; min-height: 170px; position: relative; }
+  .matrix > div:nth-child(4n) { border-right: none; }
+  .matrix > div.row-last { border-bottom: none; }
+
+  /* Header row */
+  .hdr-cell {
+    min-height: 50px !important;
+    padding: 14px 18px !important;
+    background: var(--card);
+    font-family: 'Fraunces', serif;
+    font-weight: 600;
+    font-size: 16px;
+    letter-spacing: -0.02em;
+    color: var(--ink);
+  }
+  .hdr-cell.hdr-corner {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    font-weight: 600;
+    color: var(--ink3);
+  }
+
+  /* Angle rail */
+  .angle {
+    background: var(--card);
+    padding-left: 20px !important;
+    box-shadow: 4px 0 10px -6px rgba(14,14,16,0.10);
+    position: relative;
+  }
+  .angle::before {
+    content: '';
+    position: absolute; left: 0; top: 12px; bottom: 12px;
+    width: 4px; border-radius: 0 3px 3px 0;
+    background: var(--ink3); opacity: 0.85;
+  }
+  .angle.s-win::before  { background: var(--limed); }
+  .angle.s-test::before { background: var(--violetd); }
+  .angle .angle-name {
+    font-family: 'Fraunces', serif;
+    font-size: 18px; font-weight: 600;
+    letter-spacing: -0.025em; line-height: 1.15;
+    margin-bottom: 8px;
+  }
+  .angle .stamp {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 5px 12px; border-radius: 999px;
+    font-size: 11px; font-weight: 600; letter-spacing: 0.04em;
+    width: fit-content;
+  }
+  .angle .stamp.win  { background: rgba(214,255,75,0.45); color: #4d6010; border: 1px solid rgba(136,164,24,0.32); }
+  .angle .stamp.test { background: rgba(108,71,255,0.18); color: #3f2a9c; border: 1px solid rgba(108,71,255,0.32); }
+  .angle .cov {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px; color: var(--ink3);
+    margin-top: 10px;
+  }
+  .angle .cov b { color: var(--ink); }
+
+  /* ── Cell base styles ──────────────────────────────────────────── */
+  .cell {
+    display: flex; flex-direction: column; gap: 7px;
+    cursor: pointer; transition: transform .18s ease, box-shadow .18s ease;
+  }
+  .count-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .count {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px; font-weight: 600; color: var(--ink2);
+  }
+  .count .clap { font-size: 12px; padding: 1px 6px; border-radius: 999px; background: rgba(255,183,150,0.45); margin-left: 4px; color: #8c4017; }
+  .badge {
+    font-size: 10px; font-weight: 700; letter-spacing: 0.10em;
+    padding: 4px 10px; border-radius: 999px; text-transform: uppercase;
+  }
+  .badge.winner   { background: var(--lime); color: var(--ink); }
+  .badge.testing  { background: var(--violet); color: var(--violetd); }
+  .badge.kill     { background: var(--rose); color: var(--rosed); }
+  .badge.mixed    { background: linear-gradient(90deg, var(--lime) 0%, var(--rose) 100%); color: var(--ink); }
+  .badge.ready    { background: var(--butter); color: var(--butterd); }
+
+  /* Status bar — current style: multi-segment */
+  .bar {
+    height: 6px; border-radius: 999px; background: rgba(14,14,16,0.06); overflow: hidden;
+    display: flex; flex-direction: row;
+  }
+  .bar > span { display: block; height: 100%; }
+  .bar .seg-win   { background: var(--limed); }
+  .bar .seg-test  { background: var(--violetd); }
+  .bar .seg-prod  { background: var(--peachd); }
+  .bar .seg-ready { background: var(--butterd); }
+  .bar .seg-lose  { background: var(--rosed); }
+
+  /* Status bar — option D: single hue */
+  .bar.single { background: rgba(14,14,16,0.06); }
+  .bar.single > span { background: var(--ink); }
+  .bar.single.is-win   > span { background: var(--limed); }
+  .bar.single.is-test  > span { background: var(--violetd); }
+  .bar.single.is-kill  > span { background: var(--rosed); }
+  .bar.single.is-ready > span { background: var(--butterd); }
+  .bar.single.is-mixed > span { background: var(--ink2); }
+
+  /* Chips — current loud version */
+  .chips { display: flex; flex-wrap: wrap; gap: 5px; }
+  .chip {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 3px 9px; border-radius: 999px;
+    font-size: 11px; font-weight: 600;
+  }
+  .chip .dot { width: 5px; height: 5px; border-radius: 50%; }
+  .chip.win   { background: rgba(214,255,75,0.35); color: #4d6010; }
+  .chip.win   .dot { background: var(--limed); }
+  .chip.test  { background: rgba(108,71,255,0.13); color: #4c33b8; }
+  .chip.test  .dot { background: var(--violetd); }
+  .chip.prod  { background: rgba(255,183,150,0.30); color: #b85a25; }
+  .chip.prod  .dot { background: var(--peachd); }
+  .chip.ready { background: rgba(255,224,102,0.32); color: #8a6f0a; }
+  .chip.ready .dot { background: var(--butterd); }
+  .chip.lose  { background: rgba(255,179,200,0.32); color: #b03050; }
+  .chip.lose  .dot { background: var(--rosed); }
+  .chip.new   { background: rgba(14,14,16,0.06); color: var(--ink2); }
+  .chip.new   .dot { background: var(--ink3); }
+
+  /* Chips — option C: monochrome with coloured dot */
+  .chip.mono {
+    background: rgba(14,14,16,0.04) !important;
+    color: var(--ink) !important;
+    border: 1px solid rgba(14,14,16,0.08);
+  }
+
+  /* Funnel + footer */
+  .funnels { display: flex; gap: 10px; font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--ink2); }
+  .funnels .f .d { display: inline-block; width: 5px; height: 5px; border-radius: 50%; margin-right: 4px; vertical-align: middle; }
+  .funnels .tof .d { background: var(--skyd); }
+  .funnels .mof .d { background: var(--violetd); }
+  .funnels .bof .d { background: var(--rosed); }
+  .funnels.mono .f .d { background: var(--ink3) !important; }
+
+  .last { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--ink3); margin-top: auto; }
+
+  /* ── State backgrounds — current ───────────────────────────────── */
+  .cell.s-winner   { background: linear-gradient(155deg, rgba(214,255,75,0.30) 0%, var(--card) 65%); }
+  .cell.s-mixed    { background: linear-gradient(155deg, rgba(214,255,75,0.22) 0%, rgba(255,179,200,0.20) 100%); }
+  .cell.s-testing  { background: linear-gradient(155deg, rgba(200,184,255,0.24) 0%, var(--card) 65%); }
+  .cell.s-kill     { background: linear-gradient(155deg, rgba(255,179,200,0.30) 0%, var(--card) 65%); }
+  .cell.s-ready    { background: linear-gradient(155deg, rgba(255,224,102,0.30) 0%, var(--card) 65%); }
+
+  /* ── Option B: drop background tint, border carries state ──────── */
+  .matrix.opt-b .cell { background: var(--card) !important; }
+  .matrix.opt-b .cell.s-winner   { border: 2px solid var(--limed) !important; }
+  .matrix.opt-b .cell.s-testing  { border: 2px solid var(--violetd) !important; }
+  .matrix.opt-b .cell.s-kill     { border: 2px solid var(--rosed) !important; }
+  .matrix.opt-b .cell.s-mixed    { border: 2px solid var(--ink2) !important; }
+  .matrix.opt-b .cell.s-ready    { border: 2px solid var(--butterd) !important; }
+  .matrix.opt-b > .cell-wrap     { padding: 14px !important; }
+
+  /* So borders fit nicely inside the grid track */
+  .cell-wrap { padding: 0 !important; min-height: 170px; display: flex; }
+  .cell-wrap > .cell { flex: 1; padding: 14px; border-radius: 12px; border: 1px solid var(--rule); margin: 8px; }
+
+  /* Notes column for the legend */
+  .legend {
+    margin-top: 14px;
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px;
+  }
+  .legend-card {
+    background: var(--bg);
+    border: 1px solid var(--rule);
+    border-radius: 12px;
+    padding: 14px 16px;
+  }
+  .legend-card h4 { margin: 0 0 6px; font-size: 13px; font-weight: 700; letter-spacing: -0.01em; }
+  .legend-card p { margin: 0; color: var(--ink2); font-size: 12px; line-height: 1.5; }
+  .legend-card.b { border-color: rgba(108,71,255,0.30); }
+  .legend-card.c { border-color: rgba(184,90,44,0.30); }
+  .legend-card.d { border-color: rgba(140,101,0,0.30); }
+
+  .nav {
+    position: sticky; top: 0; z-index: 10;
+    background: var(--bg);
+    padding: 12px 0;
+    margin: -32px -28px 28px;
+    padding: 16px 28px;
+    border-bottom: 1px solid var(--rule);
+  }
+  .nav a {
+    display: inline-block;
+    margin-right: 14px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    font-weight: 600;
+    color: var(--ink2);
+    text-decoration: none;
+    padding: 6px 12px;
+    border-radius: 999px;
+    border: 1px solid var(--rule);
+    background: var(--card);
+  }
+  .nav a:hover { border-color: var(--ink); color: var(--ink); }
+</style>
+</head>
+<body>
+
+  <h1>Matrix calm pass — B / C / D mockups</h1>
+  <p class="lede">Same data, four treatments. Compare directly. Each section calls out exactly what changes vs the live version.</p>
+
+  <div class="nav">
+    <a href="#current">Current (live)</a>
+    <a href="#opt-b">Option B</a>
+    <a href="#opt-c">Option C</a>
+    <a href="#opt-d">Option D</a>
+    <a href="#opt-bcd">B + C + D combined</a>
+  </div>
+
+  <!-- ──────────────────────────────────────────────────────────────
+       CURRENT (LIVE) — for reference
+       ────────────────────────────────────────────────────────────── -->
+  <div class="section" id="current">
+    <div class="section-hdr">
+      <span class="section-tag">Reference</span>
+      <h2>Current — live version</h2>
+    </div>
+    <p class="section-sub">Six colour systems stacked: tinted background, coloured badge, multi-segment bar, tinted chips, coloured funnel dots, coloured border. Eye has nowhere to rest.</p>
+
+    <div class="matrix">
+      <div class="hdr-cell hdr-corner">Angle \ Persona</div>
+      <div class="hdr-cell">Moms Raising Kids 35–44</div>
+      <div class="hdr-cell">Mom's POV</div>
+      <div class="hdr-cell">Female Teachers 25–44</div>
+
+      <div class="angle s-win">
+        <div class="angle-name">Dysregulated Kids</div>
+        <span class="stamp win">🏆 Winner</span>
+        <div class="cov"><b>4</b> / 5 active · 80%</div>
+      </div>
+      <div class="cell-wrap"><div class="cell s-mixed">
+        <div class="count-row"><span class="count">29 creatives <span class="clap">📋 1</span></span><span class="badge mixed">Mixed</span></div>
+        <div class="bar"><span class="seg-win" style="width: 4%"></span><span class="seg-test" style="width: 22%"></span><span class="seg-ready" style="width: 70%"></span><span class="seg-lose" style="width: 4%"></span></div>
+        <div class="chips">
+          <span class="chip win"><span class="dot"></span>Win 1</span>
+          <span class="chip test"><span class="dot"></span>Test 6</span>
+          <span class="chip ready"><span class="dot"></span>Ready 20</span>
+          <span class="chip lose"><span class="dot"></span>Lose 1</span>
+          <span class="chip new"><span class="dot"></span>New 1</span>
+        </div>
+        <div class="funnels"><span class="f tof"><span class="d"></span>TOF · 29</span><span class="f mof"><span class="d"></span>MOF · 0</span><span class="f bof"><span class="d"></span>BOF · 0</span></div>
+        <div class="last">Last 2d ago</div>
+      </div></div>
+      <div class="cell-wrap"><div class="cell s-kill">
+        <div class="count-row"><span class="count">4 creatives <span class="clap">📋 1</span></span><span class="badge kill">Kill</span></div>
+        <div class="bar"><span class="seg-ready" style="width: 25%"></span><span class="seg-lose" style="width: 75%"></span></div>
+        <div class="chips">
+          <span class="chip ready"><span class="dot"></span>Ready 1</span>
+          <span class="chip lose"><span class="dot"></span>Lose 3</span>
+        </div>
+        <div class="funnels"><span class="f tof"><span class="d"></span>TOF · 4</span><span class="f mof"><span class="d"></span>MOF · 0</span><span class="f bof"><span class="d"></span>BOF · 0</span></div>
+        <div class="last">Last 1w ago</div>
+      </div></div>
+      <div class="cell-wrap row-last"><div class="cell s-mixed">
+        <div class="count-row"><span class="count">19 creatives <span class="clap">📋 8</span></span><span class="badge mixed">Mixed</span></div>
+        <div class="bar"><span class="seg-win" style="width: 11%"></span><span class="seg-test" style="width: 26%"></span><span class="seg-ready" style="width: 47%"></span><span class="seg-lose" style="width: 16%"></span></div>
+        <div class="chips">
+          <span class="chip win"><span class="dot"></span>Win 2</span>
+          <span class="chip test"><span class="dot"></span>Test 5</span>
+          <span class="chip ready"><span class="dot"></span>Ready 9</span>
+          <span class="chip lose"><span class="dot"></span>Lose 3</span>
+        </div>
+        <div class="funnels"><span class="f tof"><span class="d"></span>TOF · 14</span><span class="f mof"><span class="d"></span>MOF · 2</span><span class="f bof"><span class="d"></span>BOF · 3</span></div>
+        <div class="last">Last 1w ago</div>
+      </div></div>
+
+      <div class="angle s-test row-last">
+        <div class="angle-name">ADHD Kids</div>
+        <span class="stamp test">🧪 Testing</span>
+        <div class="cov"><b>3</b> / 5 active · 60%</div>
+      </div>
+      <div class="cell-wrap row-last"><div class="cell s-mixed">
+        <div class="count-row"><span class="count">91 creatives</span><span class="badge mixed">Mixed</span></div>
+        <div class="bar"><span class="seg-win" style="width: 3%"></span><span class="seg-test" style="width: 23%"></span><span class="seg-ready" style="width: 70%"></span><span class="seg-lose" style="width: 4%"></span></div>
+        <div class="chips">
+          <span class="chip win"><span class="dot"></span>Win 3</span>
+          <span class="chip test"><span class="dot"></span>Test 21</span>
+          <span class="chip ready"><span class="dot"></span>Ready 64</span>
+          <span class="chip lose"><span class="dot"></span>Lose 3</span>
+        </div>
+        <div class="funnels"><span class="f tof"><span class="d"></span>TOF · 90</span><span class="f mof"><span class="d"></span>MOF · 0</span><span class="f bof"><span class="d"></span>BOF · 1</span></div>
+        <div class="last">Last 2w ago</div>
+      </div></div>
+      <div class="cell-wrap row-last"><div class="cell s-testing">
+        <div class="count-row"><span class="count">3 creatives</span><span class="badge testing">Testing</span></div>
+        <div class="bar"><span class="seg-test" style="width: 67%"></span><span class="seg-ready" style="width: 33%"></span></div>
+        <div class="chips">
+          <span class="chip test"><span class="dot"></span>Test 2</span>
+          <span class="chip ready"><span class="dot"></span>Ready 1</span>
+        </div>
+        <div class="funnels"><span class="f tof"><span class="d"></span>TOF · 3</span><span class="f mof"><span class="d"></span>MOF · 0</span><span class="f bof"><span class="d"></span>BOF · 0</span></div>
+        <div class="last">Last 3w ago</div>
+      </div></div>
+      <div class="cell-wrap row-last"><div class="cell s-ready">
+        <div class="count-row"><span class="count">6 creatives</span><span class="badge ready">Ready</span></div>
+        <div class="bar"><span class="seg-ready" style="width: 100%"></span></div>
+        <div class="chips">
+          <span class="chip ready"><span class="dot"></span>Ready 6</span>
+        </div>
+        <div class="funnels"><span class="f tof"><span class="d"></span>TOF · 5</span><span class="f mof"><span class="d"></span>MOF · 1</span><span class="f bof"><span class="d"></span>BOF · 0</span></div>
+        <div class="last">Last 1d ago</div>
+      </div></div>
+    </div>
+  </div>
+
+  <!-- ──────────────────────────────────────────────────────────────
+       OPTION B — drop background tints, border carries state
+       ────────────────────────────────────────────────────────────── -->
+  <div class="section" id="opt-b">
+    <div class="section-hdr">
+      <span class="section-tag">Option B</span>
+      <h2>White paper · coloured border + badge</h2>
+    </div>
+    <p class="section-sub">Cell backgrounds go to plain white. Status comes from a 2px coloured border + the badge. The lime/rose/violet wash is gone. Reads like Linear or Notion. Chips and bar still loud — that's what C and D fix.</p>
+
+    <div class="matrix opt-b">
+      <div class="hdr-cell hdr-corner">Angle \ Persona</div>
+      <div class="hdr-cell">Moms Raising Kids 35–44</div>
+      <div class="hdr-cell">Mom's POV</div>
+      <div class="hdr-cell">Female Teachers 25–44</div>
+
+      <div class="angle s-win">
+        <div class="angle-name">Dysregulated Kids</div>
+        <span class="stamp win">🏆 Winner</span>
+        <div class="cov"><b>4</b> / 5 active · 80%</div>
+      </div>
+      <div class="cell-wrap"><div class="cell s-mixed">
+        <div class="count-row"><span class="count">29 creatives <span class="clap">📋 1</span></span><span class="badge mixed">Mixed</span></div>
+        <div class="bar"><span class="seg-win" style="width: 4%"></span><span class="seg-test" style="width: 22%"></span><span class="seg-ready" style="width: 70%"></span><span class="seg-lose" style="width: 4%"></span></div>
+        <div class="chips">
+          <span class="chip win"><span class="dot"></span>Win 1</span>
+          <span class="chip test"><span class="dot"></span>Test 6</span>
+          <span class="chip ready"><span class="dot"></span>Ready 20</span>
+          <span class="chip lose"><span class="dot"></span>Lose 1</span>
+          <span class="chip new"><span class="dot"></span>New 1</span>
+        </div>
+        <div class="funnels"><span class="f tof"><span class="d"></span>TOF · 29</span><span class="f mof"><span class="d"></span>MOF · 0</span><span class="f bof"><span class="d"></span>BOF · 0</span></div>
+        <div class="last">Last 2d ago</div>
+      </div></div>
+      <div class="cell-wrap"><div class="cell s-kill">
+        <div class="count-row"><span class="count">4 creatives <span class="clap">📋 1</span></span><span class="badge kill">Kill</span></div>
+        <div class="bar"><span class="seg-ready" style="width: 25%"></span><span class="seg-lose" style="width: 75%"></span></div>
+        <div class="chips">
+          <span class="chip ready"><span class="dot"></span>Ready 1</span>
+          <span class="chip lose"><span class="dot"></span>Lose 3</span>
+        </div>
+        <div class="funnels"><span class="f tof"><span class="d"></span>TOF · 4</span><span class="f mof"><span class="d"></span>MOF · 0</span><span class="f bof"><span class="d"></span>BOF · 0</span></div>
+        <div class="last">Last 1w ago</div>
+      </div></div>
+      <div class="cell-wrap row-last"><div class="cell s-mixed">
+        <div class="count-row"><span class="count">19 creatives <span class="clap">📋 8</span></span><span class="badge mixed">Mixed</span></div>
+        <div class="bar"><span class="seg-win" style="width: 11%"></span><span class="seg-test" style="width: 26%"></span><span class="seg-ready" style="width: 47%"></span><span class="seg-lose" style="width: 16%"></span></div>
+        <div class="chips">
+          <span class="chip win"><span class="dot"></span>Win 2</span>
+          <span class="chip test"><span class="dot"></span>Test 5</span>
+          <span class="chip ready"><span class="dot"></span>Ready 9</span>
+          <span class="chip lose"><span class="dot"></span>Lose 3</span>
+        </div>
+        <div class="funnels"><span class="f tof"><span class="d"></span>TOF · 14</span><span class="f mof"><span class="d"></span>MOF · 2</span><span class="f bof"><span class="d"></span>BOF · 3</span></div>
+        <div class="last">Last 1w ago</div>
+      </div></div>
+
+      <div class="angle s-test row-last">
+        <div class="angle-name">ADHD Kids</div>
+        <span class="stamp test">🧪 Testing</span>
+        <div class="cov"><b>3</b> / 5 active · 60%</div>
+      </div>
+      <div class="cell-wrap row-last"><div class="cell s-mixed">
+        <div class="count-row"><span class="count">91 creatives</span><span class="badge mixed">Mixed</span></div>
+        <div class="bar"><span class="seg-win" style="width: 3%"></span><span class="seg-test" style="width: 23%"></span><span class="seg-ready" style="width: 70%"></span><span class="seg-lose" style="width: 4%"></span></div>
+        <div class="chips">
+          <span class="chip win"><span class="dot"></span>Win 3</span>
+          <span class="chip test"><span class="dot"></span>Test 21</span>
+          <span class="chip ready"><span class="dot"></span>Ready 64</span>
+          <span class="chip lose"><span class="dot"></span>Lose 3</span>
+        </div>
+        <div class="funnels"><span class="f tof"><span class="d"></span>TOF · 90</span><span class="f mof"><span class="d"></span>MOF · 0</span><span class="f bof"><span class="d"></span>BOF · 1</span></div>
+        <div class="last">Last 2w ago</div>
+      </div></div>
+      <div class="cell-wrap row-last"><div class="cell s-testing">
+        <div class="count-row"><span class="count">3 creatives</span><span class="badge testing">Testing</span></div>
+        <div class="bar"><span class="seg-test" style="width: 67%"></span><span class="seg-ready" style="width: 33%"></span></div>
+        <div class="chips">
+          <span class="chip test"><span class="dot"></span>Test 2</span>
+          <span class="chip ready"><span class="dot"></span>Ready 1</span>
+        </div>
+        <div class="funnels"><span class="f tof"><span class="d"></span>TOF · 3</span><span class="f mof"><span class="d"></span>MOF · 0</span><span class="f bof"><span class="d"></span>BOF · 0</span></div>
+        <div class="last">Last 3w ago</div>
+      </div></div>
+      <div class="cell-wrap row-last"><div class="cell s-ready">
+        <div class="count-row"><span class="count">6 creatives</span><span class="badge ready">Ready</span></div>
+        <div class="bar"><span class="seg-ready" style="width: 100%"></span></div>
+        <div class="chips">
+          <span class="chip ready"><span class="dot"></span>Ready 6</span>
+        </div>
+        <div class="funnels"><span class="f tof"><span class="d"></span>TOF · 5</span><span class="f mof"><span class="d"></span>MOF · 1</span><span class="f bof"><span class="d"></span>BOF · 0</span></div>
+        <div class="last">Last 1d ago</div>
+      </div></div>
+    </div>
+  </div>
+
+  <!-- ──────────────────────────────────────────────────────────────
+       OPTION C — monochrome chips
+       ────────────────────────────────────────────────────────────── -->
+  <div class="section" id="opt-c">
+    <div class="section-hdr">
+      <span class="section-tag">Option C</span>
+      <h2>Monochrome chips (coloured dot only)</h2>
+    </div>
+    <p class="section-sub">Win / Test / Ready / Lose / New chips lose their tinted backgrounds. They become small grey pills with a tiny coloured dot + ink text. Five tinted chips per cell was the loudest noise source — this kills it.</p>
+
+    <div class="matrix">
+      <div class="hdr-cell hdr-corner">Angle \ Persona</div>
+      <div class="hdr-cell">Moms Raising Kids 35–44</div>
+      <div class="hdr-cell">Mom's POV</div>
+      <div class="hdr-cell">Female Teachers 25–44</div>
+
+      <div class="angle s-win">
+        <div class="angle-name">Dysregulated Kids</div>
+        <span class="stamp win">🏆 Winner</span>
+        <div class="cov"><b>4</b> / 5 active · 80%</div>
+      </div>
+      <div class="cell-wrap"><div class="cell s-mixed">
+        <div class="count-row"><span class="count">29 creatives <span class="clap">📋 1</span></span><span class="badge mixed">Mixed</span></div>
+        <div class="bar"><span class="seg-win" style="width: 4%"></span><span class="seg-test" style="width: 22%"></span><span class="seg-ready" style="width: 70%"></span><span class="seg-lose" style="width: 4%"></span></div>
+        <div class="chips">
+          <span class="chip mono"><span class="dot" style="background:var(--limed)"></span>Win 1</span>
+          <span class="chip mono"><span class="dot" style="background:var(--violetd)"></span>Test 6</span>
+          <span class="chip mono"><span class="dot" style="background:var(--butterd)"></span>Ready 20</span>
+          <span class="chip mono"><span class="dot" style="background:var(--rosed)"></span>Lose 1</span>
+          <span class="chip mono"><span class="dot" style="background:var(--ink3)"></span>New 1</span>
+        </div>
+        <div class="funnels"><span class="f tof"><span class="d"></span>TOF · 29</span><span class="f mof"><span class="d"></span>MOF · 0</span><span class="f bof"><span class="d"></span>BOF · 0</span></div>
+        <div class="last">Last 2d ago</div>
+      </div></div>
+      <div class="cell-wrap"><div class="cell s-kill">
+        <div class="count-row"><span class="count">4 creatives <span class="clap">📋 1</span></span><span class="badge kill">Kill</span></div>
+        <div class="bar"><span class="seg-ready" style="width: 25%"></span><span class="seg-lose" style="width: 75%"></span></div>
+        <div class="chips">
+          <span class="chip mono"><span class="dot" style="background:var(--butterd)"></span>Ready 1</span>
+          <span class="chip mono"><span class="dot" style="background:var(--rosed)"></span>Lose 3</span>
+        </div>
+        <div class="funnels"><span class="f tof"><span class="d"></span>TOF · 4</span><span class="f mof"><span class="d"></span>MOF · 0</span><span class="f bof"><span class="d"></span>BOF · 0</span></div>
+        <div class="last">Last 1w ago</div>
+      </div></div>
+      <div class="cell-wrap row-last"><div class="cell s-mixed">
+        <div class="count-row"><span class="count">19 creatives <span class="clap">📋 8</span></span><span class="badge mixed">Mixed</span></div>
+        <div class="bar"><span class="seg-win" style="width: 11%"></span><span class="seg-test" style="width: 26%"></span><span class="seg-ready" style="width: 47%"></span><span class="seg-lose" style="width: 16%"></span></div>
+        <div class="chips">
+          <span class="chip mono"><span class="dot" style="background:var(--limed)"></span>Win 2</span>
+          <span class="chip mono"><span class="dot" style="background:var(--violetd)"></span>Test 5</span>
+          <span class="chip mono"><span class="dot" style="background:var(--butterd)"></span>Ready 9</span>
+          <span class="chip mono"><span class="dot" style="background:var(--rosed)"></span>Lose 3</span>
+        </div>
+        <div class="funnels"><span class="f tof"><span class="d"></span>TOF · 14</span><span class="f mof"><span class="d"></span>MOF · 2</span><span class="f bof"><span class="d"></span>BOF · 3</span></div>
+        <div class="last">Last 1w ago</div>
+      </div></div>
+
+      <div class="angle s-test row-last">
+        <div class="angle-name">ADHD Kids</div>
+        <span class="stamp test">🧪 Testing</span>
+        <div class="cov"><b>3</b> / 5 active · 60%</div>
+      </div>
+      <div class="cell-wrap row-last"><div class="cell s-mixed">
+        <div class="count-row"><span class="count">91 creatives</span><span class="badge mixed">Mixed</span></div>
+        <div class="bar"><span class="seg-win" style="width: 3%"></span><span class="seg-test" style="width: 23%"></span><span class="seg-ready" style="width: 70%"></span><span class="seg-lose" style="width: 4%"></span></div>
+        <div class="chips">
+          <span class="chip mono"><span class="dot" style="background:var(--limed)"></span>Win 3</span>
+          <span class="chip mono"><span class="dot" style="background:var(--violetd)"></span>Test 21</span>
+          <span class="chip mono"><span class="dot" style="background:var(--butterd)"></span>Ready 64</span>
+          <span class="chip mono"><span class="dot" style="background:var(--rosed)"></span>Lose 3</span>
+        </div>
+        <div class="funnels"><span class="f tof"><span class="d"></span>TOF · 90</span><span class="f mof"><span class="d"></span>MOF · 0</span><span class="f bof"><span class="d"></span>BOF · 1</span></div>
+        <div class="last">Last 2w ago</div>
+      </div></div>
+      <div class="cell-wrap row-last"><div class="cell s-testing">
+        <div class="count-row"><span class="count">3 creatives</span><span class="badge testing">Testing</span></div>
+        <div class="bar"><span class="seg-test" style="width: 67%"></span><span class="seg-ready" style="width: 33%"></span></div>
+        <div class="chips">
+          <span class="chip mono"><span class="dot" style="background:var(--violetd)"></span>Test 2</span>
+          <span class="chip mono"><span class="dot" style="background:var(--butterd)"></span>Ready 1</span>
+        </div>
+        <div class="funnels"><span class="f tof"><span class="d"></span>TOF · 3</span><span class="f mof"><span class="d"></span>MOF · 0</span><span class="f bof"><span class="d"></span>BOF · 0</span></div>
+        <div class="last">Last 3w ago</div>
+      </div></div>
+      <div class="cell-wrap row-last"><div class="cell s-ready">
+        <div class="count-row"><span class="count">6 creatives</span><span class="badge ready">Ready</span></div>
+        <div class="bar"><span class="seg-ready" style="width: 100%"></span></div>
+        <div class="chips">
+          <span class="chip mono"><span class="dot" style="background:var(--butterd)"></span>Ready 6</span>
+        </div>
+        <div class="funnels"><span class="f tof"><span class="d"></span>TOF · 5</span><span class="f mof"><span class="d"></span>MOF · 1</span><span class="f bof"><span class="d"></span>BOF · 0</span></div>
+        <div class="last">Last 1d ago</div>
+      </div></div>
+    </div>
+  </div>
+
+  <!-- ──────────────────────────────────────────────────────────────
+       OPTION D — single-hue status bar
+       ────────────────────────────────────────────────────────────── -->
+  <div class="section" id="opt-d">
+    <div class="section-hdr">
+      <span class="section-tag">Option D</span>
+      <h2>Single-hue status bar (dominant only)</h2>
+    </div>
+    <p class="section-sub">The multi-segment bar (lime+violet+butter+peach+rose stripes per cell) collapses to one fill in the cell's dominant status colour. The detail still lives in the chips, but the bar reads as one clean signal.</p>
+
+    <div class="matrix">
+      <div class="hdr-cell hdr-corner">Angle \ Persona</div>
+      <div class="hdr-cell">Moms Raising Kids 35–44</div>
+      <div class="hdr-cell">Mom's POV</div>
+      <div class="hdr-cell">Female Teachers 25–44</div>
+
+      <div class="angle s-win">
+        <div class="angle-name">Dysregulated Kids</div>
+        <span class="stamp win">🏆 Winner</span>
+        <div class="cov"><b>4</b> / 5 active · 80%</div>
+      </div>
+      <div class="cell-wrap"><div class="cell s-mixed">
+        <div class="count-row"><span class="count">29 creatives <span class="clap">📋 1</span></span><span class="badge mixed">Mixed</span></div>
+        <div class="bar single is-mixed"><span style="width: 96%"></span></div>
+        <div class="chips">
+          <span class="chip win"><span class="dot"></span>Win 1</span>
+          <span class="chip test"><span class="dot"></span>Test 6</span>
+          <span class="chip ready"><span class="dot"></span>Ready 20</span>
+          <span class="chip lose"><span class="dot"></span>Lose 1</span>
+          <span class="chip new"><span class="dot"></span>New 1</span>
+        </div>
+        <div class="funnels"><span class="f tof"><span class="d"></span>TOF · 29</span><span class="f mof"><span class="d"></span>MOF · 0</span><span class="f bof"><span class="d"></span>BOF · 0</span></div>
+        <div class="last">Last 2d ago</div>
+      </div></div>
+      <div class="cell-wrap"><div class="cell s-kill">
+        <div class="count-row"><span class="count">4 creatives <span class="clap">📋 1</span></span><span class="badge kill">Kill</span></div>
+        <div class="bar single is-kill"><span style="width: 100%"></span></div>
+        <div class="chips">
+          <span class="chip ready"><span class="dot"></span>Ready 1</span>
+          <span class="chip lose"><span class="dot"></span>Lose 3</span>
+        </div>
+        <div class="funnels"><span class="f tof"><span class="d"></span>TOF · 4</span><span class="f mof"><span class="d"></span>MOF · 0</span><span class="f bof"><span class="d"></span>BOF · 0</span></div>
+        <div class="last">Last 1w ago</div>
+      </div></div>
+      <div class="cell-wrap row-last"><div class="cell s-mixed">
+        <div class="count-row"><span class="count">19 creatives <span class="clap">📋 8</span></span><span class="badge mixed">Mixed</span></div>
+        <div class="bar single is-mixed"><span style="width: 84%"></span></div>
+        <div class="chips">
+          <span class="chip win"><span class="dot"></span>Win 2</span>
+          <span class="chip test"><span class="dot"></span>Test 5</span>
+          <span class="chip ready"><span class="dot"></span>Ready 9</span>
+          <span class="chip lose"><span class="dot"></span>Lose 3</span>
+        </div>
+        <div class="funnels"><span class="f tof"><span class="d"></span>TOF · 14</span><span class="f mof"><span class="d"></span>MOF · 2</span><span class="f bof"><span class="d"></span>BOF · 3</span></div>
+        <div class="last">Last 1w ago</div>
+      </div></div>
+
+      <div class="angle s-test row-last">
+        <div class="angle-name">ADHD Kids</div>
+        <span class="stamp test">🧪 Testing</span>
+        <div class="cov"><b>3</b> / 5 active · 60%</div>
+      </div>
+      <div class="cell-wrap row-last"><div class="cell s-mixed">
+        <div class="count-row"><span class="count">91 creatives</span><span class="badge mixed">Mixed</span></div>
+        <div class="bar single is-mixed"><span style="width: 96%"></span></div>
+        <div class="chips">
+          <span class="chip win"><span class="dot"></span>Win 3</span>
+          <span class="chip test"><span class="dot"></span>Test 21</span>
+          <span class="chip ready"><span class="dot"></span>Ready 64</span>
+          <span class="chip lose"><span class="dot"></span>Lose 3</span>
+        </div>
+        <div class="funnels"><span class="f tof"><span class="d"></span>TOF · 90</span><span class="f mof"><span class="d"></span>MOF · 0</span><span class="f bof"><span class="d"></span>BOF · 1</span></div>
+        <div class="last">Last 2w ago</div>
+      </div></div>
+      <div class="cell-wrap row-last"><div class="cell s-testing">
+        <div class="count-row"><span class="count">3 creatives</span><span class="badge testing">Testing</span></div>
+        <div class="bar single is-test"><span style="width: 67%"></span></div>
+        <div class="chips">
+          <span class="chip test"><span class="dot"></span>Test 2</span>
+          <span class="chip ready"><span class="dot"></span>Ready 1</span>
+        </div>
+        <div class="funnels"><span class="f tof"><span class="d"></span>TOF · 3</span><span class="f mof"><span class="d"></span>MOF · 0</span><span class="f bof"><span class="d"></span>BOF · 0</span></div>
+        <div class="last">Last 3w ago</div>
+      </div></div>
+      <div class="cell-wrap row-last"><div class="cell s-ready">
+        <div class="count-row"><span class="count">6 creatives</span><span class="badge ready">Ready</span></div>
+        <div class="bar single is-ready"><span style="width: 100%"></span></div>
+        <div class="chips">
+          <span class="chip ready"><span class="dot"></span>Ready 6</span>
+        </div>
+        <div class="funnels"><span class="f tof"><span class="d"></span>TOF · 5</span><span class="f mof"><span class="d"></span>MOF · 1</span><span class="f bof"><span class="d"></span>BOF · 0</span></div>
+        <div class="last">Last 1d ago</div>
+      </div></div>
+    </div>
+  </div>
+
+  <!-- ──────────────────────────────────────────────────────────────
+       B + C + D combined — recommended pick
+       ────────────────────────────────────────────────────────────── -->
+  <div class="section" id="opt-bcd">
+    <div class="section-hdr">
+      <span class="section-tag tag-bcd">Recommended</span>
+      <h2>B + C + D combined</h2>
+    </div>
+    <p class="section-sub">All three calm fixes stacked: white paper cells with coloured 2px borders, monochrome chips with coloured dots, single-hue status bar, monochrome funnel dots. Reads like a tool. Colour is reserved for the points that matter — border (state), badge (label), single bar (severity), small dots (chip identity).</p>
+
+    <div class="matrix opt-b">
+      <div class="hdr-cell hdr-corner">Angle \ Persona</div>
+      <div class="hdr-cell">Moms Raising Kids 35–44</div>
+      <div class="hdr-cell">Mom's POV</div>
+      <div class="hdr-cell">Female Teachers 25–44</div>
+
+      <div class="angle s-win">
+        <div class="angle-name">Dysregulated Kids</div>
+        <span class="stamp win">🏆 Winner</span>
+        <div class="cov"><b>4</b> / 5 active · 80%</div>
+      </div>
+      <div class="cell-wrap"><div class="cell s-mixed">
+        <div class="count-row"><span class="count">29 creatives <span class="clap">📋 1</span></span><span class="badge mixed">Mixed</span></div>
+        <div class="bar single is-mixed"><span style="width: 96%"></span></div>
+        <div class="chips">
+          <span class="chip mono"><span class="dot" style="background:var(--limed)"></span>Win 1</span>
+          <span class="chip mono"><span class="dot" style="background:var(--violetd)"></span>Test 6</span>
+          <span class="chip mono"><span class="dot" style="background:var(--butterd)"></span>Ready 20</span>
+          <span class="chip mono"><span class="dot" style="background:var(--rosed)"></span>Lose 1</span>
+          <span class="chip mono"><span class="dot" style="background:var(--ink3)"></span>New 1</span>
+        </div>
+        <div class="funnels mono"><span class="f tof"><span class="d"></span>TOF · 29</span><span class="f mof"><span class="d"></span>MOF · 0</span><span class="f bof"><span class="d"></span>BOF · 0</span></div>
+        <div class="last">Last 2d ago</div>
+      </div></div>
+      <div class="cell-wrap"><div class="cell s-kill">
+        <div class="count-row"><span class="count">4 creatives <span class="clap">📋 1</span></span><span class="badge kill">Kill</span></div>
+        <div class="bar single is-kill"><span style="width: 100%"></span></div>
+        <div class="chips">
+          <span class="chip mono"><span class="dot" style="background:var(--butterd)"></span>Ready 1</span>
+          <span class="chip mono"><span class="dot" style="background:var(--rosed)"></span>Lose 3</span>
+        </div>
+        <div class="funnels mono"><span class="f tof"><span class="d"></span>TOF · 4</span><span class="f mof"><span class="d"></span>MOF · 0</span><span class="f bof"><span class="d"></span>BOF · 0</span></div>
+        <div class="last">Last 1w ago</div>
+      </div></div>
+      <div class="cell-wrap row-last"><div class="cell s-mixed">
+        <div class="count-row"><span class="count">19 creatives <span class="clap">📋 8</span></span><span class="badge mixed">Mixed</span></div>
+        <div class="bar single is-mixed"><span style="width: 84%"></span></div>
+        <div class="chips">
+          <span class="chip mono"><span class="dot" style="background:var(--limed)"></span>Win 2</span>
+          <span class="chip mono"><span class="dot" style="background:var(--violetd)"></span>Test 5</span>
+          <span class="chip mono"><span class="dot" style="background:var(--butterd)"></span>Ready 9</span>
+          <span class="chip mono"><span class="dot" style="background:var(--rosed)"></span>Lose 3</span>
+        </div>
+        <div class="funnels mono"><span class="f tof"><span class="d"></span>TOF · 14</span><span class="f mof"><span class="d"></span>MOF · 2</span><span class="f bof"><span class="d"></span>BOF · 3</span></div>
+        <div class="last">Last 1w ago</div>
+      </div></div>
+
+      <div class="angle s-test row-last">
+        <div class="angle-name">ADHD Kids</div>
+        <span class="stamp test">🧪 Testing</span>
+        <div class="cov"><b>3</b> / 5 active · 60%</div>
+      </div>
+      <div class="cell-wrap row-last"><div class="cell s-mixed">
+        <div class="count-row"><span class="count">91 creatives</span><span class="badge mixed">Mixed</span></div>
+        <div class="bar single is-mixed"><span style="width: 96%"></span></div>
+        <div class="chips">
+          <span class="chip mono"><span class="dot" style="background:var(--limed)"></span>Win 3</span>
+          <span class="chip mono"><span class="dot" style="background:var(--violetd)"></span>Test 21</span>
+          <span class="chip mono"><span class="dot" style="background:var(--butterd)"></span>Ready 64</span>
+          <span class="chip mono"><span class="dot" style="background:var(--rosed)"></span>Lose 3</span>
+        </div>
+        <div class="funnels mono"><span class="f tof"><span class="d"></span>TOF · 90</span><span class="f mof"><span class="d"></span>MOF · 0</span><span class="f bof"><span class="d"></span>BOF · 1</span></div>
+        <div class="last">Last 2w ago</div>
+      </div></div>
+      <div class="cell-wrap row-last"><div class="cell s-testing">
+        <div class="count-row"><span class="count">3 creatives</span><span class="badge testing">Testing</span></div>
+        <div class="bar single is-test"><span style="width: 67%"></span></div>
+        <div class="chips">
+          <span class="chip mono"><span class="dot" style="background:var(--violetd)"></span>Test 2</span>
+          <span class="chip mono"><span class="dot" style="background:var(--butterd)"></span>Ready 1</span>
+        </div>
+        <div class="funnels mono"><span class="f tof"><span class="d"></span>TOF · 3</span><span class="f mof"><span class="d"></span>MOF · 0</span><span class="f bof"><span class="d"></span>BOF · 0</span></div>
+        <div class="last">Last 3w ago</div>
+      </div></div>
+      <div class="cell-wrap row-last"><div class="cell s-ready">
+        <div class="count-row"><span class="count">6 creatives</span><span class="badge ready">Ready</span></div>
+        <div class="bar single is-ready"><span style="width: 100%"></span></div>
+        <div class="chips">
+          <span class="chip mono"><span class="dot" style="background:var(--butterd)"></span>Ready 6</span>
+        </div>
+        <div class="funnels mono"><span class="f tof"><span class="d"></span>TOF · 5</span><span class="f mof"><span class="d"></span>MOF · 1</span><span class="f bof"><span class="d"></span>BOF · 0</span></div>
+        <div class="last">Last 1d ago</div>
+      </div></div>
+    </div>
+
+    <div class="legend">
+      <div class="legend-card b">
+        <h4>What B fixes</h4>
+        <p>Removes the gradient wash from cell backgrounds. Cells become white paper. State lives in a 2px coloured border + the badge. Linear / Notion approach.</p>
+      </div>
+      <div class="legend-card c">
+        <h4>What C fixes</h4>
+        <p>Chips become small grey pills with a coloured dot + ink text. Five tinted pills per cell was the loudest noise — gone.</p>
+      </div>
+      <div class="legend-card d">
+        <h4>What D fixes</h4>
+        <p>Multi-segment status bar collapses to one fill in the dominant status colour. Detail still lives in chips; bar reads as one signal.</p>
+      </div>
+    </div>
+  </div>
+
+</body>
+</html>

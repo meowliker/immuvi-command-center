@@ -1,0 +1,549 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Action Plan — Mockup 1: Timeline Command</title>
+<link href="https://api.fontshare.com/v2/css?f[]=satoshi@400,500,600,700&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg: #F3F4F6;
+  --card: #FFFFFF;
+  --b: rgba(15,23,42,0.10);
+  --holo: linear-gradient(107deg,#3e86c6 0%,#a666aa 25%,#ec4492 50%,#ee4454 73%,#f05427 100%);
+  --win: #059669;    --winb: rgba(5,150,105,0.09);
+  --lose: #DC2626;   --loseb: rgba(220,38,38,0.07);
+  --amber: #D97706;  --amberb: rgba(217,119,6,0.09);
+  --blue: #2563EB;   --blueb: rgba(37,99,235,0.08);
+  --violet: #7C3AED; --violetb: rgba(124,58,237,0.08);
+  --t1: #18181B; --t2: #64748B; --t3: #94A3B8;
+  --r: 12px;
+}
+
+body {
+  font-family: 'Satoshi', system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--t1);
+  min-height: 100vh;
+  padding: 24px;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── SUMMARY STRIP ── */
+.summary-strip {
+  background: var(--card);
+  border: 1px solid var(--b);
+  border-radius: var(--r);
+  padding: 16px 20px;
+  display: flex;
+  align-items: center;
+  gap: 0;
+  margin-bottom: 20px;
+  overflow: hidden;
+}
+
+.summary-title {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--t3);
+  white-space: nowrap;
+  margin-right: 24px;
+}
+
+.summary-pills {
+  display: flex;
+  gap: 8px;
+  flex: 1;
+}
+
+.s-pill {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.s-pill.today  { background: rgba(37,99,235,0.08); color: var(--blue); }
+.s-pill.prod   { background: rgba(5,150,105,0.09); color: var(--win); }
+.s-pill.aging  { background: rgba(220,38,38,0.07); color: var(--lose); }
+.s-pill.review { background: rgba(217,119,6,0.09); color: var(--amber); }
+.s-dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+
+.date-range {
+  display: flex;
+  gap: 4px;
+  margin-left: auto;
+}
+.dr-btn {
+  padding: 5px 12px;
+  border-radius: 20px;
+  font-size: 0.73rem;
+  font-weight: 600;
+  border: 1px solid var(--b);
+  background: transparent;
+  color: var(--t2);
+  cursor: pointer;
+  transition: all .15s;
+}
+.dr-btn.active {
+  background: var(--t1);
+  color: #fff;
+  border-color: var(--t1);
+}
+
+/* ── LANE HEADER ── */
+.lanes { display: flex; flex-direction: column; gap: 12px; }
+
+.lane-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 4px;
+  margin-bottom: 6px;
+}
+.lane-bar {
+  width: 3px;
+  height: 18px;
+  border-radius: 2px;
+}
+.lane-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+}
+.lane-count {
+  font-size: 0.68rem;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 10px;
+  margin-left: 2px;
+}
+.lane-desc { font-size: 0.68rem; color: var(--t3); margin-left: auto; }
+
+.lane.aging   .lane-bar  { background: var(--lose); }
+.lane.aging   .lane-label{ color: var(--lose); }
+.lane.aging   .lane-count{ background: var(--loseb); color: var(--lose); }
+
+.lane.active  .lane-bar  { background: var(--amber); }
+.lane.active  .lane-label{ color: var(--amber); }
+.lane.active  .lane-count{ background: var(--amberb); color: var(--amber); }
+
+.lane.new     .lane-bar  { background: var(--win); }
+.lane.new     .lane-label{ color: var(--win); }
+.lane.new     .lane-count{ background: var(--winb); color: var(--win); }
+
+.lane.pending .lane-bar  { background: var(--violet); }
+.lane.pending .lane-label{ color: var(--violet); }
+.lane.pending .lane-count{ background: var(--violetb); color: var(--violet); }
+
+/* ── TASK CARD ── */
+.task-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: 10px;
+}
+
+.task-card {
+  background: var(--card);
+  border: 1px solid var(--b);
+  border-radius: var(--r);
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  transition: box-shadow .15s;
+}
+.task-card:hover { box-shadow: 0 4px 16px rgba(15,23,42,0.08); }
+
+.task-top {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.age-badge {
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+}
+.age-badge .age-num { font-size: 1rem; line-height: 1; }
+.age-badge .age-unit { font-size: 0.48rem; text-transform: uppercase; letter-spacing: 0.05em; margin-top: 1px; }
+
+.lane.aging  .age-badge { background: var(--loseb);   color: var(--lose); }
+.lane.active .age-badge { background: var(--amberb);  color: var(--amber); }
+.lane.new    .age-badge { background: var(--winb);    color: var(--win); }
+.lane.pending .age-badge{ background: var(--violetb); color: var(--violet); }
+
+.task-info { flex: 1; min-width: 0; }
+.task-name {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--t1);
+  line-height: 1.3;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.task-meta {
+  display: flex;
+  gap: 6px;
+  margin-top: 4px;
+  flex-wrap: wrap;
+}
+.meta-tag {
+  font-size: 0.65rem;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 6px;
+  background: rgba(15,23,42,0.05);
+  color: var(--t2);
+}
+
+.task-actions {
+  display: flex;
+  gap: 6px;
+  margin-left: auto;
+}
+.act-btn {
+  width: 28px; height: 28px;
+  border-radius: 7px;
+  border: 1px solid var(--b);
+  background: var(--bg);
+  color: var(--t2);
+  font-size: 0.8rem;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: all .15s;
+}
+.act-btn:hover { background: var(--t1); color: #fff; border-color: var(--t1); }
+
+/* ── PROGRESS BAR ── */
+.task-bar-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.bar-track {
+  flex: 1;
+  height: 4px;
+  background: rgba(15,23,42,0.07);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.bar-fill {
+  height: 100%;
+  border-radius: 2px;
+  background: var(--holo);
+}
+.bar-label { font-size: 0.65rem; color: var(--t3); white-space: nowrap; }
+
+/* ── TODAY BANNER ── */
+.today-banner {
+  background: linear-gradient(135deg, rgba(37,99,235,0.06), rgba(124,58,237,0.04));
+  border: 1px solid rgba(37,99,235,0.14);
+  border-radius: var(--r);
+  padding: 14px 20px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+.today-label {
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--blue);
+}
+.today-tasks {
+  display: flex;
+  gap: 8px;
+  flex: 1;
+}
+.today-task-chip {
+  padding: 5px 12px;
+  border-radius: 8px;
+  background: white;
+  border: 1px solid rgba(37,99,235,0.15);
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--t1);
+  display: flex; align-items: center; gap: 6px;
+}
+.today-task-chip .chip-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--blue); }
+
+.section-title {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--t1);
+  margin-bottom: 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.section-title::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--b);
+}
+
+</style>
+</head>
+<body>
+
+<!-- SUMMARY STRIP -->
+<div class="summary-strip">
+  <span class="summary-title">Action Plan</span>
+  <div class="summary-pills">
+    <div class="s-pill today"><span class="s-dot"></span> 4 delivering today</div>
+    <div class="s-pill prod"><span class="s-dot"></span> 11 in production</div>
+    <div class="s-pill aging"><span class="s-dot"></span> 2 aging (7d+)</div>
+    <div class="s-pill review"><span class="s-dot"></span> 3 need review</div>
+  </div>
+  <div class="date-range">
+    <button class="dr-btn active">Today</button>
+    <button class="dr-btn">Week</button>
+    <button class="dr-btn">Month</button>
+    <button class="dr-btn">Custom</button>
+  </div>
+</div>
+
+<!-- TODAY BANNER -->
+<div class="today-banner">
+  <div class="today-label">📦 Delivering Today</div>
+  <div class="today-tasks">
+    <div class="today-task-chip"><span class="chip-dot"></span> Hook Test — Fear Angle</div>
+    <div class="today-task-chip"><span class="chip-dot"></span> UGC v3 — Busy Mom</div>
+    <div class="today-task-chip"><span class="chip-dot"></span> VSL Short — Pain Point</div>
+    <div class="today-task-chip"><span class="chip-dot"></span> Static — Before/After</div>
+  </div>
+</div>
+
+<!-- LANES -->
+<div class="lanes">
+
+  <!-- AGING LANE -->
+  <div class="lane aging">
+    <div class="lane-header">
+      <div class="lane-bar"></div>
+      <span class="lane-label">Aging</span>
+      <span class="lane-count">2 tasks</span>
+      <span class="lane-desc">Running 7+ days — review or kill</span>
+    </div>
+    <div class="task-grid">
+
+      <div class="task-card">
+        <div class="task-top">
+          <div class="age-badge"><span class="age-num">12</span><span class="age-unit">days</span></div>
+          <div class="task-info">
+            <div class="task-name">VSL Long — Skeptic Angle — Dr. Linda</div>
+            <div class="task-meta">
+              <span class="meta-tag">VSL</span>
+              <span class="meta-tag">Skeptic</span>
+              <span class="meta-tag">Dr. Linda</span>
+            </div>
+          </div>
+          <div class="task-actions">
+            <button class="act-btn" title="Open in ClickUp">↗</button>
+            <button class="act-btn" title="Kill">✕</button>
+          </div>
+        </div>
+        <div class="task-bar-row">
+          <div class="bar-track"><div class="bar-fill" style="width:85%"></div></div>
+          <span class="bar-label">Day 12 of est. 14</span>
+        </div>
+      </div>
+
+      <div class="task-card">
+        <div class="task-top">
+          <div class="age-badge"><span class="age-num">9</span><span class="age-unit">days</span></div>
+          <div class="task-info">
+            <div class="task-name">Hook Test — Curiosity — Gen Pop</div>
+            <div class="task-meta">
+              <span class="meta-tag">Hook</span>
+              <span class="meta-tag">Curiosity</span>
+              <span class="meta-tag">Gen Pop</span>
+            </div>
+          </div>
+          <div class="task-actions">
+            <button class="act-btn" title="Open in ClickUp">↗</button>
+            <button class="act-btn" title="Kill">✕</button>
+          </div>
+        </div>
+        <div class="task-bar-row">
+          <div class="bar-track"><div class="bar-fill" style="width:64%"></div></div>
+          <span class="bar-label">Day 9 of est. 14</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- LEARNING LANE -->
+  <div class="lane active">
+    <div class="lane-header">
+      <div class="lane-bar"></div>
+      <span class="lane-label">Learning Phase</span>
+      <span class="lane-count">5 tasks</span>
+      <span class="lane-desc">Days 3–6 — watch closely</span>
+    </div>
+    <div class="task-grid">
+
+      <div class="task-card">
+        <div class="task-top">
+          <div class="age-badge"><span class="age-num">6</span><span class="age-unit">days</span></div>
+          <div class="task-info">
+            <div class="task-name">UGC v2 — Fear Angle — Busy Mom</div>
+            <div class="task-meta">
+              <span class="meta-tag">UGC</span><span class="meta-tag">Fear</span><span class="meta-tag">Busy Mom</span>
+            </div>
+          </div>
+          <div class="task-actions">
+            <button class="act-btn">↗</button>
+          </div>
+        </div>
+        <div class="task-bar-row">
+          <div class="bar-track"><div class="bar-fill" style="width:43%"></div></div>
+          <span class="bar-label">Day 6 of est. 14</span>
+        </div>
+      </div>
+
+      <div class="task-card">
+        <div class="task-top">
+          <div class="age-badge"><span class="age-num">4</span><span class="age-unit">days</span></div>
+          <div class="task-info">
+            <div class="task-name">Static — Pain Point — Health Nut</div>
+            <div class="task-meta">
+              <span class="meta-tag">Static</span><span class="meta-tag">Pain</span><span class="meta-tag">Health Nut</span>
+            </div>
+          </div>
+          <div class="task-actions">
+            <button class="act-btn">↗</button>
+          </div>
+        </div>
+        <div class="task-bar-row">
+          <div class="bar-track"><div class="bar-fill" style="width:28%"></div></div>
+          <span class="bar-label">Day 4 of est. 14</span>
+        </div>
+      </div>
+
+      <div class="task-card">
+        <div class="task-top">
+          <div class="age-badge"><span class="age-num">3</span><span class="age-unit">days</span></div>
+          <div class="task-info">
+            <div class="task-name">Testimonial — Trust — 50+ Woman</div>
+            <div class="task-meta">
+              <span class="meta-tag">Testimonial</span><span class="meta-tag">Trust</span>
+            </div>
+          </div>
+          <div class="task-actions">
+            <button class="act-btn">↗</button>
+          </div>
+        </div>
+        <div class="task-bar-row">
+          <div class="bar-track"><div class="bar-fill" style="width:21%"></div></div>
+          <span class="bar-label">Day 3 of est. 14</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- NEW LANE -->
+  <div class="lane new">
+    <div class="lane-header">
+      <div class="lane-bar"></div>
+      <span class="lane-label">Just Launched</span>
+      <span class="lane-count">4 tasks</span>
+      <span class="lane-desc">Days 1–2 — freshly live</span>
+    </div>
+    <div class="task-grid">
+
+      <div class="task-card">
+        <div class="task-top">
+          <div class="age-badge"><span class="age-num">1</span><span class="age-unit">day</span></div>
+          <div class="task-info">
+            <div class="task-name">Hook Test — Fear — Busy Mom</div>
+            <div class="task-meta">
+              <span class="meta-tag">Hook</span><span class="meta-tag">Fear</span><span class="meta-tag">Busy Mom</span>
+            </div>
+          </div>
+          <div class="task-actions">
+            <button class="act-btn">↗</button>
+          </div>
+        </div>
+        <div class="task-bar-row">
+          <div class="bar-track"><div class="bar-fill" style="width:7%"></div></div>
+          <span class="bar-label">Day 1 of est. 14</span>
+        </div>
+      </div>
+
+      <div class="task-card">
+        <div class="task-top">
+          <div class="age-badge"><span class="age-num">2</span><span class="age-unit">days</span></div>
+          <div class="task-info">
+            <div class="task-name">VSL Short — Curiosity — Gen Pop</div>
+            <div class="task-meta">
+              <span class="meta-tag">VSL</span><span class="meta-tag">Curiosity</span>
+            </div>
+          </div>
+          <div class="task-actions">
+            <button class="act-btn">↗</button>
+          </div>
+        </div>
+        <div class="task-bar-row">
+          <div class="bar-track"><div class="bar-fill" style="width:14%"></div></div>
+          <span class="bar-label">Day 2 of est. 14</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- PENDING LANE -->
+  <div class="lane pending">
+    <div class="lane-header">
+      <div class="lane-bar"></div>
+      <span class="lane-label">Pending Launch</span>
+      <span class="lane-count">3 tasks</span>
+      <span class="lane-desc">Ready to go live</span>
+    </div>
+    <div class="task-grid">
+
+      <div class="task-card">
+        <div class="task-top">
+          <div class="age-badge"><span class="age-num">—</span></div>
+          <div class="task-info">
+            <div class="task-name">UGC v3 — Social Proof — Athlete</div>
+            <div class="task-meta">
+              <span class="meta-tag">UGC</span><span class="meta-tag">Social Proof</span>
+            </div>
+          </div>
+          <div class="task-actions">
+            <button class="act-btn">↗</button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+</div>
+
+</body>
+</html>

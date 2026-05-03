@@ -1,0 +1,538 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Action Plan — Mockup 3: Kanban Board</title>
+<link href="https://api.fontshare.com/v2/css?f[]=satoshi@400,500,600,700&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg: #EEF0F5;
+  --card: #FFFFFF;
+  --b: rgba(15,23,42,0.09);
+  --holo: linear-gradient(107deg,#3e86c6 0%,#a666aa 25%,#ec4492 50%,#ee4454 73%,#f05427 100%);
+  --red: #E11D48;    --redb: #FFF1F4;
+  --amber: #B45309;  --amberb: #FFFBEB;
+  --green: #047857;  --greenb: #ECFDF5;
+  --violet: #6D28D9; --violetb: #F5F3FF;
+  --blue: #1D4ED8;   --blueb: #EFF6FF;
+  --t1: #111827; --t2: #6B7280; --t3: #9CA3AF;
+  --r: 12px;
+}
+
+body {
+  font-family: 'Satoshi', system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--t1);
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── HEADER ── */
+.header {
+  background: var(--card);
+  border-bottom: 1px solid var(--b);
+  padding: 14px 24px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.hdr-title { font-size: 1rem; font-weight: 700; color: var(--t1); }
+.hdr-date  { font-size: 0.72rem; color: var(--t2); }
+
+.hdr-stats {
+  display: flex;
+  gap: 6px;
+  margin-left: 8px;
+}
+.hs-pill {
+  font-size: 0.68rem;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 20px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.hs-pill.today  { background: var(--blueb);   color: var(--blue); }
+.hs-pill.prod   { background: var(--greenb);  color: var(--green); }
+.hs-pill.aging  { background: var(--redb);    color: var(--red); }
+
+.hdr-spacer { flex: 1; }
+.range-btns { display: flex; gap: 4px; }
+.rb {
+  padding: 5px 12px;
+  border-radius: 7px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  border: 1px solid var(--b);
+  background: transparent;
+  color: var(--t2);
+  cursor: pointer;
+  font-family: inherit;
+  transition: all .12s;
+}
+.rb.on { background: var(--t1); color: #fff; border-color: var(--t1); }
+
+/* ── TODAY BANNER ── */
+.today-row {
+  background: var(--blueb);
+  border-bottom: 1px solid rgba(29,78,216,0.12);
+  padding: 10px 24px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.today-lbl {
+  font-size: 0.65rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--blue);
+  white-space: nowrap;
+}
+.today-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.tc {
+  padding: 4px 10px;
+  background: white;
+  border: 1px solid rgba(29,78,216,0.15);
+  border-radius: 6px;
+  font-size: 0.72rem;
+  font-weight: 500;
+  color: var(--t1);
+}
+
+/* ── KANBAN ── */
+.kanban {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  padding: 20px 24px;
+  height: calc(100vh - 120px);
+  overflow-x: auto;
+}
+
+.col {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  min-width: 240px;
+}
+
+.col-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-radius: 10px 10px 0 0;
+  border: 1px solid var(--b);
+  border-bottom: none;
+  background: var(--card);
+}
+
+.col-dot {
+  width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0;
+}
+
+.col-name {
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  flex: 1;
+}
+.col-badge {
+  font-size: 0.65rem;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 10px;
+}
+
+.col.aging  .col-dot   { background: var(--red); box-shadow: 0 0 0 2px var(--redb); }
+.col.aging  .col-name  { color: var(--red); }
+.col.aging  .col-badge { background: var(--redb); color: var(--red); }
+
+.col.learning .col-dot   { background: var(--amber); box-shadow: 0 0 0 2px var(--amberb); }
+.col.learning .col-name  { color: var(--amber); }
+.col.learning .col-badge { background: var(--amberb); color: var(--amber); }
+
+.col.new    .col-dot   { background: var(--green); box-shadow: 0 0 0 2px var(--greenb); }
+.col.new    .col-name  { color: var(--green); }
+.col.new    .col-badge { background: var(--greenb); color: var(--green); }
+
+.col.pending .col-dot   { background: var(--violet); box-shadow: 0 0 0 2px var(--violetb); }
+.col.pending .col-name  { color: var(--violet); }
+.col.pending .col-badge { background: var(--violetb); color: var(--violet); }
+
+.col-body {
+  flex: 1;
+  background: rgba(15,23,42,0.03);
+  border: 1px solid var(--b);
+  border-top: none;
+  border-radius: 0 0 10px 10px;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow-y: auto;
+}
+
+/* ── KANBAN CARD ── */
+.kcard {
+  background: var(--card);
+  border: 1px solid var(--b);
+  border-radius: 9px;
+  padding: 12px 13px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  transition: box-shadow .12s, transform .12s;
+  cursor: grab;
+}
+.kcard:hover {
+  box-shadow: 0 4px 14px rgba(15,23,42,0.1);
+  transform: translateY(-1px);
+}
+
+.kcard-top {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.kcard-age {
+  flex-shrink: 0;
+  font-size: 0.65rem;
+  font-weight: 800;
+  padding: 3px 7px;
+  border-radius: 5px;
+  white-space: nowrap;
+}
+.col.aging   .kcard-age { background: var(--redb);    color: var(--red); }
+.col.learning .kcard-age { background: var(--amberb); color: var(--amber); }
+.col.new     .kcard-age { background: var(--greenb);  color: var(--green); }
+.col.pending .kcard-age { background: var(--violetb); color: var(--violet); }
+
+.kcard-name {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--t1);
+  line-height: 1.35;
+  flex: 1;
+}
+
+.kcard-tags {
+  display: flex;
+  gap: 5px;
+  flex-wrap: wrap;
+}
+.ktag {
+  font-size: 0.62rem;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--t2);
+}
+
+.kcard-bar {
+  height: 3px;
+  background: rgba(15,23,42,0.08);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.kcard-fill {
+  height: 100%;
+  border-radius: 2px;
+}
+.col.aging    .kcard-fill { background: var(--red); }
+.col.learning .kcard-fill { background: var(--amber); }
+.col.new      .kcard-fill { background: var(--green); }
+
+.kcard-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.kcard-days { font-size: 0.65rem; color: var(--t3); }
+.kcard-link {
+  font-size: 0.65rem;
+  color: var(--t3);
+  text-decoration: none;
+  border: 1px solid var(--b);
+  padding: 2px 6px;
+  border-radius: 4px;
+  transition: all .1s;
+  cursor: pointer;
+  background: none;
+  font-family: inherit;
+}
+.kcard-link:hover { color: var(--t1); border-color: var(--t1); }
+
+/* ── SUMMARY DRAWER (bottom) ── */
+.summary-drawer {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: var(--card);
+  border-top: 1px solid var(--b);
+  padding: 12px 24px;
+  display: flex;
+  align-items: center;
+  gap: 24px;
+}
+.sd-label {
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--t3);
+}
+.sd-stats { display: flex; gap: 20px; flex: 1; }
+.sd-stat { display: flex; align-items: baseline; gap: 5px; }
+.sd-num { font-size: 1.1rem; font-weight: 700; color: var(--t1); }
+.sd-desc { font-size: 0.68rem; color: var(--t2); }
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<div class="header">
+  <div>
+    <div class="hdr-title">Action Plan</div>
+    <div class="hdr-date">Thu Apr 24, 2026</div>
+  </div>
+  <div class="hdr-stats">
+    <span class="hs-pill today">4 delivering today</span>
+    <span class="hs-pill prod">11 in production</span>
+    <span class="hs-pill aging">2 aging</span>
+  </div>
+  <div class="hdr-spacer"></div>
+  <div class="range-btns">
+    <button class="rb on">Today</button>
+    <button class="rb">Week</button>
+    <button class="rb">Month</button>
+    <button class="rb">Custom</button>
+  </div>
+</div>
+
+<!-- TODAY BANNER -->
+<div class="today-row">
+  <span class="today-lbl">📦 Due Today</span>
+  <div class="today-chips">
+    <span class="tc">Hook Test — Fear Angle</span>
+    <span class="tc">UGC v3 — Busy Mom</span>
+    <span class="tc">VSL Short — Pain Point</span>
+    <span class="tc">Static — Before/After</span>
+  </div>
+</div>
+
+<!-- KANBAN -->
+<div class="kanban">
+
+  <!-- AGING -->
+  <div class="col aging">
+    <div class="col-header">
+      <div class="col-dot"></div>
+      <span class="col-name">Aging</span>
+      <span class="col-badge">2</span>
+    </div>
+    <div class="col-body">
+
+      <div class="kcard">
+        <div class="kcard-top">
+          <span class="kcard-age">Day 12</span>
+          <div class="kcard-name">VSL Long — Skeptic Angle — Dr. Linda</div>
+        </div>
+        <div class="kcard-tags">
+          <span class="ktag">VSL</span>
+          <span class="ktag">Skeptic</span>
+          <span class="ktag">Dr. Linda</span>
+        </div>
+        <div class="kcard-bar"><div class="kcard-fill" style="width:86%"></div></div>
+        <div class="kcard-footer">
+          <span class="kcard-days">Day 12 of ~14</span>
+          <button class="kcard-link">↗ ClickUp</button>
+        </div>
+      </div>
+
+      <div class="kcard">
+        <div class="kcard-top">
+          <span class="kcard-age">Day 9</span>
+          <div class="kcard-name">Hook Test — Curiosity — Gen Pop</div>
+        </div>
+        <div class="kcard-tags">
+          <span class="ktag">Hook</span>
+          <span class="ktag">Curiosity</span>
+        </div>
+        <div class="kcard-bar"><div class="kcard-fill" style="width:64%"></div></div>
+        <div class="kcard-footer">
+          <span class="kcard-days">Day 9 of ~14</span>
+          <button class="kcard-link">↗ ClickUp</button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- LEARNING -->
+  <div class="col learning">
+    <div class="col-header">
+      <div class="col-dot"></div>
+      <span class="col-name">Learning Phase</span>
+      <span class="col-badge">5</span>
+    </div>
+    <div class="col-body">
+
+      <div class="kcard">
+        <div class="kcard-top">
+          <span class="kcard-age">Day 6</span>
+          <div class="kcard-name">UGC v2 — Fear Angle — Busy Mom</div>
+        </div>
+        <div class="kcard-tags"><span class="ktag">UGC</span><span class="ktag">Fear</span></div>
+        <div class="kcard-bar"><div class="kcard-fill" style="width:43%"></div></div>
+        <div class="kcard-footer">
+          <span class="kcard-days">Day 6 of ~14</span>
+          <button class="kcard-link">↗ ClickUp</button>
+        </div>
+      </div>
+
+      <div class="kcard">
+        <div class="kcard-top">
+          <span class="kcard-age">Day 5</span>
+          <div class="kcard-name">Static — Pain Point — Health Nut</div>
+        </div>
+        <div class="kcard-tags"><span class="ktag">Static</span><span class="ktag">Pain Point</span></div>
+        <div class="kcard-bar"><div class="kcard-fill" style="width:36%"></div></div>
+        <div class="kcard-footer">
+          <span class="kcard-days">Day 5 of ~14</span>
+          <button class="kcard-link">↗ ClickUp</button>
+        </div>
+      </div>
+
+      <div class="kcard">
+        <div class="kcard-top">
+          <span class="kcard-age">Day 4</span>
+          <div class="kcard-name">Testimonial — Trust — 50+ Woman</div>
+        </div>
+        <div class="kcard-tags"><span class="ktag">Testimonial</span><span class="ktag">Trust</span></div>
+        <div class="kcard-bar"><div class="kcard-fill" style="width:28%"></div></div>
+        <div class="kcard-footer">
+          <span class="kcard-days">Day 4 of ~14</span>
+          <button class="kcard-link">↗ ClickUp</button>
+        </div>
+      </div>
+
+      <div class="kcard">
+        <div class="kcard-top">
+          <span class="kcard-age">Day 3</span>
+          <div class="kcard-name">Carousel — Social Proof — Athlete</div>
+        </div>
+        <div class="kcard-tags"><span class="ktag">Carousel</span><span class="ktag">Social Proof</span></div>
+        <div class="kcard-bar"><div class="kcard-fill" style="width:21%"></div></div>
+        <div class="kcard-footer">
+          <span class="kcard-days">Day 3 of ~14</span>
+          <button class="kcard-link">↗ ClickUp</button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- NEW -->
+  <div class="col new">
+    <div class="col-header">
+      <div class="col-dot"></div>
+      <span class="col-name">Just Launched</span>
+      <span class="col-badge">4</span>
+    </div>
+    <div class="col-body">
+
+      <div class="kcard">
+        <div class="kcard-top">
+          <span class="kcard-age">Day 2</span>
+          <div class="kcard-name">Hook Test — Fear — Busy Mom</div>
+        </div>
+        <div class="kcard-tags"><span class="ktag">Hook</span><span class="ktag">Fear</span></div>
+        <div class="kcard-bar"><div class="kcard-fill" style="width:14%"></div></div>
+        <div class="kcard-footer">
+          <span class="kcard-days">Day 2 of ~14</span>
+          <button class="kcard-link">↗ ClickUp</button>
+        </div>
+      </div>
+
+      <div class="kcard">
+        <div class="kcard-top">
+          <span class="kcard-age">Day 1</span>
+          <div class="kcard-name">VSL Short — Curiosity — Gen Pop</div>
+        </div>
+        <div class="kcard-tags"><span class="ktag">VSL</span><span class="ktag">Curiosity</span></div>
+        <div class="kcard-bar"><div class="kcard-fill" style="width:7%"></div></div>
+        <div class="kcard-footer">
+          <span class="kcard-days">Day 1 of ~14</span>
+          <button class="kcard-link">↗ ClickUp</button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- PENDING -->
+  <div class="col pending">
+    <div class="col-header">
+      <div class="col-dot"></div>
+      <span class="col-name">Pending Launch</span>
+      <span class="col-badge">3</span>
+    </div>
+    <div class="col-body">
+
+      <div class="kcard">
+        <div class="kcard-top">
+          <span class="kcard-age">Ready</span>
+          <div class="kcard-name">UGC v3 — Social Proof — Athlete</div>
+        </div>
+        <div class="kcard-tags"><span class="ktag">UGC</span><span class="ktag">Social Proof</span></div>
+        <div class="kcard-footer">
+          <span class="kcard-days">Awaiting launch</span>
+          <button class="kcard-link">↗ ClickUp</button>
+        </div>
+      </div>
+
+      <div class="kcard">
+        <div class="kcard-top">
+          <span class="kcard-age">Ready</span>
+          <div class="kcard-name">Static — Before/After — Health Nut</div>
+        </div>
+        <div class="kcard-tags"><span class="ktag">Static</span><span class="ktag">Before/After</span></div>
+        <div class="kcard-footer">
+          <span class="kcard-days">Awaiting launch</span>
+          <button class="kcard-link">↗ ClickUp</button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+</div>
+
+<!-- SUMMARY DRAWER -->
+<div class="summary-drawer">
+  <span class="sd-label">This Week</span>
+  <div class="sd-stats">
+    <div class="sd-stat"><span class="sd-num">8</span><span class="sd-desc">ads launched</span></div>
+    <div class="sd-stat"><span class="sd-num">3</span><span class="sd-desc">paused</span></div>
+    <div class="sd-stat"><span class="sd-num">2</span><span class="sd-desc">killed</span></div>
+    <div class="sd-stat"><span class="sd-num">11</span><span class="sd-desc">still running</span></div>
+    <div class="sd-stat"><span class="sd-num">4</span><span class="sd-desc">due today</span></div>
+  </div>
+</div>
+
+</body>
+</html>

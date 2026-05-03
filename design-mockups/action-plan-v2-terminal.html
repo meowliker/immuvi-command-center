@@ -1,0 +1,1129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Action Plan V2 — Trading Terminal</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg: #0A0B0E;
+  --panel: #12141A;
+  --panel2: #191C25;
+  --panel3: #1F232F;
+  --grid: rgba(255,255,255,0.04);
+  --b: rgba(255,255,255,0.06);
+  --bh: rgba(255,255,255,0.11);
+  --t1: #F4F5F7;
+  --t2: #8D96A8;
+  --t3: #4B5368;
+
+  --green: #00D18F;
+  --greenb: rgba(0,209,143,0.10);
+  --red: #FF3B5C;
+  --redb: rgba(255,59,92,0.10);
+  --amber: #FFB020;
+  --amberb: rgba(255,176,32,0.10);
+  --cyan: #00B8D9;
+  --cyanb: rgba(0,184,217,0.10);
+  --purple: #8B5CF6;
+  --purpleb: rgba(139,92,246,0.10);
+}
+
+body {
+  font-family: 'Inter', system-ui, sans-serif;
+  font-size: 13px;
+  background: var(--bg);
+  color: var(--t1);
+  min-height: 100vh;
+  padding: 16px 20px 60px;
+  -webkit-font-smoothing: antialiased;
+  font-feature-settings: 'cv11', 'ss01';
+  background-image:
+    linear-gradient(var(--grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+  background-size: 40px 40px;
+  background-position: -1px -1px;
+}
+
+.mono { font-family: 'JetBrains Mono', monospace; font-feature-settings: 'ss01'; }
+
+/* ── TICKER BAR ── */
+.ticker {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  padding: 0;
+  background: var(--panel);
+  border: 1px solid var(--b);
+  border-radius: 8px;
+  margin-bottom: 12px;
+  overflow: hidden;
+}
+.tk-brand {
+  padding: 12px 18px;
+  background: var(--panel2);
+  border-right: 1px solid var(--b);
+  display: flex;
+  flex-direction: column;
+}
+.tk-name {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--t1);
+}
+.tk-date {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  color: var(--t3);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-top: 2px;
+}
+
+.tk-scroll {
+  flex: 1;
+  display: flex;
+  gap: 0;
+  overflow-x: auto;
+}
+.tk-scroll::-webkit-scrollbar { display: none; }
+
+.tk-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 18px;
+  border-right: 1px solid var(--b);
+  white-space: nowrap;
+  min-height: 44px;
+}
+.tk-label {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 9.5px;
+  color: var(--t3);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-weight: 600;
+}
+.tk-value {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--t1);
+}
+.tk-delta {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 3px;
+}
+.tk-delta.up { background: var(--greenb); color: var(--green); }
+.tk-delta.dn { background: var(--redb); color: var(--red); }
+.tk-delta.nt { background: var(--cyanb); color: var(--cyan); }
+
+.tk-actions { padding: 10px 14px; display: flex; gap: 6px; }
+.tk-btn {
+  padding: 6px 12px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  border: 1px solid var(--b);
+  background: var(--panel2);
+  color: var(--t2);
+  cursor: pointer;
+  border-radius: 5px;
+  transition: all .12s;
+}
+.tk-btn.on { background: var(--t1); color: var(--bg); border-color: var(--t1); }
+.tk-btn:hover { color: var(--t1); }
+
+/* ── LAYOUT ── */
+.grid-main {
+  display: grid;
+  grid-template-columns: 1.6fr 1fr;
+  grid-template-rows: auto auto auto;
+  gap: 12px;
+}
+
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--b);
+  border-radius: 8px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.panel-head {
+  padding: 9px 14px;
+  background: var(--panel2);
+  border-bottom: 1px solid var(--b);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.ph-code {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  color: var(--t3);
+  font-weight: 600;
+}
+.ph-title {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--t1);
+}
+.ph-count {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 999px;
+}
+.ph-note {
+  margin-left: auto;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  color: var(--t3);
+}
+.ph-sig {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  animation: pulse 2s ease-in-out infinite;
+}
+@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+/* ════════════════════════════════════════════ */
+/* HOT QUEUE (top-left, dominant)               */
+/* ════════════════════════════════════════════ */
+.panel--hot {
+  grid-column: 1; grid-row: 1;
+}
+.panel--hot .ph-sig { background: var(--red); box-shadow: 0 0 8px var(--red); }
+.panel--hot .ph-title { color: var(--red); }
+.panel--hot .ph-count { background: var(--red); color: var(--bg); }
+
+.hot-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.hot-table thead {
+  background: var(--panel2);
+  border-bottom: 1px solid var(--b);
+}
+.hot-table th {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 9.5px;
+  font-weight: 600;
+  color: var(--t3);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 7px 12px;
+  text-align: left;
+  border-right: 1px solid var(--b);
+}
+.hot-table th:last-child { border-right: none; }
+.hot-table td {
+  padding: 11px 12px;
+  border-bottom: 1px solid var(--b);
+  border-right: 1px solid var(--b);
+  font-size: 12px;
+  vertical-align: middle;
+}
+.hot-table tbody tr { transition: background .12s; cursor: pointer; }
+.hot-table tbody tr:hover { background: rgba(255,59,92,0.04); }
+.hot-table td:last-child { border-right: none; }
+.hot-table tbody tr:last-child td { border-bottom: none; }
+
+.col-id {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  color: var(--red);
+  font-weight: 700;
+  width: 40px;
+}
+.col-flag {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 9.5px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 3px;
+  background: var(--redb);
+  color: var(--red);
+  border: 1px solid rgba(255,59,92,0.25);
+  white-space: nowrap;
+}
+.col-name { color: var(--t1); font-weight: 500; }
+.col-why { color: var(--t2); font-size: 11px; }
+
+.col-act { display: flex; gap: 4px; justify-content: flex-end; }
+.mini-btn {
+  padding: 4px 9px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 9.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  border: 1px solid var(--b);
+  background: var(--panel2);
+  color: var(--t2);
+  cursor: pointer;
+  border-radius: 3px;
+  transition: all .12s;
+}
+.mini-btn:hover { background: var(--bh); color: var(--t1); }
+.mini-btn.buy  { background: var(--green); color: var(--bg); border-color: var(--green); }
+.mini-btn.sell { background: var(--red); color: var(--bg); border-color: var(--red); }
+.mini-btn.go   { background: var(--cyan); color: var(--bg); border-color: var(--cyan); }
+
+/* ════════════════════════════════════════════ */
+/* VELOCITY (top-right)                          */
+/* ════════════════════════════════════════════ */
+.panel--velo {
+  grid-column: 2; grid-row: 1;
+  padding: 0;
+}
+.velo-body {
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  flex: 1;
+}
+.velo-kpi { display: flex; align-items: baseline; gap: 10px; }
+.velo-n {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 48px;
+  font-weight: 700;
+  line-height: 0.9;
+  color: var(--green);
+  letter-spacing: -0.02em;
+}
+.velo-unit {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--t2);
+}
+.velo-delta {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 3px 8px;
+  background: var(--greenb);
+  color: var(--green);
+  border: 1px solid rgba(0,209,143,0.2);
+  border-radius: 3px;
+  width: fit-content;
+}
+
+.velo-chart {
+  height: 90px;
+  width: 100%;
+}
+
+.velo-stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  padding-top: 12px;
+  border-top: 1px solid var(--b);
+}
+.vs-item { display: flex; flex-direction: column; gap: 2px; }
+.vs-l {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 9.5px;
+  color: var(--t3);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.vs-v {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--t1);
+}
+
+/* ════════════════════════════════════════════ */
+/* LIVE PULSE (middle-left, large table)         */
+/* ════════════════════════════════════════════ */
+.panel--pulse { grid-column: 1; grid-row: 2; }
+.panel--pulse .ph-sig { background: var(--cyan); box-shadow: 0 0 6px var(--cyan); }
+.panel--pulse .ph-title { color: var(--t1); }
+
+.pulse-tabs {
+  display: flex;
+  margin-left: auto;
+  gap: 4px;
+  background: var(--panel3);
+  padding: 2px;
+  border-radius: 4px;
+}
+.pt {
+  padding: 3px 9px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 9.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--t3);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  border-radius: 3px;
+}
+.pt.on { background: var(--panel); color: var(--t1); }
+
+.pulse-table { width: 100%; border-collapse: collapse; }
+.pulse-table thead {
+  background: var(--panel2);
+  border-bottom: 1px solid var(--b);
+  position: sticky;
+  top: 0;
+}
+.pulse-table th {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 9.5px;
+  font-weight: 600;
+  color: var(--t3);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 6px 10px;
+  text-align: left;
+  border-right: 1px solid var(--b);
+}
+.pulse-table th:last-child { border-right: none; }
+.pulse-table th.num { text-align: right; }
+
+.pulse-table td {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--b);
+  border-right: 1px solid var(--b);
+  font-size: 11.5px;
+  vertical-align: middle;
+}
+.pulse-table td:last-child { border-right: none; }
+.pulse-table td.num { text-align: right; font-family: 'JetBrains Mono', monospace; }
+.pulse-table tbody tr { transition: background .1s; cursor: pointer; }
+.pulse-table tbody tr:hover { background: rgba(255,255,255,0.02); }
+
+.phase-group-row td {
+  background: var(--panel3);
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--b);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.pg-dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; margin-right: 8px; vertical-align: middle; }
+.pg-dot.r { background: var(--red); box-shadow: 0 0 6px var(--red); }
+.pg-dot.a { background: var(--amber); box-shadow: 0 0 6px var(--amber); }
+.pg-dot.g { background: var(--green); box-shadow: 0 0 6px var(--green); }
+
+.day-cell {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 3px;
+  text-align: center;
+  display: inline-block;
+}
+.day-r { background: var(--redb);    color: var(--red);    border: 1px solid rgba(255,59,92,0.2); }
+.day-a { background: var(--amberb);  color: var(--amber);  border: 1px solid rgba(255,176,32,0.2); }
+.day-g { background: var(--greenb);  color: var(--green);  border: 1px solid rgba(0,209,143,0.2); }
+
+.angle-tag, .persona-tag {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  color: var(--cyan);
+  padding: 2px 6px;
+  background: var(--cyanb);
+  border-radius: 3px;
+  border: 1px solid rgba(0,184,217,0.15);
+}
+.persona-tag { color: var(--purple); background: var(--purpleb); border-color: rgba(139,92,246,0.15); }
+
+.row-status {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 9.5px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 3px;
+  text-transform: uppercase;
+}
+.rs-live   { background: var(--greenb); color: var(--green); }
+.rs-block  { background: var(--amberb); color: var(--amber); }
+
+.twin-alert {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  color: var(--amber);
+}
+
+/* ════════════════════════════════════════════ */
+/* PIPELINE (middle-right)                       */
+/* ════════════════════════════════════════════ */
+.panel--pipe { grid-column: 2; grid-row: 2; }
+.panel--pipe .ph-sig { background: var(--purple); box-shadow: 0 0 6px var(--purple); }
+
+.pipe-body { padding: 12px; display: flex; flex-direction: column; gap: 6px; }
+
+.pipe-day-row {
+  display: grid;
+  grid-template-columns: 56px 1fr 40px;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  background: var(--panel2);
+  border: 1px solid var(--b);
+  border-radius: 5px;
+  cursor: pointer;
+  transition: all .12s;
+}
+.pipe-day-row:hover { background: var(--panel3); border-color: var(--bh); }
+.pipe-day-row.today { background: rgba(139,92,246,0.06); border-color: rgba(139,92,246,0.3); }
+
+.pdr-date {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--t1);
+}
+.pdr-date .wk { color: var(--t3); font-weight: 500; margin-right: 4px; }
+.pipe-day-row.today .pdr-date { color: var(--purple); }
+
+.pdr-items {
+  display: flex;
+  gap: 5px;
+  flex-wrap: wrap;
+}
+.pdr-chip {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  color: var(--t2);
+  padding: 2px 7px;
+  background: var(--panel);
+  border: 1px solid var(--b);
+  border-radius: 3px;
+  white-space: nowrap;
+}
+.pdr-empty {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  color: var(--t3);
+  font-style: italic;
+}
+
+.pdr-count {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--t2);
+  text-align: right;
+}
+.pipe-day-row.today .pdr-count { color: var(--purple); }
+
+/* ════════════════════════════════════════════ */
+/* LOG (bottom-left)                             */
+/* ════════════════════════════════════════════ */
+.panel--log { grid-column: 1; grid-row: 3; }
+.panel--log .ph-sig { background: var(--green); box-shadow: 0 0 6px var(--green); }
+
+.log-body {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0;
+}
+
+.log-stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  padding: 12px 0;
+  background: var(--panel2);
+  border-bottom: 1px solid var(--b);
+}
+.ls-c {
+  padding: 0 16px;
+  border-right: 1px solid var(--b);
+  text-align: center;
+}
+.ls-c:last-child { border-right: none; }
+.ls-v {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1;
+}
+.ls-v.g { color: var(--green); }
+.ls-v.r { color: var(--red); }
+.ls-v.n { color: var(--t1); }
+.ls-lbl {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 9.5px;
+  color: var(--t3);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-top: 5px;
+}
+
+/* timeline */
+.tl-wrap { padding: 12px 16px; }
+.tl-e {
+  display: grid;
+  grid-template-columns: 64px 80px 1fr;
+  gap: 12px;
+  padding: 5px 0;
+  border-bottom: 1px solid var(--b);
+  align-items: center;
+  font-size: 11.5px;
+}
+.tl-e:last-child { border-bottom: none; }
+.tl-time {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10.5px;
+  color: var(--t3);
+}
+.tl-ev {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 9.5px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 3px;
+  text-align: center;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.tl-ev.launch { background: var(--greenb); color: var(--green); }
+.tl-ev.kill   { background: var(--redb); color: var(--red); }
+.tl-ev.scale  { background: var(--amberb); color: var(--amber); }
+.tl-ev.deliv  { background: var(--cyanb); color: var(--cyan); }
+
+.tl-text { color: var(--t1); font-size: 11.5px; }
+
+/* ════════════════════════════════════════════ */
+/* PATTERNS (bottom-right)                       */
+/* ════════════════════════════════════════════ */
+.panel--pat { grid-column: 2; grid-row: 3; }
+.panel--pat .ph-sig { background: var(--amber); box-shadow: 0 0 6px var(--amber); }
+
+.pat-body { padding: 14px; }
+
+.mx {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 2px;
+  font-family: 'JetBrains Mono', monospace;
+}
+.mx th {
+  font-size: 9.5px;
+  font-weight: 600;
+  color: var(--t3);
+  padding: 5px 6px;
+  text-align: center;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.mx th.l { text-align: left; }
+.mx td {
+  padding: 7px;
+  font-size: 11.5px;
+  font-weight: 700;
+  text-align: center;
+  border-radius: 3px;
+}
+.mx td.l {
+  text-align: left;
+  font-family: 'Inter', sans-serif;
+  font-size: 11px;
+  color: var(--t2);
+  padding-left: 0;
+  font-weight: 500;
+}
+.h0 { background: rgba(255,255,255,0.02); color: var(--t3); }
+.h1 { background: rgba(0,184,217,0.12); color: var(--cyan); }
+.h2 { background: rgba(0,184,217,0.25); color: var(--cyan); }
+.h3 { background: rgba(0,184,217,0.5); color: #0A0B0E; }
+.h4 { background: var(--cyan); color: #0A0B0E; }
+
+</style>
+</head>
+<body>
+
+<!-- ═══════════ TICKER BAR ═══════════ -->
+<div class="ticker">
+  <div class="tk-brand">
+    <span class="tk-name">ACTION PLAN · TERMINAL</span>
+    <span class="tk-date">2026.04.24 · 14:38:22 IST</span>
+  </div>
+  <div class="tk-scroll">
+    <div class="tk-item">
+      <span class="tk-label">LIVE</span>
+      <span class="tk-value">14</span>
+      <span class="tk-delta up">+3</span>
+    </div>
+    <div class="tk-item">
+      <span class="tk-label">AGING</span>
+      <span class="tk-value" style="color:var(--red)">02</span>
+      <span class="tk-delta dn">7D+</span>
+    </div>
+    <div class="tk-item">
+      <span class="tk-label">LEARN</span>
+      <span class="tk-value" style="color:var(--amber)">05</span>
+    </div>
+    <div class="tk-item">
+      <span class="tk-label">FRESH</span>
+      <span class="tk-value" style="color:var(--green)">04</span>
+    </div>
+    <div class="tk-item">
+      <span class="tk-label">QUEUED</span>
+      <span class="tk-value">03</span>
+    </div>
+    <div class="tk-item">
+      <span class="tk-label">DUE TODAY</span>
+      <span class="tk-value" style="color:var(--cyan)">04</span>
+    </div>
+    <div class="tk-item">
+      <span class="tk-label">VELOCITY</span>
+      <span class="tk-value" style="color:var(--green)">12</span>
+      <span class="tk-delta up">+40%</span>
+    </div>
+    <div class="tk-item">
+      <span class="tk-label">KILL RATE</span>
+      <span class="tk-value">18%</span>
+      <span class="tk-delta nt">wk</span>
+    </div>
+    <div class="tk-item">
+      <span class="tk-label">SCALE RATE</span>
+      <span class="tk-value" style="color:var(--green)">22%</span>
+      <span class="tk-delta up">↑</span>
+    </div>
+  </div>
+  <div class="tk-actions">
+    <button class="tk-btn on">1D</button>
+    <button class="tk-btn">1W</button>
+    <button class="tk-btn">1M</button>
+    <button class="tk-btn">ALL</button>
+  </div>
+</div>
+
+<!-- ═══════════ MAIN GRID ═══════════ -->
+<div class="grid-main">
+
+  <!-- ═══ HOT QUEUE ═══ -->
+  <div class="panel panel--hot">
+    <div class="panel-head">
+      <span class="ph-sig"></span>
+      <span class="ph-code mono">[ 01 / HOT ]</span>
+      <span class="ph-title">Hot Queue — Decisions Owed</span>
+      <span class="ph-count">5</span>
+      <span class="ph-note">auto-surfaced · updated 14:38:22</span>
+    </div>
+
+    <table class="hot-table">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Flag</th>
+          <th>Task</th>
+          <th>Reason</th>
+          <th style="text-align:right">Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="col-id mono">01</td>
+          <td><span class="col-flag">REVIEW D12</span></td>
+          <td class="col-name">VSL Long · Skeptic · Dr. Linda</td>
+          <td class="col-why">Below CPA target 5 days</td>
+          <td class="col-act">
+            <button class="mini-btn sell">Kill</button>
+            <button class="mini-btn go">Review</button>
+          </td>
+        </tr>
+        <tr>
+          <td class="col-id mono">02</td>
+          <td><span class="col-flag">REVIEW D9</span></td>
+          <td class="col-name">Hook Test · Curiosity · Gen Pop</td>
+          <td class="col-why">Hit 7-day threshold, flat</td>
+          <td class="col-act">
+            <button class="mini-btn sell">Kill</button>
+            <button class="mini-btn go">Review</button>
+          </td>
+        </tr>
+        <tr>
+          <td class="col-id mono">03</td>
+          <td><span class="col-flag" style="background:var(--greenb);color:var(--green);border-color:rgba(0,209,143,0.25)">DELIVERED</span></td>
+          <td class="col-name">UGC v3 · Social Proof · Athlete</td>
+          <td class="col-why">Editor delivered 2h ago</td>
+          <td class="col-act">
+            <button class="mini-btn">Preview</button>
+            <button class="mini-btn buy">Push Live</button>
+          </td>
+        </tr>
+        <tr>
+          <td class="col-id mono">04</td>
+          <td><span class="col-flag" style="background:var(--amberb);color:var(--amber);border-color:rgba(255,176,32,0.25)">STUCK 48H</span></td>
+          <td class="col-name">Static · Before/After · Health Nut</td>
+          <td class="col-why">Waiting on Gaurav</td>
+          <td class="col-act">
+            <button class="mini-btn">Ping</button>
+            <button class="mini-btn buy">Approve</button>
+          </td>
+        </tr>
+        <tr>
+          <td class="col-id mono">05</td>
+          <td><span class="col-flag" style="background:var(--cyanb);color:var(--cyan);border-color:rgba(0,184,217,0.25)">UNASSIGNED</span></td>
+          <td class="col-name">Testimonial · Skeptic · Dr. Linda</td>
+          <td class="col-why">New brief needs editor</td>
+          <td class="col-act">
+            <button class="mini-btn">Skip</button>
+            <button class="mini-btn go">Assign</button>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ═══ VELOCITY ═══ -->
+  <div class="panel panel--velo">
+    <div class="panel-head">
+      <span class="ph-sig" style="background:var(--green);box-shadow:0 0 6px var(--green)"></span>
+      <span class="ph-code mono">[ VEL ]</span>
+      <span class="ph-title" style="color:var(--green)">Velocity · 1W</span>
+    </div>
+
+    <div class="velo-body">
+      <div>
+        <div class="velo-kpi">
+          <span class="velo-n mono">12</span>
+          <span class="velo-unit">ads shipped</span>
+        </div>
+        <span class="velo-delta" style="margin-top:8px;">↑ +40.0% WoW</span>
+      </div>
+
+      <svg class="velo-chart" viewBox="0 0 300 90" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <linearGradient id="velGrad" x1="0" x2="0" y1="0" y2="1">
+            <stop offset="0%"  stop-color="#00D18F" stop-opacity="0.35"/>
+            <stop offset="100%" stop-color="#00D18F" stop-opacity="0"/>
+          </linearGradient>
+        </defs>
+        <g stroke="rgba(255,255,255,0.04)" stroke-width="1">
+          <line x1="0" y1="20" x2="300" y2="20"/>
+          <line x1="0" y1="45" x2="300" y2="45"/>
+          <line x1="0" y1="70" x2="300" y2="70"/>
+        </g>
+        <path d="M0,70 L35,64 L70,56 L105,60 L140,44 L175,34 L210,42 L245,22 L280,14 L300,8 L300,90 L0,90 Z" fill="url(#velGrad)"/>
+        <path d="M0,70 L35,64 L70,56 L105,60 L140,44 L175,34 L210,42 L245,22 L280,14 L300,8" fill="none" stroke="#00D18F" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+        <circle cx="300" cy="8" r="3" fill="#00D18F"/>
+      </svg>
+
+      <div class="velo-stats">
+        <div class="vs-item">
+          <span class="vs-l">Avg duration</span>
+          <span class="vs-v">6.2d</span>
+        </div>
+        <div class="vs-item">
+          <span class="vs-l">Kill rate</span>
+          <span class="vs-v" style="color:var(--red)">18%</span>
+        </div>
+        <div class="vs-item">
+          <span class="vs-l">Scale rate</span>
+          <span class="vs-v" style="color:var(--green)">22%</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ LIVE PULSE ═══ -->
+  <div class="panel panel--pulse">
+    <div class="panel-head">
+      <span class="ph-sig"></span>
+      <span class="ph-code mono">[ 02 / PULSE ]</span>
+      <span class="ph-title">Live Pulse — In Production</span>
+      <span class="ph-count" style="background:var(--cyan);color:var(--bg)">11</span>
+      <div class="pulse-tabs">
+        <button class="pt on">Phase</button>
+        <button class="pt">Angle</button>
+        <button class="pt">Persona</button>
+      </div>
+    </div>
+
+    <table class="pulse-table">
+      <thead>
+        <tr>
+          <th style="width:50px">Day</th>
+          <th>Task</th>
+          <th style="width:100px">Angle</th>
+          <th style="width:100px">Persona</th>
+          <th style="width:90px">Status</th>
+          <th style="width:180px">Alerts</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr class="phase-group-row"><td colspan="6" style="color:var(--red)"><span class="pg-dot r"></span>AGING · 7+ DAYS · 02</td></tr>
+        <tr>
+          <td><span class="day-cell day-r">D12</span></td>
+          <td>VSL Long — Skeptic — Dr. Linda</td>
+          <td><span class="angle-tag">Skeptic</span></td>
+          <td><span class="persona-tag">Dr. Linda</span></td>
+          <td><span class="row-status rs-live">● Live</span></td>
+          <td><span class="twin-alert">⚠ twin VSL Short D9</span></td>
+        </tr>
+        <tr>
+          <td><span class="day-cell day-r">D9</span></td>
+          <td>Hook Test — Curiosity — Gen Pop</td>
+          <td><span class="angle-tag">Curiosity</span></td>
+          <td><span class="persona-tag">Gen Pop</span></td>
+          <td><span class="row-status rs-live">● Live</span></td>
+          <td></td>
+        </tr>
+
+        <tr class="phase-group-row"><td colspan="6" style="color:var(--amber)"><span class="pg-dot a"></span>LEARNING · 3–6 DAYS · 04</td></tr>
+        <tr>
+          <td><span class="day-cell day-a">D6</span></td>
+          <td>UGC v2 — Fear — Busy Mom</td>
+          <td><span class="angle-tag">Fear</span></td>
+          <td><span class="persona-tag">Busy Mom</span></td>
+          <td><span class="row-status rs-block">⏳ Block</span></td>
+          <td><span class="twin-alert" style="color:var(--cyan)">waiting: editor</span></td>
+        </tr>
+        <tr>
+          <td><span class="day-cell day-a">D5</span></td>
+          <td>Static — Pain Point — Health Nut</td>
+          <td><span class="angle-tag">Pain</span></td>
+          <td><span class="persona-tag">Health Nut</span></td>
+          <td><span class="row-status rs-live">● Live</span></td>
+          <td></td>
+        </tr>
+        <tr>
+          <td><span class="day-cell day-a">D4</span></td>
+          <td>Testimonial — Trust — 50+ Woman</td>
+          <td><span class="angle-tag">Trust</span></td>
+          <td><span class="persona-tag">50+ Woman</span></td>
+          <td><span class="row-status rs-live">● Live</span></td>
+          <td></td>
+        </tr>
+        <tr>
+          <td><span class="day-cell day-a">D3</span></td>
+          <td>Carousel — Social Proof — Athlete</td>
+          <td><span class="angle-tag">Social</span></td>
+          <td><span class="persona-tag">Athlete</span></td>
+          <td><span class="row-status rs-live">● Live</span></td>
+          <td></td>
+        </tr>
+
+        <tr class="phase-group-row"><td colspan="6" style="color:var(--green)"><span class="pg-dot g"></span>FRESH · 1–2 DAYS · 04</td></tr>
+        <tr>
+          <td><span class="day-cell day-g">D2</span></td>
+          <td>Hook Test — Fear — Busy Mom</td>
+          <td><span class="angle-tag">Fear</span></td>
+          <td><span class="persona-tag">Busy Mom</span></td>
+          <td><span class="row-status rs-live">● Live</span></td>
+          <td></td>
+        </tr>
+        <tr>
+          <td><span class="day-cell day-g">D1</span></td>
+          <td>VSL Short — Curiosity — Gen Pop</td>
+          <td><span class="angle-tag">Curiosity</span></td>
+          <td><span class="persona-tag">Gen Pop</span></td>
+          <td><span class="row-status rs-live">● Live</span></td>
+          <td></td>
+        </tr>
+        <tr>
+          <td><span class="day-cell day-g">D1</span></td>
+          <td>Static — Pain Point — 50+ Woman</td>
+          <td><span class="angle-tag">Pain</span></td>
+          <td><span class="persona-tag">50+ Woman</span></td>
+          <td><span class="row-status rs-live">● Live</span></td>
+          <td></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ═══ PIPELINE ═══ -->
+  <div class="panel panel--pipe">
+    <div class="panel-head">
+      <span class="ph-sig"></span>
+      <span class="ph-code mono">[ 03 / PIPE ]</span>
+      <span class="ph-title" style="color:var(--purple)">Pipeline · 7d Horizon</span>
+      <span class="ph-count" style="background:var(--purple);color:#fff">13</span>
+    </div>
+
+    <div class="pipe-body">
+      <div class="pipe-day-row today">
+        <span class="pdr-date"><span class="wk">THU</span>APR24</span>
+        <div class="pdr-items">
+          <span class="pdr-chip">Hook · Fear</span>
+          <span class="pdr-chip">UGC v3 · BM</span>
+          <span class="pdr-chip">+2</span>
+        </div>
+        <span class="pdr-count">4</span>
+      </div>
+      <div class="pipe-day-row">
+        <span class="pdr-date"><span class="wk">FRI</span>APR25</span>
+        <div class="pdr-items">
+          <span class="pdr-chip">VSL · Skeptic</span>
+          <span class="pdr-chip">Static · B/A</span>
+        </div>
+        <span class="pdr-count">2</span>
+      </div>
+      <div class="pipe-day-row">
+        <span class="pdr-date"><span class="wk">SAT</span>APR26</span>
+        <div class="pdr-items"><span class="pdr-empty">— no deliveries —</span></div>
+        <span class="pdr-count">0</span>
+      </div>
+      <div class="pipe-day-row">
+        <span class="pdr-date"><span class="wk">SUN</span>APR27</span>
+        <div class="pdr-items">
+          <span class="pdr-chip">Carousel · Trust</span>
+        </div>
+        <span class="pdr-count">1</span>
+      </div>
+      <div class="pipe-day-row">
+        <span class="pdr-date"><span class="wk">MON</span>APR28</span>
+        <div class="pdr-items">
+          <span class="pdr-chip">UGC v4 · Athlete</span>
+          <span class="pdr-chip">VSL · Sk v2</span>
+          <span class="pdr-chip">+1</span>
+        </div>
+        <span class="pdr-count">3</span>
+      </div>
+      <div class="pipe-day-row">
+        <span class="pdr-date"><span class="wk">TUE</span>APR29</span>
+        <div class="pdr-items">
+          <span class="pdr-chip">Hook v2 · Curiosity</span>
+        </div>
+        <span class="pdr-count">1</span>
+      </div>
+      <div class="pipe-day-row">
+        <span class="pdr-date"><span class="wk">WED</span>APR30</span>
+        <div class="pdr-items">
+          <span class="pdr-chip">Testimonial v2</span>
+          <span class="pdr-chip">Static · Social</span>
+        </div>
+        <span class="pdr-count">2</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ DAILY LOG ═══ -->
+  <div class="panel panel--log">
+    <div class="panel-head">
+      <span class="ph-sig"></span>
+      <span class="ph-code mono">[ 04 / LOG ]</span>
+      <span class="ph-title">Daily Log · Today</span>
+      <span class="ph-note">09:42 → 15:48</span>
+    </div>
+
+    <div class="log-body">
+
+      <div class="log-stats">
+        <div class="ls-c">
+          <div class="ls-v g mono">+3</div>
+          <div class="ls-lbl">Launched</div>
+        </div>
+        <div class="ls-c">
+          <div class="ls-v n mono">2</div>
+          <div class="ls-lbl">Paused</div>
+        </div>
+        <div class="ls-c">
+          <div class="ls-v r mono">−1</div>
+          <div class="ls-lbl">Killed</div>
+        </div>
+        <div class="ls-c">
+          <div class="ls-v n mono">4</div>
+          <div class="ls-lbl">Delivered</div>
+        </div>
+      </div>
+
+      <div class="tl-wrap">
+        <div class="tl-e">
+          <span class="tl-time">09:42:11</span>
+          <span class="tl-ev launch">LAUNCH</span>
+          <span class="tl-text">Hook Test · Fear · Busy Mom</span>
+        </div>
+        <div class="tl-e">
+          <span class="tl-time">10:15:04</span>
+          <span class="tl-ev launch">LAUNCH</span>
+          <span class="tl-text">VSL Short · Curiosity · Gen Pop</span>
+        </div>
+        <div class="tl-e">
+          <span class="tl-time">11:30:52</span>
+          <span class="tl-ev scale">SCALE</span>
+          <span class="tl-text">UGC v2 · Fear · Busy Mom — budget +50%</span>
+        </div>
+        <div class="tl-e">
+          <span class="tl-time">13:05:38</span>
+          <span class="tl-ev kill">KILL</span>
+          <span class="tl-text">Static · Trust · 50+ Woman — 14 days, no lift</span>
+        </div>
+        <div class="tl-e">
+          <span class="tl-time">14:22:17</span>
+          <span class="tl-ev deliv">DELIV</span>
+          <span class="tl-text">UGC v3 · Social Proof · Athlete (editor)</span>
+        </div>
+        <div class="tl-e">
+          <span class="tl-time">15:48:03</span>
+          <span class="tl-ev launch">LAUNCH</span>
+          <span class="tl-text">Static · Pain Point · 50+ Woman</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ PATTERNS ═══ -->
+  <div class="panel panel--pat">
+    <div class="panel-head">
+      <span class="ph-sig"></span>
+      <span class="ph-code mono">[ 05 / MX ]</span>
+      <span class="ph-title" style="color:var(--amber)">Coverage Matrix</span>
+      <span class="ph-note">angle × persona · all-time</span>
+    </div>
+
+    <div class="pat-body">
+      <table class="mx">
+        <thead>
+          <tr>
+            <th class="l"></th>
+            <th>BM</th>
+            <th>HN</th>
+            <th>GP</th>
+            <th>DL</th>
+            <th>50+</th>
+            <th>AT</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td class="l">Fear</td>         <td class="h4">8</td><td class="h2">3</td><td class="h1">2</td><td class="h0">0</td><td class="h1">1</td><td class="h0">0</td></tr>
+          <tr><td class="l">Curiosity</td>    <td class="h1">2</td><td class="h1">1</td><td class="h3">5</td><td class="h0">0</td><td class="h0">0</td><td class="h0">0</td></tr>
+          <tr><td class="l">Pain</td>         <td class="h2">3</td><td class="h3">4</td><td class="h0">0</td><td class="h0">0</td><td class="h2">3</td><td class="h0">0</td></tr>
+          <tr><td class="l">Skeptic</td>      <td class="h0">0</td><td class="h0">0</td><td class="h1">1</td><td class="h4">7</td><td class="h0">0</td><td class="h0">0</td></tr>
+          <tr><td class="l">Social</td>       <td class="h0">0</td><td class="h0">0</td><td class="h0">0</td><td class="h0">0</td><td class="h1">1</td><td class="h3">4</td></tr>
+          <tr><td class="l">Trust</td>        <td class="h1">1</td><td class="h0">0</td><td class="h0">0</td><td class="h0">0</td><td class="h3">4</td><td class="h0">0</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

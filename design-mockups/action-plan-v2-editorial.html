@@ -1,0 +1,1013 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Action Plan V2 — Editorial Ops</title>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --paper: #F5F2EA;
+  --paper2: #EDE8DA;
+  --card: #FFFDF6;
+  --ink: #1F1F18;
+  --ink2: #55544A;
+  --ink3: #9B988A;
+  --rule: rgba(31,31,24,0.14);
+  --rule-soft: rgba(31,31,24,0.07);
+
+  --brick: #C8553D;
+  --brickb: #F5E1DB;
+  --blue: #1F4E5F;
+  --blueb: #DCE8EC;
+  --olive: #4A5220;
+  --oliveb: #E6E8D6;
+  --wine: #8B1E3F;
+  --wineb: #F3DDE2;
+}
+
+body {
+  font-family: 'DM Sans', system-ui, sans-serif;
+  background: var(--paper);
+  background-image:
+    repeating-linear-gradient(0deg, transparent, transparent 38px, rgba(31,31,24,0.015) 38px, rgba(31,31,24,0.015) 39px);
+  color: var(--ink);
+  min-height: 100vh;
+  padding: 40px 48px 100px;
+  -webkit-font-smoothing: antialiased;
+}
+
+.serif  { font-family: 'Instrument Serif', Georgia, serif; font-weight: 400; }
+.serif-i { font-family: 'Instrument Serif', Georgia, serif; font-style: italic; font-weight: 400; }
+.mono  { font-family: 'JetBrains Mono', monospace; }
+
+/* ── MASTHEAD ── */
+.masthead {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: end;
+  gap: 20px;
+  padding-bottom: 14px;
+  border-bottom: 3px double var(--ink);
+  margin-bottom: 28px;
+}
+
+.mh-left { display: flex; flex-direction: column; gap: 2px; }
+.mh-edition {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.65rem;
+  color: var(--ink2);
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+}
+.mh-title {
+  font-family: 'Instrument Serif', Georgia, serif;
+  font-size: 3.6rem;
+  line-height: 0.9;
+  letter-spacing: -0.02em;
+}
+.mh-title .amp { font-style: italic; color: var(--brick); }
+
+.mh-center {
+  text-align: center;
+  padding-bottom: 8px;
+}
+.mh-flag {
+  display: inline-block;
+  border: 1px solid var(--ink);
+  padding: 6px 12px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.62rem;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  font-weight: 500;
+}
+.mh-date {
+  margin-top: 8px;
+  font-family: 'Instrument Serif', serif;
+  font-style: italic;
+  font-size: 1rem;
+  color: var(--ink2);
+}
+
+.mh-right { display: flex; flex-direction: column; gap: 8px; align-items: flex-end; }
+.range-row { display: flex; gap: 0; }
+.rr {
+  padding: 5px 12px;
+  border: 1px solid var(--ink);
+  border-right: none;
+  background: transparent;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.65rem;
+  font-weight: 500;
+  color: var(--ink2);
+  cursor: pointer;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-family: inherit;
+}
+.rr:last-child { border-right: 1px solid var(--ink); }
+.rr.on { background: var(--ink); color: var(--paper); }
+
+.summary-line {
+  font-family: 'Instrument Serif', serif;
+  font-style: italic;
+  font-size: 0.85rem;
+  color: var(--ink2);
+}
+.summary-line strong { font-style: normal; font-weight: 600; color: var(--ink); font-family: 'DM Sans', sans-serif; }
+
+/* ── ARTICLE HEAD ── */
+.article { margin-bottom: 36px; }
+
+.art-head {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  margin-bottom: 14px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--ink);
+}
+.ah-kicker {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.62rem;
+  color: var(--ink2);
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  font-weight: 500;
+}
+.ah-title {
+  font-family: 'Instrument Serif', Georgia, serif;
+  font-size: 1.5rem;
+  line-height: 1;
+  letter-spacing: -0.01em;
+}
+.ah-dek {
+  font-family: 'Instrument Serif', serif;
+  font-style: italic;
+  font-size: 0.9rem;
+  color: var(--ink2);
+  margin-left: 6px;
+}
+.ah-action {
+  margin-left: auto;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.65rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--ink2);
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-family: inherit;
+  border-bottom: 1px solid var(--ink2);
+}
+.ah-action:hover { color: var(--ink); border-bottom-color: var(--ink); }
+
+/* ════════════════════════════════════════════ */
+/* ROW 1 — HOT QUEUE (as "Front Page")          */
+/* ════════════════════════════════════════════ */
+.front-page {
+  display: grid;
+  grid-template-columns: 340px 1fr;
+  gap: 28px;
+  padding: 24px 28px;
+  background: var(--card);
+  border: 1px solid var(--ink);
+  box-shadow: 6px 6px 0 var(--ink);
+}
+
+.fp-hero {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.fp-hero-eyebrow {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.6rem;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--brick);
+  font-weight: 600;
+}
+.fp-hero-title {
+  font-family: 'Instrument Serif', Georgia, serif;
+  font-size: 2.4rem;
+  line-height: 1;
+  letter-spacing: -0.02em;
+}
+.fp-hero-title .it { font-style: italic; }
+.fp-hero-count {
+  display: inline-block;
+  font-family: 'Instrument Serif', Georgia, serif;
+  font-style: italic;
+  font-size: 5rem;
+  line-height: 1;
+  color: var(--brick);
+  letter-spacing: -0.04em;
+}
+.fp-hero-desc {
+  font-family: 'Instrument Serif', serif;
+  font-style: italic;
+  font-size: 0.95rem;
+  color: var(--ink2);
+  line-height: 1.5;
+  border-left: 2px solid var(--brick);
+  padding-left: 10px;
+}
+
+.fp-stories { display: flex; flex-direction: column; gap: 0; }
+
+.story {
+  padding: 14px 0;
+  border-bottom: 1px solid var(--rule);
+  display: grid;
+  grid-template-columns: 28px 1fr auto;
+  gap: 14px;
+  align-items: baseline;
+  cursor: pointer;
+  transition: padding-left .15s;
+}
+.story:hover { padding-left: 6px; }
+.story:last-child { border-bottom: none; }
+.story:first-child { padding-top: 0; }
+
+.story-num {
+  font-family: 'Instrument Serif', Georgia, serif;
+  font-style: italic;
+  font-size: 1.4rem;
+  color: var(--ink3);
+  line-height: 1;
+}
+.story-body { display: flex; flex-direction: column; gap: 3px; }
+.story-kicker {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.58rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--brick);
+  font-weight: 600;
+}
+.story-head {
+  font-family: 'Instrument Serif', Georgia, serif;
+  font-size: 1.1rem;
+  line-height: 1.2;
+  color: var(--ink);
+}
+.story-dek {
+  font-size: 0.78rem;
+  color: var(--ink2);
+  margin-top: 2px;
+  line-height: 1.5;
+}
+
+.story-acts { display: flex; gap: 6px; align-self: center; }
+.sa {
+  padding: 5px 10px;
+  border: 1px solid var(--ink);
+  background: transparent;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.6rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink);
+  cursor: pointer;
+  font-family: inherit;
+  transition: all .12s;
+}
+.sa:hover { background: var(--ink); color: var(--paper); }
+.sa.prim { background: var(--brick); color: var(--card); border-color: var(--brick); }
+.sa.prim:hover { background: var(--ink); border-color: var(--ink); }
+
+/* ════════════════════════════════════════════ */
+/* ROW 2 — LIVE PULSE (3-col newsprint)         */
+/* ════════════════════════════════════════════ */
+.pulse {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 28px;
+  position: relative;
+}
+.pulse::before, .pulse::after {
+  content: '';
+  position: absolute;
+  top: 14px; bottom: 0;
+  width: 1px;
+  background: var(--rule);
+}
+.pulse::before { left: calc(33.333% - 14px); }
+.pulse::after  { left: calc(66.666% - 14px); }
+
+.pcol-h {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding-bottom: 8px;
+  margin-bottom: 12px;
+  border-bottom: 2px solid var(--ink);
+}
+.pcol-h .k {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.58rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-weight: 600;
+}
+.pcol.aging  .k { color: var(--brick); }
+.pcol.learn  .k { color: var(--olive); }
+.pcol.fresh  .k { color: var(--blue); }
+
+.pcol-h .t {
+  font-family: 'Instrument Serif', Georgia, serif;
+  font-size: 1.15rem;
+  line-height: 1;
+}
+.pcol-h .c {
+  margin-left: auto;
+  font-family: 'Instrument Serif', Georgia, serif;
+  font-style: italic;
+  font-size: 1.1rem;
+}
+
+.item {
+  padding: 12px 0;
+  border-bottom: 1px solid var(--rule);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.item:last-child { border-bottom: none; }
+
+.item-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.6rem;
+  color: var(--ink2);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.it-day {
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 3px;
+}
+.pcol.aging .it-day { background: var(--brickb); color: var(--brick); }
+.pcol.learn .it-day { background: var(--oliveb); color: var(--olive); }
+.pcol.fresh .it-day { background: var(--blueb); color: var(--blue); }
+
+.it-block {
+  margin-left: auto;
+  color: var(--ink3);
+  font-style: italic;
+  font-family: 'Instrument Serif', serif;
+  font-size: 0.72rem;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.item-head {
+  font-family: 'Instrument Serif', Georgia, serif;
+  font-size: 1rem;
+  line-height: 1.25;
+  color: var(--ink);
+}
+
+.item-tags {
+  display: flex;
+  gap: 4px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.6rem;
+  color: var(--ink2);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.it-tag { opacity: 0.8; }
+.it-tag::after { content: ' ·'; margin-left: 3px; }
+.it-tag:last-child::after { content: ''; }
+
+.it-warn {
+  font-family: 'Instrument Serif', serif;
+  font-style: italic;
+  font-size: 0.75rem;
+  color: var(--wine);
+  border-left: 2px solid var(--wine);
+  padding-left: 8px;
+  margin-top: 2px;
+}
+
+/* ════════════════════════════════════════════ */
+/* ROW 3 — PIPELINE as "Upcoming Edition"       */
+/* ════════════════════════════════════════════ */
+.pipeline-board {
+  background: var(--card);
+  border: 1px solid var(--ink);
+  padding: 22px;
+  box-shadow: 4px 4px 0 var(--ink);
+}
+
+.pipe-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 14px;
+}
+
+.pd {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 8px;
+  border-top: 2px solid var(--ink);
+  min-height: 140px;
+  cursor: pointer;
+  transition: border-top-color .15s;
+}
+.pd:hover { border-top-color: var(--brick); }
+.pd.today { border-top-color: var(--brick); }
+
+.pd-date-row { display: flex; align-items: baseline; gap: 8px; }
+.pd-wk {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.6rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--ink2);
+}
+.pd-dt {
+  font-family: 'Instrument Serif', Georgia, serif;
+  font-size: 2.2rem;
+  line-height: 1;
+  letter-spacing: -0.02em;
+}
+.pd.today .pd-dt { color: var(--brick); font-style: italic; }
+
+.pd-meta {
+  font-family: 'Instrument Serif', serif;
+  font-style: italic;
+  font-size: 0.7rem;
+  color: var(--ink2);
+}
+.pd-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: auto;
+}
+.pd-ln {
+  font-size: 0.72rem;
+  color: var(--ink2);
+  padding-left: 10px;
+  position: relative;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pd-ln::before {
+  content: '—';
+  position: absolute;
+  left: 0;
+  color: var(--ink3);
+}
+
+/* ════════════════════════════════════════════ */
+/* ROW 4 — DAILY LOG                            */
+/* ════════════════════════════════════════════ */
+.log-grid {
+  display: grid;
+  grid-template-columns: 1.6fr 1fr;
+  gap: 28px;
+}
+
+.log-stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0;
+  padding: 18px 0;
+  border-top: 3px double var(--ink);
+  border-bottom: 3px double var(--ink);
+  margin-bottom: 24px;
+}
+.lsc {
+  text-align: center;
+  padding: 0 14px;
+  border-right: 1px solid var(--rule);
+}
+.lsc:last-child { border-right: none; }
+.lsc-n {
+  font-family: 'Instrument Serif', Georgia, serif;
+  font-size: 2.8rem;
+  line-height: 1;
+  letter-spacing: -0.02em;
+}
+.lsc-n.g { color: var(--olive); }
+.lsc-n.r { color: var(--brick); }
+.lsc-n .sign { font-style: italic; font-size: 1.6rem; vertical-align: super; margin-right: 2px; }
+.lsc-l {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.58rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--ink2);
+  margin-top: 8px;
+}
+
+/* Newspaper timeline — as a "from the day" column */
+.tl-col-head {
+  font-family: 'Instrument Serif', Georgia, serif;
+  font-style: italic;
+  font-size: 1rem;
+  color: var(--ink2);
+  margin-bottom: 10px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--rule);
+}
+.tl-e {
+  display: grid;
+  grid-template-columns: 72px 1fr;
+  gap: 14px;
+  padding: 6px 0;
+  align-items: baseline;
+}
+.tl-t {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.65rem;
+  color: var(--ink3);
+}
+.tl-x {
+  font-size: 0.82rem;
+  color: var(--ink);
+  line-height: 1.4;
+}
+.tl-verb { font-weight: 600; }
+.tl-verb.launch { color: var(--olive); }
+.tl-verb.kill   { color: var(--brick); }
+.tl-verb.scale  { color: var(--wine); }
+
+/* Velocity — pull quote style */
+.quote {
+  position: relative;
+  padding: 28px 30px;
+  background: var(--paper2);
+  border: 1px solid var(--ink);
+  box-shadow: 4px 4px 0 var(--ink);
+}
+.quote-mark {
+  position: absolute;
+  top: -6px; left: 14px;
+  font-family: 'Instrument Serif', Georgia, serif;
+  font-size: 5.5rem;
+  line-height: 1;
+  color: var(--brick);
+  font-style: italic;
+}
+.quote-eyebrow {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.58rem;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--ink2);
+  font-weight: 600;
+  margin-top: 16px;
+}
+.quote-hero {
+  font-family: 'Instrument Serif', Georgia, serif;
+  font-size: 4.5rem;
+  line-height: 1;
+  margin-top: 6px;
+  letter-spacing: -0.03em;
+}
+.quote-hero .it { font-style: italic; color: var(--brick); }
+.quote-sub {
+  font-family: 'Instrument Serif', serif;
+  font-style: italic;
+  font-size: 0.9rem;
+  color: var(--ink2);
+  margin-top: 4px;
+}
+
+.quote-spark { margin-top: 14px; height: 44px; }
+
+.quote-foot {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--rule);
+  font-size: 0.78rem;
+  color: var(--ink2);
+  line-height: 1.55;
+}
+.quote-foot strong { color: var(--ink); font-weight: 600; }
+
+/* ════════════════════════════════════════════ */
+/* ROW 5 — PATTERNS (as index/matrix)           */
+/* ════════════════════════════════════════════ */
+.pat-wrap {
+  background: var(--card);
+  border: 1px solid var(--ink);
+  padding: 22px 26px;
+  box-shadow: 4px 4px 0 var(--ink);
+}
+.pat-caption {
+  font-family: 'Instrument Serif', serif;
+  font-style: italic;
+  font-size: 0.85rem;
+  color: var(--ink2);
+  margin-bottom: 14px;
+}
+
+.mx {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 3px;
+}
+.mx th {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.58rem;
+  font-weight: 600;
+  color: var(--ink2);
+  padding: 6px 8px;
+  text-align: left;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+.mx th.c { text-align: center; }
+.mx td {
+  padding: 9px 8px;
+  font-family: 'Instrument Serif', Georgia, serif;
+  font-size: 0.95rem;
+  text-align: center;
+  font-weight: 400;
+  border-radius: 2px;
+}
+.mx td.lbl {
+  text-align: left;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.78rem;
+  color: var(--ink);
+  padding-left: 0;
+  font-weight: 500;
+}
+.h0 { color: var(--ink3); }
+.h1 { background: #F3ECDA; color: var(--ink); }
+.h2 { background: #E8D6B9; color: var(--ink); }
+.h3 { background: var(--brick); color: var(--card); font-style: italic; }
+.h4 { background: var(--ink); color: var(--paper); font-style: italic; }
+
+</style>
+</head>
+<body>
+
+<!-- ═══════ MASTHEAD ═══════ -->
+<header class="masthead">
+  <div class="mh-left">
+    <span class="mh-edition">The Daily Immuvi · Vol. 1</span>
+    <h1 class="mh-title">Action <span class="amp">Plan</span></h1>
+  </div>
+  <div class="mh-center">
+    <span class="mh-flag">Thursday Edition</span>
+    <div class="mh-date">the twenty-fourth of April, 2026</div>
+  </div>
+  <div class="mh-right">
+    <div class="range-row">
+      <button class="rr on">Today</button>
+      <button class="rr">Week</button>
+      <button class="rr">Month</button>
+      <button class="rr">Custom</button>
+    </div>
+    <div class="summary-line"><strong>14</strong> live · <strong>5</strong> need your call · <strong>4</strong> landing today</div>
+  </div>
+</header>
+
+<!-- ═══════ ROW 1 — FRONT PAGE / HOT QUEUE ═══════ -->
+<article class="article">
+  <div class="art-head">
+    <span class="ah-kicker">No. 01</span>
+    <h2 class="ah-title">The Front Page</h2>
+    <span class="ah-dek">Matters demanding your attention.</span>
+    <button class="ah-action">Mark reviewed →</button>
+  </div>
+
+  <div class="front-page">
+
+    <div class="fp-hero">
+      <span class="fp-hero-eyebrow">LEAD STORY</span>
+      <h3 class="fp-hero-title">Five decisions<br>await <span class="it">today.</span></h3>
+      <span class="fp-hero-count">05</span>
+      <p class="fp-hero-desc">Tests reaching their review threshold, creatives freshly delivered by the editor, and approvals long overdue — each one is costing momentum until you weigh in.</p>
+    </div>
+
+    <div class="fp-stories">
+
+      <div class="story">
+        <span class="story-num">01</span>
+        <div class="story-body">
+          <span class="story-kicker">REVIEW OVERDUE · DAY 12</span>
+          <div class="story-head">VSL Long · Skeptic · Dr. Linda</div>
+          <div class="story-dek">Below CPA target for five consecutive days. Kill, rework, or scale the winning variant?</div>
+        </div>
+        <div class="story-acts">
+          <button class="sa">Kill</button>
+          <button class="sa prim">Review →</button>
+        </div>
+      </div>
+
+      <div class="story">
+        <span class="story-num">02</span>
+        <div class="story-body">
+          <span class="story-kicker">REVIEW DUE · DAY 9</span>
+          <div class="story-head">Hook Test · Curiosity · Gen Pop</div>
+          <div class="story-dek">Hit 7-day review threshold. Performance flat.</div>
+        </div>
+        <div class="story-acts">
+          <button class="sa">Kill</button>
+          <button class="sa prim">Review →</button>
+        </div>
+      </div>
+
+      <div class="story">
+        <span class="story-num">03</span>
+        <div class="story-body">
+          <span class="story-kicker">DELIVERED · AWAITING LAUNCH</span>
+          <div class="story-head">UGC v3 · Social Proof · Athlete</div>
+          <div class="story-dek">Editor delivered 2 hours ago. Ready for launch.</div>
+        </div>
+        <div class="story-acts">
+          <button class="sa">Preview</button>
+          <button class="sa prim">Push Live →</button>
+        </div>
+      </div>
+
+      <div class="story">
+        <span class="story-num">04</span>
+        <div class="story-body">
+          <span class="story-kicker">STUCK IN APPROVAL · 48H</span>
+          <div class="story-head">Static · Before/After · Health Nut</div>
+          <div class="story-dek">Waiting on Gaurav — last comment April 22.</div>
+        </div>
+        <div class="story-acts">
+          <button class="sa">Ping</button>
+          <button class="sa prim">Approve →</button>
+        </div>
+      </div>
+
+      <div class="story">
+        <span class="story-num">05</span>
+        <div class="story-body">
+          <span class="story-kicker">UNASSIGNED · NEW BRIEF</span>
+          <div class="story-head">Testimonial · Skeptic · Dr. Linda</div>
+          <div class="story-dek">Brief created yesterday. Needs editor and delivery date.</div>
+        </div>
+        <div class="story-acts">
+          <button class="sa">Skip</button>
+          <button class="sa prim">Assign →</button>
+        </div>
+      </div>
+
+    </div>
+
+  </div>
+</article>
+
+<!-- ═══════ ROW 2 — LIVE PULSE ═══════ -->
+<article class="article">
+  <div class="art-head">
+    <span class="ah-kicker">No. 02</span>
+    <h2 class="ah-title">Live Pulse</h2>
+    <span class="ah-dek">All tests currently in production.</span>
+    <button class="ah-action">Group by angle →</button>
+  </div>
+
+  <div class="pulse">
+
+    <!-- AGING -->
+    <div class="pcol aging">
+      <div class="pcol-h">
+        <span class="k">Aging</span>
+        <span class="t">Seven days or more</span>
+        <span class="c">2</span>
+      </div>
+      <div class="item">
+        <div class="item-meta"><span class="it-day">Day 12</span></div>
+        <div class="item-head">VSL Long — Skeptic Angle — Dr. Linda</div>
+        <div class="item-tags"><span class="it-tag">VSL</span><span class="it-tag">Skeptic</span><span class="it-tag">Dr. Linda</span></div>
+        <div class="it-warn">Twin of VSL Short · Skeptic · Dr. Linda (Day 9) — potential accidental parallel test.</div>
+      </div>
+      <div class="item">
+        <div class="item-meta"><span class="it-day">Day 9</span></div>
+        <div class="item-head">Hook Test — Curiosity — Gen Pop</div>
+        <div class="item-tags"><span class="it-tag">Hook</span><span class="it-tag">Curiosity</span><span class="it-tag">Gen Pop</span></div>
+      </div>
+    </div>
+
+    <!-- LEARNING -->
+    <div class="pcol learn">
+      <div class="pcol-h">
+        <span class="k">Learning</span>
+        <span class="t">Three to six days</span>
+        <span class="c">5</span>
+      </div>
+      <div class="item">
+        <div class="item-meta"><span class="it-day">Day 6</span><span class="it-block">waiting on editor</span></div>
+        <div class="item-head">UGC v2 — Fear Angle — Busy Mom</div>
+        <div class="item-tags"><span class="it-tag">UGC</span><span class="it-tag">Fear</span><span class="it-tag">Busy Mom</span></div>
+      </div>
+      <div class="item">
+        <div class="item-meta"><span class="it-day">Day 5</span></div>
+        <div class="item-head">Static — Pain Point — Health Nut</div>
+        <div class="item-tags"><span class="it-tag">Static</span><span class="it-tag">Pain Point</span></div>
+      </div>
+      <div class="item">
+        <div class="item-meta"><span class="it-day">Day 4</span></div>
+        <div class="item-head">Testimonial — Trust — 50+ Woman</div>
+        <div class="item-tags"><span class="it-tag">Testimonial</span><span class="it-tag">Trust</span></div>
+      </div>
+      <div class="item">
+        <div class="item-meta"><span class="it-day">Day 3</span></div>
+        <div class="item-head">Carousel — Social Proof — Athlete</div>
+        <div class="item-tags"><span class="it-tag">Carousel</span><span class="it-tag">Social Proof</span></div>
+      </div>
+    </div>
+
+    <!-- FRESH -->
+    <div class="pcol fresh">
+      <div class="pcol-h">
+        <span class="k">Fresh</span>
+        <span class="t">Just launched</span>
+        <span class="c">4</span>
+      </div>
+      <div class="item">
+        <div class="item-meta"><span class="it-day">Day 2</span></div>
+        <div class="item-head">Hook Test — Fear — Busy Mom</div>
+        <div class="item-tags"><span class="it-tag">Hook</span><span class="it-tag">Fear</span></div>
+      </div>
+      <div class="item">
+        <div class="item-meta"><span class="it-day">Day 1</span></div>
+        <div class="item-head">VSL Short — Curiosity — Gen Pop</div>
+        <div class="item-tags"><span class="it-tag">VSL</span><span class="it-tag">Curiosity</span></div>
+      </div>
+      <div class="item">
+        <div class="item-meta"><span class="it-day">Day 1</span></div>
+        <div class="item-head">Static — Pain Point — 50+ Woman</div>
+        <div class="item-tags"><span class="it-tag">Static</span><span class="it-tag">Pain Point</span></div>
+      </div>
+    </div>
+
+  </div>
+</article>
+
+<!-- ═══════ ROW 3 — UPCOMING EDITION ═══════ -->
+<article class="article">
+  <div class="art-head">
+    <span class="ah-kicker">No. 03</span>
+    <h2 class="ah-title">Upcoming Edition</h2>
+    <span class="ah-dek">Deliveries, launches, and approvals expected this week.</span>
+    <button class="ah-action">Open calendar →</button>
+  </div>
+
+  <div class="pipeline-board">
+    <div class="pipe-grid">
+      <div class="pd today">
+        <div class="pd-date-row"><span class="pd-wk">Thu</span><span class="pd-dt">24</span></div>
+        <div class="pd-meta">four delivering</div>
+        <div class="pd-list">
+          <span class="pd-ln">Hook · Fear</span>
+          <span class="pd-ln">UGC v3 · Busy Mom</span>
+          <span class="pd-ln">+2 more</span>
+        </div>
+      </div>
+      <div class="pd">
+        <div class="pd-date-row"><span class="pd-wk">Fri</span><span class="pd-dt">25</span></div>
+        <div class="pd-meta">two delivering</div>
+        <div class="pd-list">
+          <span class="pd-ln">VSL Short · Skeptic</span>
+          <span class="pd-ln">Static · Before/After</span>
+        </div>
+      </div>
+      <div class="pd">
+        <div class="pd-date-row"><span class="pd-wk">Sat</span><span class="pd-dt">26</span></div>
+        <div class="pd-meta">nothing scheduled</div>
+      </div>
+      <div class="pd">
+        <div class="pd-date-row"><span class="pd-wk">Sun</span><span class="pd-dt">27</span></div>
+        <div class="pd-meta">one delivering</div>
+        <div class="pd-list">
+          <span class="pd-ln">Carousel · Trust</span>
+        </div>
+      </div>
+      <div class="pd">
+        <div class="pd-date-row"><span class="pd-wk">Mon</span><span class="pd-dt">28</span></div>
+        <div class="pd-meta">three delivering</div>
+        <div class="pd-list">
+          <span class="pd-ln">UGC v4 · Athlete</span>
+          <span class="pd-ln">VSL · Skeptic v2</span>
+          <span class="pd-ln">+1 more</span>
+        </div>
+      </div>
+      <div class="pd">
+        <div class="pd-date-row"><span class="pd-wk">Tue</span><span class="pd-dt">29</span></div>
+        <div class="pd-meta">one delivering</div>
+        <div class="pd-list">
+          <span class="pd-ln">Hook v2 · Curiosity</span>
+        </div>
+      </div>
+      <div class="pd">
+        <div class="pd-date-row"><span class="pd-wk">Wed</span><span class="pd-dt">30</span></div>
+        <div class="pd-meta">two delivering</div>
+        <div class="pd-list">
+          <span class="pd-ln">Testimonial v2</span>
+          <span class="pd-ln">Static · Social Proof</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</article>
+
+<!-- ═══════ ROW 4 — DAILY LOG ═══════ -->
+<article class="article">
+  <div class="art-head">
+    <span class="ah-kicker">No. 04</span>
+    <h2 class="ah-title">The Daily Log</h2>
+    <span class="ah-dek">A chronicle of today's moves.</span>
+    <button class="ah-action">Export summary →</button>
+  </div>
+
+  <div class="log-stats">
+    <div class="lsc"><div class="lsc-n g"><span class="sign">+</span>3</div><div class="lsc-l">Launched</div></div>
+    <div class="lsc"><div class="lsc-n">2</div><div class="lsc-l">Paused</div></div>
+    <div class="lsc"><div class="lsc-n r"><span class="sign">−</span>1</div><div class="lsc-l">Killed</div></div>
+    <div class="lsc"><div class="lsc-n">4</div><div class="lsc-l">Delivered</div></div>
+  </div>
+
+  <div class="log-grid">
+
+    <div>
+      <div class="tl-col-head">From today's desk.</div>
+      <div class="tl-e"><span class="tl-t">09:42 AM</span><span class="tl-x"><span class="tl-verb launch">Launched</span> Hook Test · Fear · Busy Mom</span></div>
+      <div class="tl-e"><span class="tl-t">10:15 AM</span><span class="tl-x"><span class="tl-verb launch">Launched</span> VSL Short · Curiosity · Gen Pop</span></div>
+      <div class="tl-e"><span class="tl-t">11:30 AM</span><span class="tl-x"><span class="tl-verb scale">Scaled</span> UGC v2 · Fear · Busy Mom — budget raised 50%</span></div>
+      <div class="tl-e"><span class="tl-t">01:05 PM</span><span class="tl-x"><span class="tl-verb kill">Killed</span> Static · Trust · 50+ Woman — fourteen days, no lift</span></div>
+      <div class="tl-e"><span class="tl-t">02:22 PM</span><span class="tl-x">Editor delivered UGC v3 · Social Proof · Athlete</span></div>
+      <div class="tl-e"><span class="tl-t">03:48 PM</span><span class="tl-x"><span class="tl-verb launch">Launched</span> Static · Pain Point · 50+ Woman</span></div>
+    </div>
+
+    <div class="quote">
+      <span class="quote-mark">"</span>
+      <div class="quote-eyebrow">WEEKLY VELOCITY</div>
+      <div class="quote-hero"><span class="it">12</span> ads</div>
+      <div class="quote-sub">this week — up 40% from last</div>
+
+      <svg class="quote-spark" viewBox="0 0 260 44" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M0,36 L30,33 L60,28 L90,30 L120,22 L150,18 L180,22 L210,12 L240,8 L260,5" fill="none" stroke="#C8553D" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+
+      <div class="quote-foot">
+        Top combo this week — <strong>Fear × Busy Mom</strong><br>
+        Avg test duration — <strong>6.2 days</strong><br>
+        Kill rate <strong>18%</strong> · Scale rate <strong>22%</strong>
+      </div>
+    </div>
+
+  </div>
+</article>
+
+<!-- ═══════ ROW 5 — PATTERNS ═══════ -->
+<article class="article">
+  <div class="art-head">
+    <span class="ah-kicker">No. 05</span>
+    <h2 class="ah-title">The Index</h2>
+    <span class="ah-dek">Angle × persona coverage.</span>
+    <button class="ah-action">Open analytics →</button>
+  </div>
+
+  <div class="pat-wrap">
+    <div class="pat-caption">Tests conducted per angle-persona pair across all time. Dark cells indicate heavy coverage; pale cells signal untested territory worth exploring.</div>
+    <table class="mx">
+      <thead>
+        <tr>
+          <th></th>
+          <th class="c">Busy Mom</th>
+          <th class="c">Health Nut</th>
+          <th class="c">Gen Pop</th>
+          <th class="c">Dr. Linda</th>
+          <th class="c">50+ Woman</th>
+          <th class="c">Athlete</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td class="lbl">Fear</td>         <td class="h4">8</td><td class="h2">3</td><td class="h1">2</td><td class="h0">—</td><td class="h1">1</td><td class="h0">—</td></tr>
+        <tr><td class="lbl">Curiosity</td>    <td class="h1">2</td><td class="h1">1</td><td class="h3">5</td><td class="h0">—</td><td class="h0">—</td><td class="h0">—</td></tr>
+        <tr><td class="lbl">Pain Point</td>   <td class="h2">3</td><td class="h3">4</td><td class="h0">—</td><td class="h0">—</td><td class="h2">3</td><td class="h0">—</td></tr>
+        <tr><td class="lbl">Skeptic</td>      <td class="h0">—</td><td class="h0">—</td><td class="h1">1</td><td class="h4">7</td><td class="h0">—</td><td class="h0">—</td></tr>
+        <tr><td class="lbl">Social Proof</td> <td class="h0">—</td><td class="h0">—</td><td class="h0">—</td><td class="h0">—</td><td class="h1">1</td><td class="h3">4</td></tr>
+        <tr><td class="lbl">Trust</td>        <td class="h1">1</td><td class="h0">—</td><td class="h0">—</td><td class="h0">—</td><td class="h3">4</td><td class="h0">—</td></tr>
+      </tbody>
+    </table>
+  </div>
+</article>
+
+</body>
+</html>

@@ -1,0 +1,1071 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Action Plan V2 — Obsidian Glass</title>
+<link href="https://api.fontshare.com/v2/css?f[]=satoshi@400,500,600,700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Geist:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg: #08090D;
+  --bg2: #0E1016;
+  --card: #14161F;
+  --card2: #1A1D28;
+  --glass: rgba(26,29,40,0.6);
+  --b: rgba(255,255,255,0.06);
+  --bh: rgba(255,255,255,0.11);
+  --t1: #E7E9EF;
+  --t2: #94A3B8;
+  --t3: #52596B;
+
+  --mint: #10D98A;
+  --mintb: rgba(16,217,138,0.10);
+  --coral: #FF4D6D;
+  --coralb: rgba(255,77,109,0.10);
+  --amber: #FFB84D;
+  --amberb: rgba(255,184,77,0.10);
+  --violet: #A78BFA;
+  --violetb: rgba(167,139,250,0.10);
+  --blue: #60A5FA;
+  --blueb: rgba(96,165,250,0.10);
+}
+
+body {
+  font-family: 'Geist', system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--t1);
+  min-height: 100vh;
+  padding: 28px 36px 100px;
+  -webkit-font-smoothing: antialiased;
+  background-image:
+    radial-gradient(ellipse 80% 60% at 20% 0%, rgba(16,217,138,0.05) 0%, transparent 50%),
+    radial-gradient(ellipse 60% 50% at 90% 20%, rgba(255,77,109,0.04) 0%, transparent 50%);
+  background-attachment: fixed;
+}
+
+.mono { font-family: 'JetBrains Mono', monospace; font-feature-settings: 'ss01'; }
+
+/* ── HEADER ── */
+.header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding-bottom: 24px;
+  border-bottom: 1px solid var(--b);
+  margin-bottom: 26px;
+}
+
+.hdr-title-block { display: flex; flex-direction: column; gap: 2px; }
+.hdr-date {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.68rem;
+  color: var(--t3);
+  letter-spacing: 0.04em;
+}
+.hdr-title {
+  font-size: 1.4rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.live-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  background: var(--mintb);
+  border: 1px solid rgba(16,217,138,0.25);
+  border-radius: 999px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.6rem;
+  font-weight: 600;
+  color: var(--mint);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-left: 4px;
+}
+.live-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--mint);
+  box-shadow: 0 0 8px var(--mint);
+  animation: pulse-live 1.5s ease-in-out infinite;
+}
+@keyframes pulse-live {
+  0%,100% { opacity: 1; }
+  50%     { opacity: 0.4; }
+}
+
+.hdr-spacer { flex: 1; }
+
+.cmd-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px;
+  background: var(--card);
+  border: 1px solid var(--b);
+  border-radius: 10px;
+  font-size: 0.78rem;
+  color: var(--t3);
+  min-width: 260px;
+}
+.cmd-bar kbd {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.65rem;
+  padding: 2px 6px;
+  background: var(--bg2);
+  border: 1px solid var(--b);
+  border-radius: 4px;
+  color: var(--t2);
+  margin-left: auto;
+}
+
+.range-seg {
+  display: flex;
+  background: var(--card);
+  border: 1px solid var(--b);
+  border-radius: 10px;
+  padding: 3px;
+}
+.rs-btn {
+  padding: 6px 12px;
+  border-radius: 7px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  border: none;
+  background: transparent;
+  color: var(--t2);
+  cursor: pointer;
+  font-family: inherit;
+  transition: all .12s;
+}
+.rs-btn.on { background: var(--card2); color: var(--t1); box-shadow: 0 1px 0 rgba(255,255,255,0.04); }
+
+/* ── SECTION HEADER ── */
+.section { margin-bottom: 28px; }
+
+.sect-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.sect-num {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.68rem;
+  color: var(--t3);
+  font-weight: 600;
+}
+.sect-title {
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--t1);
+}
+.sect-desc { font-size: 0.72rem; color: var(--t3); }
+.sect-action {
+  margin-left: auto;
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: var(--t2);
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-family: inherit;
+}
+.sect-action:hover { color: var(--t1); }
+
+/* ════════════════════════════════════════════ */
+/* ROW 1 — HOT QUEUE                            */
+/* ════════════════════════════════════════════ */
+.hot-queue {
+  background: linear-gradient(180deg, rgba(255,77,109,0.04) 0%, var(--card) 100%);
+  border: 1px solid rgba(255,77,109,0.15);
+  border-radius: 14px;
+  overflow: hidden;
+  box-shadow: 0 10px 40px -20px rgba(255,77,109,0.25);
+}
+
+.hq-header {
+  padding: 14px 18px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border-bottom: 1px solid var(--b);
+}
+.hq-indicator {
+  width: 8px; height: 8px;
+  background: var(--coral);
+  border-radius: 50%;
+  box-shadow: 0 0 12px var(--coral), 0 0 0 4px rgba(255,77,109,0.15);
+  animation: pulse-live 1.8s ease-in-out infinite;
+}
+.hq-name {
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--coral);
+}
+.hq-num-badge {
+  background: var(--coral);
+  color: #fff;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.65rem;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+.hq-sub { margin-left: auto; font-size: 0.7rem; color: var(--t3); }
+
+.hq-rows { display: flex; flex-direction: column; }
+.hq-row {
+  display: grid;
+  grid-template-columns: 38px 1fr auto;
+  gap: 14px;
+  align-items: center;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--b);
+  transition: background .12s;
+}
+.hq-row:last-child { border-bottom: none; }
+.hq-row:hover { background: rgba(255,77,109,0.03); }
+
+.hq-icon {
+  width: 34px; height: 34px;
+  border-radius: 9px;
+  background: var(--coralb);
+  color: var(--coral);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 0.9rem;
+  border: 1px solid rgba(255,77,109,0.2);
+}
+
+.hq-body { min-width: 0; }
+.hq-title-row { display: flex; align-items: baseline; gap: 6px; font-size: 0.85rem; }
+.hq-title-row strong { color: var(--t1); font-weight: 600; }
+.hq-flag { color: var(--coral); font-weight: 600; }
+.hq-why { font-size: 0.72rem; color: var(--t2); margin-top: 2px; }
+
+.hq-actions { display: flex; gap: 6px; }
+.hq-btn {
+  padding: 6px 12px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  border-radius: 7px;
+  border: 1px solid var(--b);
+  background: var(--card2);
+  color: var(--t2);
+  cursor: pointer;
+  font-family: inherit;
+  transition: all .12s;
+}
+.hq-btn:hover { background: var(--bh); color: var(--t1); }
+.hq-btn.primary { background: var(--mint); color: #062D1B; border-color: var(--mint); }
+.hq-btn.primary:hover { background: #13EA95; }
+.hq-btn.kill:hover { background: var(--coral); color: #fff; border-color: var(--coral); }
+
+/* ════════════════════════════════════════════ */
+/* ROW 2 — LIVE PULSE                           */
+/* ════════════════════════════════════════════ */
+.pulse-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+
+.pcol {
+  background: var(--card);
+  border: 1px solid var(--b);
+  border-radius: 12px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.pc-head {
+  padding: 12px 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-bottom: 1px solid var(--b);
+}
+.pc-ind { width: 6px; height: 6px; border-radius: 50%; }
+.pcol.aging  .pc-ind { background: var(--coral);  box-shadow: 0 0 8px var(--coral); }
+.pcol.learn  .pc-ind { background: var(--amber);  box-shadow: 0 0 8px var(--amber); }
+.pcol.fresh  .pc-ind { background: var(--mint);   box-shadow: 0 0 8px var(--mint); }
+
+.pc-lbl {
+  font-size: 0.66rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--t1);
+}
+.pc-k {
+  margin-left: auto;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+.pcol.aging .pc-k { color: var(--coral); }
+.pcol.learn .pc-k { color: var(--amber); }
+.pcol.fresh .pc-k { color: var(--mint); }
+
+.pc-body { display: flex; flex-direction: column; }
+
+.pc-card {
+  padding: 14px;
+  border-bottom: 1px solid var(--b);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  transition: background .12s;
+  cursor: pointer;
+}
+.pc-card:last-child { border-bottom: none; }
+.pc-card:hover { background: rgba(255,255,255,0.02); }
+
+.pc-top { display: flex; align-items: flex-start; gap: 8px; justify-content: space-between; }
+
+.pc-day-pill {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.65rem;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 5px;
+  white-space: nowrap;
+}
+.pcol.aging  .pc-day-pill { background: var(--coralb); color: var(--coral); border: 1px solid rgba(255,77,109,0.2); }
+.pcol.learn  .pc-day-pill { background: var(--amberb); color: var(--amber); border: 1px solid rgba(255,184,77,0.2); }
+.pcol.fresh  .pc-day-pill { background: var(--mintb); color: var(--mint); border: 1px solid rgba(16,217,138,0.2); }
+
+.pc-blk {
+  font-size: 0.6rem;
+  font-weight: 600;
+  padding: 3px 7px;
+  border-radius: 4px;
+  background: var(--blueb);
+  color: var(--blue);
+  border: 1px solid rgba(96,165,250,0.2);
+}
+
+.pc-title {
+  font-size: 0.82rem;
+  font-weight: 500;
+  color: var(--t1);
+  line-height: 1.35;
+}
+.pc-tags { display: flex; gap: 4px; flex-wrap: wrap; }
+.pc-tag {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.6rem;
+  color: var(--t2);
+  padding: 2px 6px;
+  background: var(--bg2);
+  border: 1px solid var(--b);
+  border-radius: 4px;
+}
+.pc-twin {
+  font-size: 0.62rem;
+  color: var(--amber);
+  font-weight: 600;
+  background: var(--amberb);
+  padding: 4px 8px;
+  border-radius: 5px;
+  border: 1px solid rgba(255,184,77,0.2);
+}
+
+/* ════════════════════════════════════════════ */
+/* ROW 3 — PIPELINE                             */
+/* ════════════════════════════════════════════ */
+.pipeline {
+  background: var(--card);
+  border: 1px solid var(--b);
+  border-radius: 14px;
+  padding: 20px;
+}
+.pipe-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 8px;
+}
+
+.pday {
+  background: var(--bg2);
+  border: 1px solid var(--b);
+  border-radius: 10px;
+  padding: 12px;
+  min-height: 128px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  transition: all .12s;
+  cursor: pointer;
+}
+.pday:hover { border-color: var(--bh); background: var(--card2); }
+.pday.today {
+  background: linear-gradient(180deg, rgba(16,217,138,0.12) 0%, rgba(16,217,138,0.04) 100%);
+  border-color: rgba(16,217,138,0.3);
+}
+
+.pd-top { display: flex; align-items: baseline; justify-content: space-between; }
+.pd-wk {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.6rem;
+  color: var(--t3);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.pday.today .pd-wk { color: var(--mint); }
+.pd-dt {
+  font-family: 'Geist', sans-serif;
+  font-size: 1.1rem;
+  font-weight: 700;
+  line-height: 1;
+}
+.pday.today .pd-dt { color: var(--mint); }
+
+.pd-ct {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.6rem;
+  color: var(--t2);
+}
+.pd-items { display: flex; flex-direction: column; gap: 4px; margin-top: auto; }
+.pd-item {
+  font-size: 0.68rem;
+  color: var(--t2);
+  padding: 3px 7px;
+  background: var(--card);
+  border: 1px solid var(--b);
+  border-radius: 5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ════════════════════════════════════════════ */
+/* ROW 4 — DAILY LOG                            */
+/* ════════════════════════════════════════════ */
+.log-grid {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 12px;
+}
+
+.log-card {
+  background: var(--card);
+  border: 1px solid var(--b);
+  border-radius: 14px;
+  padding: 20px;
+}
+
+.log-stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0;
+  margin-bottom: 22px;
+}
+.ls-cell {
+  padding: 0 16px;
+  border-right: 1px solid var(--b);
+}
+.ls-cell:first-child { padding-left: 0; }
+.ls-cell:last-child  { border-right: none; }
+
+.ls-n {
+  font-family: 'Geist', sans-serif;
+  font-size: 2.2rem;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -0.02em;
+}
+.ls-n.g { color: var(--mint); }
+.ls-n.r { color: var(--coral); }
+.ls-l {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.6rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--t3);
+  margin-top: 5px;
+}
+
+.tline {
+  position: relative;
+  padding-left: 22px;
+}
+.tline::before {
+  content: '';
+  position: absolute;
+  left: 7px; top: 4px; bottom: 4px;
+  width: 1px;
+  background: var(--b);
+}
+.tl-e {
+  display: grid;
+  grid-template-columns: 70px 1fr;
+  gap: 12px;
+  padding: 8px 0;
+  position: relative;
+}
+.tl-e::before {
+  content: '';
+  position: absolute;
+  left: -19px;
+  top: 14px;
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: var(--t3);
+  box-shadow: 0 0 0 3px var(--bg);
+}
+.tl-e.launch::before { background: var(--mint); box-shadow: 0 0 0 3px var(--bg), 0 0 8px var(--mint); }
+.tl-e.kill::before   { background: var(--coral); box-shadow: 0 0 0 3px var(--bg), 0 0 8px var(--coral); }
+.tl-e.scale::before  { background: var(--amber); box-shadow: 0 0 0 3px var(--bg), 0 0 8px var(--amber); }
+
+.tl-time {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.7rem;
+  color: var(--t3);
+  font-weight: 600;
+}
+.tl-txt { font-size: 0.8rem; color: var(--t1); }
+.tl-txt .m-launch { color: var(--mint); font-weight: 600; }
+.tl-txt .m-kill   { color: var(--coral); font-weight: 600; }
+.tl-txt .m-scale  { color: var(--amber); font-weight: 600; }
+
+/* Velocity card */
+.vc-eyebrow {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.6rem;
+  color: var(--t3);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  margin-bottom: 8px;
+}
+.vc-hero {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.vc-n {
+  font-family: 'Geist', sans-serif;
+  font-size: 3.2rem;
+  font-weight: 800;
+  line-height: 0.95;
+  letter-spacing: -0.03em;
+  background: linear-gradient(180deg, var(--mint) 0%, #079B63 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+.vc-u { font-size: 0.85rem; color: var(--t2); font-weight: 500; }
+.vc-delta {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--mint);
+  background: var(--mintb);
+  border: 1px solid rgba(16,217,138,0.2);
+  padding: 3px 9px;
+  border-radius: 5px;
+  width: fit-content;
+}
+.vc-spark { margin: 16px 0; height: 52px; }
+.vc-meta { font-size: 0.73rem; color: var(--t2); line-height: 1.65; }
+.vc-meta strong { color: var(--t1); font-weight: 600; }
+
+/* ════════════════════════════════════════════ */
+/* ROW 5 — PATTERNS                             */
+/* ════════════════════════════════════════════ */
+.pat-card {
+  background: var(--card);
+  border: 1px solid var(--b);
+  border-radius: 14px;
+  padding: 20px;
+}
+
+.mx {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 3px;
+  font-family: 'JetBrains Mono', monospace;
+}
+.mx th {
+  font-size: 0.6rem;
+  font-weight: 600;
+  color: var(--t3);
+  padding: 6px 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.mx th.col-h { text-align: center; }
+.mx td {
+  padding: 10px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  border-radius: 6px;
+  text-align: center;
+}
+.mx td.lbl {
+  text-align: left;
+  font-weight: 500;
+  color: var(--t2);
+  padding-left: 0;
+}
+.h0 { background: var(--bg2); color: var(--t3); }
+.h1 { background: rgba(16,217,138,0.10); color: #34D99B; }
+.h2 { background: rgba(16,217,138,0.22); color: #5FE5B1; }
+.h3 { background: rgba(16,217,138,0.40); color: #C4F8DE; }
+.h4 { background: var(--mint); color: #062D1B; }
+
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<header class="header">
+  <div class="hdr-title-block">
+    <span class="hdr-date mono">[ 2026.04.24 · THU ]</span>
+    <h1 class="hdr-title">Action Plan</h1>
+  </div>
+  <span class="live-tag"><span class="live-dot"></span> 14 live</span>
+  <div class="hdr-spacer"></div>
+  <div class="cmd-bar">
+    <span>◎</span>
+    <span>Search or run command</span>
+    <kbd>⌘K</kbd>
+  </div>
+  <div class="range-seg">
+    <button class="rs-btn on">Today</button>
+    <button class="rs-btn">Week</button>
+    <button class="rs-btn">Month</button>
+    <button class="rs-btn">Custom</button>
+  </div>
+</header>
+
+<!-- ═══════════════════════════════════════ -->
+<!-- ROW 1 — HOT QUEUE                       -->
+<!-- ═══════════════════════════════════════ -->
+<section class="section">
+  <div class="sect-head">
+    <span class="sect-num">01 ·</span>
+    <span class="sect-title">Hot Queue</span>
+    <span class="sect-desc">— decisions owed today</span>
+    <button class="sect-action">Mark all reviewed →</button>
+  </div>
+
+  <div class="hot-queue">
+    <div class="hq-header">
+      <span class="hq-indicator"></span>
+      <span class="hq-name">Needs your call</span>
+      <span class="hq-num-badge">5</span>
+      <span class="hq-sub">Auto-surfaced by age, deadline, block status</span>
+    </div>
+    <div class="hq-rows">
+
+      <div class="hq-row">
+        <div class="hq-icon">⏱</div>
+        <div class="hq-body">
+          <div class="hq-title-row"><strong>VSL Long · Skeptic · Dr. Linda</strong> <span class="hq-flag mono">— DAY 12, PAST REVIEW</span></div>
+          <div class="hq-why">Below CPA target for 5 days. Kill, rework, or scale winning variant?</div>
+        </div>
+        <div class="hq-actions">
+          <button class="hq-btn kill">Kill</button>
+          <button class="hq-btn">Scale</button>
+          <button class="hq-btn primary">Review →</button>
+        </div>
+      </div>
+
+      <div class="hq-row">
+        <div class="hq-icon">⏱</div>
+        <div class="hq-body">
+          <div class="hq-title-row"><strong>Hook Test · Curiosity · Gen Pop</strong> <span class="hq-flag mono">— DAY 9</span></div>
+          <div class="hq-why">Hit 7-day review threshold. Performance flat — decision pending.</div>
+        </div>
+        <div class="hq-actions">
+          <button class="hq-btn kill">Kill</button>
+          <button class="hq-btn">Scale</button>
+          <button class="hq-btn primary">Review →</button>
+        </div>
+      </div>
+
+      <div class="hq-row">
+        <div class="hq-icon">📦</div>
+        <div class="hq-body">
+          <div class="hq-title-row"><strong>UGC v3 · Social Proof · Athlete</strong> <span class="hq-flag mono">— EDITOR DELIVERED 2H</span></div>
+          <div class="hq-why">Ready for launch. Review creative and push live.</div>
+        </div>
+        <div class="hq-actions">
+          <button class="hq-btn">Preview</button>
+          <button class="hq-btn primary">Push Live →</button>
+        </div>
+      </div>
+
+      <div class="hq-row">
+        <div class="hq-icon">⚠</div>
+        <div class="hq-body">
+          <div class="hq-title-row"><strong>Static · Before/After · Health Nut</strong> <span class="hq-flag mono">— STUCK IN APPROVAL 48H</span></div>
+          <div class="hq-why">Waiting on: Gaurav — last comment Apr 22.</div>
+        </div>
+        <div class="hq-actions">
+          <button class="hq-btn">Ping approver</button>
+          <button class="hq-btn primary">Approve →</button>
+        </div>
+      </div>
+
+      <div class="hq-row">
+        <div class="hq-icon">🆕</div>
+        <div class="hq-body">
+          <div class="hq-title-row"><strong>Testimonial · Skeptic · Dr. Linda</strong> <span class="hq-flag mono">— UNASSIGNED</span></div>
+          <div class="hq-why">Brief created yesterday. Assign editor and set delivery.</div>
+        </div>
+        <div class="hq-actions">
+          <button class="hq-btn">Skip</button>
+          <button class="hq-btn primary">Assign →</button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════ -->
+<!-- ROW 2 — LIVE PULSE                      -->
+<!-- ═══════════════════════════════════════ -->
+<section class="section">
+  <div class="sect-head">
+    <span class="sect-num">02 ·</span>
+    <span class="sect-title">Live Pulse</span>
+    <span class="sect-desc">— everything in production</span>
+    <button class="sect-action">Group by angle →</button>
+  </div>
+
+  <div class="pulse-grid">
+
+    <div class="pcol aging">
+      <div class="pc-head">
+        <span class="pc-ind"></span>
+        <span class="pc-lbl">Aging · 7+ days</span>
+        <span class="pc-k">02</span>
+      </div>
+      <div class="pc-body">
+
+        <div class="pc-card">
+          <div class="pc-top"><span class="pc-day-pill">D12</span></div>
+          <div class="pc-title">VSL Long — Skeptic Angle — Dr. Linda</div>
+          <div class="pc-tags">
+            <span class="pc-tag">VSL</span><span class="pc-tag">Skeptic</span><span class="pc-tag">Dr. Linda</span>
+          </div>
+          <div class="pc-twin">⚠ Twin: VSL Short · Skeptic · Dr. Linda (D9)</div>
+        </div>
+
+        <div class="pc-card">
+          <div class="pc-top"><span class="pc-day-pill">D9</span></div>
+          <div class="pc-title">Hook Test — Curiosity — Gen Pop</div>
+          <div class="pc-tags">
+            <span class="pc-tag">Hook</span><span class="pc-tag">Curiosity</span><span class="pc-tag">Gen Pop</span>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <div class="pcol learn">
+      <div class="pc-head">
+        <span class="pc-ind"></span>
+        <span class="pc-lbl">Learning · 3–6 days</span>
+        <span class="pc-k">05</span>
+      </div>
+      <div class="pc-body">
+
+        <div class="pc-card">
+          <div class="pc-top">
+            <span class="pc-day-pill">D6</span>
+            <span class="pc-blk">⏳ editor</span>
+          </div>
+          <div class="pc-title">UGC v2 — Fear Angle — Busy Mom</div>
+          <div class="pc-tags">
+            <span class="pc-tag">UGC</span><span class="pc-tag">Fear</span><span class="pc-tag">Busy Mom</span>
+          </div>
+        </div>
+
+        <div class="pc-card">
+          <div class="pc-top"><span class="pc-day-pill">D5</span></div>
+          <div class="pc-title">Static — Pain Point — Health Nut</div>
+          <div class="pc-tags">
+            <span class="pc-tag">Static</span><span class="pc-tag">Pain Point</span>
+          </div>
+        </div>
+
+        <div class="pc-card">
+          <div class="pc-top"><span class="pc-day-pill">D4</span></div>
+          <div class="pc-title">Testimonial — Trust — 50+ Woman</div>
+          <div class="pc-tags">
+            <span class="pc-tag">Testimonial</span><span class="pc-tag">Trust</span>
+          </div>
+        </div>
+
+        <div class="pc-card">
+          <div class="pc-top"><span class="pc-day-pill">D3</span></div>
+          <div class="pc-title">Carousel — Social Proof — Athlete</div>
+          <div class="pc-tags">
+            <span class="pc-tag">Carousel</span><span class="pc-tag">Social Proof</span>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <div class="pcol fresh">
+      <div class="pc-head">
+        <span class="pc-ind"></span>
+        <span class="pc-lbl">Fresh · 1–2 days</span>
+        <span class="pc-k">04</span>
+      </div>
+      <div class="pc-body">
+
+        <div class="pc-card">
+          <div class="pc-top"><span class="pc-day-pill">D2</span></div>
+          <div class="pc-title">Hook Test — Fear — Busy Mom</div>
+          <div class="pc-tags">
+            <span class="pc-tag">Hook</span><span class="pc-tag">Fear</span><span class="pc-tag">Busy Mom</span>
+          </div>
+        </div>
+
+        <div class="pc-card">
+          <div class="pc-top"><span class="pc-day-pill">D1</span></div>
+          <div class="pc-title">VSL Short — Curiosity — Gen Pop</div>
+          <div class="pc-tags">
+            <span class="pc-tag">VSL</span><span class="pc-tag">Curiosity</span>
+          </div>
+        </div>
+
+        <div class="pc-card">
+          <div class="pc-top"><span class="pc-day-pill">D1</span></div>
+          <div class="pc-title">Static — Pain Point — 50+ Woman</div>
+          <div class="pc-tags">
+            <span class="pc-tag">Static</span><span class="pc-tag">Pain Point</span>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════ -->
+<!-- ROW 3 — PIPELINE                        -->
+<!-- ═══════════════════════════════════════ -->
+<section class="section">
+  <div class="sect-head">
+    <span class="sect-num">03 ·</span>
+    <span class="sect-title">Pipeline · 7-day horizon</span>
+    <span class="sect-desc">— deliveries, launches, approvals</span>
+    <button class="sect-action">Open calendar →</button>
+  </div>
+
+  <div class="pipeline">
+    <div class="pipe-grid">
+
+      <div class="pday today">
+        <div class="pd-top"><span class="pd-wk">Thu</span><span class="pd-dt">24</span></div>
+        <span class="pd-ct mono">4 delivering</span>
+        <div class="pd-items">
+          <div class="pd-item">Hook · Fear</div>
+          <div class="pd-item">UGC v3 · BM</div>
+          <div class="pd-item">+2 more</div>
+        </div>
+      </div>
+
+      <div class="pday">
+        <div class="pd-top"><span class="pd-wk">Fri</span><span class="pd-dt">25</span></div>
+        <span class="pd-ct mono">2 delivering</span>
+        <div class="pd-items">
+          <div class="pd-item">VSL Short · Skeptic</div>
+          <div class="pd-item">Static · B/A</div>
+        </div>
+      </div>
+
+      <div class="pday">
+        <div class="pd-top"><span class="pd-wk">Sat</span><span class="pd-dt">26</span></div>
+        <span class="pd-ct mono">—</span>
+      </div>
+
+      <div class="pday">
+        <div class="pd-top"><span class="pd-wk">Sun</span><span class="pd-dt">27</span></div>
+        <span class="pd-ct mono">1 delivering</span>
+        <div class="pd-items">
+          <div class="pd-item">Carousel · Trust</div>
+        </div>
+      </div>
+
+      <div class="pday">
+        <div class="pd-top"><span class="pd-wk">Mon</span><span class="pd-dt">28</span></div>
+        <span class="pd-ct mono">3 delivering</span>
+        <div class="pd-items">
+          <div class="pd-item">UGC v4 · Athlete</div>
+          <div class="pd-item">VSL · Skeptic v2</div>
+          <div class="pd-item">+1 more</div>
+        </div>
+      </div>
+
+      <div class="pday">
+        <div class="pd-top"><span class="pd-wk">Tue</span><span class="pd-dt">29</span></div>
+        <span class="pd-ct mono">1 delivering</span>
+        <div class="pd-items">
+          <div class="pd-item">Hook v2 · Curiosity</div>
+        </div>
+      </div>
+
+      <div class="pday">
+        <div class="pd-top"><span class="pd-wk">Wed</span><span class="pd-dt">30</span></div>
+        <span class="pd-ct mono">2 delivering</span>
+        <div class="pd-items">
+          <div class="pd-item">Testimonial v2</div>
+          <div class="pd-item">Static · Social</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════ -->
+<!-- ROW 4 — DAILY LOG                       -->
+<!-- ═══════════════════════════════════════ -->
+<section class="section">
+  <div class="sect-head">
+    <span class="sect-num">04 ·</span>
+    <span class="sect-title">Daily Log</span>
+    <span class="sect-desc">— what happened today</span>
+    <button class="sect-action">Export summary →</button>
+  </div>
+
+  <div class="log-grid">
+
+    <div class="log-card">
+      <div class="log-stats">
+        <div class="ls-cell">
+          <div class="ls-n g">+3</div>
+          <div class="ls-l">Launched</div>
+        </div>
+        <div class="ls-cell">
+          <div class="ls-n">2</div>
+          <div class="ls-l">Paused</div>
+        </div>
+        <div class="ls-cell">
+          <div class="ls-n r">−1</div>
+          <div class="ls-l">Killed</div>
+        </div>
+        <div class="ls-cell">
+          <div class="ls-n">4</div>
+          <div class="ls-l">Delivered</div>
+        </div>
+      </div>
+
+      <div class="tline">
+        <div class="tl-e launch">
+          <span class="tl-time">09:42 AM</span>
+          <span class="tl-txt"><span class="m-launch">Launched</span> Hook Test · Fear · Busy Mom</span>
+        </div>
+        <div class="tl-e launch">
+          <span class="tl-time">10:15 AM</span>
+          <span class="tl-txt"><span class="m-launch">Launched</span> VSL Short · Curiosity · Gen Pop</span>
+        </div>
+        <div class="tl-e scale">
+          <span class="tl-time">11:30 AM</span>
+          <span class="tl-txt"><span class="m-scale">Scaled</span> UGC v2 · Fear · Busy Mom — budget +50%</span>
+        </div>
+        <div class="tl-e kill">
+          <span class="tl-time">01:05 PM</span>
+          <span class="tl-txt"><span class="m-kill">Killed</span> Static · Trust · 50+ Woman — 14 days, no lift</span>
+        </div>
+        <div class="tl-e">
+          <span class="tl-time">02:22 PM</span>
+          <span class="tl-txt">Editor delivered: UGC v3 · Social Proof · Athlete</span>
+        </div>
+        <div class="tl-e launch">
+          <span class="tl-time">03:48 PM</span>
+          <span class="tl-txt"><span class="m-launch">Launched</span> Static · Pain Point · 50+ Woman</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="log-card">
+      <div class="vc-eyebrow">Weekly Velocity</div>
+      <div class="vc-hero">
+        <span class="vc-n">12</span>
+        <span class="vc-u">ads · this week</span>
+      </div>
+      <span class="vc-delta">↗ +40% vs last week</span>
+
+      <svg class="vc-spark" viewBox="0 0 260 52" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <linearGradient id="mintG" x1="0" x2="0" y1="0" y2="1">
+            <stop offset="0%"  stop-color="#10D98A" stop-opacity="0.4"/>
+            <stop offset="100%" stop-color="#10D98A" stop-opacity="0"/>
+          </linearGradient>
+        </defs>
+        <path d="M0,44 L30,40 L60,34 L90,38 L120,28 L150,22 L180,28 L210,14 L240,10 L260,6 L260,52 L0,52 Z" fill="url(#mintG)"/>
+        <path d="M0,44 L30,40 L60,34 L90,38 L120,28 L150,22 L180,28 L210,14 L240,10 L260,6" fill="none" stroke="#10D98A" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+
+      <div class="vc-meta">
+        Top combo: <strong>Fear × Busy Mom</strong><br>
+        Avg test duration: <strong>6.2 days</strong><br>
+        Kill rate <strong>18%</strong> · Scale rate <strong>22%</strong>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════ -->
+<!-- ROW 5 — PATTERNS                        -->
+<!-- ═══════════════════════════════════════ -->
+<section class="section">
+  <div class="sect-head">
+    <span class="sect-num">05 ·</span>
+    <span class="sect-title">Patterns</span>
+    <span class="sect-desc">— angle × persona coverage heatmap</span>
+    <button class="sect-action">Open analytics →</button>
+  </div>
+
+  <div class="pat-card">
+    <table class="mx">
+      <thead>
+        <tr>
+          <th></th>
+          <th class="col-h">Busy Mom</th>
+          <th class="col-h">Health Nut</th>
+          <th class="col-h">Gen Pop</th>
+          <th class="col-h">Dr. Linda</th>
+          <th class="col-h">50+ Woman</th>
+          <th class="col-h">Athlete</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td class="lbl">Fear</td>         <td class="h4">8</td><td class="h2">3</td><td class="h1">2</td><td class="h0">0</td><td class="h1">1</td><td class="h0">0</td></tr>
+        <tr><td class="lbl">Curiosity</td>    <td class="h1">2</td><td class="h1">1</td><td class="h3">5</td><td class="h0">0</td><td class="h0">0</td><td class="h0">0</td></tr>
+        <tr><td class="lbl">Pain Point</td>   <td class="h2">3</td><td class="h3">4</td><td class="h0">0</td><td class="h0">0</td><td class="h2">3</td><td class="h0">0</td></tr>
+        <tr><td class="lbl">Skeptic</td>      <td class="h0">0</td><td class="h0">0</td><td class="h1">1</td><td class="h4">7</td><td class="h0">0</td><td class="h0">0</td></tr>
+        <tr><td class="lbl">Social Proof</td> <td class="h0">0</td><td class="h0">0</td><td class="h0">0</td><td class="h0">0</td><td class="h1">1</td><td class="h3">4</td></tr>
+        <tr><td class="lbl">Trust</td>        <td class="h1">1</td><td class="h0">0</td><td class="h0">0</td><td class="h0">0</td><td class="h3">4</td><td class="h0">0</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+</body>
+</html>

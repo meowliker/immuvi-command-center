@@ -1,0 +1,980 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Action Plan V2 — Spatial Bento</title>
+<link href="https://api.fontshare.com/v2/css?f[]=satoshi@400,500,600,700,800,900&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg: #F6F5F0;
+  --card: #FFFFFF;
+  --ink: #0E0E10;
+  --ink2: #54565B;
+  --ink3: #9A9CA3;
+  --rule: rgba(14,14,16,0.08);
+
+  --lime: #D6FF4B;
+  --limed: #A8D02A;
+  --peach: #FFB796;
+  --peachd: #D97948;
+  --rose: #FFB3C8;
+  --rosed: #C73B64;
+  --sky: #B5E2FF;
+  --skyd: #1C6FA8;
+  --violet: #C8B8FF;
+  --violetd: #5A3EC6;
+  --butter: #FFE066;
+  --butterd: #B88700;
+}
+
+body {
+  font-family: 'Satoshi', system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--ink);
+  min-height: 100vh;
+  padding: 20px;
+  -webkit-font-smoothing: antialiased;
+}
+.mono { font-family: 'JetBrains Mono', monospace; }
+
+/* ── HEADER ── */
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 22px;
+  background: var(--card);
+  border: 1px solid var(--rule);
+  border-radius: 18px;
+  margin-bottom: 16px;
+}
+.tb-title {
+  font-size: 1.35rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+.tb-sub {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.65rem;
+  color: var(--ink3);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+.tb-spacer { flex: 1; }
+
+.range-chip {
+  display: flex;
+  background: var(--bg);
+  border: 1px solid var(--rule);
+  border-radius: 999px;
+  padding: 3px;
+}
+.rc-btn {
+  padding: 6px 14px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  border: none;
+  background: transparent;
+  color: var(--ink2);
+  cursor: pointer;
+  font-family: inherit;
+  transition: all .15s;
+}
+.rc-btn.on { background: var(--ink); color: var(--lime); }
+
+.search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 14px;
+  background: var(--bg);
+  border: 1px solid var(--rule);
+  border-radius: 999px;
+  font-size: 0.72rem;
+  color: var(--ink3);
+  width: 180px;
+}
+
+/* ── BENTO GRID ── */
+.bento {
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+  grid-auto-rows: minmax(84px, auto);
+  gap: 14px;
+}
+
+.tile {
+  background: var(--card);
+  border: 1px solid var(--rule);
+  border-radius: 20px;
+  padding: 22px;
+  display: flex;
+  flex-direction: column;
+  transition: transform .15s;
+}
+
+.tile-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.th-dot { width: 10px; height: 10px; border-radius: 50%; }
+.th-name {
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+.th-count {
+  margin-left: auto;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+
+/* ─── Tile positions ─── */
+.tile--hot       { grid-column: span 7; grid-row: span 3; }
+.tile--velocity  { grid-column: span 5; grid-row: span 2; }
+.tile--today     { grid-column: span 5; grid-row: span 1; }
+
+.tile--aging     { grid-column: span 4; grid-row: span 3; }
+.tile--learn     { grid-column: span 4; grid-row: span 3; }
+.tile--fresh     { grid-column: span 4; grid-row: span 3; }
+
+.tile--pipeline  { grid-column: span 12; grid-row: span 2; }
+
+.tile--log       { grid-column: span 7; grid-row: span 3; }
+.tile--patterns  { grid-column: span 5; grid-row: span 3; }
+
+/* ════════════════════════════════════════════ */
+/* HOT QUEUE TILE                               */
+/* ════════════════════════════════════════════ */
+.tile--hot {
+  background: var(--ink);
+  color: var(--card);
+  position: relative;
+  overflow: hidden;
+  border: none;
+}
+.tile--hot::before {
+  content: '';
+  position: absolute;
+  top: -40px; right: -40px;
+  width: 220px; height: 220px;
+  background: radial-gradient(circle, var(--lime) 0%, transparent 65%);
+  opacity: 0.35;
+}
+.tile--hot .th-dot    { background: var(--lime); box-shadow: 0 0 0 3px rgba(214,255,75,0.25); }
+.tile--hot .th-name   { color: var(--lime); }
+.tile--hot .th-count  { background: var(--lime); color: var(--ink); }
+
+.hot-hero {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+  margin-bottom: 16px;
+}
+.hh-num {
+  font-size: 5rem;
+  font-weight: 900;
+  line-height: 0.9;
+  letter-spacing: -0.04em;
+  color: var(--lime);
+}
+.hh-text {
+  font-size: 1.25rem;
+  font-weight: 600;
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+}
+.hh-text span { color: var(--ink3); font-weight: 400; }
+
+.hot-items { display: flex; flex-direction: column; gap: 10px; }
+.hot-item {
+  display: grid;
+  grid-template-columns: 24px 1fr auto;
+  gap: 12px;
+  align-items: center;
+  padding: 10px 12px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 12px;
+  transition: background .12s;
+  cursor: pointer;
+}
+.hot-item:hover { background: rgba(214,255,75,0.06); }
+
+.hi-n {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--lime);
+}
+.hi-body { min-width: 0; }
+.hi-title { font-size: 0.85rem; font-weight: 600; color: var(--card); }
+.hi-why { font-size: 0.7rem; color: rgba(255,255,255,0.55); margin-top: 2px; }
+
+.hi-actions { display: flex; gap: 5px; }
+.hi-btn {
+  padding: 5px 10px;
+  font-size: 0.68rem;
+  font-weight: 600;
+  border-radius: 7px;
+  border: 1px solid rgba(255,255,255,0.12);
+  background: transparent;
+  color: var(--card);
+  cursor: pointer;
+  font-family: inherit;
+  transition: all .12s;
+}
+.hi-btn:hover { background: rgba(255,255,255,0.08); }
+.hi-btn.prim { background: var(--lime); color: var(--ink); border-color: var(--lime); }
+
+/* ════════════════════════════════════════════ */
+/* VELOCITY TILE                                */
+/* ════════════════════════════════════════════ */
+.tile--velocity {
+  background: var(--lime);
+  color: var(--ink);
+  border: none;
+}
+.tile--velocity .th-name { color: var(--ink); }
+
+.vel-hero {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin: 4px 0 10px;
+}
+.vel-n {
+  font-size: 5.5rem;
+  font-weight: 900;
+  line-height: 0.9;
+  letter-spacing: -0.04em;
+}
+.vel-u { font-size: 1.1rem; font-weight: 600; color: var(--ink2); letter-spacing: -0.01em; }
+
+.vel-delta {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  padding: 5px 12px;
+  background: var(--ink);
+  color: var(--lime);
+  border-radius: 999px;
+  width: fit-content;
+}
+
+.vel-spark { margin-top: auto; height: 48px; }
+
+/* ════════════════════════════════════════════ */
+/* TODAY DELIVERIES TILE                        */
+/* ════════════════════════════════════════════ */
+.tile--today {
+  background: var(--sky);
+  color: var(--ink);
+  border: none;
+  justify-content: center;
+}
+.tile--today .th-name { color: var(--skyd); }
+
+.today-flex {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.today-big {
+  font-size: 3rem;
+  font-weight: 900;
+  line-height: 1;
+  letter-spacing: -0.04em;
+  color: var(--ink);
+}
+.today-desc {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.today-lbl {
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+.today-sub {
+  font-size: 0.72rem;
+  color: var(--skyd);
+  font-weight: 500;
+}
+
+/* ════════════════════════════════════════════ */
+/* PULSE COLUMN TILES                           */
+/* ════════════════════════════════════════════ */
+.tile--aging .th-dot   { background: var(--rosed); }
+.tile--aging .th-name  { color: var(--rosed); }
+.tile--aging .th-count { background: var(--rose); color: var(--rosed); }
+
+.tile--learn .th-dot   { background: var(--peachd); }
+.tile--learn .th-name  { color: var(--peachd); }
+.tile--learn .th-count { background: var(--peach); color: var(--peachd); }
+
+.tile--fresh .th-dot   { background: var(--limed); }
+.tile--fresh .th-name  { color: var(--limed); }
+.tile--fresh .th-count { background: var(--lime); color: var(--ink); }
+
+.pcard {
+  padding: 12px 14px;
+  background: var(--bg);
+  border-radius: 12px;
+  margin-bottom: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  cursor: pointer;
+  transition: transform .12s;
+}
+.pcard:hover { transform: translateX(3px); }
+.pcard:last-child { margin-bottom: 0; }
+
+.pc-meta { display: flex; align-items: center; justify-content: space-between; }
+.pc-day {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 5px;
+}
+.tile--aging .pc-day { background: var(--rose);  color: var(--rosed); }
+.tile--learn .pc-day { background: var(--peach); color: var(--peachd); }
+.tile--fresh .pc-day { background: var(--lime);  color: var(--ink); }
+
+.pc-blk {
+  font-size: 0.62rem;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 4px;
+  background: var(--sky);
+  color: var(--skyd);
+}
+
+.pc-title {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--ink);
+  line-height: 1.3;
+}
+.pc-tags { display: flex; gap: 4px; flex-wrap: wrap; }
+.pc-t {
+  font-size: 0.62rem;
+  color: var(--ink2);
+  padding: 2px 7px;
+  background: var(--card);
+  border-radius: 4px;
+  border: 1px solid var(--rule);
+}
+
+.pc-warn {
+  font-size: 0.65rem;
+  font-weight: 600;
+  color: var(--butterd);
+  padding: 4px 8px;
+  background: var(--butter);
+  border-radius: 5px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* ════════════════════════════════════════════ */
+/* PIPELINE TILE                                */
+/* ════════════════════════════════════════════ */
+.tile--pipeline .th-dot   { background: var(--violetd); }
+.tile--pipeline .th-name  { color: var(--violetd); }
+.tile--pipeline .th-count { background: var(--violet); color: var(--violetd); }
+
+.pipe-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 10px;
+  flex: 1;
+}
+
+.pday {
+  background: var(--bg);
+  border-radius: 14px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  cursor: pointer;
+  transition: transform .12s;
+}
+.pday:hover { transform: translateY(-2px); }
+.pday.today {
+  background: var(--violet);
+  color: var(--ink);
+}
+.pday.today .pd-wk { color: var(--violetd); }
+
+.pd-top { display: flex; align-items: baseline; justify-content: space-between; }
+.pd-wk {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.6rem;
+  font-weight: 700;
+  color: var(--ink3);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.pd-dt {
+  font-size: 1.4rem;
+  font-weight: 900;
+  line-height: 1;
+  letter-spacing: -0.03em;
+}
+
+.pd-ct {
+  font-size: 0.68rem;
+  color: var(--ink2);
+  font-weight: 500;
+}
+.pday.today .pd-ct { color: var(--violetd); font-weight: 700; }
+
+.pd-list { display: flex; flex-direction: column; gap: 3px; margin-top: 4px; }
+.pd-item {
+  font-size: 0.64rem;
+  color: var(--ink2);
+  padding: 3px 6px;
+  background: var(--card);
+  border-radius: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pday.today .pd-item { background: rgba(255,255,255,0.7); }
+
+/* ════════════════════════════════════════════ */
+/* LOG TILE                                     */
+/* ════════════════════════════════════════════ */
+.tile--log .th-dot   { background: var(--ink); }
+.tile--log .th-name  { color: var(--ink); }
+
+.log-kpis {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+  margin-bottom: 18px;
+}
+.lk {
+  background: var(--bg);
+  border-radius: 12px;
+  padding: 14px;
+  text-align: center;
+}
+.lk.lk-launch { background: var(--lime); }
+.lk.lk-kill   { background: var(--rose); }
+.lk-n {
+  font-size: 2rem;
+  font-weight: 900;
+  line-height: 1;
+  letter-spacing: -0.03em;
+}
+.lk-l {
+  font-size: 0.6rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink2);
+  margin-top: 6px;
+}
+
+.tl { padding-left: 18px; position: relative; }
+.tl::before {
+  content: '';
+  position: absolute;
+  left: 5px; top: 8px; bottom: 8px;
+  width: 2px;
+  background: var(--rule);
+  border-radius: 1px;
+}
+.tl-e {
+  position: relative;
+  padding: 6px 0;
+  display: grid;
+  grid-template-columns: 70px 1fr;
+  gap: 12px;
+  align-items: baseline;
+}
+.tl-e::before {
+  content: '';
+  position: absolute;
+  left: -16px;
+  top: 13px;
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--ink3);
+  border: 2px solid var(--card);
+  box-shadow: 0 0 0 2px var(--rule);
+}
+.tl-e.launch::before { background: var(--limed); }
+.tl-e.kill::before   { background: var(--rosed); }
+.tl-e.scale::before  { background: var(--peachd); }
+
+.tl-t {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.68rem;
+  color: var(--ink3);
+  font-weight: 600;
+}
+.tl-x { font-size: 0.8rem; color: var(--ink); }
+.tl-x .v { font-weight: 700; }
+.tl-x .v.l { color: var(--limed); }
+.tl-x .v.k { color: var(--rosed); }
+.tl-x .v.s { color: var(--peachd); }
+
+/* ════════════════════════════════════════════ */
+/* PATTERNS TILE                                */
+/* ════════════════════════════════════════════ */
+.tile--patterns {
+  background: var(--butter);
+  border: none;
+  color: var(--ink);
+}
+.tile--patterns .th-name { color: var(--butterd); }
+
+.pat-note {
+  font-size: 0.73rem;
+  color: var(--ink2);
+  margin-bottom: 14px;
+  font-weight: 500;
+}
+
+.mx {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 3px;
+}
+.mx th {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.58rem;
+  font-weight: 600;
+  color: var(--ink2);
+  padding: 5px 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  text-align: left;
+}
+.mx th.c { text-align: center; }
+.mx td {
+  padding: 8px 6px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-align: center;
+  border-radius: 6px;
+}
+.mx td.lbl {
+  text-align: left;
+  font-family: 'Satoshi', sans-serif;
+  font-size: 0.74rem;
+  color: var(--ink);
+  padding-left: 0;
+}
+.h0 { background: rgba(0,0,0,0.04); color: var(--ink3); }
+.h1 { background: #FFF1AC; color: var(--butterd); }
+.h2 { background: #FFE066; color: var(--ink); }
+.h3 { background: var(--peach); color: var(--peachd); }
+.h4 { background: var(--ink); color: var(--lime); }
+
+</style>
+</head>
+<body>
+
+<!-- TOPBAR -->
+<header class="topbar">
+  <div>
+    <div class="tb-title">Action Plan</div>
+    <div class="tb-sub">THU · APR 24, 2026</div>
+  </div>
+  <div class="tb-spacer"></div>
+  <div class="search"><span>🔍</span><span>Search tasks…</span></div>
+  <div class="range-chip">
+    <button class="rc-btn on">Today</button>
+    <button class="rc-btn">Week</button>
+    <button class="rc-btn">Month</button>
+    <button class="rc-btn">Custom</button>
+  </div>
+</header>
+
+<!-- BENTO GRID -->
+<div class="bento">
+
+  <!-- ═══ HOT QUEUE (big, dark, hero tile) ═══ -->
+  <div class="tile tile--hot">
+    <div class="tile-head">
+      <span class="th-dot"></span>
+      <span class="th-name">Hot Queue</span>
+      <span class="th-count">5</span>
+    </div>
+
+    <div class="hot-hero">
+      <div class="hh-num">5</div>
+      <div class="hh-text">decisions<br>needed <span>right now</span></div>
+    </div>
+
+    <div class="hot-items">
+      <div class="hot-item">
+        <span class="hi-n">01</span>
+        <div class="hi-body">
+          <div class="hi-title">VSL Long · Skeptic · Dr. Linda — Day 12</div>
+          <div class="hi-why">Below CPA target 5 days. Kill, rework, or scale?</div>
+        </div>
+        <div class="hi-actions">
+          <button class="hi-btn">Kill</button>
+          <button class="hi-btn prim">Review →</button>
+        </div>
+      </div>
+
+      <div class="hot-item">
+        <span class="hi-n">02</span>
+        <div class="hi-body">
+          <div class="hi-title">Hook · Curiosity · Gen Pop — Day 9</div>
+          <div class="hi-why">Hit review threshold, performance flat.</div>
+        </div>
+        <div class="hi-actions">
+          <button class="hi-btn">Kill</button>
+          <button class="hi-btn prim">Review →</button>
+        </div>
+      </div>
+
+      <div class="hot-item">
+        <span class="hi-n">03</span>
+        <div class="hi-body">
+          <div class="hi-title">UGC v3 · Social Proof · Athlete — Delivered 2h</div>
+          <div class="hi-why">Ready for launch. Preview and push live.</div>
+        </div>
+        <div class="hi-actions">
+          <button class="hi-btn prim">Push Live →</button>
+        </div>
+      </div>
+
+      <div class="hot-item">
+        <span class="hi-n">04</span>
+        <div class="hi-body">
+          <div class="hi-title">Static · Before/After · Health Nut — Stuck 48h</div>
+          <div class="hi-why">Waiting on Gaurav since Apr 22.</div>
+        </div>
+        <div class="hi-actions">
+          <button class="hi-btn prim">Approve →</button>
+        </div>
+      </div>
+
+      <div class="hot-item">
+        <span class="hi-n">05</span>
+        <div class="hi-body">
+          <div class="hi-title">Testimonial · Skeptic · Dr. Linda — Unassigned</div>
+          <div class="hi-why">New brief needs editor + delivery date.</div>
+        </div>
+        <div class="hi-actions">
+          <button class="hi-btn prim">Assign →</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ VELOCITY TILE (lime, playful) ═══ -->
+  <div class="tile tile--velocity">
+    <div class="tile-head">
+      <span class="th-name">Weekly Velocity</span>
+    </div>
+
+    <div class="vel-hero">
+      <span class="vel-n">12</span>
+      <span class="vel-u">ads shipped</span>
+    </div>
+
+    <span class="vel-delta">↗ +40% vs last week</span>
+
+    <svg class="vel-spark" viewBox="0 0 300 48" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M0,40 L35,36 L70,30 L105,34 L140,22 L175,18 L210,24 L245,12 L280,8 L300,4" fill="none" stroke="#0E0E10" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+      <circle cx="300" cy="4" r="4" fill="#0E0E10"/>
+    </svg>
+  </div>
+
+  <!-- ═══ TODAY DELIVERIES (sky chip) ═══ -->
+  <div class="tile tile--today">
+    <div class="today-flex">
+      <div class="today-big">4</div>
+      <div class="today-desc">
+        <span class="today-lbl">Delivering today</span>
+        <span class="today-sub">Hook · UGC v3 · VSL Short · Static</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ AGING COL ═══ -->
+  <div class="tile tile--aging">
+    <div class="tile-head">
+      <span class="th-dot"></span>
+      <span class="th-name">Aging · 7+ days</span>
+      <span class="th-count">2</span>
+    </div>
+
+    <div class="pcard">
+      <div class="pc-meta">
+        <span class="pc-day">D12</span>
+      </div>
+      <div class="pc-title">VSL Long — Skeptic — Dr. Linda</div>
+      <div class="pc-tags">
+        <span class="pc-t">VSL</span><span class="pc-t">Skeptic</span><span class="pc-t">Dr. Linda</span>
+      </div>
+      <div class="pc-warn">⚠ Twin of VSL Short · Skeptic (D9)</div>
+    </div>
+
+    <div class="pcard">
+      <div class="pc-meta">
+        <span class="pc-day">D9</span>
+      </div>
+      <div class="pc-title">Hook Test — Curiosity — Gen Pop</div>
+      <div class="pc-tags">
+        <span class="pc-t">Hook</span><span class="pc-t">Curiosity</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ LEARNING COL ═══ -->
+  <div class="tile tile--learn">
+    <div class="tile-head">
+      <span class="th-dot"></span>
+      <span class="th-name">Learning · 3–6d</span>
+      <span class="th-count">5</span>
+    </div>
+
+    <div class="pcard">
+      <div class="pc-meta">
+        <span class="pc-day">D6</span>
+        <span class="pc-blk">waiting editor</span>
+      </div>
+      <div class="pc-title">UGC v2 — Fear — Busy Mom</div>
+      <div class="pc-tags">
+        <span class="pc-t">UGC</span><span class="pc-t">Fear</span>
+      </div>
+    </div>
+
+    <div class="pcard">
+      <div class="pc-meta"><span class="pc-day">D5</span></div>
+      <div class="pc-title">Static — Pain Point — Health Nut</div>
+      <div class="pc-tags">
+        <span class="pc-t">Static</span><span class="pc-t">Pain</span>
+      </div>
+    </div>
+
+    <div class="pcard">
+      <div class="pc-meta"><span class="pc-day">D4</span></div>
+      <div class="pc-title">Testimonial — Trust — 50+ Woman</div>
+      <div class="pc-tags">
+        <span class="pc-t">Testimonial</span><span class="pc-t">Trust</span>
+      </div>
+    </div>
+
+    <div class="pcard">
+      <div class="pc-meta"><span class="pc-day">D3</span></div>
+      <div class="pc-title">Carousel — Social Proof — Athlete</div>
+      <div class="pc-tags">
+        <span class="pc-t">Carousel</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ FRESH COL ═══ -->
+  <div class="tile tile--fresh">
+    <div class="tile-head">
+      <span class="th-dot"></span>
+      <span class="th-name">Fresh · 1–2d</span>
+      <span class="th-count">4</span>
+    </div>
+
+    <div class="pcard">
+      <div class="pc-meta"><span class="pc-day">D2</span></div>
+      <div class="pc-title">Hook Test — Fear — Busy Mom</div>
+      <div class="pc-tags">
+        <span class="pc-t">Hook</span><span class="pc-t">Fear</span>
+      </div>
+    </div>
+
+    <div class="pcard">
+      <div class="pc-meta"><span class="pc-day">D1</span></div>
+      <div class="pc-title">VSL Short — Curiosity — Gen Pop</div>
+      <div class="pc-tags">
+        <span class="pc-t">VSL</span><span class="pc-t">Curiosity</span>
+      </div>
+    </div>
+
+    <div class="pcard">
+      <div class="pc-meta"><span class="pc-day">D1</span></div>
+      <div class="pc-title">Static — Pain Point — 50+ Woman</div>
+      <div class="pc-tags">
+        <span class="pc-t">Static</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ PIPELINE ═══ -->
+  <div class="tile tile--pipeline">
+    <div class="tile-head">
+      <span class="th-dot"></span>
+      <span class="th-name">Pipeline · Next 7 days</span>
+      <span class="th-count">13</span>
+    </div>
+
+    <div class="pipe-grid">
+      <div class="pday today">
+        <div class="pd-top"><span class="pd-wk">Thu</span><span class="pd-dt">24</span></div>
+        <span class="pd-ct">4 delivering</span>
+        <div class="pd-list">
+          <span class="pd-item">Hook · Fear</span>
+          <span class="pd-item">UGC v3 · BM</span>
+        </div>
+      </div>
+      <div class="pday">
+        <div class="pd-top"><span class="pd-wk">Fri</span><span class="pd-dt">25</span></div>
+        <span class="pd-ct">2 delivering</span>
+        <div class="pd-list">
+          <span class="pd-item">VSL · Skeptic</span>
+          <span class="pd-item">Static · B/A</span>
+        </div>
+      </div>
+      <div class="pday">
+        <div class="pd-top"><span class="pd-wk">Sat</span><span class="pd-dt">26</span></div>
+        <span class="pd-ct">—</span>
+      </div>
+      <div class="pday">
+        <div class="pd-top"><span class="pd-wk">Sun</span><span class="pd-dt">27</span></div>
+        <span class="pd-ct">1 delivering</span>
+        <div class="pd-list">
+          <span class="pd-item">Carousel · Trust</span>
+        </div>
+      </div>
+      <div class="pday">
+        <div class="pd-top"><span class="pd-wk">Mon</span><span class="pd-dt">28</span></div>
+        <span class="pd-ct">3 delivering</span>
+        <div class="pd-list">
+          <span class="pd-item">UGC v4</span>
+          <span class="pd-item">VSL · Skeptic v2</span>
+        </div>
+      </div>
+      <div class="pday">
+        <div class="pd-top"><span class="pd-wk">Tue</span><span class="pd-dt">29</span></div>
+        <span class="pd-ct">1 delivering</span>
+        <div class="pd-list">
+          <span class="pd-item">Hook v2</span>
+        </div>
+      </div>
+      <div class="pday">
+        <div class="pd-top"><span class="pd-wk">Wed</span><span class="pd-dt">30</span></div>
+        <span class="pd-ct">2 delivering</span>
+        <div class="pd-list">
+          <span class="pd-item">Testimonial v2</span>
+          <span class="pd-item">Static · Social</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ DAILY LOG ═══ -->
+  <div class="tile tile--log">
+    <div class="tile-head">
+      <span class="th-dot"></span>
+      <span class="th-name">Daily Log · today</span>
+    </div>
+
+    <div class="log-kpis">
+      <div class="lk lk-launch">
+        <div class="lk-n">+3</div>
+        <div class="lk-l">Launched</div>
+      </div>
+      <div class="lk">
+        <div class="lk-n">2</div>
+        <div class="lk-l">Paused</div>
+      </div>
+      <div class="lk lk-kill">
+        <div class="lk-n">−1</div>
+        <div class="lk-l">Killed</div>
+      </div>
+      <div class="lk">
+        <div class="lk-n">4</div>
+        <div class="lk-l">Delivered</div>
+      </div>
+    </div>
+
+    <div class="tl">
+      <div class="tl-e launch">
+        <span class="tl-t">09:42 AM</span>
+        <span class="tl-x"><span class="v l">Launched</span> Hook · Fear · Busy Mom</span>
+      </div>
+      <div class="tl-e launch">
+        <span class="tl-t">10:15 AM</span>
+        <span class="tl-x"><span class="v l">Launched</span> VSL Short · Curiosity · Gen Pop</span>
+      </div>
+      <div class="tl-e scale">
+        <span class="tl-t">11:30 AM</span>
+        <span class="tl-x"><span class="v s">Scaled</span> UGC v2 — budget +50%</span>
+      </div>
+      <div class="tl-e kill">
+        <span class="tl-t">01:05 PM</span>
+        <span class="tl-x"><span class="v k">Killed</span> Static · Trust · 50+ — 14 days, no lift</span>
+      </div>
+      <div class="tl-e">
+        <span class="tl-t">02:22 PM</span>
+        <span class="tl-x">Delivered UGC v3 · Athlete</span>
+      </div>
+      <div class="tl-e launch">
+        <span class="tl-t">03:48 PM</span>
+        <span class="tl-x"><span class="v l">Launched</span> Static · Pain · 50+ Woman</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ PATTERNS ═══ -->
+  <div class="tile tile--patterns">
+    <div class="tile-head">
+      <span class="th-name">Patterns · Angle × Persona</span>
+    </div>
+    <div class="pat-note">Dark cells = heavy coverage. Light cells = untested territory worth exploring.</div>
+
+    <table class="mx">
+      <thead>
+        <tr>
+          <th></th>
+          <th class="c">BM</th>
+          <th class="c">HN</th>
+          <th class="c">GP</th>
+          <th class="c">DL</th>
+          <th class="c">50+</th>
+          <th class="c">AT</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td class="lbl">Fear</td>         <td class="h4">8</td><td class="h2">3</td><td class="h1">2</td><td class="h0">0</td><td class="h1">1</td><td class="h0">0</td></tr>
+        <tr><td class="lbl">Curiosity</td>    <td class="h1">2</td><td class="h1">1</td><td class="h3">5</td><td class="h0">0</td><td class="h0">0</td><td class="h0">0</td></tr>
+        <tr><td class="lbl">Pain</td>         <td class="h2">3</td><td class="h3">4</td><td class="h0">0</td><td class="h0">0</td><td class="h2">3</td><td class="h0">0</td></tr>
+        <tr><td class="lbl">Skeptic</td>      <td class="h0">0</td><td class="h0">0</td><td class="h1">1</td><td class="h4">7</td><td class="h0">0</td><td class="h0">0</td></tr>
+        <tr><td class="lbl">Social Proof</td> <td class="h0">0</td><td class="h0">0</td><td class="h0">0</td><td class="h0">0</td><td class="h1">1</td><td class="h3">4</td></tr>
+        <tr><td class="lbl">Trust</td>        <td class="h1">1</td><td class="h0">0</td><td class="h0">0</td><td class="h0">0</td><td class="h3">4</td><td class="h0">0</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+</div>
+
+</body>
+</html>

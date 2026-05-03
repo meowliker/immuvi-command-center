@@ -811,3 +811,40 @@ Sites updated:
 
 ### NOT pushed
 Per the user's request, this fix lives only in the local file. Not committed, not pushed to GitHub, not deployed to Vercel.
+
+## Bug 13 — Adding or deleting a product silently failed; row gone after refresh
+**Status:** ✅ done — shipped 2026-05-03 (LOCAL ONLY, NOT pushed to git or Vercel per user request)
+**Reported:** 2026-05-03
+**Surface:** Product picker → "+ Add Product" / "Delete Product"
+
+### Symptom
+- "I add a product, it appears in the picker. After refresh it's gone."
+- "I delete a product, it disappears. After refresh it's back."
+
+### Root cause
+`addProduct` and `confirmDeleteProduct` were "optimistic-then-fire-and-forget":
+- `addProduct` did `PRODUCTS.push(prod); try { await DB.upsertProduct(prod); } catch (e) { console.error(...) }`. If the upsert errored (network blip, RLS misconfig, schema mismatch), the catch swallowed it to console — UI showed success and the local row, but the DB never got it. After refresh, `listProducts()` returned the unchanged set and the user's "added" product was gone.
+- `confirmDeleteProduct` had the same shape — local filter happened first, DB call could fail silently.
+- `DB.upsertProduct` / `DB.deleteProduct` themselves only logged the error and returned undefined, so callers had no way to know.
+
+### Fix
+1. **`DB.upsertProduct` / `DB.deleteProduct` now return `{ ok, error }`** — structured result so callers can branch on success/failure. Errors still go to console for debugging, but they're also returned.
+2. **`addProduct`**: call `DB.upsertProduct` BEFORE pushing to `PRODUCTS`. If `!ok`, surface the error via toast (`'Could not save product — ' + reason`) and bail. After upsert, do a verification read (`SB.from('products').select('id').eq('id', prod.id)`) — if the row isn't there despite ok:true, surface a different toast and bail. Only after both checks succeed do we push locally + switch.
+3. **`confirmDeleteProduct`**: hit `DB.deleteProduct` BEFORE filtering `PRODUCTS`. If `!ok`, surface the error via toast and bail — leaves local state untouched. After successful delete, run the rest of the cleanup (tombstone, filter, switch) and removed the now-redundant second `DB.deleteProduct` call.
+
+### Verified
+- JS parses cleanly.
+- Live preview synthetic test:
+  - Stubbed `closeModal` + `toast`, called `addProduct('Test Bug13 …', …)`.
+  - Verified row landed in DB (`SB.from('products').select(...)` returned the new id).
+  - Local `PRODUCTS` includes the new product.
+  - Toast log shows the success path fired.
+  - Test row cleaned up via direct `SB.from('products').delete()`.
+- Pre-existing `[SB] getResults` console noise unrelated.
+
+### Behavioral change for the user
+- If add/delete actually fails (network, RLS, schema), the user now sees `Could not save product — <reason>` instead of false success. They can retry knowing what went wrong.
+- Local state never drifts from DB state on add/delete — the local row is only added/removed AFTER the DB confirms.
+
+### NOT pushed
+Per the user's request, lives only in the local file.

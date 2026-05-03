@@ -2764,6 +2764,258 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .ap-bulk-btn.ghost   { background:transparent; }
 .ap-bulk-btn:hover   { transform:translateY(-1px); }
 
+/* ════════════════════════════════════════════════════════════════
+   ACTION PLAN — PREMIUM FILTER STRIP (v2 overlay)
+   Mirrors the Creative Matrix's two-row filter card: pill-shaped
+   controls with icons, Fraunces values, segmented Window/Lifetime
+   toggle, and a prominent Clear button. The overlay applies only to
+   .ap-filterbar.ap-fbv2 so legacy/other filterbars are untouched.
+   ════════════════════════════════════════════════════════════════ */
+.ap-filterbar.ap-fbv2 {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  background: var(--b-card, #fff);
+  border: 1px solid var(--b-rule, #e5e7eb);
+  border-radius: 14px;
+  padding: 8px 11px;
+  box-shadow: 0 1px 0 rgba(255,255,255,1) inset, 0 2px 8px rgba(15,23,42,0.03);
+  margin-bottom: 12px;
+  position: relative;
+}
+/* Inline row wrapper kept so existing markup parses cleanly. Acts as a
+   transparent passthrough: visually identical to its parent's flex flow. */
+.ap-fbv2 .ap-fbv2-row {
+  display: contents;
+}
+/* Icon-pill — keeps existing classes for compat, adds icon slot, Fraunces value. */
+.ap-fbv2 .ap-filter-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 9px 5px 8px;
+  background: var(--b-bg, #fafafa);
+  border: 1px solid var(--b-rule, #e5e7eb);
+  border-radius: 999px;
+  font-size: 0.7rem;
+  cursor: pointer;
+  color: var(--t2);
+  font-weight: 500;
+  transition: background .18s ease, border-color .18s ease, color .18s ease, transform .12s ease;
+  font-family: inherit;
+  white-space: nowrap;
+}
+.ap-fbv2 .ap-filter-pill:hover {
+  background: var(--b-card, #fff);
+  border-color: rgba(14,14,16,0.30);
+  color: var(--t1);
+  transform: translateY(-1px);
+}
+.ap-fbv2 .ap-filter-pill.hot {
+  background: #0E0E10;
+  color: #fff;
+  border-color: #0E0E10;
+}
+.ap-fbv2 .ap-filter-pill.hot .lbl { color: rgba(255,255,255,0.55); }
+.ap-fbv2 .ap-filter-pill .ap-pill-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px; height: 14px;
+  color: currentColor;
+  opacity: 0.75;
+}
+.ap-fbv2 .ap-filter-pill .ap-pill-icon svg { width: 14px; height: 14px; }
+.ap-fbv2 .ap-filter-pill .lbl {
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
+  font-size: 0.58rem;
+  font-weight: 700;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  color: var(--t3);
+  opacity: 1;
+}
+.ap-fbv2 .ap-filter-pill.hot .lbl { color: rgba(255,255,255,0.6); }
+.ap-fbv2 .ap-filter-pill .val {
+  font-family: inherit;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+  color: inherit;
+}
+.ap-fbv2 .ap-filter-pill .caret {
+  font-size: 9px;
+  opacity: 0.5;
+  margin-left: 1px;
+}
+
+/* Segmented Window / Lifetime toggle (replaces the legacy radios). */
+.ap-fbv2 .ap-mode-seg {
+  display: inline-flex;
+  background: var(--b-bg, #fafafa);
+  border: 1px solid var(--b-rule, #e5e7eb);
+  border-radius: 999px;
+  padding: 3px;
+  gap: 2px;
+}
+.ap-fbv2 .ap-mode-seg button {
+  appearance: none;
+  background: transparent;
+  border: none;
+  font-family: inherit;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--t2);
+  padding: 4px 11px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background .18s, color .18s;
+  letter-spacing: -0.01em;
+}
+.ap-fbv2 .ap-mode-seg button:hover { color: var(--t1); }
+.ap-fbv2 .ap-mode-seg button.on {
+  background: #0E0E10;
+  color: #fff;
+  box-shadow: 0 1px 3px rgba(14,14,16,0.18);
+}
+
+/* Anomalies chip — amber accent, count badge, inline triangle. */
+.ap-fbv2 .ap-anom-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  white-space: nowrap;
+  border: 1px solid rgba(217, 119, 6, 0.30);
+  background: rgba(254, 243, 199, 0.55);
+  color: #92400e;
+  font-size: 0.72rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background .18s ease, border-color .18s ease, transform .12s ease;
+  font-family: inherit;
+}
+.ap-fbv2 .ap-anom-chip:hover {
+  background: rgba(254, 243, 199, 0.85);
+  border-color: rgba(217, 119, 6, 0.55);
+  transform: translateY(-1px);
+}
+.ap-fbv2 .ap-anom-chip.on {
+  background: #d97706;
+  color: #fff;
+  border-color: #d97706;
+}
+.ap-fbv2 .ap-anom-chip .ap-anom-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: rgba(217, 119, 6, 0.18);
+  color: #92400e;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.62rem;
+  font-weight: 700;
+}
+.ap-fbv2 .ap-anom-chip.on .ap-anom-count {
+  background: rgba(255, 255, 255, 0.22);
+  color: #fff;
+}
+
+/* Section labels (DATE, STATUS, FILTER, VIEW). */
+.ap-fbv2 .ap-fb-label {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--t3);
+  margin-right: 4px;
+  flex-shrink: 0;
+}
+
+/* Vertical separator. */
+.ap-fbv2 .ap-fb-sep {
+  width: 1px;
+  height: 22px;
+  background: var(--b-rule, #e5e7eb);
+}
+
+/* Toolbar button (View / Columns) — restyled to match Matrix's pill family. */
+.ap-fbv2 .ap-tb-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 10px;
+  background: var(--b-bg, #fafafa);
+  border: 1px solid var(--b-rule, #e5e7eb);
+  border-radius: 999px;
+  font-size: 0.7rem;
+  white-space: nowrap;
+  font-weight: 500;
+  color: var(--t2);
+  cursor: pointer;
+  transition: background .18s ease, border-color .18s ease, color .18s ease, transform .12s ease;
+  font-family: inherit;
+}
+.ap-fbv2 .ap-tb-btn:hover {
+  background: var(--b-card, #fff);
+  border-color: rgba(14,14,16,0.30);
+  color: var(--t1);
+  transform: translateY(-1px);
+}
+.ap-fbv2 .ap-tb-btn svg {
+  width: 13px; height: 13px;
+  flex-shrink: 0;
+  opacity: 0.75;
+}
+.ap-fbv2 .ap-tb-btn .caret { width: 10px; height: 10px; opacity: 0.5; }
+
+/* Result count + Clear button. */
+.ap-fbv2 .ap-result-count {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.66rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--t3);
+  text-transform: uppercase;
+}
+.ap-fbv2 .ap-clear-filters {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 11px;
+  background: transparent;
+  border: 1px solid var(--b-rule, #e5e7eb);
+  border-radius: 999px;
+  font-size: 0.7rem;
+  white-space: nowrap;
+  font-weight: 600;
+  color: var(--t2);
+  cursor: pointer;
+  transition: background .18s ease, border-color .18s ease, color .18s ease, transform .12s ease;
+  font-family: inherit;
+  letter-spacing: 0.01em;
+}
+.ap-fbv2 .ap-clear-filters:hover {
+  background: #0E0E10;
+  border-color: #0E0E10;
+  color: #fff;
+  transform: translateY(-1px);
+}
+.ap-fbv2 .ap-clear-filters svg { width: 11px; height: 11px; }
+.ap-fbv2 .ap-clear-filters[disabled],
+.ap-fbv2 .ap-clear-filters.disabled {
+  opacity: 0.35;
+  pointer-events: none;
+  cursor: default;
+}
+.ap-fbv2 .ap-fb-grow { flex: 1; }
+
 /* Table */
 .ap-table-wrap { overflow-x:auto; border:1px solid var(--b-rule,#e5e7eb); border-radius:14px; }
 .ap-table { width:100%; border-collapse:separate; border-spacing:0; font-size:0.76rem; background:var(--b-card,#fff); }
@@ -5950,14 +6202,14 @@ button.mx-dt-action-sent .open { color:#0a84ff; font-weight:700; margin-left:4px
   background: linear-gradient(180deg, var(--card) 0%, var(--bg) 100%);
 }
 .mx-tg-ph {
-  padding: 18px 18px 16px;
+  padding: 18px 14px 16px;
   text-align: center;
   font-family: 'Fraunces', serif;
-  font-size: 14.5px;
+  font-size: 12.5px;
   font-weight: 500;
   color: var(--t1);
   border-right: 1px solid var(--b);
-  letter-spacing: -0.018em;
+  letter-spacing: -0.012em;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -5968,10 +6220,55 @@ button.mx-dt-action-sent .open { color:#0a84ff; font-weight:700; margin-left:4px
   background: linear-gradient(180deg, var(--card) 0%, var(--bg) 100%);
   font-feature-settings: "ss01", "ss02", "liga", "kern";
   font-variant-numeric: lining-nums;
+  position: relative;
+  cursor: default;
 }
 .mx-tg-ph:last-child { border-right: none; }
 .mx-tg-ph:hover { background: linear-gradient(180deg, rgba(214,255,75,0.12) 0%, rgba(214,255,75,0.04) 100%); color: var(--t1); }
 .mx-tg-ph.inactive { color: var(--t3); font-weight: 400; font-style: italic; }
+/* Smart-truncate tooltip — body-portaled so .mx-tg-ph's overflow:hidden
+   (required for text-overflow:ellipsis) doesn't clip it. JS positions it
+   via getBoundingClientRect on hover. */
+.mx-ph-tip {
+  position: fixed;
+  left: 0;
+  top: 0;
+  background: var(--t1, #1a1a1a);
+  color: var(--bg, #f6f5f0);
+  padding: 7px 11px;
+  border-radius: 7px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.015em;
+  white-space: nowrap;
+  z-index: 9999;
+  pointer-events: none;
+  box-shadow: 0 6px 18px rgba(0,0,0,0.18), 0 1px 3px rgba(0,0,0,0.10);
+  text-transform: none;
+  opacity: 0;
+  transform: translate(-50%, -4px);
+  transition: opacity .12s ease-out, transform .12s ease-out;
+}
+.mx-ph-tip.show {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+.mx-ph-tip::after {
+  content: '';
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 5px solid transparent;
+  border-bottom-color: var(--t1, #1a1a1a);
+}
+.mx-ph-tip.flip-up::after {
+  bottom: auto;
+  top: 100%;
+  border-bottom-color: transparent;
+  border-top-color: var(--t1, #1a1a1a);
+}
 
 /* Angle rows */
 .mx-tg-row {
@@ -8450,6 +8747,10 @@ function _initRealtimeChannel(productId) {
       if (CELL_CREATIVE_ASSIGNMENTS[p.cellKey].indexOf(p.ad.id) === -1) {
         CELL_CREATIVE_ASSIGNMENTS[p.cellKey].push(p.ad.id);
       }
+      // Bug 13: defensive dedup — covers the case where local push and peer
+      // broadcast race and both add the same id under slightly different
+      // identity comparisons (e.g. trimmed whitespace, type coercion).
+      if (typeof _dedupCellAssignment === 'function') _dedupCellAssignment(p.cellKey);
       // Make sure the angle/persona of the spawned cell are wired in
       // ANGLE_PERSONAS too so the matrix doesn't render an orphan column.
       var _parts = p.cellKey.split('||');
@@ -8477,6 +8778,10 @@ function _initRealtimeChannel(productId) {
     if (!p || !p.cellKey) return;
     if (p.clientId && p.clientId === _myClientId) return;
     CELL_CREATIVE_ASSIGNMENTS[p.cellKey] = (p.assignments || []).slice();
+    // Bug 13: dedup defensively — incoming payload may have duplicates from
+    // a peer's racy state, and an authoritative replace shouldn't propagate
+    // them.
+    if (typeof _dedupCellAssignment === 'function') _dedupCellAssignment(p.cellKey);
     if (typeof renderMatrix === 'function') { try { renderMatrix(); } catch (e) {} }
   });
 
@@ -9003,6 +9308,16 @@ function _adToRow(a, productId) {
     // "Last decided Xd ago" hover-card line. Nullable — for rows
     // pre-dating the field, the date filter falls back to updatedAt.
     last_status_change_at: a.lastStatusChangeAt || null,
+    // ── Bug regression fix (Bug 9 v3) ─────────────────────────────────
+    // Always clear deleted_at on every write. nextSerialId() can reuse
+    // an AD-NNN id whose row was previously soft-deleted; without this,
+    // the upsert resurrects the data but the stale tombstone survives →
+    // loadProductData filters it out via .is('deleted_at', null) →
+    // AD silently vanishes from local state on next refresh, leaving
+    // manual_action orphans and "1 ClickUp task" cell placeholders.
+    // Soft-delete still works because that path uses a direct
+    // .update({ deleted_at: ... }) (not _adToRow).
+    deleted_at: null,
     meta: meta
   };
 }
@@ -9138,7 +9453,7 @@ const DB = {
   },
 
   async upsertProduct(p) {
-    if (!SB || !p || !p.id) return;
+    if (!SB || !p || !p.id) return { ok: false, error: { message: 'no client or product' } };
     const config = {
       clickup_list_id: p.clickupListId || '',
       clickup_list_name: p.clickupListName || '',
@@ -9148,15 +9463,31 @@ const DB = {
       last_synced_at_ms: p.lastSyncedAt || null,
       last_synced_count: p.lastSyncedCount || 0
     };
-    const { error } = await SB.from('products').upsert({ id: p.id, name: p.name, config: config });
-    if (error) console.error('[SB] upsertProduct', error);
+    // Bug 13: return a structured ok/error so callers (addProduct,
+    // saveProductClickUpLink) can surface failures via toast instead of
+    // silently logging to console — that's why "added product gone after
+    // refresh" was happening with no visible signal.
+    try {
+      const { error } = await SB.from('products').upsert({ id: p.id, name: p.name, config: config });
+      if (error) { console.error('[SB] upsertProduct', error); return { ok: false, error: error }; }
+      return { ok: true };
+    } catch (e) {
+      console.error('[SB] upsertProduct threw', e);
+      return { ok: false, error: e };
+    }
   },
 
   async deleteProduct(productId) {
-    if (!SB) return;
+    if (!SB) return { ok: false, error: { message: 'no client' } };
     // Cascade will drop angles/personas/ads/cells/etc.
-    const { error } = await SB.from('products').delete().eq('id', productId);
-    if (error) console.error('[SB] deleteProduct', error);
+    try {
+      const { error } = await SB.from('products').delete().eq('id', productId);
+      if (error) { console.error('[SB] deleteProduct', error); return { ok: false, error: error }; }
+      return { ok: true };
+    } catch (e) {
+      console.error('[SB] deleteProduct threw', e);
+      return { ok: false, error: e };
+    }
   },
 
   async loadProductData(productId) {
@@ -10342,10 +10673,12 @@ function getProductPrefix() {
 // ============================================================
 function generateTaskName(source, inspoId, formatName) {
   var prefix = getProductPrefix();
-  // Bump serial immediately so two tasks created before the debounced
-  // save fires never share the same KL-207/KL-207 prefix (Scenario 9 fix).
-  var serial = String(nextAdSerial).padStart(3, '0');
-  nextAdSerial++;
+  // Bug 14: format-name serial is decoupled from nextAdSerial (the AD-NNN id
+  // counter). The format-name prefix scans ONLY existing "PREFIX-NNN-…" names
+  // with 1–3 digit serials, ignoring inflated 4+ digit junk that came from
+  // ClickUp numeric task names. This way new spawns get sensible "AR-100",
+  // "AR-101", "AR-102" instead of "AR-12643".
+  var serial = _nextFormatSerial(prefix);
 
   if (source === 'inspo' && inspoId) {
     // Extract "INS-007" from "AR-INS-007" or "IM-INS-003"
@@ -10363,10 +10696,106 @@ function generateTaskName(source, inspoId, formatName) {
   return prefix + '-' + serial;
 }
 
+// Bug 14: scan all known sources for "PREFIX-NNN-…" format names with 1–3
+// digit serials only. 4+ digit serials (legacy inflation from numeric ClickUp
+// task names) are ignored so they don't poison the counter. Returns the next
+// serial as a zero-padded 3-digit string.
+function _nextFormatSerial(prefix) {
+  if (!prefix) prefix = getProductPrefix();
+  // Match PREFIX- followed by 1-3 digits followed by either end-of-string or
+  // a non-digit. The negative-lookahead (?!\d) prevents matching the first 3
+  // digits of "AR-12634-…" as if it were 126.
+  var re = new RegExp('^' + prefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '-(\\d{1,3})(?!\\d)', 'i');
+  var max = 0;
+  function scan(name) {
+    if (typeof name !== 'string') return;
+    var m = re.exec(name);
+    if (m) {
+      var n = parseInt(m[1], 10);
+      if (n > max && n <= 999) max = n;
+    }
+  }
+  if (typeof ADS !== 'undefined' && Array.isArray(ADS)) {
+    for (var i = 0; i < ADS.length; i++) {
+      if (ADS[i]) {
+        scan(ADS[i].formatName);
+        // Some imports also stash the original ClickUp task name on _cuName
+        scan(ADS[i]._cuName);
+      }
+    }
+  }
+  if (typeof MANUAL_ACTIONS !== 'undefined' && Array.isArray(MANUAL_ACTIONS)) {
+    for (var j = 0; j < MANUAL_ACTIONS.length; j++) {
+      if (MANUAL_ACTIONS[j]) {
+        scan(MANUAL_ACTIONS[j].format);
+        scan(MANUAL_ACTIONS[j].title);
+      }
+    }
+  }
+  // If nothing legitimate exists yet, start at 1.
+  var next = max + 1;
+  if (next > 999) next = 999; // soft cap; we'll handle 1000+ later if you ever cross over
+  return String(next).padStart(3, '0');
+}
+
 function nextSerialId() {
+  // Bug 13: clamp counter forward past max existing AD-NNN id BEFORE consuming.
+  // Without this, a stale snapshot can roll nextAdSerial backwards, leading to
+  // the "new spawn returns the existing AD" symptom (collision on upsert).
+  if (typeof _advanceAdSerialPastMax === 'function') _advanceAdSerialPastMax();
   var num = nextAdSerial;
   nextAdSerial++;
   return 'AD-' + String(num).padStart(3, '0');
+}
+
+// Bug 13: scan ADS + MANUAL_ACTIONS for the highest AD-NNN numeric and ensure
+// nextAdSerial is strictly greater than it. Cheap (O(N), called only at spawn
+// time) — keeps the counter monotonic across snapshot loads, peer broadcasts,
+// and product switches.
+function _advanceAdSerialPastMax() {
+  var max = 0;
+  function scan(arr, idField) {
+    if (!Array.isArray(arr)) return;
+    for (var i = 0; i < arr.length; i++) {
+      var v = arr[i] && arr[i][idField];
+      if (typeof v !== 'string') continue;
+      var m = /^AD-(\d{1,7})$/.exec(v);
+      if (m) {
+        var n = parseInt(m[1], 10);
+        if (n > max) max = n;
+      }
+    }
+  }
+  scan(typeof ADS !== 'undefined' ? ADS : null, 'id');
+  // Manual actions can hold an adId mirror that was generated locally.
+  scan(typeof MANUAL_ACTIONS !== 'undefined' ? MANUAL_ACTIONS : null, 'adId');
+  scan(typeof MANUAL_ACTIONS !== 'undefined' ? MANUAL_ACTIONS : null, 'sourceAdId');
+  if (typeof nextAdSerial !== 'number' || nextAdSerial <= max) {
+    nextAdSerial = max + 1;
+  }
+}
+
+// Bug 13: idempotent dedup of a cell's creative_assignments array. Same id
+// should never appear twice — collateral damage of local-push + peer-broadcast
+// races, where the spawning tab pushes locally and the receiving tab also
+// folds the broadcast id without checking. Returns the deduped array.
+function _dedupCellAssignment(cellKey) {
+  if (!cellKey) return null;
+  var arr = (typeof CELL_CREATIVE_ASSIGNMENTS !== 'undefined') ? CELL_CREATIVE_ASSIGNMENTS[cellKey] : null;
+  if (!Array.isArray(arr)) return arr;
+  var seen = Object.create(null);
+  var clean = [];
+  for (var i = 0; i < arr.length; i++) {
+    var id = arr[i];
+    if (id == null) continue;
+    if (seen[id]) continue;
+    seen[id] = true;
+    clean.push(id);
+  }
+  if (clean.length !== arr.length) {
+    CELL_CREATIVE_ASSIGNMENTS[cellKey] = clean;
+  }
+  return clean;
 }
 
 // Bug 8: heal orphaned cell-assignment ids by remapping them to the matching
@@ -14394,47 +14823,88 @@ function renderApSubViewTabs() {
 }
 
 // ─── Render: Filter strip ──────────────────────────────────────────
+// Premium two-row layout — mirrors the Creative Matrix filter card.
+// Row 1: section label + filter pills (icon + lbl + Fraunces value) +
+//        anomalies chip + segmented Window/Lifetime + Clear.
+// Row 2: VIEW label + saved-view picker + columns + result count.
 function renderApFilterStrip(allResolved, filtered) {
   var f = _apState.filters;
-  function pill(label, value, action, hot) {
+
+  // Inline SVG icons — stroke-based, currentColor, premium minimal.
+  var icons = {
+    date:   '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="3.5" width="11" height="10" rx="1.5"/><path d="M2.5 6.5h11M5.5 2v3M10.5 2v3"/></svg>',
+    status: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="8" r="5.5"/><circle cx="8" cy="8" r="2" fill="currentColor"/></svg>',
+    funnel: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 3h11l-4 5v5l-3-1.5V8z"/></svg>',
+    type:   '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 2.5h4v4l-7 7-4-4z"/><circle cx="10.5" cy="5.5" r="0.8" fill="currentColor"/></svg>',
+    source: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2.5v8M5 7.5l3 3 3-3M3 13.5h10"/></svg>',
+    anom:   '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2.5L14 13H2z"/><path d="M8 7v3M8 11.5v.01"/></svg>',
+    clear:  '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M4 4l8 8M12 4l-8 8"/></svg>',
+    view:   '<svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h10M2 7h10M2 11h7"/></svg>',
+    cols:   '<svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"><rect x="1.5" y="1.5" width="3.3" height="11" rx="0.6"/><rect x="6.35" y="1.5" width="3.3" height="11" rx="0.6"/><rect x="11.2" y="1.5" width="1.3" height="11" rx="0.4" stroke-dasharray="1.5 1.5"/></svg>',
+    caret:  '<svg class="caret" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 4l3 3 3-3"/></svg>'
+  };
+
+  function pill(label, value, action, hot, iconKey) {
     var cls = 'ap-filter-pill' + (hot ? ' hot' : '');
-    return '<button class="' + cls + '" onclick="' + action + '"><span class="lbl">' + label + '</span><span class="val">' + value + '</span><span class="caret">▾</span></button>';
+    var iconHtml = iconKey && icons[iconKey] ? '<span class="ap-pill-icon">' + icons[iconKey] + '</span>' : '';
+    return '<button class="' + cls + '" onclick="' + action + '">' +
+             iconHtml +
+             '<span class="lbl">' + label + '</span>' +
+             '<span class="val">' + value + '</span>' +
+             '<span class="caret">▾</span>' +
+           '</button>';
   }
 
-  // Date dropdown
-  var dateLbl = _apDatePresetLabel();
+  var dateLbl   = _apDatePresetLabel();
   var statusLbl = f.statuses.length ? (f.statuses.length + ' selected') : 'All statuses';
   var funnelLbl = f.funnels.length ? f.funnels.join(', ') : 'All funnels';
   var typeLbl   = f.adTypes.length ? (f.adTypes.length + ' selected') : 'All types';
   var sourceLbl = f.sources.length ? (f.sources.length + ' selected') : 'All sources';
-
-  var html = '<div class="ap-filterbar">';
-  html += pill('Date',   dateLbl,   "toggleApFilter('date', event)",   f.datePreset !== 'week');
-  html += pill('Status', statusLbl, "toggleApFilter('status', event)", f.statuses.length > 0);
-  html += pill('Funnel', funnelLbl, "toggleApFilter('funnel', event)", f.funnels.length > 0);
-  html += pill('Type',   typeLbl,   "toggleApFilter('type', event)",   f.adTypes.length > 0);
-  html += pill('Source', sourceLbl, "toggleApFilter('source', event)", f.sources.length > 0);
-  // Anomalies one-click filter — toggles "show only rows with anomaly badges"
   var anomCount = apResolveAllCards().filter(function (r) { return apComputeAnomalies(r).length > 0; }).length;
-  html += '<button class="ap-anom-chip' + (f.anomaliesOnly ? ' on' : '') + '" onclick="setApAnomaliesOnly(' + (!f.anomaliesOnly) + ')" title="Show only cards with anomalies (tag removed, deleted in CU, adopted, recently re-linked)">' +
-            '⚠ Anomalies' + (anomCount ? ' <span class="ap-anom-count">' + anomCount + '</span>' : '') +
+  var hasFilters = apHasActiveFilters();
+
+  var html = '<div class="ap-filterbar ap-fbv2">';
+
+  // ── Single line: filters + anomalies + window/lifetime + clear ──
+  html += '<div class="ap-fbv2-row">';
+  html += pill('Date',   dateLbl,   "toggleApFilter('date', event)",   f.datePreset !== 'week',     'date');
+  html += pill('Status', statusLbl, "toggleApFilter('status', event)", f.statuses.length > 0,        'status');
+  html += pill('Funnel', funnelLbl, "toggleApFilter('funnel', event)", f.funnels.length > 0,         'funnel');
+  html += pill('Type',   typeLbl,   "toggleApFilter('type', event)",   f.adTypes.length > 0,         'type');
+  html += pill('Source', sourceLbl, "toggleApFilter('source', event)", f.sources.length > 0,         'source');
+  html += '<button class="ap-anom-chip' + (f.anomaliesOnly ? ' on' : '') + '"' +
+          ' onclick="setApAnomaliesOnly(' + (!f.anomaliesOnly) + ')"' +
+          ' title="Show only cards with anomalies (tag removed, deleted in CU, adopted, recently re-linked)">' +
+            '<span class="ap-pill-icon">' + icons.anom + '</span>' +
+            'Anomalies' +
+            (anomCount ? ' <span class="ap-anom-count">' + anomCount + '</span>' : '') +
           '</button>';
-  html += '<span class="ap-filter-sep"></span>';
-  html += '<span class="ap-mode-toggle"><label><input type="radio" name="apDateMode" value="window" ' + (f.dateMode === 'window' ? 'checked' : '') + ' onchange="setApDateMode(\'window\')"> Window</label> <label><input type="radio" name="apDateMode" value="lifetime" ' + (f.dateMode === 'lifetime' ? 'checked' : '') + ' onchange="setApDateMode(\'lifetime\')"> Lifetime</label></span>';
-  html += '<span class="ap-filter-grow"></span>';
-  // View + Columns toolbox buttons — open glass pickers anchored to the button.
+  html += '<span class="ap-fb-sep"></span>';
+  html += '<div class="ap-mode-seg" role="tablist">' +
+            '<button class="' + (f.dateMode === 'window'   ? 'on' : '') + '" onclick="setApDateMode(\'window\')">Window</button>' +
+            '<button class="' + (f.dateMode === 'lifetime' ? 'on' : '') + '" onclick="setApDateMode(\'lifetime\')">Lifetime</button>' +
+          '</div>';
+  html += '<span class="ap-fb-grow"></span>';
+  html += '<button class="ap-clear-filters' + (hasFilters ? '' : ' disabled') + '"' +
+          (hasFilters ? '' : ' aria-disabled="true"') +
+          ' onclick="clearApFilters()" title="Clear all filters">' +
+            '<span class="ap-pill-icon">' + icons.clear + '</span>Clear filters' +
+          '</button>';
+  html += '</div>'; // close row 1
+
+  // ── View picker, columns, count — same single line ──
   var _apActV = (function(){ try { return _apActiveView(); } catch(e) { return { name:'Default' }; } })();
-  html += '<button class="ap-tb-btn" id="apViewBtn" onclick="event.stopPropagation();_apOpenViewPicker(this)" title="Switch saved view">'
-       +    '<svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h10M2 7h10M2 11h7"/></svg>'
-       +    '<span>' + esc(_apActV.name || 'Default') + '</span>'
-       +    '<svg class="caret" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 4l3 3 3-3"/></svg>'
-       + '</button>';
-  html += '<button class="ap-tb-btn" id="apColsBtn" onclick="event.stopPropagation();_apOpenColumnManager(this)" title="Show / hide / reorder columns">'
-       +    '<svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"><rect x="1.5" y="1.5" width="3.3" height="11" rx="0.6"/><rect x="6.35" y="1.5" width="3.3" height="11" rx="0.6"/><rect x="11.2" y="1.5" width="1.3" height="11" rx="0.4" stroke-dasharray="1.5 1.5"/></svg>'
-       +    '<span>Columns</span>'
-       + '</button>';
-  html += '<span class="ap-result-count">Showing ' + filtered.length + ' of ' + allResolved.length + '</span>';
-  if (apHasActiveFilters()) html += ' <button class="ap-clear-filters" onclick="clearApFilters()">Clear</button>';
+  html += '<span class="ap-fb-sep"></span>';
+  html += '<button class="ap-tb-btn" id="apViewBtn" onclick="event.stopPropagation();_apOpenViewPicker(this)" title="Switch saved view">' +
+            icons.view +
+            '<span>' + esc(_apActV.name || 'Default') + '</span>' +
+            icons.caret +
+          '</button>';
+  html += '<button class="ap-tb-btn" id="apColsBtn" onclick="event.stopPropagation();_apOpenColumnManager(this)" title="Show / hide / reorder columns">' +
+            icons.cols +
+            '<span>Columns</span>' +
+          '</button>';
+  html += '<span class="ap-result-count">' + filtered.length + ' / ' + allResolved.length + '</span>';
 
   // Active filter dropdown panels — must live INSIDE .ap-filterbar so the
   // `position: absolute` resolves against the filterbar (which has
@@ -14446,7 +14916,7 @@ function renderApFilterStrip(allResolved, filtered) {
   if (_apState.openFilter === 'type')   html += renderApTypeDropdown(allResolved);
   if (_apState.openFilter === 'source') html += renderApSourceDropdown();
 
-  html += '</div>';
+  html += '</div>'; // close .ap-filterbar
   return html;
 }
 
@@ -21657,8 +22127,32 @@ async function addProduct(name, color, listId, listName) {
   var words = name.trim().split(/\s+/).filter(Boolean);
   var autoPrefix = words.map(function(w){ return (w[0]||'').toUpperCase(); }).join('').substring(0, 3) || 'INS';
   var prod = { id: 'prod-' + Date.now(), name: name.trim(), insPrefix: autoPrefix, clickupListId: listId || '', clickupListName: listName || '', color: color || '#4F46E5', createdAt: Date.now() };
+  // Bug 13: write to DB BEFORE pushing to PRODUCTS / switching. If the
+  // upsert fails we never want a phantom local product that disappears on
+  // refresh — better to fail loud and let the user retry. The previous code
+  // pushed to PRODUCTS optimistically and only logged the upsert error.
+  var upRes = null;
+  try { upRes = await DB.upsertProduct(prod); } catch (e) { upRes = { ok: false, error: e }; }
+  if (!upRes || !upRes.ok) {
+    var msg = (upRes && upRes.error && (upRes.error.message || upRes.error.details)) || 'Unknown error';
+    toast('Could not save product — ' + msg, 'err', 6000);
+    return;
+  }
+  // Verify by reading back — guards against any silently-rejected RLS / CORS
+  // case that returns ok:true but didn't actually write.
+  try {
+    var verify = await SB.from('products').select('id').eq('id', prod.id).limit(1);
+    if (!verify || verify.error || !verify.data || !verify.data.length) {
+      console.error('[SB] product verify after upsert failed', verify && verify.error);
+      toast('Product save did not land in DB — please retry', 'err', 6000);
+      return;
+    }
+  } catch (e) {
+    console.error('[SB] product verify threw', e);
+    toast('Product save verification failed — please retry', 'err', 6000);
+    return;
+  }
   PRODUCTS.push(prod);
-  try { await DB.upsertProduct(prod); } catch (e) { console.error('[SB] addProduct upsert', e); }
   await switchProduct(prod.id);
   closeModal();
   toast('Product "' + prod.name + '" created', 'ok');
@@ -21689,12 +22183,27 @@ async function saveProductClickUpLink(productId, listId, listName) {
 
 async function confirmDeleteProduct(productId) {
   if (!confirm('Delete this product and all its data from the cloud database? This cannot be undone.')) return;
+  // Bug 13: hit the DB FIRST so we know it actually deleted before mutating
+  // local state. If the DB call errors, we leave PRODUCTS untouched and
+  // surface the error — previously the code optimistically removed locally
+  // and only logged the DB error, so a failed delete looked successful but
+  // the row reappeared on the next refresh.
+  var delRes = null;
+  try { delRes = await DB.deleteProduct(productId); } catch (e) { delRes = { ok: false, error: e }; }
+  if (!delRes || !delRes.ok) {
+    var msg = (delRes && delRes.error && (delRes.error.message || delRes.error.details)) || 'Unknown error';
+    toast('Could not delete product — ' + msg, 'err', 6000);
+    return;
+  }
   // Tombstone BEFORE filter so any concurrent _flushStateToSupabase can't
   // re-upsert the product via its PRODUCTS loop. Also protects against
   // another tab that still has this product in its in-memory PRODUCTS.
   _rememberProductDeletion(productId);
   PRODUCTS = PRODUCTS.filter(function(p) { return p.id !== productId; });
-  try { await DB.deleteProduct(productId); } catch (e) { console.error('[SB] deleteProduct', e); }
+  // Bug 13: DB delete already happened above (and was verified). Don't
+  // double-call it here — the previous code did, which was harmless but
+  // wasted a round-trip and obscured the verified-vs-fire-and-forget
+  // boundary.
   if (PRODUCTS.length > 0) {
     await switchProduct(PRODUCTS[0].id);
   } else {
@@ -22691,6 +23200,102 @@ function changeAdStatusFromMatrix(adId, angleName, personaName, newStatus) {
 // ================================================
 // renderMatrix — main renderer (stacked angle sections)
 // ================================================
+// Smart-truncate a persona name for the matrix column header.
+// - Returns the full name as-is when short enough.
+// - Otherwise derives a "main section" by splitting on " / ", "(", ",", and
+//   stripping a trailing age range (e.g. "25-35").
+// - The full name is always preserved in `.full` for the hover tooltip.
+function _shortenPersonaName(name) {
+  var full = (name == null) ? '' : String(name).trim();
+  if (!full) return { full: '', display: '', didShorten: false };
+  // Soft threshold — anything at/under this just renders full.
+  var SOFT = 22;
+  if (full.length <= SOFT) return { full: full, display: full, didShorten: false };
+  // Try to extract a "main section" via natural separators.
+  var display = full;
+  var slashIdx = display.indexOf('/');
+  if (slashIdx !== -1) display = display.slice(0, slashIdx);
+  var parenIdx = display.indexOf('(');
+  if (parenIdx !== -1) display = display.slice(0, parenIdx);
+  var commaIdx = display.indexOf(',');
+  if (commaIdx !== -1) display = display.slice(0, commaIdx);
+  display = display.replace(/\s+\d{1,3}\s*[-–]\s*\d{1,3}\s*$/, '');
+  display = display.replace(/\s+/g, ' ').trim();
+  if (!display) display = full;
+  // If the algorithm couldn't find a natural split (display is still the
+  // full name), fall back to the full name and let CSS ellipsis handle
+  // visual overflow. We still flag didShorten=true so the hover tooltip
+  // surfaces the full name — useful when CSS clips it.
+  var didShorten = display !== full || full.length > SOFT;
+  if (display === full) display = full; // explicit no-op; keep readability
+  return { full: full, display: display, didShorten: didShorten };
+}
+
+// Body-portaled tooltip for shortened persona-column headers.
+// `.mx-tg-ph` has overflow:hidden (required for text-overflow:ellipsis), so
+// pseudo-element tooltips get clipped. Instead we maintain a single fixed
+// tooltip element on document.body and position it via getBoundingClientRect
+// on mouseenter. Idempotent — wires once per page load.
+function _wirePersonaHeaderTooltip() {
+  if (window._mxPhTipWired) return;
+  window._mxPhTipWired = true;
+  var tip = document.createElement('div');
+  tip.className = 'mx-ph-tip';
+  tip.setAttribute('role', 'tooltip');
+  document.body.appendChild(tip);
+
+  function place(target) {
+    var full = target.getAttribute('data-full');
+    if (!full) return;
+    tip.textContent = full;
+    var r = target.getBoundingClientRect();
+    var cx = r.left + r.width / 2;
+    var below = r.bottom + 8;
+    var tipH = 30; // approximate, animation-stable
+    // Re-measure after content set so we know real height
+    tip.classList.remove('flip-up');
+    tip.style.left = cx + 'px';
+    tip.style.top = below + 'px';
+    tip.classList.add('show');
+    // After the browser computes layout, check if it would overflow viewport.
+    requestAnimationFrame(function () {
+      var tr = tip.getBoundingClientRect();
+      if (tr.bottom > window.innerHeight - 6) {
+        // Flip above the header.
+        tip.style.top = (r.top - 8 - tr.height) + 'px';
+        tip.classList.add('flip-up');
+      }
+      // Clamp horizontally so the pill never escapes the viewport.
+      var minLeft = tr.width / 2 + 6;
+      var maxLeft = window.innerWidth - tr.width / 2 - 6;
+      var clampedX = Math.max(minLeft, Math.min(maxLeft, cx));
+      tip.style.left = clampedX + 'px';
+    });
+  }
+  function hide() { tip.classList.remove('show', 'flip-up'); }
+
+  document.addEventListener('mouseover', function (e) {
+    var t = e.target;
+    if (!t || !t.closest) return;
+    var ph = t.closest('.mx-tg-ph[data-shortened="1"], .mxv4-mini-hdr-ph[data-shortened="1"]');
+    if (ph) place(ph);
+  });
+  document.addEventListener('mouseout', function (e) {
+    var t = e.target;
+    if (!t || !t.closest) return;
+    var ph = t.closest('.mx-tg-ph[data-shortened="1"], .mxv4-mini-hdr-ph[data-shortened="1"]');
+    if (!ph) return;
+    // mouseout fires when crossing into a child of ph (e.g. the inactive
+    // sub-label). Only hide if leaving the ph entirely.
+    var related = e.relatedTarget;
+    if (related && ph.contains(related)) return;
+    hide();
+  });
+  // Defensive: hide on scroll/resize so the tip can't float over stale geometry.
+  window.addEventListener('scroll', hide, true);
+  window.addEventListener('resize', hide);
+}
+
 function renderMatrix() {
   var el = document.getElementById('matrixGrid');
   if (!el) return;
@@ -22757,7 +23362,9 @@ function renderMatrix() {
   html += '<div class="mx-tg-corner">Angle \\ Persona</div>';
   visiblePersonas.forEach(function (pn) {
     var isActive = isPersonaActive(pn);
-    html += '<div class="mx-tg-ph' + (!isActive ? ' inactive' : '') + '">' + esc(pn);
+    var _short = (typeof _shortenPersonaName === 'function') ? _shortenPersonaName(pn) : { full: pn, display: pn, didShorten: false };
+    var phAttrs = ' data-full="' + escAttr(_short.full) + '"' + (_short.didShorten ? ' data-shortened="1"' : '');
+    html += '<div class="mx-tg-ph' + (!isActive ? ' inactive' : '') + '"' + phAttrs + '>' + esc(_short.display);
     if (!isActive) html += '<div style="font-size:0.58rem;color:var(--t3);font-weight:400;margin-top:2px">inactive</div>';
     html += '</div>';
   });
@@ -22880,6 +23487,10 @@ function renderMatrix() {
   // re-created each render; the observer needs the fresh node.
   if (typeof _mhWire === 'function') {
     try { _mhWire(); } catch (e) { console.warn('[mxv4] mini-header wiring failed', e); }
+  }
+  // Persona-header smart-truncate tooltip — body-portaled, idempotent.
+  if (typeof _wirePersonaHeaderTooltip === 'function') {
+    try { _wirePersonaHeaderTooltip(); } catch (e) { console.warn('[mxv4] header tooltip wiring failed', e); }
   }
 
   // Keep the v4 modal in sync when realtime / poll / save triggers a
@@ -24974,7 +25585,9 @@ function _mhRender() {
     } else if (c.classList.contains('mx-tg-ph')) {
       var nameNode = c.firstChild;
       var name = nameNode ? nameNode.textContent : c.textContent;
-      html += '<div class="mxv4-mini-hdr-ph" data-pcol="' + (i - 1) + '">' + esc(name) + '</div>';
+      var dFull = c.getAttribute('data-full') || name;
+      var dShortAttr = (c.getAttribute('data-shortened') === '1') ? ' data-shortened="1"' : '';
+      html += '<div class="mxv4-mini-hdr-ph" data-pcol="' + (i - 1) + '" data-full="' + escAttr(dFull) + '"' + dShortAttr + '>' + esc(name) + '</div>';
     }
   }
   inner.innerHTML = html;
@@ -26597,6 +27210,10 @@ function renderMxv4Modal() {
   if (!m) return;
   var parts = _mxv4.cell.split('||');
   var angleName = parts[0], personaName = parts[1];
+  // Bug 13: dedup the active cell's assignment array before counting/rendering
+  // so a local-push + peer-broadcast race can never show the same creative
+  // twice in the modal table.
+  if (typeof _dedupCellAssignment === 'function') _dedupCellAssignment(_mxv4.cell);
   var st = _mxv4ClassifyCell(angleName, personaName);
 
   var html = '';

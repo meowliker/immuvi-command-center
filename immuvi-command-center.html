@@ -10249,8 +10249,32 @@ const DB = {
     tasks.push((async function () {
       const _saveClientId = typeof _myClientId !== 'undefined' ? _myClientId : null;
 
+      // ── Multi-tab MA resurrection guard (2026-05-05) ──────────────
+      // Mirrors the AD flush filter above. When an AD is deleted via
+      // deleteAdEverywhere, its linked MANUAL_ACTIONS are also deleted.
+      // But a peer/tab with stale memory holds those MAs and will
+      // resurrect them via this snapshot save (showing them in the
+      // Action Plan with origin "manual" — the MA's tag field). The
+      // AD's tombstone in deleted_ads naturally implies its MAs are
+      // also dead. Drop any MA whose sourceAdId/adId matches a
+      // tombstoned AD before building finalRows.
+      // _flushTomb is the closure variable from the ADS section above.
+      var _filteredStateMAs = (state.MANUAL_ACTIONS || []).filter(function (ma) {
+        if (!ma) return false;
+        var srcId = ma.sourceAdId || ma.adId;
+        if (srcId && _flushTomb.has(srcId)) {
+          // Also drop from in-memory MANUAL_ACTIONS so the AP doesn't keep showing it.
+          if (typeof MANUAL_ACTIONS !== 'undefined' && Array.isArray(MANUAL_ACTIONS)) {
+            MANUAL_ACTIONS = MANUAL_ACTIONS.filter(function (x) { return x.id !== ma.id; });
+          }
+          console.log('[SB] flush blocked resurrection of MA tied to tombstoned AD', ma.id, '→', srcId);
+          return false;
+        }
+        return true;
+      });
+
       // Build final rows, stamping clientId into payload for self-echo detection
-      const finalRows = (state.MANUAL_ACTIONS || []).map(function (ma) {
+      const finalRows = _filteredStateMAs.map(function (ma) {
         var payload = {};
         // _dbId is internal DB row id, _clickupTaskDeleted is runtime-only flag
         // (recalculated on every sync) — never persist either to DB

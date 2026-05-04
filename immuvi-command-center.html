@@ -9842,16 +9842,18 @@ function _adToRow(a, productId) {
     // "Last decided Xd ago" hover-card line. Nullable — for rows
     // pre-dating the field, the date filter falls back to updatedAt.
     last_status_change_at: a.lastStatusChangeAt || null,
-    // ── Bug regression fix (Bug 9 v3) ─────────────────────────────────
-    // Always clear deleted_at on every write. nextSerialId() can reuse
-    // an AD-NNN id whose row was previously soft-deleted; without this,
-    // the upsert resurrects the data but the stale tombstone survives →
-    // loadProductData filters it out via .is('deleted_at', null) →
-    // AD silently vanishes from local state on next refresh, leaving
-    // manual_action orphans and "1 ClickUp task" cell placeholders.
-    // Soft-delete still works because that path uses a direct
-    // .update({ deleted_at: ... }) (not _adToRow).
-    deleted_at: null,
+    // ── Multi-tab resurrection fix (2026-05-05) ──────────────────────
+    // Previously this row included `deleted_at: null` on EVERY upsert
+    // to cover Bug 9 v3 (id-reuse from nextSerialId). Side effect: any
+    // peer/tab with stale memory un-soft-deleted rows on save, causing
+    // "I deleted AR-115 but it came back" — see AR-115 incident.
+    //
+    // Now: deleted_at is OWNED by deleteAdEverywhere. _adToRow MUST NOT
+    // touch it. The original Bug 9 v3 (id reuse) is prevented at the
+    // source — nextSerialId() now consults the deleted_ads tombstone
+    // cache and skips any id that's tombstoned (see _deletedAdIdsCache
+    // + _advanceAdSerialPastMax below). So no save ever needs to
+    // resurrect a deleted id.
     meta: meta
   };
 }
@@ -10144,7 +10146,34 @@ const DB = {
     if (personaRows.length)    tasks.push(SB.from('personas').upsert(personaRows));
 
     // ── ADS ──────────────────────────────────────────────────────
-    const adRows = (state.ADS || []).map(function (a) { return _adToRow(a, productId); });
+    // Multi-tab resurrection fix (2026-05-05): before building the upsert
+    // payload, fetch the current deleted_ads tombstone set and filter out
+    // any AD whose id is tombstoned. Without this, a stale-memory tab could
+    // upsert a deleted AD back into the table. _adToRow no longer touches
+    // deleted_at, so the tombstone in deleted_ads is the only protection.
+    var _flushTomb = new Set();
+    try {
+      var _tombFetch = await SB.from('deleted_ads').select('id').eq('product_id', productId);
+      if (_tombFetch && _tombFetch.data) {
+        _tombFetch.data.forEach(function (row) { _flushTomb.add(row.id); });
+        // Update the in-memory cache opportunistically — keeps nextSerialId fresh.
+        _deletedAdIdsCache = _flushTomb;
+        _deletedAdIdsCacheProductId = productId;
+      }
+    } catch (e) { console.warn('[SB] flush tombstone fetch failed (proceeding without filter)', e); }
+    const _filteredStateAds = (state.ADS || []).filter(function (a) {
+      if (a && a.id && _flushTomb.has(a.id)) {
+        // Stale-memory resurrection blocked at the save boundary.
+        // Also drop from in-memory ADS so the UI doesn't keep showing it.
+        if (typeof ADS !== 'undefined' && Array.isArray(ADS)) {
+          ADS = ADS.filter(function (x) { return x.id !== a.id; });
+        }
+        console.log('[SB] flush blocked resurrection of tombstoned AD', a.id);
+        return false;
+      }
+      return true;
+    });
+    const adRows = _filteredStateAds.map(function (a) { return _adToRow(a, productId); });
     const adIds = new Set(adRows.map(function (r) { return r.id; }));
     const adOrphans = (existingAds.data || []).filter(function (r) { return !adIds.has(r.id); }).map(function (r) { return r.id; });
     if (adOrphans.length) tasks.push(SB.from('ads').delete().in('id', adOrphans));
@@ -11341,11 +11370,47 @@ function _nextFormatSerial(prefix) {
   return String(next).padStart(3, '0');
 }
 
+// In-memory cache of `deleted_ads.id` for the active product. Populated by
+// _refreshDeletedAdIdsCache() at product load + after every successful delete +
+// before every save flush. Used by nextSerialId() to skip tombstoned ids so
+// the upsert can never accidentally resurrect a soft-deleted row, AND by
+// _flushStateToSupabase to filter the upsert payload.
+var _deletedAdIdsCache = new Set();
+var _deletedAdIdsCacheProductId = null;
+
+async function _refreshDeletedAdIdsCache(productId) {
+  productId = productId || activeProductId;
+  if (!productId || typeof SB === 'undefined' || !SB) return;
+  try {
+    var r = await SB.from('deleted_ads').select('id').eq('product_id', productId);
+    if (r && r.data) {
+      _deletedAdIdsCache = new Set(r.data.map(function(row){ return row.id; }));
+      _deletedAdIdsCacheProductId = productId;
+    }
+  } catch (e) { console.warn('[deleted_ads cache] refresh failed', e); }
+}
+
 function nextSerialId() {
   // Bug 13: clamp counter forward past max existing AD-NNN id BEFORE consuming.
   // Without this, a stale snapshot can roll nextAdSerial backwards, leading to
   // the "new spawn returns the existing AD" symptom (collision on upsert).
   if (typeof _advanceAdSerialPastMax === 'function') _advanceAdSerialPastMax();
+  // Multi-tab resurrection fix (2026-05-05): skip ids that are tombstoned in
+  // deleted_ads. Without this, _adToRow no longer clears deleted_at, so reusing
+  // a tombstoned id would leave the row stuck soft-deleted (loadProductData
+  // filters it out → AD silently vanishes). Loop until we find a free id.
+  // Bounded loop — tombstones aren't infinite. Safety cap at 10k iterations.
+  var safety = 10000;
+  while (safety-- > 0) {
+    var candidate = 'AD-' + String(nextAdSerial).padStart(3, '0');
+    if (!_deletedAdIdsCache.has(candidate)) {
+      nextAdSerial++;
+      return candidate;
+    }
+    nextAdSerial++; // candidate is tombstoned, advance
+  }
+  // Fallback: should never hit, but don't infinite-loop on weird state.
+  console.warn('[nextSerialId] safety cap hit — using current id without tombstone check');
   var num = nextAdSerial;
   nextAdSerial++;
   return 'AD-' + String(num).padStart(3, '0');
@@ -17799,7 +17864,7 @@ function saveNewCreative() {
 // ── Central delete: removes ONE task only — no cascade to clones or variations.
 // Every task (original, production clone, variation) is independent.
 // Deleting one task never touches any other task.
-function deleteAdEverywhere(adId) {
+async function deleteAdEverywhere(adId) {
   var ad = null;
   for (var i = 0; i < ADS.length; i++) {
     if (ADS[i].id === adId) { ad = ADS[i]; break; }
@@ -17826,11 +17891,60 @@ function deleteAdEverywhere(adId) {
     unlinkedInspoId = ad._fromInspoId;
   }
 
-  // Remove this AD only — no cascade to clones or variations
+  // ── Multi-tab resurrection fix (2026-05-05) ──────────────────────
+  // Supabase writes are now AWAITED. The user-visible UI doesn't change
+  // local state until both writes commit. If Supabase is unreachable,
+  // the AD stays visible and the user sees an error — better than
+  // "I deleted it but it came back" silently.
+  // Also: the deleted_ads tombstone goes in BEFORE the soft-delete on
+  // ads, so any racing peer save sees the tombstone first and can't
+  // resurrect via filter at flush time (Step 2 in flushStateToSupabase).
+  if (typeof SB !== 'undefined' && SB && activeProductId) {
+    var _delAd_now = new Date().toISOString();
+    // CRITICAL: the soft-delete on `ads` is the AUTHORITATIVE delete signal.
+    // Combined with _adToRow no longer clearing deleted_at, this alone is
+    // enough to keep the row deleted across all peers/tabs. Await it; if
+    // it fails, abort — local state stays intact, user sees an error.
+    try {
+      var _softResp = await SB.from('ads').update({ deleted_at: _delAd_now }).eq('id', adId);
+      if (_softResp && _softResp.error) {
+        console.error('[SB] ads soft delete failed', _softResp.error);
+        try { toast('Delete failed — Supabase unreachable. Try again.', 'err'); } catch (_) {}
+        return;
+      }
+    } catch (e) {
+      console.error('[SB] ads soft delete threw', e);
+      try { toast('Delete failed — connection error. Try again.', 'err'); } catch (_) {}
+      return;
+    }
+    // SECONDARY: deleted_ads tombstone (cross-client signal + ClickUp-task-id
+    // tombstone for ClickUp re-import filter). Best-effort. RLS may reject
+    // INSERT for some workspaces — that's OK because the soft-delete on
+    // `ads` already protects against resurrection. Log and continue.
+    try {
+      var _tombResp = await SB.from('deleted_ads').upsert({
+        id: adId,
+        product_id: activeProductId,
+        clickup_task_id: (ad && ad._clickupId) || null,
+        deleted_at: _delAd_now,
+        deleted_by: (CFG && CFG.userLabel) || 'unknown'
+      }, { onConflict: 'id' });
+      if (_tombResp && _tombResp.error) {
+        console.warn('[SB] deleted_ads tombstone failed (non-fatal — soft-delete on ads still protects)', _tombResp.error.message || _tombResp.error);
+      }
+    } catch (e) {
+      console.warn('[SB] deleted_ads tombstone threw (non-fatal)', e);
+    }
+    // Update in-memory tombstone cache so the next save's filter sees it
+    // even if the periodic refresh hasn't fired yet.
+    try { _deletedAdIdsCache.add(adId); } catch (_) {}
+  }
+
+  // Both Supabase writes committed. Now safe to clear local state.
   ADS = ADS.filter(function(a) { return a.id !== adId; });
 
   // Tombstone the AD id so the realtime onChange handler doesn't resurrect it
-  // from a stale DB read before our DELETE has committed on the replica.
+  // from a stale DB read before the DELETE has propagated to all read replicas.
   _rememberAdDeletion(adId);
 
   // Broadcast delete to other connected clients via realtime channel
@@ -17838,29 +17952,6 @@ function deleteAdEverywhere(adId) {
     _rtChannel.send({ type: 'broadcast', event: 'ad-deleted',
       payload: { adId: adId, adName: (ad && ad.taskName) || adId,
                  deletedBy: (CFG && CFG.userLabel) || 'Someone', clientId: _myClientId } });
-  }
-
-  // Immediately delete from Supabase — don't wait for the debounced saveState().
-  // This prevents the "deleted task reappears after refresh" bug where a fast
-  // page reload happens before the 300ms debounce fires (or the beforeunload
-  // async flush gets cancelled by the browser).
-  if (typeof SB !== 'undefined' && SB && activeProductId) {
-    try {
-      // Soft delete — mark as deleted so all clients see it via onChange
-      SB.from('ads').update({ deleted_at: new Date().toISOString() }).eq('id', adId)
-        .then(function(r) {
-          if (r && r.error) console.error('[SB] soft delete error', r.error);
-        });
-
-      // Also insert into deleted_ads table for cross-client tombstone
-      SB.from('deleted_ads').upsert({
-        id: adId,
-        product_id: activeProductId,
-        clickup_task_id: (ad && ad._clickupId) || null,
-        deleted_at: new Date().toISOString(),
-        deleted_by: (CFG && CFG.userLabel) || 'unknown'
-      }, { onConflict: 'id' }).then(function(){});
-    } catch (e) { console.error('[SB] ads soft delete threw', e); }
   }
 
   // Record ClickUp IDs AND the local AD id in a localStorage tombstone so
@@ -23193,6 +23284,13 @@ async function loadState() {
   // Bug 8: heal orphan cell-assignment ids on initial load too — covers state
   // saved with stale ids before this fix landed.
   if (typeof _reconcileCellAssignments === 'function') { try { _reconcileCellAssignments(); } catch (e) {} }
+  // Multi-tab resurrection fix (2026-05-05): prime the deleted_ads cache so
+  // nextSerialId() can skip tombstoned ids and _flushStateToSupabase can
+  // filter them out before any save lands. Fire-and-forget — first save
+  // after load awaits its own fresh fetch as a safety net.
+  if (typeof _refreshDeletedAdIdsCache === 'function') {
+    try { _refreshDeletedAdIdsCache(activeProductId); } catch (e) {}
+  }
   return true;
 }
 

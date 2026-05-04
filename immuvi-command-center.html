@@ -1186,6 +1186,236 @@ body::before {
   .activity-panel { animation: none; }
   .activity-panel-backdrop { animation: none; }
 }
+
+/* ─────────────────────────────────────────────────────────────────
+   VARIATION LAB — chip + popover + spawn modal + AP subtab
+   Compact inline chip on parent winners. Click → popover with
+   per-axis breakdown + variations list. "Spawn variations" modal
+   for structured creation. New Action Plan subtab grouped by parent.
+   ───────────────────────────────────────────────────────────────── */
+.varlab-chip {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(34,197,94,0.10);
+  border: 1px solid rgba(34,197,94,0.25);
+  color: #166534;
+  font-size: 0.62rem;
+  font-weight: 600;
+  font-family: 'JetBrains Mono', monospace;
+  cursor: pointer;
+  user-select: none;
+  transition: transform 0.12s, background 0.15s;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+.varlab-chip:hover { background: rgba(34,197,94,0.18); transform: translateY(-1px); }
+.varlab-chip.warm { background: rgba(245,158,11,0.10); border-color: rgba(245,158,11,0.30); color: #92400e; }
+.varlab-chip.cold { background: rgba(148,163,184,0.10); border-color: rgba(148,163,184,0.30); color: #475569; }
+.varlab-chip .vl-leaf { font-size: 0.7rem; line-height: 1; }
+
+.varlab-popover {
+  position: absolute;
+  z-index: 9000;
+  background: var(--card, #fff);
+  border: 1px solid var(--border, #e5e7eb);
+  border-radius: 12px;
+  box-shadow: 0 12px 40px rgba(0,0,0,0.16), 0 4px 12px rgba(0,0,0,0.08);
+  padding: 14px 16px;
+  width: 360px;
+  max-height: 440px;
+  overflow-y: auto;
+  font-size: 0.74rem;
+  animation: fadeUp 0.18s ease-out both;
+}
+.varlab-popover h4 { margin: 0 0 10px; font-size: 0.82rem; font-weight: 700; color: var(--t1, #111827); }
+.varlab-popover .vl-stats {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 6px 14px;
+  margin-bottom: 12px; font-size: 0.7rem; color: var(--t2, #374151);
+}
+.varlab-popover .vl-stats b { color: var(--t1, #111827); font-weight: 700; }
+.varlab-popover .vl-axis-row {
+  display: grid; grid-template-columns: 88px 1fr 60px;
+  gap: 8px; align-items: center;
+  font-size: 0.68rem; padding: 4px 0;
+}
+.varlab-popover .vl-axis-bar {
+  height: 6px; background: var(--bg, #f3f4f6); border-radius: 3px; overflow: hidden;
+}
+.varlab-popover .vl-axis-bar > span { display: block; height: 100%; background: var(--win, #22c55e); border-radius: 3px; transition: width 0.4s ease; }
+.varlab-popover .vl-axis-row.zero .vl-axis-bar > span { background: rgba(148,163,184,0.4); }
+.varlab-popover .vl-divider { border-top: 1px solid var(--border, #e5e7eb); margin: 10px 0; }
+.varlab-popover .vl-vlist { display: flex; flex-direction: column; gap: 4px; }
+.varlab-popover .vl-vrow {
+  display: grid; grid-template-columns: auto 1fr auto;
+  gap: 8px; align-items: center;
+  padding: 5px 8px; border-radius: 6px;
+  cursor: pointer; transition: background 0.12s;
+}
+.varlab-popover .vl-vrow:hover { background: var(--bg, #f9fafb); }
+.varlab-popover .vl-vrow .vl-vid { font-family: 'JetBrains Mono', monospace; font-size: 0.66rem; color: var(--t2); }
+.varlab-popover .vl-vrow .vl-vmeta { font-size: 0.62rem; color: var(--t3); }
+.varlab-popover .vl-vrow .vl-vstatus {
+  font-size: 0.6rem; padding: 1px 6px; border-radius: 999px; font-weight: 600;
+}
+.varlab-popover .vl-spawn-more {
+  margin-top: 12px;
+  width: 100%; padding: 8px;
+  background: var(--t1, #111827); color: #fff;
+  border: none; border-radius: 8px;
+  font-size: 0.74rem; font-weight: 600;
+  cursor: pointer;
+}
+.varlab-popover .vl-spawn-more:hover { background: var(--t2, #374151); }
+
+/* Spawn modal */
+.varlab-modal-bd {
+  position: fixed; inset: 0;
+  background: rgba(15,17,26,0.55);
+  backdrop-filter: blur(4px);
+  z-index: 10000;
+  display: flex; align-items: center; justify-content: center;
+  animation: fadeUp 0.2s ease-out both;
+  padding: 24px;
+}
+.varlab-modal {
+  background: var(--card, #fff);
+  border-radius: 16px;
+  width: 720px; max-width: 100%;
+  max-height: 90vh;
+  display: flex; flex-direction: column;
+  box-shadow: 0 24px 64px rgba(0,0,0,0.24);
+  overflow: hidden;
+}
+.varlab-modal-hdr {
+  padding: 18px 22px;
+  border-bottom: 1px solid var(--border, #e5e7eb);
+  display: flex; justify-content: space-between; align-items: flex-start; gap: 14px;
+}
+.varlab-modal-hdr h2 { margin: 0; font-size: 1rem; font-weight: 700; color: var(--t1, #111827); }
+.varlab-modal-hdr .vl-sub { color: var(--t3, #9ca3af); font-size: 0.72rem; margin-top: 4px; }
+.varlab-modal-hdr button.vl-close {
+  background: transparent; border: 1px solid var(--border); border-radius: 6px;
+  padding: 4px 10px; font-size: 0.72rem; cursor: pointer; color: var(--t2);
+}
+.varlab-modal-body { flex: 1; overflow-y: auto; padding: 16px 22px; }
+.varlab-templates {
+  display: flex; flex-wrap: wrap; gap: 8px;
+  padding: 10px 14px; background: var(--bg, #f9fafb); border-radius: 10px;
+  margin-bottom: 16px;
+}
+.varlab-templates .vl-lbl { font-size: 0.68rem; color: var(--t3); font-weight: 600; align-self: center; margin-right: 4px; }
+.varlab-templates button {
+  background: var(--card, #fff); border: 1px solid var(--border);
+  padding: 5px 11px; border-radius: 999px; font-size: 0.68rem; cursor: pointer;
+  color: var(--t2); transition: all 0.15s;
+}
+.varlab-templates button:hover { background: var(--t1); color: #fff; border-color: var(--t1); }
+.varlab-row {
+  border: 1px solid var(--border, #e5e7eb);
+  border-radius: 12px;
+  padding: 14px 16px;
+  margin-bottom: 12px;
+  position: relative;
+}
+.varlab-row .vl-row-num {
+  position: absolute; top: -10px; left: 14px;
+  background: var(--t1, #111827); color: #fff;
+  padding: 2px 8px; border-radius: 999px;
+  font-size: 0.62rem; font-weight: 700; font-family: 'JetBrains Mono', monospace;
+}
+.varlab-row .vl-row-rm {
+  position: absolute; top: 10px; right: 10px;
+  background: transparent; border: none; cursor: pointer;
+  font-size: 1rem; color: var(--t3); padding: 0; line-height: 1;
+}
+.varlab-row .vl-row-rm:hover { color: var(--lose, #ef4444); }
+.varlab-row label { display: block; font-size: 0.62rem; color: var(--t3); margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.04em; font-weight: 600; }
+.varlab-row .vl-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 14px; margin-top: 6px; }
+.varlab-row select, .varlab-row input[type="text"], .varlab-row input[type="date"], .varlab-row textarea {
+  width: 100%; padding: 6px 10px;
+  border: 1px solid var(--border); border-radius: 6px;
+  font-size: 0.78rem; background: var(--card); color: var(--t1);
+  font-family: inherit;
+}
+.varlab-row textarea { resize: vertical; min-height: 32px; }
+.varlab-row .vl-fromto {
+  display: grid; grid-template-columns: 1fr auto 1fr; gap: 8px; align-items: center;
+}
+.varlab-row .vl-fromto .vl-arrow { color: var(--t3); font-size: 0.7rem; }
+.varlab-row .vl-toggle {
+  font-size: 0.62rem; color: var(--t3); cursor: pointer; margin-left: 8px;
+  text-decoration: underline;
+}
+.varlab-row .vl-toggle:hover { color: var(--inprog, #3b82f6); }
+.varlab-add {
+  width: 100%;
+  padding: 10px;
+  border: 1px dashed var(--border);
+  background: transparent;
+  border-radius: 10px;
+  font-size: 0.74rem;
+  color: var(--t2);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.varlab-add:hover { background: var(--bg); color: var(--t1); border-color: var(--t1); }
+.varlab-modal-ftr {
+  padding: 14px 22px;
+  border-top: 1px solid var(--border);
+  display: flex; justify-content: flex-end; gap: 10px;
+  background: var(--bg, #fafafa);
+}
+.varlab-modal-ftr button {
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-size: 0.78rem;
+  cursor: pointer;
+  border: 1px solid var(--border);
+  font-weight: 600;
+}
+.varlab-modal-ftr .vl-cancel { background: var(--card); color: var(--t2); }
+.varlab-modal-ftr .vl-spawn { background: var(--t1); color: #fff; border-color: var(--t1); }
+.varlab-modal-ftr .vl-spawn:hover { background: var(--t2); }
+.varlab-modal-ftr .vl-spawn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* AP "Variations" subtab */
+.varlab-ap-group {
+  margin-bottom: 22px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--card);
+}
+.varlab-ap-group-hdr {
+  padding: 12px 16px;
+  background: var(--bg, #fafafa);
+  border-bottom: 1px solid var(--border);
+  display: flex; justify-content: space-between; align-items: center; gap: 12px;
+  flex-wrap: wrap;
+}
+.varlab-ap-group-hdr .vl-pname {
+  font-weight: 700; font-size: 0.82rem; color: var(--t1);
+  display: flex; align-items: center; gap: 8px;
+}
+.varlab-ap-group-hdr .vl-pname .vl-trophy { font-size: 0.9rem; }
+.varlab-ap-group-hdr .vl-paxes {
+  display: flex; gap: 6px; flex-wrap: wrap;
+  font-size: 0.62rem; color: var(--t3); font-family: 'JetBrains Mono', monospace;
+}
+.varlab-ap-group-hdr .vl-paxes span {
+  background: var(--card); border: 1px solid var(--border); padding: 2px 8px; border-radius: 999px;
+}
+.varlab-ap-group-table { width: 100%; border-collapse: collapse; font-size: 0.74rem; }
+.varlab-ap-group-table th { text-align: left; padding: 8px 14px; font-size: 0.6rem; color: var(--t3); text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid var(--border); }
+.varlab-ap-group-table td { padding: 9px 14px; border-bottom: 1px solid rgba(0,0,0,0.04); }
+.varlab-ap-group-table tr:hover { background: rgba(59,130,246,0.04); cursor: pointer; }
+.varlab-ap-group-table .vl-vid-cell { font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; color: var(--t2); }
+.varlab-ap-empty { text-align: center; padding: 60px 20px; color: var(--t3); font-size: 0.85rem; }
+
+@media (prefers-reduced-motion: reduce) {
+  .varlab-popover, .varlab-modal-bd { animation: none; }
+}
 .toast {
   background: var(--t1);
   color: #fff;
@@ -14579,6 +14809,10 @@ function renderActionPlan() {
     html += renderApWeekView(filtered);
   } else if (view === 'trends') {
     html += renderApTrendsView(resolved);
+  } else if (view === 'variations') {
+    html += (typeof window._varlabRenderApVariationsView === 'function')
+      ? window._varlabRenderApVariationsView()
+      : '<div class="varlab-ap-empty">Variations view not loaded</div>';
   } else {
     html += renderApTableView(filtered);
   }
@@ -14952,7 +15186,7 @@ function renderApSubViewTabs() {
   function tab(id, label) {
     return '<button class="ap-subtab' + (v === id ? ' on' : '') + '" onclick="setApView(\'' + id + '\')">' + label + '</button>';
   }
-  return '<div class="ap-subtabs">' + tab('table','⊞ Table') + tab('pipeline','▣ Pipeline') + tab('week','📅 This Week') + tab('trends','📊 Trends') + '</div>';
+  return '<div class="ap-subtabs">' + tab('table','⊞ Table') + tab('pipeline','▣ Pipeline') + tab('week','📅 This Week') + tab('trends','📊 Trends') + tab('variations','🌱 Variations') + '</div>';
 }
 
 // ─── Render: Filter strip ──────────────────────────────────────────
@@ -27690,23 +27924,32 @@ function _mxv4ColumnRegistry() {
   cols['action'] = { id: 'action', label: 'Action', source: 'app',
     render: function (a, ad, ctx) {
       var actionInfo = (typeof getActionForAd === 'function') ? getActionForAd(ad.id) : null;
+      // Variation Lab affordances — visible inline so the user doesn't
+      // need to drill into a detail view.
+      var isWin = (a.status === 'Winner' || a.status === 'Scale');
+      var spawnBtn = '';
+      if (isWin) {
+        spawnBtn = '<button class="mxv4-detail-action replicate" style="padding:4px 10px;font-size:0.7rem;margin-right:4px" ' +
+                   'onclick="event.stopPropagation();_varlabOpenSpawnModal(\'' + escAttr(ad.id) + '\',\'' + escJs(ctx.angleName) + '\',\'' + escJs(ctx.personaName) + '\')" ' +
+                   'title="Spawn variations of this winner">🌱 Spawn</button>';
+      }
+      var labChip = '';
+      try {
+        if (typeof window._varlabChipHtml === 'function') labChip = window._varlabChipHtml(ad.id);
+      } catch (e) {}
+
+      var actionPart = '';
       if (actionInfo && actionInfo.inActionPlan && actionInfo.clickupId) {
-        // Already in Action Plan + linked to ClickUp — show a "moved" pill
-        // that opens the ClickUp task. Clearer than just "ClickUp ↗" because
-        // the user explicitly asked for the moved-state to be visible.
-        return '<td><a href="https://app.clickup.com/t/' + escAttr(actionInfo.clickupId) + '" target="_blank" class="mxv4-detail-action moved" style="padding:4px 10px;font-size:0.7rem;text-decoration:none" title="Moved to Action Plan — open in ClickUp">✓ Moved ↗</a></td>';
-      }
-      if (actionInfo && actionInfo.inActionPlan) {
-        // In Action Plan but no ClickUp task yet — still show the moved pill,
-        // jumping to the Action Plan card on click. Prevents the user from
-        // clicking "→ Plan" again and creating a duplicate.
+        actionPart = '<a href="https://app.clickup.com/t/' + escAttr(actionInfo.clickupId) + '" target="_blank" class="mxv4-detail-action moved" style="padding:4px 10px;font-size:0.7rem;text-decoration:none" title="Moved to Action Plan — open in ClickUp">✓ Moved ↗</a>';
+      } else if (actionInfo && actionInfo.inActionPlan) {
         var _jumpId = actionInfo.actionId || actionInfo.id || '';
-        return '<td><button class="mxv4-detail-action moved" style="padding:4px 10px;font-size:0.7rem" onclick="apJumpToCard(\'' + escAttr(_jumpId) + '\')" title="Already in Action Plan — click to open">✓ Moved to Plan</button></td>';
+        actionPart = '<button class="mxv4-detail-action moved" style="padding:4px 10px;font-size:0.7rem" onclick="apJumpToCard(\'' + escAttr(_jumpId) + '\')" title="Already in Action Plan — click to open">✓ Moved to Plan</button>';
+      } else if (ad._clickupId) {
+        actionPart = '<a href="https://app.clickup.com/t/' + escAttr(ad._clickupId) + '" target="_blank" style="color:var(--b-skyd);font-size:0.7rem">ClickUp ↗</a>';
+      } else {
+        actionPart = '<button class="mxv4-detail-action" style="padding:4px 10px;font-size:0.7rem" onclick="createActionFromMatrix(\'' + escAttr(ad.id) + '\',\'' + escJs(ctx.angleName) + '\',\'' + escJs(ctx.personaName) + '\', this)">→ Plan</button>';
       }
-      if (ad._clickupId) {
-        return '<td><a href="https://app.clickup.com/t/' + escAttr(ad._clickupId) + '" target="_blank" style="color:var(--b-skyd);font-size:0.7rem">ClickUp ↗</a></td>';
-      }
-      return '<td><button class="mxv4-detail-action" style="padding:4px 10px;font-size:0.7rem" onclick="createActionFromMatrix(\'' + escAttr(ad.id) + '\',\'' + escJs(ctx.angleName) + '\',\'' + escJs(ctx.personaName) + '\', this)">→ Plan</button></td>';
+      return '<td><div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">' + spawnBtn + actionPart + (labChip ? '<span style="margin-left:2px">' + labChip + '</span>' : '') + '</div></td>';
     } };
   cols['delete'] = { id: 'delete', label: '', source: 'app',
     render: function (a, ad) {
@@ -28527,8 +28770,14 @@ function _mxv4RenderDetail(angleName, personaName, sel) {
 
   html += '<div class="mxv4-detail-actions">';
   if (sel.status === 'Winner' || sel.status === 'Scale') {
-    html += '<button class="mxv4-detail-action replicate" onclick="toggleMxv4Replicate()">✨ Replicate</button>';
+    html += '<button class="mxv4-detail-action replicate" onclick="_varlabOpenSpawnModal(\'' + escAttr(ad.id) + '\',\'' + escJs(angleName) + '\',\'' + escJs(personaName) + '\')">🌱 Spawn variations</button>';
   }
+  // Variation Lab chip — shown for any creative that has spawned variations,
+  // regardless of status (so a winner that's now scaled keeps showing the lab).
+  try {
+    var _vlChip = (typeof window._varlabChipHtml === 'function') ? window._varlabChipHtml(ad.id) : '';
+    if (_vlChip) html += _vlChip;
+  } catch (e) {}
   if (actionInfo && actionInfo.inActionPlan) {
     if (actionInfo.clickupId) {
       html += '<a class="mxv4-detail-action" href="https://app.clickup.com/t/' + escAttr(actionInfo.clickupId) + '" target="_blank">✓ ClickUp ↗</a>';
@@ -33333,6 +33582,573 @@ window._retryPendingCu = _retryPendingCu;
 window._clearPendingCu = _clearPendingCu;
 
 // ════════════════════════════════════════════════════════════════════
+// VARIATION LAB — spawn modal, rollup chip, popover, AP subtab
+// ────────────────────────────────────────────────────────────────────
+// The data model already supports variations (parentAdId, variationNumber,
+// adOrigin: 'Winner Variation', variationChanges). This module replaces
+// the legacy inline form with a structured spawn modal, adds a compact
+// rollup chip on parent winners that opens an inline popover with
+// per-axis breakdown, and adds a "Variations" subtab in the Action Plan
+// grouped by parent. No schema changes — purely UI layer over existing
+// fields. Builds new tasks via the same code path as createVariationFromMatrix.
+// ════════════════════════════════════════════════════════════════════
+(function _installVariationLab() {
+  if (window._varlabInstalled) return;
+  window._varlabInstalled = true;
+
+  var BUILTIN_AXES = ['Hook', 'Production Style', 'Music', 'CTA', 'Title', 'Text', 'Thumbnail', 'Full Remake'];
+  var TEMPLATES = [
+    { lbl: '5 Hook tests',     axis: 'Hook',             count: 5 },
+    { lbl: '3 Production-style tests', axis: 'Production Style', count: 3 },
+    { lbl: '4 Music tests',    axis: 'Music',            count: 4 },
+    { lbl: '3 CTA tests',      axis: 'CTA',              count: 3 },
+    { lbl: 'Full Remake set',  axis: 'Full Remake',      count: 3 }
+  ];
+
+  function loadCustomAxes() {
+    try {
+      var raw = localStorage.getItem('varlab.customAxes');
+      var arr = raw ? JSON.parse(raw) : [];
+      return Array.isArray(arr) ? arr.filter(function (x) { return typeof x === 'string' && x.trim(); }) : [];
+    } catch (e) { return []; }
+  }
+  function saveCustomAxes(arr) {
+    try { localStorage.setItem('varlab.customAxes', JSON.stringify(arr || [])); } catch (e) {}
+  }
+  function allAxes() {
+    var custom = loadCustomAxes();
+    var seen = {};
+    var out = [];
+    BUILTIN_AXES.concat(custom).forEach(function (a) {
+      if (a && !seen[a]) { seen[a] = 1; out.push(a); }
+    });
+    return out;
+  }
+
+  // ── Stats: rollup over all variations of a parent. Recursive
+  // (descendants of variations also count if they exist), but we cap
+  // at 2 levels to keep the chip honest about what users see.
+  function getVariationsOf(parentId) {
+    if (typeof ADS === 'undefined' || !Array.isArray(ADS)) return [];
+    return ADS.filter(function (a) { return a && a.parentAdId === parentId; });
+  }
+  function buildStats(parentId) {
+    var vars = getVariationsOf(parentId);
+    var total = vars.length;
+    var winners = 0, losers = 0, testing = 0, untested = 0, other = 0;
+    var byAxis = {}; // axis -> { tested, won }
+    vars.forEach(function (v) {
+      var s = (v.status || '').toLowerCase();
+      if (s === 'winner' || s === 'scale')      winners++;
+      else if (s === 'loser' || s === 'complete') losers++;
+      else if (s === 'testing' || s === 'in production' || s === 'ready to launch') testing++;
+      else if (s === 'untested' || s === '')    untested++;
+      else other++;
+      var axes = Array.isArray(v.variationChanges) && v.variationChanges.length
+        ? v.variationChanges
+        : ['Other'];
+      axes.forEach(function (ax) {
+        if (!byAxis[ax]) byAxis[ax] = { tested: 0, won: 0 };
+        byAxis[ax].tested++;
+        if (s === 'winner' || s === 'scale') byAxis[ax].won++;
+      });
+    });
+    var winRate = total > 0 ? Math.round((winners / total) * 100) : 0;
+    var bestAxis = null, bestRate = -1;
+    Object.keys(byAxis).forEach(function (ax) {
+      var r = byAxis[ax].tested > 0 ? byAxis[ax].won / byAxis[ax].tested : 0;
+      if (r > bestRate && byAxis[ax].tested >= 2) { bestRate = r; bestAxis = ax; }
+    });
+    return {
+      total: total, winners: winners, losers: losers, testing: testing, untested: untested, other: other,
+      byAxis: byAxis, winRate: winRate, bestAxis: bestAxis, variations: vars
+    };
+  }
+  window._varlabBuildStats = buildStats;
+
+  function chipHtml(parentId) {
+    var s = buildStats(parentId);
+    if (s.total === 0) return '';
+    var cls = s.winners > 0 ? '' : (s.testing > 0 ? 'warm' : 'cold');
+    var lbl = s.total + '·' + s.winRate + '%';
+    return '<span class="varlab-chip ' + cls + '" ' +
+           'title="' + s.total + ' variations · ' + s.winRate + '% won · click for breakdown" ' +
+           'onclick="event.stopPropagation();_varlabOpenPopover(\'' + escAttr(parentId) + '\', this)">' +
+           '<span class="vl-leaf">🌱</span><span>' + lbl + '</span></span>';
+  }
+  window._varlabChipHtml = chipHtml;
+
+  // ── Popover (anchored to the chip)
+  function closePopover() {
+    var p = document.getElementById('varlabPopover');
+    if (p && p.parentNode) p.parentNode.removeChild(p);
+    document.removeEventListener('click', _popoverOutside, true);
+    document.removeEventListener('keydown', _popoverEsc, true);
+  }
+  function _popoverOutside(e) {
+    var p = document.getElementById('varlabPopover');
+    if (!p) return closePopover();
+    if (!p.contains(e.target) && !(e.target && e.target.classList && e.target.classList.contains('varlab-chip'))) closePopover();
+  }
+  function _popoverEsc(e) { if (e.key === 'Escape') closePopover(); }
+  window._varlabClosePopover = closePopover;
+
+  function statusPill(status) {
+    var s = String(status || 'Untested');
+    var palette = {
+      'Winner':           'background:rgba(34,197,94,0.15);color:#15803d',
+      'Scale':            'background:rgba(34,197,94,0.15);color:#15803d',
+      'Loser':            'background:rgba(239,68,68,0.12);color:#b91c1c',
+      'Complete':         'background:rgba(148,163,184,0.18);color:#475569',
+      'Testing':          'background:rgba(168,85,247,0.12);color:#7c3aed',
+      'In Production':    'background:rgba(245,158,11,0.14);color:#b45309',
+      'Ready to Launch':  'background:rgba(245,158,11,0.14);color:#b45309',
+      'Approved':         'background:rgba(59,130,246,0.12);color:#1d4ed8'
+    };
+    var style = palette[s] || 'background:rgba(148,163,184,0.12);color:#475569';
+    return '<span class="vl-vstatus" style="' + style + '">' + esc(s) + '</span>';
+  }
+
+  function openPopover(parentId, anchorEl) {
+    closePopover();
+    var s = buildStats(parentId);
+    var parent = ADS.find(function (a) { return a.id === parentId; });
+    var pName = parent ? (parent.formatName || parent.id) : parentId;
+    var html = '<div id="varlabPopover" class="varlab-popover">';
+    html += '<h4>' + esc(pName) + ' · Variation Lab</h4>';
+    html += '<div class="vl-stats">';
+    html += '<div>Total: <b>' + s.total + '</b></div>';
+    html += '<div>Win rate: <b>' + s.winRate + '%</b></div>';
+    html += '<div>✅ ' + s.winners + ' winners</div>';
+    html += '<div>🟡 ' + s.testing + ' testing</div>';
+    html += '<div>🔴 ' + s.losers + ' losers</div>';
+    html += '<div>⚪ ' + s.untested + ' pending</div>';
+    html += '</div>';
+    var axisKeys = Object.keys(s.byAxis);
+    if (axisKeys.length) {
+      html += '<div style="font-size:0.62rem;color:var(--t3);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px">By change axis</div>';
+      axisKeys.sort(function (a, b) { return s.byAxis[b].tested - s.byAxis[a].tested; }).forEach(function (ax) {
+        var rec = s.byAxis[ax];
+        var pct = rec.tested > 0 ? Math.round((rec.won / rec.tested) * 100) : 0;
+        html += '<div class="vl-axis-row' + (rec.won === 0 ? ' zero' : '') + '">';
+        html += '<span>' + esc(ax) + '</span>';
+        html += '<div class="vl-axis-bar"><span style="width:' + Math.max(pct, rec.won > 0 ? 8 : 4) + '%"></span></div>';
+        html += '<span style="text-align:right;font-family:\'JetBrains Mono\',monospace">' + rec.won + 'W/' + rec.tested + 'T</span>';
+        html += '</div>';
+      });
+    }
+    if (s.variations.length) {
+      html += '<div class="vl-divider"></div>';
+      html += '<div style="font-size:0.62rem;color:var(--t3);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px">Variations</div>';
+      html += '<div class="vl-vlist">';
+      s.variations.slice().sort(function (a, b) { return (a.variationNumber || 0) - (b.variationNumber || 0); }).forEach(function (v) {
+        var axesTxt = (Array.isArray(v.variationChanges) && v.variationChanges.length) ? v.variationChanges.join(' + ') : '—';
+        html += '<div class="vl-vrow" onclick="_varlabClosePopover();apJumpToCard && apJumpToCard(_varlabActionForAd(\'' + escAttr(v.id) + '\'))">';
+        html += '<span class="vl-vid">V' + (v.variationNumber || '?') + '</span>';
+        html += '<span><div>' + esc(v.formatName || v.id) + '</div><div class="vl-vmeta">' + esc(axesTxt) + '</div></span>';
+        html += statusPill(v.status);
+        html += '</div>';
+      });
+      html += '</div>';
+    } else {
+      html += '<div class="vl-divider"></div>';
+      html += '<div style="text-align:center;color:var(--t3);font-size:0.74rem;padding:12px 0">No variations yet</div>';
+    }
+    var ang = (parent && parent.angle) || '';
+    var per = (parent && parent.persona) || '';
+    html += '<button class="vl-spawn-more" onclick="_varlabClosePopover();_varlabOpenSpawnModal(\'' + escAttr(parentId) + '\',\'' + escJs(ang) + '\',\'' + escJs(per) + '\')">+ Spawn more variations</button>';
+    html += '</div>';
+    document.body.insertAdjacentHTML('beforeend', html);
+    var pop = document.getElementById('varlabPopover');
+    if (!pop || !anchorEl) return;
+    var rect = anchorEl.getBoundingClientRect();
+    var left = rect.left;
+    var top  = rect.bottom + 6 + window.scrollY;
+    if (left + 380 > window.innerWidth) left = Math.max(10, window.innerWidth - 380);
+    pop.style.left = left + 'px';
+    pop.style.top  = top  + 'px';
+    setTimeout(function () {
+      document.addEventListener('click',   _popoverOutside, true);
+      document.addEventListener('keydown', _popoverEsc,    true);
+    }, 0);
+  }
+  window._varlabOpenPopover = openPopover;
+
+  // Helper used in popover row click — finds the action id for an ad.
+  window._varlabActionForAd = function (adId) {
+    if (typeof MANUAL_ACTIONS === 'undefined') return null;
+    var hit = MANUAL_ACTIONS.find(function (m) { return m && (m.sourceAdId === adId || m.adId === adId); });
+    return hit ? hit.id : null;
+  };
+
+  // ── Spawn modal
+  var _vlMod = { rows: [], parentId: null, angle: '', persona: '' };
+  function freshRow(axis) {
+    return {
+      axis: axis || 'Hook',
+      customAxis: '',
+      from: '', to: '',
+      hypothesis: '',
+      brief: '',
+      editorIds: [], reviewerIds: [],
+      due: '',
+      mode: 'split' // 'split' for From→To, 'note' for single-line
+    };
+  }
+  function applyTemplate(t) {
+    _vlMod.rows = [];
+    for (var i = 0; i < t.count; i++) _vlMod.rows.push(freshRow(t.axis));
+    renderModal();
+  }
+  window._varlabApplyTemplate = function (idx) {
+    var t = TEMPLATES[idx]; if (!t) return; applyTemplate(t);
+  };
+  window._varlabAddRow = function () {
+    _vlMod.rows.push(freshRow());
+    renderModal();
+  };
+  window._varlabRemoveRow = function (idx) {
+    _vlMod.rows.splice(idx, 1);
+    if (!_vlMod.rows.length) _vlMod.rows.push(freshRow());
+    renderModal();
+  };
+  window._varlabRowToggleMode = function (idx) {
+    var r = _vlMod.rows[idx]; if (!r) return;
+    r.mode = (r.mode === 'split') ? 'note' : 'split';
+    syncRowFromDom(idx);
+    renderModal();
+  };
+  function readVal(id) { var el = document.getElementById(id); return el ? el.value : ''; }
+  function readMulti(id) {
+    var el = document.getElementById(id); if (!el) return [];
+    return Array.prototype.slice.call(el.selectedOptions || []).map(function (o) { return parseInt(o.value, 10); }).filter(function (v) { return !isNaN(v); });
+  }
+  function syncRowFromDom(i) {
+    var r = _vlMod.rows[i]; if (!r) return;
+    r.axis        = readVal('vlrow_axis_' + i) || r.axis;
+    r.customAxis  = readVal('vlrow_customaxis_' + i) || '';
+    r.from        = readVal('vlrow_from_' + i) || '';
+    r.to          = readVal('vlrow_to_' + i) || '';
+    r.hypothesis  = readVal('vlrow_hyp_' + i) || '';
+    r.brief       = readVal('vlrow_brief_' + i) || '';
+    r.due         = readVal('vlrow_due_' + i) || '';
+    r.editorIds   = readMulti('vlrow_editor_' + i);
+    r.reviewerIds = readMulti('vlrow_reviewer_' + i);
+  }
+  function syncAllRowsFromDom() {
+    for (var i = 0; i < _vlMod.rows.length; i++) syncRowFromDom(i);
+  }
+
+  function membersOpts(selected) {
+    var members = (typeof CLICKUP_MEMBERS !== 'undefined' && Array.isArray(CLICKUP_MEMBERS)) ? CLICKUP_MEMBERS : [];
+    return members.slice().sort(function (a, b) { return (a.username || '').localeCompare(b.username || ''); }).map(function (m) {
+      var sel = (selected || []).indexOf(m.id) !== -1 ? ' selected' : '';
+      return '<option value="' + m.id + '"' + sel + '>' + esc(m.username || ('User ' + m.id)) + '</option>';
+    }).join('');
+  }
+
+  function renderModal() {
+    var bd = document.getElementById('varlabModalBd');
+    if (!bd) {
+      bd = document.createElement('div');
+      bd.id = 'varlabModalBd';
+      bd.className = 'varlab-modal-bd';
+      bd.onclick = function (e) { if (e.target === bd) closeModal(); };
+      document.body.appendChild(bd);
+    }
+    var parent = ADS.find(function (a) { return a.id === _vlMod.parentId; });
+    var pName = parent ? (parent.formatName || parent.id) : _vlMod.parentId;
+    var stats = buildStats(_vlMod.parentId);
+    var statLine = stats.total > 0
+      ? stats.total + ' variations exist · ' + stats.winRate + '% won so far'
+      : 'No variations yet — start the lab.';
+
+    var axes = allAxes();
+    var rowsHtml = _vlMod.rows.map(function (r, i) {
+      var axisOpts = axes.map(function (a) { return '<option value="' + esc(a) + '"' + (a === r.axis ? ' selected' : '') + '>' + esc(a) + '</option>'; }).join('') +
+                     '<option value="__custom__"' + (r.axis === '__custom__' ? ' selected' : '') + '>+ Custom axis…</option>';
+      var changeBlock = '';
+      if (r.mode === 'split') {
+        changeBlock =
+          '<div class="vl-fromto">' +
+            '<input type="text" id="vlrow_from_' + i + '" placeholder="From: current copy / hook" value="' + escAttr(r.from) + '">' +
+            '<span class="vl-arrow">→</span>' +
+            '<input type="text" id="vlrow_to_' + i + '" placeholder="To: new copy / hook" value="' + escAttr(r.to) + '">' +
+          '</div>';
+      } else {
+        changeBlock =
+          '<input type="text" id="vlrow_from_' + i + '" placeholder="Describe the change in one line…" value="' + escAttr(r.from) + '">';
+      }
+      return '<div class="varlab-row">' +
+        '<span class="vl-row-num">V' + (i + 1) + '</span>' +
+        '<button class="vl-row-rm" title="Remove" onclick="_varlabRemoveRow(' + i + ')">×</button>' +
+        '<div class="vl-grid">' +
+          '<div>' +
+            '<label>Change axis</label>' +
+            '<select id="vlrow_axis_' + i + '" onchange="_varlabAxisOnChange(' + i + ')">' + axisOpts + '</select>' +
+            (r.axis === '__custom__'
+              ? '<input type="text" id="vlrow_customaxis_' + i + '" placeholder="Name the new axis (e.g. Voiceover, Lighting)" value="' + escAttr(r.customAxis) + '" style="margin-top:6px">'
+              : '') +
+          '</div>' +
+          '<div>' +
+            '<label>Due date</label>' +
+            '<input type="date" id="vlrow_due_' + i + '" value="' + escAttr(r.due) + '">' +
+          '</div>' +
+        '</div>' +
+        '<div style="margin-top:10px">' +
+          '<label>What is changing <span class="vl-toggle" onclick="_varlabRowToggleMode(' + i + ')">' + (r.mode === 'split' ? 'use single-line note' : 'use From → To') + '</span></label>' +
+          changeBlock +
+        '</div>' +
+        '<div style="margin-top:10px">' +
+          '<label>Hypothesis</label>' +
+          '<input type="text" id="vlrow_hyp_' + i + '" placeholder="Why this change should win…" value="' + escAttr(r.hypothesis) + '">' +
+        '</div>' +
+        '<div style="margin-top:10px">' +
+          '<label>Editor brief (optional — for the assignee in ClickUp)</label>' +
+          '<textarea id="vlrow_brief_' + i + '" rows="2" placeholder="Specifics for the editor: scope, references, do/don\'t…">' + esc(r.brief) + '</textarea>' +
+        '</div>' +
+        '<div class="vl-grid" style="margin-top:10px">' +
+          '<div>' +
+            '<label>Editor</label>' +
+            '<select id="vlrow_editor_' + i + '" multiple size="3">' + membersOpts(r.editorIds) + '</select>' +
+          '</div>' +
+          '<div>' +
+            '<label>Reviewer (optional)</label>' +
+            '<select id="vlrow_reviewer_' + i + '" multiple size="3">' + membersOpts(r.reviewerIds) + '</select>' +
+          '</div>' +
+        '</div>' +
+        '</div>';
+    }).join('');
+
+    var templatesHtml = '<div class="varlab-templates">' +
+      '<span class="vl-lbl">Quick templates:</span>' +
+      TEMPLATES.map(function (t, i) { return '<button onclick="_varlabApplyTemplate(' + i + ')">' + esc(t.lbl) + '</button>'; }).join('') +
+      '</div>';
+
+    bd.innerHTML =
+      '<div class="varlab-modal" role="dialog" aria-label="Spawn variations">' +
+        '<div class="varlab-modal-hdr">' +
+          '<div>' +
+            '<h2>🌱 Spawn variations of ' + esc(pName) + '</h2>' +
+            '<div class="vl-sub">' + esc(statLine) + '</div>' +
+          '</div>' +
+          '<button class="vl-close" onclick="_varlabCloseSpawnModal()">Close ✕</button>' +
+        '</div>' +
+        '<div class="varlab-modal-body">' +
+          templatesHtml +
+          rowsHtml +
+          '<button class="varlab-add" onclick="_varlabAddRow()">+ Add another variation</button>' +
+        '</div>' +
+        '<div class="varlab-modal-ftr">' +
+          '<button class="vl-cancel" onclick="_varlabCloseSpawnModal()">Cancel</button>' +
+          '<button class="vl-spawn" onclick="_varlabConfirmSpawn()">Spawn ' + _vlMod.rows.length + ' variation' + (_vlMod.rows.length === 1 ? '' : 's') + ' → Action Plan</button>' +
+        '</div>' +
+      '</div>';
+  }
+  window._varlabAxisOnChange = function (i) {
+    syncRowFromDom(i);
+    renderModal();
+  };
+  function closeModal() {
+    var bd = document.getElementById('varlabModalBd');
+    if (bd && bd.parentNode) bd.parentNode.removeChild(bd);
+    _vlMod.rows = []; _vlMod.parentId = null;
+  }
+  window._varlabCloseSpawnModal = closeModal;
+
+  window._varlabOpenSpawnModal = function (parentId, angle, persona) {
+    _vlMod.parentId = parentId;
+    _vlMod.angle = angle || '';
+    _vlMod.persona = persona || '';
+    if (!_vlMod.rows.length) _vlMod.rows = [freshRow('Hook')];
+    renderModal();
+  };
+
+  // ── Spawn — creates ADs + MANUAL_ACTIONS, pushes each to ClickUp.
+  window._varlabConfirmSpawn = function () {
+    syncAllRowsFromDom();
+    if (!_vlMod.parentId) { try { toast('No parent selected', 'err'); } catch (e) {} return; }
+    var parent = ADS.find(function (a) { return a.id === _vlMod.parentId; });
+    if (!parent) { try { toast('Parent task not found', 'err'); } catch (e) {} return; }
+    var rows = _vlMod.rows.slice();
+    if (!rows.length) { try { toast('Add at least one variation', 'warn'); } catch (e) {} return; }
+
+    // Save any new custom axes used
+    var custom = loadCustomAxes();
+    rows.forEach(function (r) {
+      if (r.axis === '__custom__' && r.customAxis) {
+        var name = r.customAxis.trim();
+        if (name && BUILTIN_AXES.indexOf(name) === -1 && custom.indexOf(name) === -1) custom.push(name);
+      }
+    });
+    saveCustomAxes(custom);
+
+    var existingVars = (typeof ADS !== 'undefined' ? ADS : []).filter(function (a) { return a.parentAdId === parent.id; });
+    var maxNum = 0;
+    existingVars.forEach(function (v) { if ((v.variationNumber || 0) > maxNum) maxNum = v.variationNumber || 0; });
+    var startNum = maxNum + 1;
+
+    var spawnedAds = [];
+    rows.forEach(function (r, idx) {
+      var num = startNum + idx;
+      var varId = parent.id + '-V' + num;
+      while (ADS.find(function (a) { return a.id === varId; })) {
+        num++; varId = parent.id + '-V' + num;
+      }
+      var axisName = (r.axis === '__custom__' ? (r.customAxis || 'Custom') : r.axis) || 'Hook';
+      var changes = [axisName];
+      var changeText = '';
+      if (r.mode === 'split') {
+        if (r.from || r.to) changeText = 'From: ' + (r.from || '—') + '\nTo: ' + (r.to || '—');
+      } else {
+        changeText = r.from || '';
+      }
+      var pName = parent.formatName || parent.id;
+      var varName = pName + ' - V' + num + ' - ' + axisName;
+      var briefLines = [];
+      briefLines.push('🏆 Variation of: ' + pName);
+      briefLines.push('🎯 Change axis: ' + axisName);
+      if (changeText) briefLines.push((r.mode === 'split' ? '   ' : '') + changeText);
+      if (r.hypothesis) briefLines.push('💡 Hypothesis: ' + r.hypothesis);
+      if (r.brief)      briefLines.push('📋 Editor brief: ' + r.brief);
+      if (parent.driveLink) briefLines.push('📌 Reference drive: ' + parent.driveLink);
+      if (parent.adLink)    briefLines.push('🔗 Reference creative: ' + parent.adLink);
+      var fullBrief = briefLines.join('\n');
+
+      var editorAssignees = (r.editorIds || []).map(function (id) {
+        var hit = (typeof CLICKUP_MEMBERS !== 'undefined') ? CLICKUP_MEMBERS.find(function (m) { return m.id === id; }) : null;
+        return hit ? { id: hit.id, username: hit.username || '', email: hit.email || '' } : { id: id };
+      });
+      var reviewerRaw = (r.reviewerIds || []).map(function (id) {
+        var hit = (typeof CLICKUP_MEMBERS !== 'undefined') ? CLICKUP_MEMBERS.find(function (m) { return m.id === id; }) : null;
+        return hit ? { id: hit.id, username: hit.username || '' } : { id: id };
+      });
+
+      var newAd = {
+        id: varId,
+        formatName: varName,
+        uniqueName: varName,
+        adLink: '',
+        driveLink: '',
+        adType: parent.adType,
+        funnelStage: parent.funnelStage,
+        status: 'Untested',
+        angle: parent.angle,
+        persona: parent.persona,
+        parentAdId: parent.id,
+        parentTaskName: pName,
+        variationNumber: num,
+        adOrigin: 'Winner Variation',
+        variationChanges: changes,
+        variationFromText: r.from || '',
+        variationToText:   r.to || '',
+        variationHypothesis: r.hypothesis || '',
+        variationBrief:      r.brief || '',
+        notes: r.brief || changeText || '',
+        variationNotes: r.brief || changeText || '',
+        _fromTrackerAdId: parent.id,
+        _clickupId: null,
+        _clickupStatus: null,
+        dueDate: r.due || '',
+        createdAt: Date.now(),
+        dateCreated: Date.now(),
+        assignees: editorAssignees,
+        _customFieldsRaw: {}
+      };
+      // Mirror reviewer onto _customFieldsRaw (Reviewer is a real CF) so the
+      // post-create CF push sends it to ClickUp.
+      if (reviewerRaw.length) newAd._customFieldsRaw['reviewer'] = reviewerRaw;
+      // Seed editor mirror too — _native field reads from assignees.
+      ADS.push(newAd);
+      spawnedAds.push({ ad: newAd, brief: fullBrief, axisName: axisName, due: r.due });
+    });
+
+    // Persist + render
+    if (typeof process === 'function') P = process(ADS);
+    if (typeof deriveWinners === 'function') deriveWinners();
+    if (typeof genActions === 'function') genActions();
+    if (typeof renderAll === 'function') renderAll();
+    if (typeof saveState === 'function') saveState();
+
+    // Push each to Action Plan + ClickUp
+    spawnedAds.forEach(function (entry, idx) {
+      setTimeout(function () {
+        try {
+          if (typeof createActionFromMatrix === 'function') {
+            createActionFromMatrix(entry.ad.id, entry.ad.angle, entry.ad.persona, null);
+          }
+        } catch (e) { console.warn('[varlab] action push failed', entry.ad.id, e); }
+      }, 200 + idx * 250);
+    });
+
+    closeModal();
+    try { toast(spawnedAds.length + ' variation' + (spawnedAds.length === 1 ? '' : 's') + ' spawned for ' + parent.id + ' · pushing to Action Plan…', 'ok'); } catch (e) {}
+  };
+
+  // ── AP "Variations" subtab renderer (called from renderActionPlan when
+  // _apState.view === 'variations'). Returns the HTML chunk that goes
+  // inside #actionsContainer below the chrome.
+  window._varlabRenderApVariationsView = function () {
+    if (typeof ADS === 'undefined') return '<div class="varlab-ap-empty">No data loaded</div>';
+    // Find every AD that is itself a parent of variations.
+    var parentIds = {};
+    ADS.forEach(function (a) {
+      if (a && a.parentAdId) parentIds[a.parentAdId] = true;
+    });
+    var parents = Object.keys(parentIds).map(function (pid) {
+      return ADS.find(function (a) { return a.id === pid; });
+    }).filter(Boolean);
+    if (!parents.length) {
+      return '<div class="varlab-ap-empty">No variations yet. Spawn variations from a winner card in the Creative Matrix.</div>';
+    }
+    parents.sort(function (a, b) {
+      var ba = buildStats(a.id), bb = buildStats(b.id);
+      return bb.total - ba.total;
+    });
+    var html = '';
+    parents.forEach(function (p) {
+      var s = buildStats(p.id);
+      var axesPills = Object.keys(s.byAxis).sort(function (a, b) { return s.byAxis[b].tested - s.byAxis[a].tested; }).map(function (ax) {
+        var rec = s.byAxis[ax];
+        var pct = rec.tested > 0 ? Math.round((rec.won / rec.tested) * 100) : 0;
+        return '<span title="' + esc(ax) + ': ' + rec.won + ' wins / ' + rec.tested + ' tested (' + pct + '%)">' + esc(ax) + ' ' + rec.won + 'W/' + rec.tested + 'T</span>';
+      }).join('');
+      var pTrophy = (String(p.status || '').toLowerCase() === 'winner') ? '<span class="vl-trophy">🏆</span>' : '';
+      html += '<div class="varlab-ap-group">';
+      html += '<div class="varlab-ap-group-hdr">';
+      html += '<div class="vl-pname">' + pTrophy + esc(p.formatName || p.id) + ' · 🌱 ' + s.total + ' · ' + s.winRate + '%</div>';
+      html += '<div class="vl-paxes">' + (axesPills || '<span style="background:transparent;border:none">No axis data</span>') + '</div>';
+      html += '</div>';
+      html += '<table class="varlab-ap-group-table">';
+      html += '<thead><tr><th>Variation</th><th>Axis</th><th>Status</th><th>Editor</th><th>Due</th><th>ClickUp</th></tr></thead>';
+      html += '<tbody>';
+      s.variations.slice().sort(function (a, b) { return (a.variationNumber || 0) - (b.variationNumber || 0); }).forEach(function (v) {
+        var act = (typeof MANUAL_ACTIONS !== 'undefined') ? MANUAL_ACTIONS.find(function (m) { return m && (m.sourceAdId === v.id || m.adId === v.id); }) : null;
+        var editorTxt = '—';
+        if (Array.isArray(v.assignees) && v.assignees.length) editorTxt = v.assignees.map(function (u) { return u.username || ('User ' + u.id); }).join(', ');
+        var cuCell = '—';
+        if (v._clickupId) cuCell = '<a href="https://app.clickup.com/t/' + escAttr(v._clickupId) + '" target="_blank" onclick="event.stopPropagation()">↗ ClickUp</a>';
+        else if (act && act._clickupId) cuCell = '<a href="https://app.clickup.com/t/' + escAttr(act._clickupId) + '" target="_blank" onclick="event.stopPropagation()">↗ ClickUp</a>';
+        var axesTxt = (Array.isArray(v.variationChanges) && v.variationChanges.length) ? v.variationChanges.join(' + ') : '—';
+        var jumpJs = act ? "apJumpToCard && apJumpToCard('" + escAttr(act.id) + "')" : "";
+        html += '<tr' + (jumpJs ? ' onclick="' + jumpJs + '"' : '') + '>';
+        html += '<td class="vl-vid-cell">' + esc(v.formatName || v.id) + '</td>';
+        html += '<td>' + esc(axesTxt) + '</td>';
+        html += '<td>' + statusPill(v.status) + '</td>';
+        html += '<td>' + esc(editorTxt) + '</td>';
+        html += '<td class="vl-vid-cell">' + esc(v.dueDate || '—') + '</td>';
+        html += '<td>' + cuCell + '</td>';
+        html += '</tr>';
+      });
+      html += '</tbody></table>';
+      html += '</div>';
+    });
+    return html;
+  };
+})();
+
+
+// ════════════════════════════════════════════════════════════════════
 // ACTIVITY LOG + ROUTINE-TOAST SUPPRESSION
 // ────────────────────────────────────────────────────────────────────
 // Replaces the bottom-right toast pile-up for routine sync chatter
@@ -33686,9 +34502,16 @@ window._clearPendingCu = _clearPendingCu;
     }
     s += '#' + _adsCoreFp() + '#';
     if (typeof _apState !== 'undefined' && _apState) {
-      s += 'view=' + (_apState.view||'') + '|sort=' + (_apState.sortCol||'') + ':' + (_apState.sortDir||'');
-      if (_apState.filters) s += '|f=' + JSON.stringify(_apState.filters || {});
-      if (_apState.selected) s += '|sel=' + Object.keys(_apState.selected).length;
+      // Serialize the whole _apState so UI-only flags (openFilter,
+      // anomaliesOnly, drawer open, etc.) bust the fingerprint and the
+      // re-render actually fires. Earlier we only covered view/sort/filters
+      // which made filter pills feel dead — clicking them set openFilter
+      // but the render was skipped.
+      try { s += '|s=' + JSON.stringify(_apState); }
+      catch (e) {
+        s += 'view=' + (_apState.view||'') + '|sort=' + (_apState.sortCol||'') + ':' + (_apState.sortDir||'') + '|of=' + (_apState.openFilter||'') + '|ao=' + (_apState.anomaliesOnly?1:0);
+        if (_apState.filters) s += '|f=' + JSON.stringify(_apState.filters || {});
+      }
     }
     return s;
   }

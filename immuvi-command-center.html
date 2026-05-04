@@ -20373,10 +20373,19 @@ function importTasksFromClickUp(tasks) {
   // MANUAL_ACTION and promote it into localByClickupId + fix the link.
   for (var mi = 0; mi < MANUAL_ACTIONS.length; mi++) {
     var _act = MANUAL_ACTIONS[mi];
-    if (!_act || !_act._clickupId || !_act._sourceAdId) continue;
+    if (!_act || !_act._clickupId) continue;
+    // Bug-fix: same field-name typo as pollFullSync Pass 0. createActionFromMatrix
+    // and friends write `sourceAdId` (no underscore). Without accepting both,
+    // this repair never fires for app-pushed actions — the dominant path —
+    // and the next importTasksFromClickUp call can't recognize the freshly-
+    // created CU task as already-owned, so it gets imported as a brand-new
+    // AD and the matrix cell shows the duplicate. See feedback memory:
+    // pollFullSync Pass 0 — both sourceAdId names.
+    var _maSrcAdId = _act._sourceAdId || _act.sourceAdId;
+    if (!_maSrcAdId) continue;
     if (localByClickupId[_act._clickupId]) continue; // already linked
     for (var si = 0; si < ADS.length; si++) {
-      if (ADS[si].id === _act._sourceAdId) {
+      if (ADS[si].id === _maSrcAdId) {
         // Repair the link in memory so future syncs don't re-create duplicates
         ADS[si]._clickupId   = _act._clickupId;
         ADS[si].clickupTaskId = _act._clickupId;

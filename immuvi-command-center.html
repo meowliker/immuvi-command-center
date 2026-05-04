@@ -20411,17 +20411,26 @@ function autoDiscoverTaxonomy(sourceAds) {
   return { addedAngles: addedAngles, addedPersonas: addedPersonas };
 }
 
-function importTasksFromClickUp(tasks) {
-  // Load cross-client tombstone from deleted_ads table
+async function importTasksFromClickUp(tasks) {
+  // Load cross-client tombstone from deleted_ads table.
+  // 2026-05-05 fix: AWAIT the SELECT before processing tasks. Previously this
+  // was fire-and-forget, racing with the tasks loop. If ClickUp's response
+  // landed before the tombstone fetch resolved, deleted tasks slipped through
+  // the filter and got re-imported. Await ensures the filter is fully built
+  // before any task is checked.
   var _supabaseTombstone = {};
   if (typeof SB !== 'undefined' && SB && activeProductId) {
-    SB.from('deleted_ads').select('id,clickup_task_id').eq('product_id', activeProductId)
-      .then(function(r) {
-        if (r && r.data) r.data.forEach(function(row) {
+    try {
+      var _tombResp = await SB.from('deleted_ads').select('id,clickup_task_id').eq('product_id', activeProductId);
+      if (_tombResp && _tombResp.data) {
+        _tombResp.data.forEach(function(row) {
           _supabaseTombstone[row.id] = true;
           if (row.clickup_task_id) _supabaseTombstone[row.clickup_task_id] = true;
         });
-      });
+      }
+    } catch (e) {
+      console.warn('[import] tombstone fetch failed (proceeding without filter)', e);
+    }
   }
 
   // ── MERGE STRATEGY (not full replace) ──────────────────────────────────────
@@ -21586,7 +21595,7 @@ function pollFullSync() {
 
   // Fetch ALL pages (up to 500 tasks) — same as manual Sync, so we don't miss new tasks beyond page 0
   fetchAllTasks(_startListId)
-    .then(function(tasks) {
+    .then(async function(tasks) {
       // RACE-CONDITION GUARD: verify we're still on the same product before
       // mutating ADS. If the user switched products during the fetch, the
       // fetched tasks belong to a DIFFERENT product's list and must NOT be
@@ -21647,15 +21656,23 @@ function pollFullSync() {
         });
       } catch(e) {}
 
-      // Also load cross-client tombstone from deleted_ads table (Supabase)
+      // Also load cross-client tombstone from deleted_ads table (Supabase).
+      // 2026-05-05 fix: AWAIT the SELECT before Pass 1/Pass 2 run. Previously
+      // fire-and-forget — Pass 2's `if (_deletedCuTombstone[cuid]) continue;`
+      // race-checked an empty object, so deleted CU tasks slipped through and
+      // got re-imported when the SELECT lagged behind the ClickUp fetch.
       if (typeof SB !== 'undefined' && SB && activeProductId) {
-        SB.from('deleted_ads').select('id,clickup_task_id').eq('product_id', activeProductId)
-          .then(function(r) {
-            if (r && r.data) r.data.forEach(function(row) {
+        try {
+          var _p1TombResp = await SB.from('deleted_ads').select('id,clickup_task_id').eq('product_id', activeProductId);
+          if (_p1TombResp && _p1TombResp.data) {
+            _p1TombResp.data.forEach(function(row) {
               _p1Tombstone[row.id] = true;
               if (row.clickup_task_id) _p1Tombstone[row.clickup_task_id] = true;
             });
-          });
+          }
+        } catch (e) {
+          console.warn('[poll] tombstone fetch failed (proceeding without supabase tombstone)', e);
+        }
       }
 
       // BUG-004: load taxonomy tombstones once per poll cycle.

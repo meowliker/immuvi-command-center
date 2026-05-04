@@ -21731,6 +21731,36 @@ function apResolveCard(act) {
       }
     }
   }
+  // Fallback: match by exact formatName === act.title. Catches the case
+  // where ClickUp sync rekeyed an AD's id, the cell-assignments + manual-
+  // actions reconciler missed the remap, and act.sourceAdId now points at
+  // a stale id but the AD still exists under its new id with the same name.
+  // Self-heal by stamping the resolved id back onto act.sourceAdId so the
+  // fast path hits on the next render.
+  if (!ad && act.title && typeof ADS !== 'undefined') {
+    for (var jt = 0; jt < ADS.length; jt++) {
+      if ((ADS[jt].formatName || '') === act.title) { ad = ADS[jt]; break; }
+    }
+    if (ad) {
+      act.sourceAdId = ad.id;
+      if (ad._clickupId && !act._clickupId) act._clickupId = ad._clickupId;
+      // Heal MATRIX_CELL_META + CELL_CREATIVE_ASSIGNMENTS so the matrix cell
+      // reappears too. Same logic as _reconcileCellAssignments but scoped to
+      // this one AD — quick and idempotent.
+      try {
+        if (typeof CELL_CREATIVE_ASSIGNMENTS !== 'undefined') {
+          Object.keys(CELL_CREATIVE_ASSIGNMENTS).forEach(function (cellKey) {
+            var arr = CELL_CREATIVE_ASSIGNMENTS[cellKey] || [];
+            for (var ai = 0; ai < arr.length; ai++) {
+              if (arr[ai] === lookupId && lookupId && lookupId !== ad.id) {
+                arr[ai] = ad.id;
+              }
+            }
+          });
+        }
+      } catch (e) {}
+    }
+  }
 
   // Provenance: figure out where the card came from (inspiration / variation /
   // tracker-format / blank brief). Drives the "Origin" chip on the row.

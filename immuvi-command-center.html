@@ -21517,9 +21517,17 @@ function pollFullSync() {
       var changed = false;
       for (var mai = 0; mai < MANUAL_ACTIONS.length; mai++) {
         var _ma = MANUAL_ACTIONS[mai];
-        if (!_ma || !_ma._clickupId || !_ma._sourceAdId) continue;
+        if (!_ma || !_ma._clickupId) continue;
+        // Bug-fix: createActionFromMatrix and friends write `sourceAdId`
+        // (no underscore). The original lookup only checked `_sourceAdId`,
+        // so this repair loop never fired for app-pushed actions — leaving
+        // the source AD with _clickupId=null. Result: Pass 2 imports the
+        // CU task as a brand-new AD on every poll, duplicating the matrix
+        // cell row. Accept either field name.
+        var _maSrcAdId = _ma._sourceAdId || _ma.sourceAdId;
+        if (!_maSrcAdId) continue;
         for (var aidx = 0; aidx < ADS.length; aidx++) {
-          if (ADS[aidx].id === _ma._sourceAdId && !ADS[aidx]._clickupId) {
+          if (ADS[aidx].id === _maSrcAdId && !ADS[aidx]._clickupId) {
             ADS[aidx]._clickupId   = _ma._clickupId;
             ADS[aidx].clickupTaskId = _ma._clickupId;
             changed = true;

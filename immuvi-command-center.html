@@ -1416,6 +1416,177 @@ body::before {
 @media (prefers-reduced-motion: reduce) {
   .varlab-popover, .varlab-modal-bd { animation: none; }
 }
+
+/* ─────────────────────────────────────────────────────────────────
+   AP filter strip enhancements: Needs Attention pill, hot Clear
+   filters, active filter chips below the row, custom date range
+   popover for the Week pulse panel.
+   ───────────────────────────────────────────────────────────────── */
+.ap-attn-chip {
+  background: rgba(245,158,11,0.12) !important;
+  border-color: rgba(245,158,11,0.40) !important;
+  color: #92400e !important;
+}
+.ap-attn-chip:hover { background: rgba(245,158,11,0.20) !important; }
+.ap-attn-chip.on {
+  background: #f59e0b !important;
+  color: #fff !important;
+  border-color: #f59e0b !important;
+  box-shadow: 0 4px 12px rgba(245,158,11,0.35);
+}
+.ap-attn-chip .ap-anom-count {
+  background: rgba(245,158,11,0.30);
+  color: #78350f;
+}
+.ap-attn-chip.on .ap-anom-count {
+  background: rgba(255,255,255,0.32);
+  color: #fff;
+}
+
+/* Higher specificity — must beat .ap-fbv2 .ap-clear-filters base style */
+.ap-fbv2 .ap-clear-filters.hot,
+.ap-clear-filters.hot {
+  background: linear-gradient(135deg, #fb923c, #f59e0b) !important;
+  color: #fff !important;
+  border-color: #f59e0b !important;
+  box-shadow: 0 4px 14px rgba(245,158,11,0.30) !important;
+  font-weight: 700;
+  animation: apClearPulse 2.4s ease-in-out infinite;
+}
+.ap-fbv2 .ap-clear-filters.hot:hover,
+.ap-clear-filters.hot:hover {
+  filter: brightness(1.05);
+  transform: translateY(-1px);
+  background: linear-gradient(135deg, #f97316, #d97706) !important;
+}
+.ap-clear-filters.hot .ap-pill-icon,
+.ap-fbv2 .ap-clear-filters.hot .ap-pill-icon,
+.ap-clear-filters.hot svg,
+.ap-fbv2 .ap-clear-filters.hot svg { color: #fff !important; stroke: #fff !important; }
+.ap-clear-count {
+  display: inline-block;
+  background: rgba(255,255,255,0.32);
+  color: #fff;
+  border-radius: 999px;
+  padding: 1px 8px;
+  font-size: 0.65rem;
+  font-weight: 700;
+  margin-left: 6px;
+}
+@keyframes apClearPulse {
+  0%, 100% { box-shadow: 0 4px 14px rgba(245,158,11,0.30); }
+  50%      { box-shadow: 0 4px 20px rgba(245,158,11,0.50); }
+}
+
+.ap-active-chips {
+  display: flex; flex-wrap: wrap; gap: 6px; align-items: center;
+  padding: 8px 14px;
+  background: rgba(59,130,246,0.04);
+  border-radius: 10px;
+  margin: 8px 0 4px;
+  font-size: 0.72rem;
+}
+.ap-active-chips-lbl {
+  font-size: 0.62rem;
+  color: var(--t3, #9ca3af);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: 700;
+  margin-right: 4px;
+}
+.ap-active-chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  background: var(--card, #fff);
+  border: 1px solid var(--border, #e5e7eb);
+  border-radius: 999px;
+  padding: 3px 4px 3px 10px;
+  font-size: 0.7rem;
+  color: var(--t1, #111827);
+  font-weight: 500;
+}
+.ap-active-chip-x {
+  background: transparent;
+  border: none;
+  color: var(--t3, #9ca3af);
+  cursor: pointer;
+  padding: 0 6px;
+  font-size: 0.95rem;
+  line-height: 1;
+  border-radius: 999px;
+}
+.ap-active-chip-x:hover { background: rgba(239,68,68,0.12); color: #b91c1c; }
+.ap-active-chips-clearall {
+  margin-left: auto;
+  background: linear-gradient(135deg, #fb923c, #f59e0b);
+  border: 1px solid #f59e0b;
+  color: #fff;
+  border-radius: 999px;
+  padding: 4px 14px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(245,158,11,0.25);
+  letter-spacing: 0.02em;
+}
+.ap-active-chips-clearall:hover {
+  background: linear-gradient(135deg, #f97316, #d97706);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(245,158,11,0.35);
+}
+
+/* Custom date range button + popover on the Week pulse panel */
+.ap-pulse-range-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: transparent;
+  border: 1px solid var(--border, #e5e7eb);
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 0.66rem;
+  color: var(--t2, #6b7280);
+  cursor: pointer;
+  margin-left: 8px;
+}
+.ap-pulse-range-btn:hover { background: var(--bg, #f9fafb); border-color: var(--t2); }
+.ap-pulse-range-btn.on {
+  background: #111827;
+  color: #fff;
+  border-color: #111827;
+}
+.ap-pulse-range-btn .vl-leaf { font-size: 0.85rem; }
+.ap-pulse-range-pop {
+  position: absolute;
+  z-index: 9000;
+  background: var(--card, #fff);
+  border: 1px solid var(--border, #e5e7eb);
+  border-radius: 12px;
+  box-shadow: 0 12px 36px rgba(0,0,0,0.16);
+  padding: 14px;
+  width: 320px;
+  font-size: 0.74rem;
+  animation: fadeUp 0.18s ease-out both;
+}
+.ap-pulse-range-pop h5 { margin: 0 0 8px; font-size: 0.78rem; font-weight: 700; }
+.ap-pulse-range-pop .ap-pr-presets {
+  display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 10px;
+}
+.ap-pulse-range-pop .ap-pr-presets button {
+  background: var(--bg, #f3f4f6); border: 1px solid transparent;
+  padding: 4px 10px; border-radius: 999px; font-size: 0.66rem; cursor: pointer;
+  color: var(--t2);
+}
+.ap-pulse-range-pop .ap-pr-presets button:hover { background: var(--t1); color: #fff; }
+.ap-pulse-range-pop .ap-pr-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.ap-pulse-range-pop .ap-pr-grid label { display: block; font-size: 0.62rem; color: var(--t3); margin-bottom: 3px; }
+.ap-pulse-range-pop .ap-pr-grid input { width: 100%; padding: 5px 8px; border: 1px solid var(--border); border-radius: 6px; font-size: 0.74rem; font-family: inherit; }
+.ap-pulse-range-pop .ap-pr-actions {
+  display: flex; justify-content: space-between; align-items: center; margin-top: 12px; gap: 8px;
+}
+.ap-pulse-range-pop .ap-pr-actions button {
+  padding: 6px 14px; border-radius: 6px; font-size: 0.72rem; cursor: pointer;
+  border: 1px solid var(--border);
+}
+.ap-pulse-range-pop .ap-pr-actions .ap-pr-apply { background: #111827; color: #fff; border-color: #111827; }
+.ap-pulse-range-pop .ap-pr-actions .ap-pr-reset { background: transparent; color: var(--t2); }
 .toast {
   background: var(--t1);
   color: #fff;
@@ -10066,9 +10237,44 @@ const DB = {
       const toInsert = finalRows.filter(function (r) { return !r.id; });
       const keepDbIds = new Set(toUpsert.map(function (r) { return r.id; }));
 
-      // Find DB rows that no longer exist in local state → delete them
-      const existing = await SB.from('manual_actions').select('id').eq('product_id', productId);
+      // Find DB rows that no longer exist in local state → delete them.
+      // Bug-fix: also fetch payload->>id so we can RECOVER any direct-insert
+      // (_writeManualActionRowDirect) whose Promise hasn't resolved yet to
+      // stamp ma._dbId locally. Without this, the directly-inserted row's
+      // UUID is missing from keepDbIds and the delete-then-insert dance
+      // wipes the just-pushed action, then re-creates it under a new UUID
+      // (causing a flicker AND combining with the realtime merge race to
+      // permanently drop the local action). Match by payload.id and stamp
+      // _dbId back so the row is treated as a known upsert, not a delete-
+      // and-reinsert.
+      const existing = await SB.from('manual_actions').select('id, payload').eq('product_id', productId);
       if (existing.error) throw existing.error;
+      var _localPayloadIdToMa = {};
+      if (typeof MANUAL_ACTIONS !== 'undefined' && Array.isArray(MANUAL_ACTIONS)) {
+        for (var _pi = 0; _pi < MANUAL_ACTIONS.length; _pi++) {
+          var _pma = MANUAL_ACTIONS[_pi];
+          if (_pma && _pma.id && !_pma._dbId) _localPayloadIdToMa[_pma.id] = _pma;
+        }
+      }
+      (existing.data || []).forEach(function (row) {
+        var _payloadId = row && row.payload && row.payload.id;
+        if (!_payloadId) return;
+        var _ma = _localPayloadIdToMa[_payloadId];
+        if (_ma && !_ma._dbId) {
+          _ma._dbId = row.id;
+          // Promote this row from toInsert → toUpsert so it isn't deleted then re-inserted.
+          for (var _ri = 0; _ri < finalRows.length; _ri++) {
+            if (finalRows[_ri] && finalRows[_ri].payload && finalRows[_ri].payload.id === _payloadId && !finalRows[_ri].id) {
+              finalRows[_ri].id = row.id;
+              toUpsert.push(finalRows[_ri]);
+              var _idx = toInsert.indexOf(finalRows[_ri]);
+              if (_idx !== -1) toInsert.splice(_idx, 1);
+              keepDbIds.add(row.id);
+              break;
+            }
+          }
+        }
+      });
       const toDeleteIds = (existing.data || []).map(function (r) { return r.id; }).filter(function (id) { return !keepDbIds.has(id); });
 
       if (toDeleteIds.length) {
@@ -10465,11 +10671,24 @@ function _resubscribeRealtime() {
           for (var _li = 0; _li < MANUAL_ACTIONS.length; _li++) {
             var _lma = MANUAL_ACTIONS[_li];
             if (!_lma || !_lma.id) continue;
-            // If DB no longer has this action AND we didn't just delete it locally → another client deleted it
-            if (!_dbMaIds[_lma.id] && !_recentlyDeletedMaIds.has(_lma.id)) {
-              // Drop it — another client deleted it
-              continue;
-            }
+            // Bug-fix (Astro Rekha "task vanishes after auto-refresh"): the
+            // previous logic dropped local actions whose payload.id wasn't in
+            // the freshly-fetched DB rows, on the theory "another client
+            // deleted it." That theory is wrong on busy products where the
+            // dedup pass deletes zombie adopted rows in a loop — each delete
+            // fires a postgres-changes DELETE event which re-enters this
+            // handler. Read-replica lag occasionally hides the just-pushed
+            // row in the SELECT response, the local action gets dropped, and
+            // the next snapshot save persists the diminished state to DB.
+            // Permanent loss.
+            //
+            // The merge's job is to ADD peer-created rows we don't have
+            // locally, not to drop local rows. Peer deletes already arrive
+            // via the 'action-deleted' broadcast handler (line ~9244), and
+            // local deletes go through _rememberManualActionDeletion which
+            // mutates MANUAL_ACTIONS directly. So this branch should never
+            // drop. Always keep the local copy; the additive pass below
+            // handles new rows from peers.
             _localById[_lma.id] = _lma;
             _newLocalMa.push(_lma);
           }
@@ -11063,6 +11282,23 @@ function generateTaskName(source, inspoId, formatName) {
 // digit serials only. 4+ digit serials (legacy inflation from numeric ClickUp
 // task names) are ignored so they don't poison the counter. Returns the next
 // serial as a zero-padded 3-digit string.
+//
+// SERIAL HIGH-WATER: per-prefix monotonic counter persisted to localStorage.
+// Once a serial is issued, it's NEVER reused — even after the task is deleted.
+// Without this, deleting AR-102 frees up "102" → next spawn would reuse it
+// and collide with the deleted task's tombstone / cached ClickUp adopt loop,
+// resurrecting the bug 8 family. (Per user's request, May 2026.)
+function _serialHighWaterKey(prefix) { return 'immuvi.serial.highwater.' + prefix; }
+function _readSerialHighWater(prefix) {
+  try {
+    var raw = localStorage.getItem(_serialHighWaterKey(prefix));
+    var n = parseInt(raw, 10);
+    return isNaN(n) ? 0 : n;
+  } catch (e) { return 0; }
+}
+function _writeSerialHighWater(prefix, n) {
+  try { localStorage.setItem(_serialHighWaterKey(prefix), String(n)); } catch (e) {}
+}
 function _nextFormatSerial(prefix) {
   if (!prefix) prefix = getProductPrefix();
   // Match PREFIX- followed by 1-3 digits followed by either end-of-string or
@@ -11095,9 +11331,13 @@ function _nextFormatSerial(prefix) {
       }
     }
   }
-  // If nothing legitimate exists yet, start at 1.
+  // High-water: never below the persisted max-ever-issued for this prefix.
+  var hw = _readSerialHighWater(prefix);
+  if (hw > max) max = hw;
   var next = max + 1;
   if (next > 999) next = 999; // soft cap; we'll handle 1000+ later if you ever cross over
+  // Persist the new high-water IMMEDIATELY so concurrent spawns don't collide.
+  _writeSerialHighWater(prefix, next);
   return String(next).padStart(3, '0');
 }
 
@@ -11917,6 +12157,25 @@ function createActionFromMatrix(adId, angleName, personaName, btnEl) {
   newAction._pushedBy = (typeof CFG !== 'undefined' && CFG.userLabel) || (typeof _myClientId !== 'undefined' ? _myClientId : '');
   newAction._highlightNew = true; // briefly highlight the new row in v2 table
   MANUAL_ACTIONS.push(newAction);
+  // IMMEDIATE DB insert so the action survives a refresh / sync race even
+  // before the debounced saveStateNow flushes. Mirrors _writeAdRowDirect
+  // for brand-new ADs. Bug 8 protection — see memory/feedback_bug8_orphan_protection.md.
+  try {
+    if (typeof _writeManualActionRowDirect === 'function') {
+      _writeManualActionRowDirect(newAction);
+    }
+  } catch (e) { console.warn('[createActionFromMatrix] direct DB write failed', e); }
+  // Clear any tombstone matching this task's identifiers — user is
+  // explicitly re-creating, so the previous deletion intent is voided.
+  try {
+    if (typeof window._apTombstoneClearMatching === 'function') {
+      window._apTombstoneClearMatching({
+        cuid: ad._clickupId || ad.clickupTaskId || '',
+        adid: ad.id || '',
+        title: ad.formatName || ''
+      });
+    }
+  } catch (e) {}
   // Live broadcast — teammates see the card appear in <200ms.
   try { apBroadcastActionAdded(newAction, 'pushed'); } catch (e) {}
   // Update cell meta to reflect action status
@@ -14785,6 +15044,11 @@ function _apStartColResize(e, key) {
 function renderActionPlan() {
   var container = document.getElementById('actionsContainer');
   if (!container) return;
+  // Dedup MANUAL_ACTIONS at the very top of every render. Catches duplicates
+  // from any source (double-click on Move-to-Plan, realtime echo, prior
+  // session DB dupes) before resolution + filtering touches the list.
+  // See memory/feedback_bug8_orphan_protection.md.
+  try { if (typeof window._apDedupActions === 'function') window._apDedupActions(); } catch (e) {}
   // Make sure cached statuses are loaded for the current product. Async fetch
   // refreshes when the network call returns.
   try { _hydrateCuStatusesFromCache(); } catch (e) {}
@@ -14800,6 +15064,8 @@ function renderActionPlan() {
   html += renderApHygieneBanner(hygiene);
   html += renderApSubViewTabs();
   html += renderApFilterStrip(resolved, filtered);
+  // Active-filter chips below the filter row — quick remove individually.
+  try { html += (typeof renderApActiveFilterChips === 'function') ? renderApActiveFilterChips() : ''; } catch (e) {}
   html += renderApBulkToolbar();
 
   var view = (_apState && _apState.view) || 'table';
@@ -14840,7 +15106,7 @@ var _apState = (function () {
     view: 'table',                  // table | pipeline | week | trends
     filters: {
       dateMode: 'window',           // window (event-in-period) | lifetime (created-in-period)
-      datePreset: 'week',           // today / yesterday / 7d / week / lastweek / 14d / month / lastmonth / custom / all
+      datePreset: 'all',            // today / yesterday / 7d / week / lastweek / 14d / month / lastmonth / custom / all
       dateFrom: null, dateTo: null, // ISO YYYY-MM-DD when datePreset = custom
       statuses: [],                 // [] = all statuses
       funnels: [],                  // [] = all funnels
@@ -14962,11 +15228,22 @@ function apComputePulse(resolved) {
   function startOfDay(d) { var x = new Date(d); x.setHours(0,0,0,0); return x.getTime(); }
   function daysAgo(n) { var d = new Date(); d.setDate(d.getDate() - n); return startOfDay(d); }
   var dow = now.getDay() || 7;
-  var weekStart = (function () {
+  // Default Week range = Mon→today. Override with user's custom range when set.
+  var defaultWeekStart = (function () {
     var d = new Date(); d.setDate(d.getDate() - (dow - 1)); d.setHours(0,0,0,0); return d.getTime();
   })();
-  var lastWeekStart = weekStart - 7 * 24 * 60 * 60 * 1000;
-  var lastWeekEnd = weekStart - 1;
+  var customRange = (typeof _apState !== 'undefined' && _apState && _apState.pulseCustomRange) || null;
+  var weekStart, weekEnd;
+  if (customRange && customRange.from) {
+    weekStart = customRange.from;
+    weekEnd   = customRange.to || Date.now();
+  } else {
+    weekStart = defaultWeekStart;
+    weekEnd   = Date.now();
+  }
+  var weekSpanMs = Math.max(1, weekEnd - weekStart);
+  var lastWeekStart = weekStart - weekSpanMs;
+  var lastWeekEnd   = weekStart - 1;
   var todayStart = startOfDay(now);
   var yesterdayStart = daysAgo(1);
   var yesterdayEnd = todayStart - 1;
@@ -15000,9 +15277,9 @@ function apComputePulse(resolved) {
       if (isBriefStatus(status)) p.today.briefed++;
       if (isWinnerStatus(status) || isLoserStatus(status)) p.today.decisions++;
     }
-    // This week buckets
-    if (created && created >= weekStart) p.week.created++;
-    if (statusChanged && statusChanged >= weekStart) {
+    // This week buckets (or user-chosen custom range)
+    if (created && created >= weekStart && created <= weekEnd) p.week.created++;
+    if (statusChanged && statusChanged >= weekStart && statusChanged <= weekEnd) {
       if (isProductionStatus(status)) p.week.production++;
       if (isReadyStatus(status)) p.week.ready++;
       if (isTestingStatus(status)) { p.week.launched++; p.week.tested++; }
@@ -15100,9 +15377,17 @@ function renderApPulseStrip(p) {
   html += distBar(p.today);
   html += '</div>';
 
-  // THIS WEEK card
+  // PERIOD card — formerly THIS WEEK. Header text now reflects the
+  // active range (default "THIS WEEK · Mon → today" or whatever the
+  // user picked). The range button on the right opens the picker.
+  var _wkRange = (_apState && _apState.pulseCustomRange) || null;
+  var _wkTitle = _wkRange && _wkRange.label ? _wkRange.label.toUpperCase() : 'THIS WEEK';
+  var _wkSub   = _wkRange && _wkRange.label ? ('vs prior period of same length') : 'Mon → today · vs last week';
+  var _wkBtnLbl = _wkRange ? ('📅 ' + (_wkRange.label || 'Custom')) : '📅 This Week';
   html += '<div class="ap-pulse-card">';
-  html += '<div class="ap-pulse-head"><span class="ap-pulse-eyebrow">●</span> THIS WEEK <span class="ap-pulse-sub">Mon → today · vs last week</span></div>';
+  html += '<div class="ap-pulse-head"><span class="ap-pulse-eyebrow">●</span> ' + esc(_wkTitle) + ' <span class="ap-pulse-sub">' + esc(_wkSub) + '</span>' +
+          '<button class="ap-pulse-range-btn' + (_wkRange ? ' on' : '') + '" onclick="event.stopPropagation();_apOpenPulseRangePicker(this)" title="Pick a date range for this panel — also applies to the table filter">' + esc(_wkBtnLbl) + '</button>' +
+          '</div>';
   html += '<div class="ap-pulse-tiles">';
   html += tile('created',  'Created',  p.week.created,  delta(p.weekDelta.created),   'week', 'violet',  '✨');
   html += tile('tested',   'Tested',   p.week.tested,   '',                           'week', 'sky',     '🧪');
@@ -15129,18 +15414,12 @@ function _apTileColor(metric) {
   })[metric] || 'sky';
 }
 
-// Returns true when the current filter combo matches what this tile filters
-// to — used to render the "active" pressed state on the tile.
+// Returns true when this tile is in the multi-select set. Now O(1) over
+// _apState.filters.tileToggles instead of inferring from scattered filter
+// state — that inference was fragile when multi-select mixed metrics.
 function _apIsTileActive(metric, scope) {
-  var f = _apState.filters;
-  var preset = (scope === 'today') ? 'today' : 'week';
-  if (f.datePreset !== preset) return false;
-  var expectedMode = (metric === 'created') ? 'lifetime' : 'window';
-  if (f.dateMode !== expectedMode) return false;
-  var expectedKeys = _apMetricStatusFilter(metric);
-  if (!expectedKeys.length) return f.statuses.length === 0;
-  // Match if at least one expected status is in the active filter set.
-  return f.statuses.some(function (s) { return expectedKeys.indexOf((s || '').toLowerCase()) !== -1; });
+  var arr = ((_apState && _apState.filters && _apState.filters.tileToggles) || []);
+  return arr.indexOf(scope + ':' + metric) !== -1;
 }
 
 // Animate the count-up on every render. Cheap rAF loop, ~360ms.
@@ -15165,28 +15444,32 @@ function _apAnimateCounters() {
 }
 
 // ─── Render: Hygiene banner ────────────────────────────────────────
-function renderApHygieneBanner(h) {
-  if (!h.total) return '';
+// Banner removed — replaced by inline "Needs Attention" pill in the filter
+// strip (see renderApFilterStrip). Function kept as a no-op so any
+// stale caller doesn't crash.
+function renderApHygieneBanner(h) { return ''; }
+// Helper consumed by the new filter-strip pill. Returns the same shape
+// the banner used so the breakdown tooltip can be assembled.
+function _apHygieneTooltip(h) {
+  if (!h || !h.total) return '';
   var parts = [];
-  Object.keys(h.groups).forEach(function (k) {
+  Object.keys(h.groups || {}).forEach(function (k) {
     parts.push(h.groups[k].length + ' ' + k);
   });
-  var html = '<div class="ap-hygiene">';
-  html += '<span class="ap-hygiene-icon">⚠</span>';
-  html += '<span class="ap-hygiene-msg"><b>' + h.total + ' card' + (h.total > 1 ? 's' : '') + '</b> need attention: ' + parts.join(' · ') + '</span>';
-  html += '<button class="ap-hygiene-btn primary" onclick="setApHygieneOnly(true)">Show only these</button>';
-  html += '<button class="ap-hygiene-btn" onclick="setApHygieneOnly(false)">All cards</button>';
-  html += '</div>';
-  return html;
+  return parts.join(' · ');
 }
+window._apHygieneTooltip = _apHygieneTooltip;
 
 // ─── Render: Sub-view tabs ─────────────────────────────────────────
 function renderApSubViewTabs() {
   var v = _apState.view;
+  // Auto-redirect persisted views we no longer expose so users with stale
+  // localStorage don't land on a tab that's gone from the bar.
+  if (v === 'pipeline' || v === 'week') { _apState.view = 'table'; v = 'table'; try { _apSaveState(); } catch (e) {} }
   function tab(id, label) {
     return '<button class="ap-subtab' + (v === id ? ' on' : '') + '" onclick="setApView(\'' + id + '\')">' + label + '</button>';
   }
-  return '<div class="ap-subtabs">' + tab('table','⊞ Table') + tab('pipeline','▣ Pipeline') + tab('week','📅 This Week') + tab('trends','📊 Trends') + tab('variations','🌱 Variations') + '</div>';
+  return '<div class="ap-subtabs">' + tab('table','⊞ Table') + tab('trends','📊 Trends') + tab('variations','🌱 Variations') + '</div>';
 }
 
 // ─── Render: Filter strip ──────────────────────────────────────────
@@ -15246,16 +15529,44 @@ function renderApFilterStrip(allResolved, filtered) {
             'Anomalies' +
             (anomCount ? ' <span class="ap-anom-count">' + anomCount + '</span>' : '') +
           '</button>';
+  // Needs Attention pill — replaces the orange banner. Click toggles the
+  // hygieneOnly filter; tooltip carries the breakdown ("1 Untested · 6 Ready
+  // to Launch · 2 In Production"). Only shown when there are red-aged cards.
+  try {
+    var _hyg = (typeof apComputeHygieneAlerts === 'function') ? apComputeHygieneAlerts(allResolved) : { total: 0, groups: {} };
+    if (_hyg.total) {
+      var _hygTip = (typeof _apHygieneTooltip === 'function') ? _apHygieneTooltip(_hyg) : '';
+      html += '<button class="ap-anom-chip ap-attn-chip' + (f.hygieneOnly ? ' on' : '') + '"' +
+              ' onclick="setApHygieneOnly(' + (!f.hygieneOnly) + ')"' +
+              ' title="' + escAttr(_hyg.total + ' card' + (_hyg.total > 1 ? 's' : '') + ' need attention' + (_hygTip ? ': ' + _hygTip : '')) + '">' +
+                '<span class="ap-pill-icon">⚠</span>' +
+                'Needs Attention' +
+                ' <span class="ap-anom-count">' + _hyg.total + '</span>' +
+              '</button>';
+    }
+  } catch (e) {}
   html += '<span class="ap-fb-sep"></span>';
   html += '<div class="ap-mode-seg" role="tablist">' +
             '<button class="' + (f.dateMode === 'window'   ? 'on' : '') + '" onclick="setApDateMode(\'window\')">Window</button>' +
             '<button class="' + (f.dateMode === 'lifetime' ? 'on' : '') + '" onclick="setApDateMode(\'lifetime\')">Lifetime</button>' +
           '</div>';
   html += '<span class="ap-fb-grow"></span>';
-  html += '<button class="ap-clear-filters' + (hasFilters ? '' : ' disabled') + '"' +
+  // Active-filter count for the Clear button badge. 'all' is the new
+  // neutral default — anything else (including 'week') is a real filter.
+  var _activeFilterCount = 0;
+  if (f.statuses && f.statuses.length) _activeFilterCount += f.statuses.length;
+  if (f.funnels && f.funnels.length)   _activeFilterCount += f.funnels.length;
+  if (f.adTypes && f.adTypes.length)   _activeFilterCount += f.adTypes.length;
+  if (f.sources && f.sources.length)   _activeFilterCount += f.sources.length;
+  if (f.datePreset && f.datePreset !== 'all') _activeFilterCount++;
+  if (f.anomaliesOnly) _activeFilterCount++;
+  if (f.hygieneOnly)   _activeFilterCount++;
+  if (Array.isArray(f.tileToggles) && f.tileToggles.length) _activeFilterCount += f.tileToggles.length;
+  html += '<button class="ap-clear-filters' + (hasFilters ? ' hot' : ' disabled') + '"' +
           (hasFilters ? '' : ' aria-disabled="true"') +
           ' onclick="clearApFilters()" title="Clear all filters">' +
             '<span class="ap-pill-icon">' + icons.clear + '</span>Clear filters' +
+            (hasFilters && _activeFilterCount > 0 ? ' <span class="ap-clear-count">' + _activeFilterCount + '</span>' : '') +
           '</button>';
   html += '</div>'; // close row 1
 
@@ -15289,7 +15600,18 @@ function renderApFilterStrip(allResolved, filtered) {
 
 function apHasActiveFilters() {
   var f = _apState.filters;
-  return f.datePreset !== 'week' || f.statuses.length || f.funnels.length || f.adTypes.length || f.sources.length || f.hygieneOnly;
+  // 'all' is the new neutral default after Clear filters. Treat 'all' as
+  // "no date filter active" so the Clear button doesn't stay hot when the
+  // user is just looking at every card. 'week' is now a real filter.
+  return (f.datePreset && f.datePreset !== 'all')
+      || (f.statuses && f.statuses.length)
+      || (f.funnels && f.funnels.length)
+      || (f.adTypes && f.adTypes.length)
+      || (f.sources && f.sources.length)
+      || f.hygieneOnly
+      || f.anomaliesOnly
+      || (f.tileToggles && f.tileToggles.length)
+      || !!(_apState && _apState.pulseCustomRange);
 }
 
 function renderApDateDropdown() {
@@ -15417,9 +15739,91 @@ function toggleApStatus(s)           { var arr = _apState.filters.statuses; var 
 function toggleApFunnel(s)           { var arr = _apState.filters.funnels;  var i = arr.indexOf(s); if (i === -1) arr.push(s); else arr.splice(i, 1); _apSaveState(); renderActionPlan(); }
 function toggleApAdType(s)           { var arr = _apState.filters.adTypes;  var i = arr.indexOf(s); if (i === -1) arr.push(s); else arr.splice(i, 1); _apSaveState(); renderActionPlan(); }
 function toggleApSource(s)           { var arr = _apState.filters.sources;  var i = arr.indexOf(s); if (i === -1) arr.push(s); else arr.splice(i, 1); _apSaveState(); renderActionPlan(); }
+// ─── Active filter chips ─────────────────────────────────────────
+// Renders a compact row of chips (one per active filter) below the
+// filter strip. Each chip carries an × to remove just that one filter.
+// No-op when nothing is active.
+function renderApActiveFilterChips() {
+  var f = _apState.filters || {};
+  var chips = [];
+  function chip(label, onclick) {
+    // Use single-quoted onclick attribute so callers can use double-quoted
+    // string literals inside without breaking the HTML parser. Earlier
+    // double-quoted onclick + JSON.stringify produced "..." inside "..."
+    // which silently broke the × button.
+    return '<span class="ap-active-chip">' + esc(label) +
+           "<button class=\"ap-active-chip-x\" onclick='" + onclick + "' title=\"Remove this filter\">×</button></span>";
+  }
+  // Date preset chip — surface the panel-driven custom range honestly so
+  // users see "Date: Last 14d" instead of the misleading scope label
+  // baked into tile-toggles. Skip when no date filter is active (preset
+  // is 'week' default OR 'all').
+  var pulseR = (_apState && _apState.pulseCustomRange) || null;
+  if (pulseR && pulseR.label) {
+    chips.push(chip('Date: ' + pulseR.label, '_apClearChip("datePreset")'));
+  } else if (f.datePreset && f.datePreset !== 'week' && f.datePreset !== 'all') {
+    var dlbl = ({ 'today':'Today', 'yesterday':'Yesterday', '14d':'Last 14d', '30d':'Last 30d', 'custom':'Custom range' })[f.datePreset] || f.datePreset;
+    chips.push(chip('Date: ' + dlbl, '_apClearChip("datePreset")'));
+  }
+  // Statuses (escape value as JS-string literal with double quotes since
+  // the onclick attribute is single-quoted)
+  function jsArg(v) { return '"' + String(v).replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"'; }
+  (f.statuses || []).forEach(function (s) {
+    chips.push(chip('Status: ' + s, '_apClearChip("status", ' + jsArg(s) + ')'));
+  });
+  (f.funnels || []).forEach(function (s) {
+    chips.push(chip('Funnel: ' + s, '_apClearChip("funnel", ' + jsArg(s) + ')'));
+  });
+  (f.adTypes || []).forEach(function (s) {
+    chips.push(chip('Type: ' + s, '_apClearChip("adType", ' + jsArg(s) + ')'));
+  });
+  (f.sources || []).forEach(function (s) {
+    chips.push(chip('Source: ' + s, '_apClearChip("source", ' + jsArg(s) + ')'));
+  });
+  if (f.anomaliesOnly) chips.push(chip('Anomalies only', '_apClearChip("anomaliesOnly")'));
+  if (f.hygieneOnly)   chips.push(chip('Needs Attention only', '_apClearChip("hygieneOnly")'));
+  (f.tileToggles || []).forEach(function (k) {
+    var parts = k.split(':');
+    var mLbl = parts[1].charAt(0).toUpperCase() + parts[1].slice(1);
+    // When the user has a custom date range applied, the tile's "scope"
+    // label (Today/Week) is misleading — the date is set by the picker.
+    // Just label by the metric. When no custom range, prefix with
+    // scope so the chip self-describes.
+    var label = pulseR ? mLbl : ((parts[0] === 'today' ? 'Today' : 'Week') + ': ' + mLbl);
+    chips.push(chip(label, '_apClearChip("tile", ' + jsArg(k) + ')'));
+  });
+  if (!chips.length) return '';
+  return '<div class="ap-active-chips"><span class="ap-active-chips-lbl">Active:</span>' +
+         chips.join('') +
+         '<button class="ap-active-chips-clearall" onclick="clearApFilters()">Clear all</button>' +
+         '</div>';
+}
+window._apClearChip = function (kind, value) {
+  var f = _apState.filters;
+  if (kind === 'datePreset') {
+    f.datePreset = 'all';
+    f.dateFrom = null; f.dateTo = null;
+    // Also wipe the panel custom range so the panel and table stay in sync.
+    if (_apState.pulseCustomRange) _apState.pulseCustomRange = null;
+  }
+  else if (kind === 'status') { f.statuses = (f.statuses || []).filter(function (s) { return s !== value; }); }
+  else if (kind === 'funnel') { f.funnels = (f.funnels || []).filter(function (s) { return s !== value; }); }
+  else if (kind === 'adType') { f.adTypes = (f.adTypes || []).filter(function (s) { return s !== value; }); }
+  else if (kind === 'source') { f.sources = (f.sources || []).filter(function (s) { return s !== value; }); }
+  else if (kind === 'anomaliesOnly') { f.anomaliesOnly = false; }
+  else if (kind === 'hygieneOnly')   { f.hygieneOnly = false; }
+  else if (kind === 'tile') {
+    f.tileToggles = (f.tileToggles || []).filter(function (k) { return k !== value; });
+    if (typeof _apApplyPulseToggles === 'function') _apApplyPulseToggles();
+  }
+  _apSaveState(); renderActionPlan();
+};
 function clearApFilters() {
-  _apState.filters = { dateMode: _apState.filters.dateMode, datePreset: 'week', dateFrom: null, dateTo: null, statuses: [], funnels: [], adTypes: [], sources: [], hygieneOnly: false };
+  _apState.filters = { dateMode: _apState.filters.dateMode, datePreset: 'all', dateFrom: null, dateTo: null, statuses: [], funnels: [], adTypes: [], sources: [], hygieneOnly: false, anomaliesOnly: false, tileToggles: [] };
   _apState.openFilter = null;
+  // Also wipe any custom range applied via the Week panel picker so the
+  // Pulse strip falls back to its default Mon→today.
+  _apState.pulseCustomRange = null;
   _apSaveState(); renderActionPlan();
 }
 function setApView(v)                { _apState.view = v; _apSaveState(); renderActionPlan(); }
@@ -15437,9 +15841,13 @@ function setApAnomaliesOnly(on)      { _apState.filters.anomaliesOnly = !!on; _a
 // names ("In Production" / "Production" / "Producing") across products.
 function _apMetricStatusFilter(metric) {
   switch (metric) {
+    // Briefed = brief written, no creative produced yet (status: Untested,
+    // plus Approved as "brief approved, ready to assign"). 'brief'/'to do'
+    // tolerated for ClickUp lists that use those legacy status names.
     case 'briefed':    return ['untested','brief','approved','to do'];
     case 'production': return ['in production','production','in progress'];
     case 'ready':      return ['ready to launch','ready'];
+    case 'testing':
     case 'launched':
     case 'tested':     return ['testing','live','in testing'];
     case 'decisions':
@@ -15464,26 +15872,63 @@ function _apStatusesMatching(metricKeys) {
   return keep;
 }
 
-function setApFilterToday(metric) {
-  _apState.filters.datePreset = 'today';
-  // 'created' uses lifetime (when task was born today).
-  // Everything else uses window (status changed today).
-  _apState.filters.dateMode   = (metric === 'created') ? 'lifetime' : 'window';
-  _apState.filters.statuses   = _apStatusesMatching(_apMetricStatusFilter(metric));
-  _apState.filters.funnels = []; _apState.filters.adTypes = []; _apState.filters.sources = [];
-  _apState.filters.hygieneOnly = false;
+// Multi-select pulse-cell toggles. Each cell toggles a `scope:metric`
+// entry in _apState.filters.tileToggles. Clicking the same cell again
+// removes just its filter; clicking another cell ADDS to the set so the
+// table filters by the union. Date preset = last-clicked scope.
+function _apTogglePulseCell(scope, metric) {
+  if (!_apState.filters.tileToggles) _apState.filters.tileToggles = [];
+  var key = scope + ':' + metric;
+  var idx = _apState.filters.tileToggles.indexOf(key);
+  if (idx === -1) _apState.filters.tileToggles.push(key);
+  else            _apState.filters.tileToggles.splice(idx, 1);
+  _apApplyPulseToggles();
   _apState.openFilter = null;
   _apSaveState(); renderActionPlan();
 }
-function setApFilterWeek(metric) {
-  _apState.filters.datePreset = 'week';
-  _apState.filters.dateMode   = (metric === 'created') ? 'lifetime' : 'window';
-  _apState.filters.statuses   = _apStatusesMatching(_apMetricStatusFilter(metric));
-  _apState.filters.funnels = []; _apState.filters.adTypes = []; _apState.filters.sources = [];
-  _apState.filters.hygieneOnly = false;
-  _apState.openFilter = null;
-  _apSaveState(); renderActionPlan();
+function _apApplyPulseToggles() {
+  var arr = (_apState.filters.tileToggles || []);
+  // If the user has a custom date range applied via the panel picker,
+  // never overwrite it from a tile click. The custom range owns the date
+  // dimension; tiles only contribute their status filter.
+  var hasCustom = !!(_apState && _apState.pulseCustomRange);
+  if (!arr.length) {
+    // No tiles selected → reset status. Keep the date filter as-is so
+    // a custom range survives tile-clear.
+    if (!hasCustom) {
+      _apState.filters.datePreset = 'all';
+      _apState.filters.dateMode   = 'window';
+    }
+    _apState.filters.statuses   = [];
+    return;
+  }
+  if (!hasCustom) {
+    // Date scope = the most-recently-toggled cell's scope. If user mixes
+    // today + week tiles, the last click wins for date semantics.
+    var lastScope = arr[arr.length - 1].split(':')[0];
+    _apState.filters.datePreset = lastScope;
+    // Mode: 'created' tiles want lifetime; others want window. Mixed → window.
+    var anyNonCreated = false;
+    arr.forEach(function (k) { if (k.split(':')[1] !== 'created') anyNonCreated = true; });
+    _apState.filters.dateMode = anyNonCreated ? 'window' : 'lifetime';
+  } else {
+    // Custom range active — keep dateFrom/dateTo, just refine dateMode
+    // based on whether any non-created tile is in the set.
+    var anyNonCreated2 = false;
+    arr.forEach(function (k) { if (k.split(':')[1] !== 'created') anyNonCreated2 = true; });
+    _apState.filters.dateMode = anyNonCreated2 ? 'window' : 'lifetime';
+  }
+  // Statuses = union of metric→status sets.
+  var statusKeySet = {};
+  arr.forEach(function (k) {
+    var metric = k.split(':')[1];
+    var keys = _apMetricStatusFilter(metric);
+    keys.forEach(function (s) { statusKeySet[s] = 1; });
+  });
+  _apState.filters.statuses = _apStatusesMatching(Object.keys(statusKeySet));
 }
+function setApFilterToday(metric) { _apTogglePulseCell('today', metric); }
+function setApFilterWeek(metric)  { _apTogglePulseCell('week',  metric); }
 
 // ─── Bulk toolbar ──────────────────────────────────────────────────
 function renderApBulkToolbar() {
@@ -16533,6 +16978,18 @@ function deleteManualAction(id) {
     if (MANUAL_ACTIONS[i].id === id) { act = MANUAL_ACTIONS[i]; break; }
   }
   if (!act) return;
+  // Tombstone first — prevents the next ClickUp poll's auto-adopt loop
+  // from resurrecting this row before the async CU delete lands. See
+  // memory/feedback_bug8_orphan_protection.md.
+  try {
+    if (typeof window._apTombstoneAdd === 'function') {
+      window._apTombstoneAdd({
+        cuid:  act._clickupId || '',
+        adid:  act.sourceAdId || act.adId || '',
+        title: act.title || ''
+      });
+    }
+  } catch (e) {}
 
   var sourceId = act.sourceAdId || act.adId;
   var sourceAd = null;
@@ -20124,8 +20581,25 @@ function importTasksFromClickUp(tasks) {
     }
   }
   for (var i = 0; i < MANUAL_ACTIONS.length; i++) {
-    if (MANUAL_ACTIONS[i]._clickupId) {
-      MANUAL_ACTIONS[i]._clickupTaskDeleted = !_validClickupIds.has(MANUAL_ACTIONS[i]._clickupId);
+    var _maChk = MANUAL_ACTIONS[i];
+    if (!_maChk._clickupId) continue;
+    // Only mark as deleted-in-CU if the action has a legitimate push history.
+    // 'pushed_to_clickup' is logged at line ~19110 inside the success branch
+    // of createClickUpTaskFromAction; 'relinked' is logged on the recreate
+    // flow. Either is a positive signal that this _clickupId is real.
+    // Without one of those, the _clickupId likely came from a stale self-
+    // heal — don't flag the row, and don't touch the value (let the row
+    // resolve via apResolveCard's normal lookup chain).
+    var _hist = Array.isArray(_maChk._history) ? _maChk._history : [];
+    var _legitPush = _hist.some(function (e) { return e && (e.type === 'pushed_to_clickup' || e.type === 'relinked'); });
+    if (_legitPush || _maChk._clickupUrl) {
+      _maChk._clickupTaskDeleted = !_validClickupIds.has(_maChk._clickupId);
+    } else {
+      // Make sure no stale flag survives — but DO NOT null _clickupId.
+      // Earlier patch over-cleaned and broke the primary push path which
+      // doesn't always set _clickupUrl. Bug 8 family — see memory/
+      // feedback_bug8_orphan_protection.md.
+      _maChk._clickupTaskDeleted = false;
     }
   }
 
@@ -21123,17 +21597,40 @@ function pollFullSync() {
           } else if (prevTaskType !== 'production' && nextTaskType === 'production') {
             // Production tag ADDED in ClickUp — adopt if not already in plan.
             if (_linkedAct) apLogEvent(_linkedAct, 'tag_added', 'production tag added in ClickUp', 'sync');
-            else apAdoptAdAsAction(ad, { reason: 'production tag added in ClickUp' });
+            else {
+              // Require app-created marker — see Bug 8 family protection.
+              var _hasAppMarker2 = Array.isArray(ad._tags) && ad._tags.indexOf('app-created') !== -1;
+              if (_hasAppMarker2) apAdoptAdAsAction(ad, { reason: 'production tag added in ClickUp' });
+            }
           }
           ad.taskType = nextTaskType; // commit
           changed = true;
         } else if (nextTaskType === 'production') {
           // Production-tagged but no MANUAL_ACTION yet — adopt (catches
           // tasks created directly in ClickUp by another teammate).
+          // Stronger dedup: also accept formatName === act.title to catch
+          // user-pushed actions whose sourceAdId got rekeyed. See
+          // memory/feedback_bug8_orphan_protection.md.
           var _alreadyLinked = (typeof MANUAL_ACTIONS !== 'undefined' && MANUAL_ACTIONS.find(function (a) {
-            return (a.sourceAdId === ad.id) || (a._clickupId && a._clickupId === ad._clickupId);
+            if (!a) return false;
+            if (a.sourceAdId === ad.id) return true;
+            if (a._clickupId && a._clickupId === ad._clickupId) return true;
+            if (ad.formatName && a.title && String(a.title).trim() === String(ad.formatName).trim()) return true;
+            return false;
           }));
-          if (!_alreadyLinked) {
+          // Skip if AD is being used as a tracker parent — see
+          // apAdoptAdAsAction's parent-protection guard for full reasoning.
+          var _isParent = (typeof ADS !== 'undefined' && Array.isArray(ADS)) &&
+                          ADS.some(function (x) { return x && x !== ad && x.sourceFormatId === ad.id; });
+          // Tombstone check — same as apAdoptAdAsAction's. Belt-and-suspenders
+          // because the dedup search above might miss when title drifted.
+          var _isTombstoned = (typeof window._apIsTombstoned === 'function') &&
+                              window._apIsTombstoned({ cuid: ad._clickupId || '', adid: ad.id || '', title: ad.formatName || '' });
+          // Require app-created marker tag — only adopt CU tasks pushed by
+          // this app, never random tracker imports / parent format tasks.
+          // Bug 8 protection. See memory/feedback_bug8_orphan_protection.md.
+          var _hasAppMarker = Array.isArray(ad._tags) && ad._tags.indexOf('app-created') !== -1;
+          if (!_alreadyLinked && !_isParent && !_isTombstoned && _hasAppMarker) {
             if (apAdoptAdAsAction(ad, { reason: 'production tag detected during sync' })) changed = true;
           }
         }
@@ -21274,10 +21771,37 @@ function pollFullSync() {
         for (var _li2 = 0; _li2 < ADS.length; _li2++) {
           if (ADS[_li2]._clickupId) _localWithCid++;
         }
+        // Bug 8 protection: never drop an AD that has an associated
+        // MANUAL_ACTION pointing at it — those are user-tracked entities.
+        // The AD's _clickupId might be a parent format task that's in a
+        // different list / not in this fetch. Dropping it leaves the
+        // Action Plan row orphaned and the matrix cell empty. See
+        // memory/feedback_bug8_orphan_protection.md.
+        var _adsWithActions = {};
+        if (typeof MANUAL_ACTIONS !== 'undefined' && Array.isArray(MANUAL_ACTIONS)) {
+          for (var _mai = 0; _mai < MANUAL_ACTIONS.length; _mai++) {
+            var _maRef = MANUAL_ACTIONS[_mai];
+            if (_maRef && _maRef.sourceAdId) _adsWithActions[_maRef.sourceAdId] = true;
+            if (_maRef && _maRef.adId)       _adsWithActions[_maRef.adId]       = true;
+          }
+        }
         var _wouldDrop = [];
         for (var _li3 = 0; _li3 < ADS.length; _li3++) {
           var _ad = ADS[_li3];
           if (_ad._clickupId && !taskMap[_ad._clickupId]) {
+            // Skip if user has tracked this AD via Action Plan.
+            if (_adsWithActions[_ad.id]) continue;
+            // Skip if AD is referenced by any matrix cell — same reasoning,
+            // user has actively organized this creative into a cell.
+            var _inCell = false;
+            if (typeof CELL_CREATIVE_ASSIGNMENTS !== 'undefined') {
+              var _cks = Object.keys(CELL_CREATIVE_ASSIGNMENTS);
+              for (var _cki = 0; _cki < _cks.length; _cki++) {
+                var _arr = CELL_CREATIVE_ASSIGNMENTS[_cks[_cki]] || [];
+                if (_arr.indexOf(_ad.id) !== -1) { _inCell = true; break; }
+              }
+            }
+            if (_inCell) continue;
             _wouldDrop.push(_ad.id);
           }
         }
@@ -21287,12 +21811,103 @@ function pollFullSync() {
           for (var _dsi = 0; _dsi < _wouldDrop.length; _dsi++) _dropSet[_wouldDrop[_dsi]] = true;
           ADS = ADS.filter(function (a) { return !_dropSet[a.id]; });
           changed = true;
-          console.log('[poll] reconciled — dropped', _wouldDrop.length, 'stale ads deleted from ClickUp');
+          console.log('[poll] reconciled — dropped', _wouldDrop.length, 'stale ads deleted from ClickUp (kept all action-linked + cell-linked ADs)');
         } else if (_wouldDrop.length > 0 && _dropPct > 0.4) {
           console.warn('[poll] reconcile SKIPPED — would drop', _wouldDrop.length, 'of', _localWithCid,
             '(' + Math.round(_dropPct * 100) + '%) which exceeds 40% safety threshold. Click Sync Now to force reconcile.');
         }
       }
+
+      // ── Pass 2.6: action dedup ──
+      // Whenever there are 2+ MANUAL_ACTIONS pointing at the SAME _clickupId
+      // (or the same sourceAdId among null-_clickupId entries), keep one
+      // and drop the rest. Priority for which to keep:
+      //   1. has 'pushed_to_clickup' history event (user-pushed by app)
+      //   2. has _pushedAt and is NOT _origin='adopted'
+      //   3. earliest _pushedAt / _adoptedAt
+      try {
+        var _byCu = {};
+        var _bySrc = {};
+        for (var _di = 0; _di < MANUAL_ACTIONS.length; _di++) {
+          var _da = MANUAL_ACTIONS[_di];
+          if (!_da) continue;
+          if (_da._clickupId) {
+            (_byCu[_da._clickupId] = _byCu[_da._clickupId] || []).push(_da);
+          } else if (_da.sourceAdId) {
+            // Only group null-cu ones by sourceAdId+title to avoid grouping
+            // distinct actions for the same AD (rare but possible).
+            var _sk = _da.sourceAdId + '||' + (_da.title || '');
+            (_bySrc[_sk] = _bySrc[_sk] || []).push(_da);
+          }
+        }
+        function _scoreAction(a) {
+          var hist = Array.isArray(a._history) ? a._history : [];
+          var pushed = hist.some(function (e) { return e && e.type === 'pushed_to_clickup'; });
+          var isAdopted = (a._origin === 'adopted' || !!a._adoptedAt);
+          var s = 0;
+          // Massive weight on "not adopted" — same scoring as the render-time
+          // dedup so they agree. User-pushed always beats adopted phantom.
+          if (!isAdopted)                              s += 1000;
+          if (pushed)                                  s += 100;
+          if (a._pushedAt)                             s += 50;
+          // Tie-breaker: earlier wins (smaller _pushedAt/_adoptedAt). Use
+          // negative so the natural sort keeps higher score = better keeper.
+          var t = a._pushedAt || a._adoptedAt || 0;
+          return s - (t / 1e15); // tiny negative weight on time
+        }
+        var _drops = {};
+        var _dedupCount = 0;
+        function _processGroup(group) {
+          if (!group || group.length < 2) return;
+          var keeper = group.slice().sort(function (a, b) { return _scoreAction(b) - _scoreAction(a); })[0];
+          for (var i = 0; i < group.length; i++) {
+            if (group[i].id === keeper.id) continue;
+            _drops[group[i].id] = true;
+            _dedupCount++;
+          }
+        }
+        Object.keys(_byCu).forEach(function (cu) { _processGroup(_byCu[cu]); });
+        Object.keys(_bySrc).forEach(function (sk) { _processGroup(_bySrc[sk]); });
+        if (_dedupCount > 0) {
+          MANUAL_ACTIONS = MANUAL_ACTIONS.filter(function (a) { return !_drops[a.id]; });
+          changed = true;
+          console.log('[poll] deduplicated', _dedupCount, 'duplicate MANUAL_ACTION row(s)');
+        }
+      } catch (_eDedup) { console.warn('[poll] dedup pass error', _eDedup); }
+
+      // ── Pass 2.7: heal previously-falsely-adopted actions ──
+      // Earlier sync cycles may have wrongly adopted parent-format ADs as
+      // standalone Action Plan rows (Bug 8 family). Detect those and revert
+      // to clean state. Signature: action has _origin='adopted' AND its
+      // linked AD is being used as a tracker parent (some other AD has
+      // sourceFormatId pointing at it). Such an AD is inventory, not a
+      // user-pushed task — its action shouldn't exist.
+      try {
+        var _healed = 0;
+        var _toRemove = {};
+        for (var _hai = 0; _hai < MANUAL_ACTIONS.length; _hai++) {
+          var _ha = MANUAL_ACTIONS[_hai];
+          if (!_ha) continue;
+          if (_ha._origin !== 'adopted') continue;
+          // Find the linked AD (by sourceAdId or _clickupId).
+          var _linkedAd = null;
+          if (_ha.sourceAdId) _linkedAd = ADS.find(function (x) { return x && x.id === _ha.sourceAdId; });
+          if (!_linkedAd && _ha._clickupId) _linkedAd = ADS.find(function (x) { return x && x._clickupId === _ha._clickupId; });
+          if (!_linkedAd) continue;
+          // Is _linkedAd used as a tracker parent?
+          var _usedAsParent = ADS.some(function (x) { return x && x !== _linkedAd && x.sourceFormatId === _linkedAd.id; });
+          if (!_usedAsParent) continue;
+          // Drop the false-adopt action. If the matching user-pushed action
+          // exists (by title === ad.formatName), keep that one.
+          _toRemove[_ha.id] = true;
+          _healed++;
+        }
+        if (_healed > 0) {
+          MANUAL_ACTIONS = MANUAL_ACTIONS.filter(function (a) { return !_toRemove[a.id]; });
+          changed = true;
+          console.log('[poll] healed', _healed, 'falsely-adopted action(s) on tracker parents');
+        }
+      } catch (_eHeal) { console.warn('[poll] heal-adopt pass error', _eHeal); }
 
       // ── Pass 3: sync MANUAL_ACTIONS liveStatus + title from ClickUp ──
       // External ClickUp renames now propagate to action plan task titles
@@ -21593,12 +22208,57 @@ function apLogEvent(act, type, detail, by) {
 // Writes an `adopted` history event so the user sees where it came from.
 // ─────────────────────────────────────────────────────────────────
 function apAdoptAdAsAction(ad, opts) {
+  // ─────────────────────────────────────────────────────────────────
+  // GLOBAL KILL SWITCH — auto-adopt fully disabled (May 2026).
+  //
+  // User explicit rule: AP rows should ONLY appear when user pushes via
+  // the app's Move-to-Plan flow (createActionFromMatrix or
+  // createClickUpTaskFromAction). Auto-adopt was importing tracker
+  // parent-format tasks and other unrelated CU tasks, creating phantom
+  // rows tagged "adopted" that never went away. Every "ghost row" /
+  // "task disappears and comes back" / "old deleted task resurrects"
+  // bug we hit traced back to this function. Disabling end-to-end.
+  //
+  // To re-enable for a specific use case in the future, replace this
+  // early-return with the actual creation logic below. The original
+  // implementation is preserved below for reference.
+  // ─────────────────────────────────────────────────────────────────
+  return null;
+  /* eslint-disable no-unreachable */
   if (!ad || !ad.id) return null;
   if (typeof MANUAL_ACTIONS === 'undefined') return null;
-  // Dedupe by sourceAdId / _clickupId.
+  // Tombstone protection — if this AD's identifiers are tombstoned (i.e.
+  // user previously deleted the AP row for this task), don't recreate it.
+  // Tombstones expire after 7 days and clear when user explicitly re-pushes
+  // via createActionFromMatrix.
+  if (typeof window._apIsTombstoned === 'function') {
+    var _tombProbe = {
+      cuid: ad._clickupId || ad.clickupTaskId || '',
+      adid: ad.id || '',
+      title: ad.formatName || ''
+    };
+    if (window._apIsTombstoned(_tombProbe)) return null;
+  }
+  // Bug 8 family — parent-format protection. A tracker-source AD
+  // (one that other ADs reference via sourceFormatId) is INVENTORY,
+  // not a user-pushed task. Adopting it creates a phantom Action Plan
+  // row whose ClickUp link points at the parent task in another list
+  // (404 when clicked). Skip silently. See memory/feedback_bug8_orphan_protection.md.
+  if (typeof ADS !== 'undefined' && Array.isArray(ADS)) {
+    var _isParent = ADS.some(function (x) { return x && x !== ad && x.sourceFormatId === ad.id; });
+    if (_isParent) return null;
+  }
+  // Dedupe by sourceAdId / _clickupId / formatName-equals-title. The
+  // formatName check catches the case where an AD's id was rekeyed by
+  // CU sync but a user-pushed MANUAL_ACTION still references the AD
+  // by its task name. Without it, the rekey produces a duplicate
+  // adopted action AND/OR the user's pushed action loses its link.
   var existing = MANUAL_ACTIONS.find(function (a) {
-    return a.sourceAdId === ad.id || a.adId === ad.id ||
-           (a._clickupId && (a._clickupId === ad._clickupId || a._clickupId === ad.clickupTaskId));
+    if (!a) return false;
+    if (a.sourceAdId === ad.id || a.adId === ad.id) return true;
+    if (a._clickupId && (a._clickupId === ad._clickupId || a._clickupId === ad.clickupTaskId)) return true;
+    if (ad.formatName && a.title && String(a.title).trim() === String(ad.formatName).trim()) return true;
+    return false;
   });
   if (existing) return existing;
   var actionId = 'adopt-' + Date.now() + '-' + Math.random().toString(36).slice(2, 7);
@@ -21641,20 +22301,35 @@ function apAdoptAdAsAction(ad, opts) {
 function apRunLegacyBackfill() {
   if (typeof activeProductId === 'undefined' || !activeProductId) return;
   if (typeof ADS === 'undefined' || !Array.isArray(ADS)) return;
-  // Build a set of AD ids already represented in MANUAL_ACTIONS so we don't
-  // create duplicates.
+  // Build multi-key dedup index of MANUAL_ACTIONS so we don't recreate
+  // dupes after a sync rekeyed the AD's id (Bug 8 family). Use sourceAdId
+  // AND adId AND _clickupId AND title — any one matching counts.
   var inMA = {};
   (MANUAL_ACTIONS || []).forEach(function (a) {
-    var k = a.sourceAdId || a.adId; if (k) inMA[k] = true;
+    if (!a) return;
+    if (a.sourceAdId) inMA[a.sourceAdId] = true;
+    if (a.adId)       inMA[a.adId] = true;
+    if (a._clickupId) inMA['cu:' + a._clickupId] = true;
+    if (a.title)      inMA['t:' + String(a.title).trim().toLowerCase()] = true;
   });
   var adopted = 0;
   ADS.forEach(function (ad) {
     if (!ad) return;
+    // Multi-key check.
     if (inMA[ad.id]) return;
+    if (ad._clickupId && inMA['cu:' + ad._clickupId]) return;
+    if (ad.clickupTaskId && inMA['cu:' + ad.clickupTaskId]) return;
+    if (ad.formatName && inMA['t:' + String(ad.formatName).trim().toLowerCase()]) return;
     // Adopt if any of: parsed taskType=production, OR raw tags include production.
     var isProd = (ad.taskType === 'production') ||
                  (Array.isArray(ad._tags) && ad._tags.indexOf('production') !== -1);
     if (!isProd) return;
+    // Bug 8 family — require the `app-created` marker tag.
+    // Without it, the AD is a passive tracker import (or a parent format
+    // task with the legacy `production` tag) — NOT something this app
+    // pushed → not actionable as an AP row. Skip silently.
+    var hasAppMarker = Array.isArray(ad._tags) && ad._tags.indexOf('app-created') !== -1;
+    if (!hasAppMarker) return;
     if (apAdoptAdAsAction(ad, { reason: 'legacy backfill' })) adopted++;
   });
   if (adopted > 0) {
@@ -21731,19 +22406,65 @@ function apResolveCard(act) {
       }
     }
   }
-  // Fallback: match by exact formatName === act.title. Catches the case
-  // where ClickUp sync rekeyed an AD's id, the cell-assignments + manual-
-  // actions reconciler missed the remap, and act.sourceAdId now points at
-  // a stale id but the AD still exists under its new id with the same name.
-  // Self-heal by stamping the resolved id back onto act.sourceAdId so the
-  // fast path hits on the next render.
+  // Fallback chain: ClickUp sync sometimes appends suffixes to formatName
+  // (e.g. "AR-101-12346" → "AR-101-12346 (12346/12345-2)"), so an exact
+  // match against the act.title snapshot can drift. Try in order:
+  //   3a. exact equals
+  //   3b. case-insensitive equals
+  //   3c. one is a prefix of the other (handles suffix-on-either-side)
+  //   3d. case-insensitive substring match on first 8 chars of title
+  //   3e. cell-assignment scoped — walk the action's source cell ids and
+  //       find the AD whose formatName starts with act.title (most
+  //       reliable signal when title has drifted: scope is exact)
   if (!ad && act.title && typeof ADS !== 'undefined') {
+    var _t = String(act.title || '').trim();
+    var _tLow = _t.toLowerCase();
+    var _tHead = _tLow.slice(0, 8);
+    // 3a + 3b
     for (var jt = 0; jt < ADS.length; jt++) {
-      if ((ADS[jt].formatName || '') === act.title) { ad = ADS[jt]; break; }
+      var _fn = String(ADS[jt].formatName || '').trim();
+      if (_fn === _t || _fn.toLowerCase() === _tLow) { ad = ADS[jt]; break; }
+    }
+    // 3c — prefix either way
+    if (!ad) for (var jt2 = 0; jt2 < ADS.length; jt2++) {
+      var _fn2 = String(ADS[jt2].formatName || '').trim();
+      var _fn2Low = _fn2.toLowerCase();
+      if (!_fn2) continue;
+      if (_fn2Low.indexOf(_tLow) === 0 || _tLow.indexOf(_fn2Low) === 0) { ad = ADS[jt2]; break; }
+    }
+    // 3d — head-substring (8 chars covers the AR-NNN- prefix)
+    if (!ad && _tHead.length >= 6) for (var jt3 = 0; jt3 < ADS.length; jt3++) {
+      var _fn3Low = String(ADS[jt3].formatName || '').toLowerCase();
+      if (_fn3Low.indexOf(_tHead) !== -1) { ad = ADS[jt3]; break; }
+    }
+    // 3e — scope by the action's matrix cell so we don't false-match
+    // a similarly-named AD in a different cell.
+    if (!ad && act.sourceAngle && act.sourcePersona && typeof CELL_CREATIVE_ASSIGNMENTS !== 'undefined') {
+      var _scopeKey = act.sourceAngle + '||' + act.sourcePersona;
+      var _scopeIds = CELL_CREATIVE_ASSIGNMENTS[_scopeKey] || [];
+      for (var jt4 = 0; jt4 < _scopeIds.length; jt4++) {
+        var _scopedAd = ADS.find(function (x) { return x.id === _scopeIds[jt4]; });
+        if (_scopedAd) {
+          // Same scope + plausible name overlap → take it. If the cell only
+          // has one AD, we take it without name check (clear single match).
+          var _scopedFn = String(_scopedAd.formatName || '').toLowerCase();
+          if (_scopeIds.length === 1 || (_tLow && (_scopedFn.indexOf(_tLow) !== -1 || _tLow.indexOf(_scopedFn) !== -1))) {
+            ad = _scopedAd; break;
+          }
+        }
+      }
     }
     if (ad) {
       act.sourceAdId = ad.id;
-      if (ad._clickupId && !act._clickupId) act._clickupId = ad._clickupId;
+      // DELIBERATELY NOT stamping act._clickupId from the AD here. AD's
+      // _clickupId is the AD's own CU task (often the parent format task
+      // for tracker-derived clones), NOT the action's CU task. Stamping
+      // would falsely link the AP row to a task it never created, and
+      // the next ClickUp poll's deletion detector would incorrectly flag
+      // it as "deleted in CU" when the parent task isn't in the fetched
+      // production-tag list. The action's _clickupId is set only by an
+      // actual + ClickUp push or by the relink event — never inferred
+      // from formatName matching.
       // Heal MATRIX_CELL_META + CELL_CREATIVE_ASSIGNMENTS so the matrix cell
       // reappears too. Same logic as _reconcileCellAssignments but scoped to
       // this one AD — quick and idempotent.
@@ -22218,6 +22939,45 @@ function _writeAdRowDirect(ad) {
     });
   } catch (e) {
     console.warn('[SB] _writeAdRowDirect threw', e);
+    return Promise.resolve({ ok: false, error: e });
+  }
+}
+
+// _writeManualActionRowDirect — immediate insert for a freshly-created
+// MANUAL_ACTION. Bypasses the debounced saveState and the snapshot-style
+// _flushStateToSupabase delete-then-upsert dance, so a brand-new action
+// is in DB BEFORE any sync poll / refresh / tab-close can drop it.
+// Mirrors the protection _writeAdRowDirect gives to brand-new ADs.
+function _writeManualActionRowDirect(ma) {
+  if (!ma) return Promise.resolve({ ok: false, reason: 'no-ma' });
+  if (typeof DB === 'undefined' || !DB.ready) return Promise.resolve({ ok: false, reason: 'db-not-ready' });
+  if (!activeProductId) return Promise.resolve({ ok: false, reason: 'no-product' });
+  try {
+    var payload = {};
+    var skipKeys = { '_dbId': true, '_clickupTaskDeleted': true };
+    for (var k in ma) { if (!skipKeys[k]) payload[k] = ma[k]; }
+    if (typeof _myClientId !== 'undefined') payload._clientId = _myClientId;
+    var row = { product_id: activeProductId, payload: payload, live_status: ma.liveStatus || null };
+    if (ma._dbId) row.id = ma._dbId;
+    var op = ma._dbId
+      ? SB.from('manual_actions').upsert(row, { onConflict: 'id' })
+      : SB.from('manual_actions').insert(row).select();
+    return op.then(function (r) {
+      if (r && r.error) {
+        console.warn('[SB] _writeManualActionRowDirect error', r.error);
+        return { ok: false, error: r.error };
+      }
+      // Capture the assigned DB id so subsequent saves UPSERT instead of re-INSERT.
+      if (r && Array.isArray(r.data) && r.data[0] && r.data[0].id && !ma._dbId) {
+        ma._dbId = r.data[0].id;
+      }
+      return { ok: true };
+    }).catch(function (e) {
+      console.warn('[SB] _writeManualActionRowDirect exception', e);
+      return { ok: false, error: e };
+    });
+  } catch (e) {
+    console.warn('[SB] _writeManualActionRowDirect threw', e);
     return Promise.resolve({ ok: false, error: e });
   }
 }
@@ -33610,6 +34370,462 @@ setInterval(function() { if (window._pendingCu.length) _renderSyncBanner(); }, 5
 window._syncToClickUp = _syncToClickUp;
 window._retryPendingCu = _retryPendingCu;
 window._clearPendingCu = _clearPendingCu;
+
+// ════════════════════════════════════════════════════════════════════
+// AP DELETION TOMBSTONES — prevent the auto-adopt loop from resurrecting
+// rows the user just deleted. Without this, deleting an AP row triggers
+// `deleteAdEverywhere(sourceAd.id)` which kicks off an async CU delete,
+// but the next sync poll (~30s) often arrives before CU has processed
+// the delete → the task is still in the fetched list → continuous-adopt
+// at importTasksFromClickUp Pass 2 creates a fresh adopted row.
+// ────────────────────────────────────────────────────────────────────
+// Tombstone shape: { cuid?, adid?, title?, ts }
+// Match condition: any of cuid / adid / title equals candidate's value.
+// Expiry: 7 days (configurable below). Cleared when user explicitly
+// re-pushes the same task via createActionFromMatrix.
+// Persisted in localStorage per-product so tombstones survive refresh.
+// ════════════════════════════════════════════════════════════════════
+(function _installApTombstones() {
+  if (window._apTombstonesInstalled) return;
+  window._apTombstonesInstalled = true;
+
+  var TTL_MS = 7 * 24 * 3600 * 1000;
+  function key() {
+    var pid = (typeof activeProductId !== 'undefined' && activeProductId) || 'default';
+    return 'immuvi.ap.tombstones.' + pid;
+  }
+  function load() {
+    try {
+      var raw = localStorage.getItem(key());
+      var arr = raw ? JSON.parse(raw) : [];
+      if (!Array.isArray(arr)) return [];
+      var now = Date.now();
+      // Drop expired entries on load.
+      return arr.filter(function (t) { return t && (!t.ts || (now - t.ts) < TTL_MS); });
+    } catch (e) { return []; }
+  }
+  function save(arr) {
+    try { localStorage.setItem(key(), JSON.stringify(arr || [])); } catch (e) {}
+  }
+  function _norm(v) { return v == null ? '' : String(v).trim().toLowerCase(); }
+  function add(entry) {
+    if (!entry) return;
+    var t = { cuid: entry.cuid || '', adid: entry.adid || '', title: entry.title || '', ts: Date.now() };
+    if (!t.cuid && !t.adid && !t.title) return;
+    var arr = load();
+    arr.push(t);
+    save(arr);
+    // Broadcast so other tabs / peers also tombstone — otherwise their
+    // adopt loop would resurrect the row independently.
+    if (typeof _rtChannel !== 'undefined' && _rtChannel) {
+      try { _rtChannel.send({ type: 'broadcast', event: 'ap-tombstone-add', payload: { entry: t, clientId: _myClientId } }); } catch (e) {}
+    }
+  }
+  function clearMatching(entry) {
+    if (!entry) return;
+    var c = _norm(entry.cuid), a = _norm(entry.adid), tt = _norm(entry.title);
+    var arr = load();
+    var out = arr.filter(function (t) {
+      if (c && _norm(t.cuid) === c) return false;
+      if (a && _norm(t.adid) === a) return false;
+      if (tt && _norm(t.title) === tt) return false;
+      return true;
+    });
+    if (out.length !== arr.length) {
+      save(out);
+      if (typeof _rtChannel !== 'undefined' && _rtChannel) {
+        try { _rtChannel.send({ type: 'broadcast', event: 'ap-tombstone-clear', payload: { entry: entry, clientId: _myClientId } }); } catch (e) {}
+      }
+    }
+  }
+  function isTombstoned(probe) {
+    if (!probe) return false;
+    var c = _norm(probe.cuid), a = _norm(probe.adid), tt = _norm(probe.title);
+    if (!c && !a && !tt) return false;
+    var arr = load();
+    var now = Date.now();
+    for (var i = 0; i < arr.length; i++) {
+      var t = arr[i]; if (!t) continue;
+      if (t.ts && (now - t.ts) >= TTL_MS) continue;
+      if (c && _norm(t.cuid) === c) return true;
+      if (a && _norm(t.adid) === a) return true;
+      if (tt && _norm(t.title) === tt) return true;
+    }
+    return false;
+  }
+  window._apTombstoneAdd = add;
+  window._apTombstoneClearMatching = clearMatching;
+  window._apIsTombstoned = isTombstoned;
+
+  // Listen for peer tombstone broadcasts so cross-tab state stays in sync.
+  function bindPeerListeners() {
+    if (typeof _rtChannel === 'undefined' || !_rtChannel) {
+      setTimeout(bindPeerListeners, 1000);
+      return;
+    }
+    if (window._apTombstonesPeerBound) return;
+    window._apTombstonesPeerBound = true;
+    try {
+      _rtChannel.on('broadcast', { event: 'ap-tombstone-add' }, function (msg) {
+        var p = msg && msg.payload; if (!p || !p.entry) return;
+        if (p.clientId === _myClientId) return;
+        var arr = load();
+        arr.push(p.entry);
+        save(arr);
+      });
+      _rtChannel.on('broadcast', { event: 'ap-tombstone-clear' }, function (msg) {
+        var p = msg && msg.payload; if (!p || !p.entry) return;
+        if (p.clientId === _myClientId) return;
+        clearMatching(p.entry);
+      });
+    } catch (e) { console.warn('[ap-tombstones] peer bind failed', e); }
+  }
+  bindPeerListeners();
+})();
+
+// ════════════════════════════════════════════════════════════════════
+// AP MANUAL_ACTIONS render-time dedup
+// ────────────────────────────────────────────────────────────────────
+// Kicks duplicates out of MANUAL_ACTIONS at every render — fast, idempotent.
+// Complements the dedup pass inside importTasksFromClickUp (which only fires
+// on a full sync poll). Catches duplicates from: double-click on Move-to-Plan,
+// realtime echoes from peers, prior-session DB-level dupes, or any race that
+// produced two rows for the same task.
+// ════════════════════════════════════════════════════════════════════
+(function _installApActionDedup() {
+  if (window._apActionDedupInstalled) return;
+  window._apActionDedupInstalled = true;
+
+  function score(a) {
+    var hist = Array.isArray(a._history) ? a._history : [];
+    var pushed = hist.some(function (e) { return e && e.type === 'pushed_to_clickup'; });
+    var isAdopted = (a._origin === 'adopted' || !!a._adoptedAt);
+    var s = 0;
+    // Massive weight on "not adopted" — when a non-adopted (user-pushed)
+    // action exists in the same group, always pick it over an adopted
+    // phantom regardless of _dbId or other ties. Bug 8 protection.
+    if (!isAdopted)                              s += 1000;
+    if (pushed)                                  s += 100;
+    if (a._pushedAt)                             s += 50;
+    if (a._dbId)                                 s += 10;
+    var t = a._pushedAt || a._adoptedAt || 0;
+    return s - (t / 1e15);
+  }
+
+  function dedup() {
+    if (typeof MANUAL_ACTIONS === 'undefined' || !Array.isArray(MANUAL_ACTIONS)) return 0;
+    // Pre-pass A: ZOMBIE ADOPTED ACTIONS.
+    // An adopted MANUAL_ACTION whose linked AD can't be found anywhere in
+    // ADS is a zombie — pointing at nothing. These are residue from old
+    // sync polls before the protection landed. Drop them aggressively;
+    // they have no usable backing data so they can never resolve to a
+    // useful AP row anyway.
+    try {
+      var zombieDrops = [];
+      MANUAL_ACTIONS.forEach(function (a) {
+        if (!a) return;
+        var isAdopted = (a._origin === 'adopted' || !!a._adoptedAt);
+        if (!isAdopted) return;
+        if (typeof ADS === 'undefined' || !Array.isArray(ADS)) return;
+        // Try every link to find an AD.
+        var found = ADS.find(function (x) {
+          if (!x) return false;
+          if (a.sourceAdId && x.id === a.sourceAdId) return true;
+          if (a.adId && x.id === a.adId) return true;
+          if (a._clickupId && (x._clickupId === a._clickupId || x.clickupTaskId === a._clickupId)) return true;
+          if (a.title && x.formatName === a.title) return true;
+          return false;
+        });
+        if (!found) zombieDrops.push(a);
+      });
+      if (zombieDrops.length) {
+        var zDropIds = {};
+        zombieDrops.forEach(function (a) { zDropIds[a.id] = true; });
+        var zMeta = zombieDrops.map(function (a) { return { id: a.id, dbId: a._dbId, title: a.title, cuid: a._clickupId }; });
+        MANUAL_ACTIONS = MANUAL_ACTIONS.filter(function (a) { return !zDropIds[a.id]; });
+        try {
+          if (typeof _rememberManualActionDeletion === 'function') {
+            zMeta.forEach(function (m) { _rememberManualActionDeletion(m.id, m.dbId); });
+          }
+          if (typeof window._apTombstoneAdd === 'function') {
+            zMeta.forEach(function (m) {
+              window._apTombstoneAdd({ cuid: m.cuid || '', adid: '', title: m.title || '' });
+            });
+          }
+        } catch (e) {}
+        console.log('[ap-dedup] dropped', zombieDrops.length, 'zombie adopted action(s) with no linked AD');
+      }
+    } catch (e) { console.warn('[ap-dedup] zombie pass error', e); }
+
+    // Pre-pass B: any adopted MANUAL_ACTION whose AD is already claimed by a
+    // non-adopted action (via sourceAdId / _clickupId / formatName) is a
+    // phantom — drop it directly, don't even let it enter the grouping
+    // logic. This catches cases where user-pushed and adopted have
+    // different titles (e.g. user customized name in cell) so the title-
+    // based grouping misses them.
+    try {
+      var claimedAdIds = {};
+      var claimedCuIds = {};
+      var claimedTitles = {};
+      MANUAL_ACTIONS.forEach(function (a) {
+        if (!a) return;
+        var isAdopted = (a._origin === 'adopted' || !!a._adoptedAt);
+        if (isAdopted) return;
+        if (a.sourceAdId)  claimedAdIds[a.sourceAdId] = true;
+        if (a.adId)        claimedAdIds[a.adId] = true;
+        if (a._clickupId)  claimedCuIds[a._clickupId] = true;
+        if (a.title)       claimedTitles[String(a.title).trim().toLowerCase()] = true;
+        // Also claim by the resolved AD's formatName + _clickupId so adopt
+        // phantoms targeting the same AD via different identifiers get caught.
+        if (a.sourceAdId && typeof ADS !== 'undefined' && Array.isArray(ADS)) {
+          var srcAd = ADS.find(function (x) { return x && x.id === a.sourceAdId; });
+          if (srcAd) {
+            if (srcAd._clickupId)  claimedCuIds[srcAd._clickupId] = true;
+            if (srcAd.clickupTaskId) claimedCuIds[srcAd.clickupTaskId] = true;
+            if (srcAd.formatName)  claimedTitles[String(srcAd.formatName).trim().toLowerCase()] = true;
+          }
+        }
+      });
+      var preDrops = [];
+      MANUAL_ACTIONS.forEach(function (a) {
+        if (!a) return;
+        var isAdopted = (a._origin === 'adopted' || !!a._adoptedAt);
+        if (!isAdopted) return;
+        var hit = false;
+        if (a.sourceAdId && claimedAdIds[a.sourceAdId]) hit = true;
+        if (a.adId       && claimedAdIds[a.adId]) hit = true;
+        if (a._clickupId && claimedCuIds[a._clickupId]) hit = true;
+        if (a.title      && claimedTitles[String(a.title).trim().toLowerCase()]) hit = true;
+        if (hit) preDrops.push(a);
+      });
+      if (preDrops.length) {
+        var dropIds = {};
+        preDrops.forEach(function (a) { dropIds[a.id] = true; });
+        // Capture _dbId BEFORE filtering for direct DB delete
+        var dropMeta = preDrops.map(function (a) { return { id: a.id, dbId: a._dbId }; });
+        MANUAL_ACTIONS = MANUAL_ACTIONS.filter(function (a) { return !dropIds[a.id]; });
+        try {
+          if (typeof _rememberManualActionDeletion === 'function') {
+            dropMeta.forEach(function (m) { _rememberManualActionDeletion(m.id, m.dbId); });
+          }
+        } catch (e) {}
+        console.log('[ap-dedup] pre-pass dropped', preDrops.length, 'adopted phantom(s) on AD already claimed by non-adopted action');
+      }
+    } catch (e) { console.warn('[ap-dedup] pre-pass error', e); }
+
+    var byCu = {};
+    var bySrc = {};
+    var bySourceAd = {};   // sourceAdId alone — catches title-drift dupes
+    var byCellTitle = {}; // title + cell scope — catches user-pushed (cu=null) + adopted (cu=X) pairs
+    var byTitle = {};
+    for (var i = 0; i < MANUAL_ACTIONS.length; i++) {
+      var a = MANUAL_ACTIONS[i]; if (!a) continue;
+      // Bucket by sourceAdId regardless of title. When a sync rekeyed the
+      // AD's title (e.g. "AR-101-12346" → "AR-101-13161" because CU swapped
+      // task ids), the same conceptual creative ended up with TWO actions.
+      // bySourceAd collapses them — one AD = one action.
+      if (a.sourceAdId) {
+        (bySourceAd[a.sourceAdId] = bySourceAd[a.sourceAdId] || []).push(a);
+      }
+      // Also bucket by (title, angle, persona) so an adopted row with a
+      // _clickupId and a user-pushed row without one — both for the same
+      // conceptual task — group together.
+      if (a.title) {
+        var ckey = a.title + '||' + (a.sourceAngle || '') + '||' + (a.sourcePersona || '');
+        (byCellTitle[ckey] = byCellTitle[ckey] || []).push(a);
+      }
+      if (a._clickupId) {
+        (byCu[a._clickupId] = byCu[a._clickupId] || []).push(a);
+      } else if (a.sourceAdId) {
+        var sk = a.sourceAdId + '||' + (a.title || '');
+        (bySrc[sk] = bySrc[sk] || []).push(a);
+      } else if (a.title) {
+        (byTitle[a.title] = byTitle[a.title] || []).push(a);
+      }
+    }
+    var drops = {};
+    var n = 0;
+    function processGroup(group) {
+      if (!group || group.length < 2) return;
+      var keeper = group.slice().sort(function (x, y) { return score(y) - score(x); })[0];
+      group.forEach(function (g) { if (g.id !== keeper.id) { drops[g.id] = true; n++; } });
+    }
+    Object.keys(bySourceAd).forEach(function (k) { processGroup(bySourceAd[k]); });
+    Object.keys(byCellTitle).forEach(function (k) { processGroup(byCellTitle[k]); });
+    Object.keys(byCu).forEach(function (k) { processGroup(byCu[k]); });
+    Object.keys(bySrc).forEach(function (k) { processGroup(bySrc[k]); });
+    Object.keys(byTitle).forEach(function (k) { processGroup(byTitle[k]); });
+    if (n > 0) {
+      // Trigger immediate DB-level deletion for each dropped row so the
+      // dupes don't return on next refresh from Supabase. Uses the existing
+      // _rememberManualActionDeletion helper (immediate DB delete + peer
+      // broadcast). Without this, saveState's debounced upsert would still
+      // include all current MANUAL_ACTIONS and the dropped ones might
+      // re-appear when the upsert lands or another tab loaded the old set.
+      try {
+        Object.keys(drops).forEach(function (id) {
+          var a = MANUAL_ACTIONS.find(function (x) { return x && x.id === id; });
+          // a was already filtered out below — try to find original
+          if (typeof _rememberManualActionDeletion === 'function') {
+            _rememberManualActionDeletion(id, a && a._dbId);
+          }
+        });
+      } catch (e) { console.warn('[ap-dedup] DB-delete trigger failed', e); }
+      // Capture _dbId BEFORE filtering them out so we can do precise DB deletes.
+      var dropMeta = [];
+      MANUAL_ACTIONS.forEach(function (a) {
+        if (drops[a.id]) dropMeta.push({ id: a.id, dbId: a._dbId });
+      });
+      MANUAL_ACTIONS = MANUAL_ACTIONS.filter(function (a) { return !drops[a.id]; });
+      // Re-issue with correct dbIds (the call above ran AFTER filter so a was undefined)
+      try {
+        if (typeof _rememberManualActionDeletion === 'function') {
+          dropMeta.forEach(function (m) { _rememberManualActionDeletion(m.id, m.dbId); });
+        }
+      } catch (e) {}
+      try { saveState(); } catch (e) {}
+      console.log('[ap-dedup] removed', n, 'duplicate row(s) at render time');
+    }
+    return n;
+  }
+  window._apDedupActions = dedup;
+
+  // Hook into renderActionPlan via the existing render-preserve wrapper
+  // — the wrapper already runs _reconcileCellAssignments first; we add
+  // dedup right after, before the original render.
+  function tryWrap() {
+    var orig = window.renderActionPlan;
+    if (typeof orig !== 'function') { setTimeout(tryWrap, 100); return; }
+    if (orig.__apDedupWrapped) return;
+    var wrapped = function () {
+      try { dedup(); } catch (e) {}
+      return orig.apply(this, arguments);
+    };
+    wrapped.__apDedupWrapped = true;
+    // Preserve any other flags the existing wrapper attached (e.g. preserveWrapped).
+    Object.keys(orig).forEach(function (k) { wrapped[k] = orig[k]; });
+    window.renderActionPlan = wrapped;
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', tryWrap);
+  } else {
+    setTimeout(tryWrap, 0);
+  }
+})();
+
+// ════════════════════════════════════════════════════════════════════
+// AP pulse-strip custom date range picker
+// ────────────────────────────────────────────────────────────────────
+// State: _apState.pulseCustomRange = { from: ms, to: ms, label: string }.
+// Cleared via the same picker (Reset) or by the user clicking the same
+// preset twice. apComputePulse honors the range when set.
+// ════════════════════════════════════════════════════════════════════
+(function _installPulseRangePicker() {
+  if (window._pulseRangePickerInstalled) return;
+  window._pulseRangePickerInstalled = true;
+
+  function close() {
+    var p = document.getElementById('apPulseRangePop');
+    if (p && p.parentNode) p.parentNode.removeChild(p);
+    document.removeEventListener('click', _outside, true);
+    document.removeEventListener('keydown', _esc, true);
+  }
+  function _outside(e) {
+    var p = document.getElementById('apPulseRangePop');
+    if (!p) return close();
+    if (!p.contains(e.target) && !(e.target && e.target.closest && e.target.closest('.ap-pulse-range-btn'))) close();
+  }
+  function _esc(e) { if (e.key === 'Escape') close(); }
+  function fmt(ms) {
+    if (!ms) return '';
+    var d = new Date(ms);
+    return d.toISOString().slice(0, 10);
+  }
+  function presets() {
+    var now = Date.now();
+    function dayStartMs(offsetDays) {
+      var d = new Date(); d.setHours(0,0,0,0); d.setDate(d.getDate() - offsetDays);
+      return d.getTime();
+    }
+    var dow = (new Date()).getDay() || 7;
+    var thisMonStart = (function () { var d = new Date(); d.setDate(d.getDate() - (dow - 1)); d.setHours(0,0,0,0); return d.getTime(); })();
+    return [
+      { lbl: 'Today',         from: dayStartMs(0),  to: now },
+      { lbl: 'Yesterday',     from: dayStartMs(1),  to: dayStartMs(0) - 1 },
+      { lbl: 'This Week',     from: thisMonStart,   to: now },
+      { lbl: 'Last 7d',       from: dayStartMs(6),  to: now },
+      { lbl: 'Last 14d',      from: dayStartMs(13), to: now },
+      { lbl: 'Last 30d',      from: dayStartMs(29), to: now },
+      { lbl: 'This month',    from: (function () { var d = new Date(); d.setDate(1); d.setHours(0,0,0,0); return d.getTime(); })(), to: now },
+      { lbl: 'Last month',    from: (function () { var d = new Date(); d.setMonth(d.getMonth() - 1); d.setDate(1); d.setHours(0,0,0,0); return d.getTime(); })(),
+                              to:   (function () { var d = new Date(); d.setDate(0); d.setHours(23,59,59,999); return d.getTime(); })() }
+    ];
+  }
+  function applyRange(from, to, label) {
+    if (typeof _apState === 'undefined') return;
+    if (!from || !to) {
+      _apState.pulseCustomRange = null;
+      // Clear the propagated table filter too — restore default (All time)
+      _apState.filters.datePreset = 'all';
+      _apState.filters.dateFrom = null;
+      _apState.filters.dateTo = null;
+    } else {
+      _apState.pulseCustomRange = { from: from, to: to, label: label || (fmt(from) + ' → ' + fmt(to)) };
+      // PROPAGATE to the table's date filter so the table view matches
+      // the panel — clicking a tile then narrows further within this range.
+      // The existing apApplyFilters expects dateFrom/dateTo as YYYY-MM-DD
+      // ISO strings (Date.parse(s + 'T00:00:00')), not raw ms — convert here.
+      _apState.filters.datePreset = 'custom';
+      _apState.filters.dateFrom = fmt(from);
+      _apState.filters.dateTo   = fmt(to);
+    }
+    try { _apSaveState(); } catch (e) {}
+    if (typeof renderActionPlan === 'function') renderActionPlan();
+    close();
+  }
+  window._apApplyPulseRange = applyRange;
+  window._apOpenPulseRangePicker = function (anchorEl) {
+    close();
+    var cur = (typeof _apState !== 'undefined' && _apState && _apState.pulseCustomRange) || {};
+    var presetsHtml = presets().map(function (p, i) {
+      return '<button onclick="_apApplyPulseRange(' + p.from + ',' + p.to + ',\'' + p.lbl + '\')">' + p.lbl + '</button>';
+    }).join('');
+    var html =
+      '<div id="apPulseRangePop" class="ap-pulse-range-pop">' +
+        '<h5>📅 Custom date range</h5>' +
+        '<div class="ap-pr-presets">' + presetsHtml + '</div>' +
+        '<div class="ap-pr-grid">' +
+          '<div><label>From</label><input type="date" id="apPrFrom" value="' + (cur.from ? fmt(cur.from) : '') + '"></div>' +
+          '<div><label>To</label><input type="date" id="apPrTo" value="' + (cur.to ? fmt(cur.to) : '') + '"></div>' +
+        '</div>' +
+        '<div class="ap-pr-actions">' +
+          '<button class="ap-pr-reset" onclick="_apApplyPulseRange(null,null,null)">Reset to default</button>' +
+          '<button class="ap-pr-apply" onclick="(function(){' +
+            'var f=document.getElementById(\'apPrFrom\').value;' +
+            'var t=document.getElementById(\'apPrTo\').value;' +
+            'if(!f||!t){return;}' +
+            'var fm=Date.parse(f+\'T00:00:00\');' +
+            'var tm=Date.parse(t+\'T23:59:59\');' +
+            'if(isNaN(fm)||isNaN(tm)){return;}' +
+            '_apApplyPulseRange(fm,tm,f+\' → \'+t);' +
+          '})()">Apply</button>' +
+        '</div>' +
+      '</div>';
+    document.body.insertAdjacentHTML('beforeend', html);
+    var pop = document.getElementById('apPulseRangePop');
+    if (!pop || !anchorEl) return;
+    var rect = anchorEl.getBoundingClientRect();
+    var left = Math.min(rect.left, window.innerWidth - 340);
+    var top  = rect.bottom + 6 + window.scrollY;
+    pop.style.left = Math.max(10, left) + 'px';
+    pop.style.top  = top + 'px';
+    setTimeout(function () {
+      document.addEventListener('click',   _outside, true);
+      document.addEventListener('keydown', _esc, true);
+    }, 0);
+  };
+  window._apClosePulseRangePicker = close;
+})();
 
 // ════════════════════════════════════════════════════════════════════
 // VARIATION LAB — spawn modal, rollup chip, popover, AP subtab

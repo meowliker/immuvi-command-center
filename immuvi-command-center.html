@@ -34516,9 +34516,15 @@ window._clearPendingCu = _clearPendingCu;
     }
     s += '#';
     if (typeof _mxv4 !== 'undefined' && _mxv4) {
-      s += 'tab=' + (_mxv4.tab||'') + '|exp=' + (_mxv4.expandedCell||'') +
-           '|hl=' + (_mxv4.highlight||'') + '|fm=' + (_mxv4.filterMode||'') +
-           '|dr=' + (_mxv4.dateRange||'') + '|sort=' + (_mxv4.angleSort||'');
+      // Serialize the whole _mxv4 state so filter pill clicks (which set
+      // dropdown-open flags) and any other UI toggle bust the no-op-skip
+      // and the render fires. The previous narrow whitelist froze filters.
+      try { s += '|m=' + JSON.stringify(_mxv4); }
+      catch (e) {
+        s += 'tab=' + (_mxv4.tab||'') + '|exp=' + (_mxv4.expandedCell||'') +
+             '|hl=' + (_mxv4.highlight||'') + '|fm=' + (_mxv4.filterMode||'') +
+             '|dr=' + (_mxv4.dateRange||'') + '|sort=' + (_mxv4.angleSort||'');
+      }
     }
     return s;
   }

@@ -646,6 +646,92 @@ class Worker:
                                 continue
                         except Exception as e:
                             log(f"[strategist] poll/run failed: {e}")
+                        # ── Producer queue check (Agent 2) ──
+                        # Sequential with classify + strategist. Worker only invokes
+                        # claude -p with the /produce-ad-image skill — the skill itself
+                        # claims the row, generates images, uploads, and PATCHes the
+                        # row to done/failed. Worker just shells out and waits.
+                        try:
+                            from tools.producer.db import (
+                                pop_pending_run as _pop_producer_run,
+                                claim_run as _claim_producer_run,
+                                finish_run as _finish_producer_run,
+                            )
+                            prod_run = _pop_producer_run(
+                                supabase_url=os.environ["SUPABASE_URL"],
+                                service_key=os.environ["SUPABASE_SERVICE_ROLE_KEY"],
+                                worker_id=self.worker_id,
+                            )
+                            if prod_run is not None:
+                                run_id = prod_run["id"]
+                                log(f"[producer] picking up run id={run_id} "
+                                    f"task={prod_run['task_id']} "
+                                    f"count={prod_run.get('count', 5)}")
+                                # Claim the row before invoking the skill so other
+                                # workers don't double-pick.
+                                try:
+                                    _claim_producer_run(
+                                        supabase_url=os.environ["SUPABASE_URL"],
+                                        service_key=os.environ["SUPABASE_SERVICE_ROLE_KEY"],
+                                        run_id=run_id,
+                                        worker_id=self.worker_id,
+                                    )
+                                except RuntimeError as e:
+                                    log(f"[producer] claim race lost on run {run_id}: {e}")
+                                    return  # back to outer loop; another worker has it
+                                self.is_busy = True
+                                self.current_job_id = str(run_id)
+                                try:
+                                    # Invoke the skill. Skill writes its own outputs.
+                                    # 10 min timeout to allow N parallel image gens.
+                                    cmd = [
+                                        "claude", "-p",
+                                        f"/produce-ad-image {run_id}",
+                                        "--permission-mode", "bypassPermissions",
+                                    ]
+                                    r = subprocess.run(cmd, capture_output=True,
+                                                       text=True, timeout=600)
+                                    stdout = (r.stdout or "").strip()
+                                    stderr = (r.stderr or "").strip()
+                                    tail = (stdout[-300:] or stderr[-300:])
+                                    ok = f"OK {run_id}" in stdout
+                                    failed = f"FAIL {run_id}" in stdout
+                                    if r.returncode != 0 or failed:
+                                        # Skill should have already PATCHed to failed,
+                                        # but belt-and-braces from worker side too.
+                                        err = f"claude exit {r.returncode}: {tail}"
+                                        try:
+                                            _finish_producer_run(
+                                                supabase_url=os.environ["SUPABASE_URL"],
+                                                service_key=os.environ["SUPABASE_SERVICE_ROLE_KEY"],
+                                                run_id=run_id, status="failed",
+                                                outputs=None, error=err,
+                                            )
+                                        except Exception:
+                                            pass
+                                        log(f"[producer] run {run_id} FAILED: {tail[-200:]}")
+                                    elif ok:
+                                        log(f"[producer] run {run_id} DONE")
+                                    else:
+                                        # Skill returned 0 but didn't print OK.
+                                        log(f"[producer] run {run_id} ambiguous, "
+                                            f"trusting skill writeback. tail: {tail[-200:]}")
+                                except subprocess.TimeoutExpired:
+                                    log(f"[producer] run {run_id} TIMEOUT after 600s")
+                                    try:
+                                        _finish_producer_run(
+                                            supabase_url=os.environ["SUPABASE_URL"],
+                                            service_key=os.environ["SUPABASE_SERVICE_ROLE_KEY"],
+                                            run_id=run_id, status="failed",
+                                            outputs=None, error="timeout after 600s",
+                                        )
+                                    except Exception:
+                                        pass
+                                finally:
+                                    self.is_busy = False
+                                    self.current_job_id = None
+                        except Exception as e:
+                            log(f"[producer] poll/run failed: {e}")
                         self.shutdown.wait(self.poll_interval)
                         continue
 

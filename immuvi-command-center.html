@@ -10011,6 +10011,16 @@ function _initRealtimeChannel(productId) {
         }
       });
 
+  // Producer runs — flip per-task chip live as the worker progresses.
+  _rtChannel.on('postgres_changes',
+      { event: '*', schema: 'public', table: 'producer_runs',
+        filter: 'product_id=eq.' + productId },
+      function (payload) {
+        if (typeof _producerState !== 'undefined') {
+          _producerLoadForProduct(productId);
+        }
+      });
+
   _rtChannel.subscribe(function(status) {
     if (status === 'SUBSCRIBED') {
       _rtChannel.track({
@@ -12260,6 +12270,148 @@ function _strategistDimTable(title, rows, mode) {
              '<tbody>' + bodyRows + '</tbody>' +
            '</table>' +
          '</div>';
+}
+
+// ── Producer (Agent 2) — generate ad images for an Action Plan task ──
+//
+// Per-task in-memory state: latest producer_runs row keyed by task_id.
+// Updated by both initial fetch and realtime subs.
+
+var _producerState = {
+  byTask: {},           // task_id → latest producer_runs row
+  modalTaskId: null,
+  modalProductId: null,
+};
+
+async function _producerLoadForProduct(productId) {
+  if (!SB || !productId) return;
+  // Most recent run per task — fetch the most recent N=200 rows for
+  // this product and keep the first occurrence per task_id.
+  var res = await SB.from('producer_runs').select('*')
+    .eq('product_id', productId)
+    .order('created_at', { ascending: false })
+    .limit(200);
+  if (res.error) {
+    console.warn('[producer] load failed:', res.error.message);
+    return;
+  }
+  var byTask = {};
+  (res.data || []).forEach(function (r) {
+    if (!byTask[r.task_id]) byTask[r.task_id] = r;
+  });
+  _producerState.byTask = byTask;
+  // Re-render Action Plan to show chips.
+  if (typeof renderActionPlan === 'function') {
+    try { renderActionPlan(); } catch (_) {}
+  }
+}
+
+function _producerChipHtml(taskId) {
+  var r = _producerState.byTask[taskId];
+  if (!r) return '';
+  var color = { pending: '#a3a3a3', running: '#fbbf24',
+                done: '#10b981', failed: '#ef4444' }[r.status] || '#a3a3a3';
+  var lbl   = { pending: '⏳ Queued', running: '⚙ Running',
+                done: '✓ ' + ((r.outputs || []).length) + ' ads',
+                failed: '✗ Failed' }[r.status] || r.status;
+  var click = '';
+  if (r.status === 'done' && r.outputs && r.outputs.length) {
+    var driveUrl = (r.outputs.find(function(o){ return o.drive_url; }) || {}).drive_url;
+    if (driveUrl) {
+      click = ' onclick="window.open(\'' + escAttr(driveUrl) + '\',\'_blank\')" ' +
+              'style="cursor:pointer"';
+    }
+  } else if (r.status === 'failed' && r.error) {
+    click = ' onclick="alert(' + JSON.stringify(r.error).replace(/"/g, '&quot;') + ')" ' +
+            'style="cursor:pointer"';
+  }
+  return '<span class="producer-chip" ' + click +
+         ' style="display:inline-flex;align-items:center;gap:4px;padding:2px 8px;' +
+         'border-radius:999px;background:' + color + '22;color:' + color + ';' +
+         'font-size:0.7rem;font-weight:500;margin-left:4px">' + esc(lbl) + '</span>';
+}
+
+function _producerButtonHtml(taskId, productId) {
+  return '<button class="btn-ghost producer-btn" ' +
+         'onclick="event.stopPropagation();_producerOpenModal(\'' + escAttr(taskId) +
+         '\',\'' + escAttr(productId) + '\')" ' +
+         'title="Generate ad images" ' +
+         'style="padding:2px 6px;font-size:0.85rem">🎨</button>';
+}
+
+function _producerOpenModal(taskId, productId) {
+  _producerState.modalTaskId = taskId;
+  _producerState.modalProductId = productId;
+  var m = document.getElementById('producerModal');
+  if (!m) {
+    m = document.createElement('div');
+    m.id = 'producerModal';
+    document.body.appendChild(m);
+  }
+  m.innerHTML =
+    '<div class="modal-overlay" onclick="_producerCloseModal()" ' +
+    'style="position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:9999;' +
+    'display:flex;align-items:center;justify-content:center">' +
+      '<div onclick="event.stopPropagation()" ' +
+      'style="background:var(--card,#fff);border-radius:14px;padding:24px;' +
+      'max-width:520px;width:92%;box-shadow:0 24px 64px rgba(0,0,0,0.2)">' +
+        '<h3 style="margin:0 0 16px;font-size:1.1rem">🎨 Generate Ad Images</h3>' +
+        '<label style="display:block;font-size:0.78rem;color:var(--t2);' +
+        'margin-bottom:6px">Instruction (optional — describe the variation)</label>' +
+        '<textarea id="producerInstruction" rows="4" ' +
+        'style="width:100%;padding:8px;border:1px solid var(--b);border-radius:8px;' +
+        'font-family:inherit;font-size:0.9rem;box-sizing:border-box" ' +
+        'placeholder="e.g. Same angle as winning AT-114 but with mom-to-mom UGC vibe"></textarea>' +
+        '<label style="display:block;font-size:0.78rem;color:var(--t2);' +
+        'margin:12px 0 6px">How many images? (1-10)</label>' +
+        '<input id="producerCount" type="number" min="1" max="10" value="5" ' +
+        'style="width:80px;padding:6px 8px;border:1px solid var(--b);border-radius:8px;' +
+        'font-size:0.9rem">' +
+        '<div style="margin-top:20px;display:flex;gap:8px;justify-content:flex-end">' +
+          '<button class="btn-ghost" onclick="_producerCloseModal()">Cancel</button>' +
+          '<button class="btn-primary" onclick="_producerSubmit()" ' +
+          'style="background:var(--inprog,#3b82f6);color:white;padding:8px 16px;' +
+          'border:none;border-radius:8px;cursor:pointer">Generate</button>' +
+        '</div>' +
+      '</div>' +
+    '</div>';
+  m.style.display = '';
+  setTimeout(function () {
+    var ta = document.getElementById('producerInstruction');
+    if (ta) ta.focus();
+  }, 50);
+}
+
+function _producerCloseModal() {
+  var m = document.getElementById('producerModal');
+  if (m) m.style.display = 'none';
+  _producerState.modalTaskId = null;
+  _producerState.modalProductId = null;
+}
+
+async function _producerSubmit() {
+  if (!SB) { alert('No Supabase client'); return; }
+  var taskId = _producerState.modalTaskId;
+  var productId = _producerState.modalProductId;
+  if (!taskId || !productId) { alert('No task selected'); return; }
+  var instr = (document.getElementById('producerInstruction') || {}).value || '';
+  var count = parseInt((document.getElementById('producerCount') || {}).value || '5', 10);
+  if (isNaN(count) || count < 1 || count > 10) count = 5;
+  var res = await SB.from('producer_runs').insert({
+    task_id: taskId,
+    product_id: productId,
+    instruction: instr,
+    count: count,
+    status: 'pending',
+    trigger: 'manual',
+  });
+  if (res.error) {
+    alert('[producer] queue failed: ' + res.error.message);
+    return;
+  }
+  _producerCloseModal();
+  // Force fetch for immediate feedback; realtime will also update.
+  _producerLoadForProduct(productId);
 }
 
 function nextSerialId() {
@@ -15266,6 +15418,7 @@ var _AP_DEFAULT_COLUMNS = [
   { key:'created',  width:80,  hidden:false },
   { key:'due',      width:120, hidden:false },
   { key:'clickup',  width:100, hidden:false },
+  { key:'producer', width:90,  hidden:false },
   { key:'del',      width:36,  hidden:false }
 ];
 
@@ -15412,6 +15565,17 @@ var _AP_COL_REGISTRY = {
     label: '', locked: true, sortable: false,
     renderCell: function (r) {
       return '<td onclick="event.stopPropagation()"><button class="ap-del-btn" title="Remove from Action Plan" onclick="if(confirm(\'Remove from Action Plan?\')) deleteManualAction(\'' + escAttr(r.act.id) + '\')">🗑</button></td>';
+    }
+  },
+  producer: {
+    label: '🎨', locked: true, sortable: false,
+    renderCell: function (r) {
+      var taskId = r.act.id;
+      var productId = (typeof activeProductId !== 'undefined' && activeProductId) || '';
+      return '<td onclick="event.stopPropagation()" style="white-space:nowrap">' +
+        _producerButtonHtml(taskId, productId) +
+        _producerChipHtml(taskId) +
+      '</td>';
     }
   }
 };
@@ -24142,6 +24306,7 @@ async function loadState() {
   // Queue a daily strategist run for this product (idempotent — unique index dedupes).
   _queueDailyStrategistRun(activeProductId);
   _loadStrategistMemory(activeProductId);
+  _producerLoadForProduct(activeProductId);
 
   // 3. Load the active product's data
   var state = null;
@@ -24391,6 +24556,7 @@ async function switchProduct(productId) {
   // Queue a daily strategist run for the newly active product (idempotent).
   _queueDailyStrategistRun(activeProductId);
   _loadStrategistMemory(activeProductId);
+  _producerLoadForProduct(activeProductId);
   toast('Switched to ' + prod.name, 'ok');
 }
 

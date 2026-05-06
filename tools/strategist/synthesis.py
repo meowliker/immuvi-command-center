@@ -18,7 +18,9 @@ class SynthesisError(Exception):
     pass
 
 
-_JSON_FENCE_RE = re.compile(r"```(?:json)?\s*(\{.*?\})\s*```", re.DOTALL)
+# Greedy on the JSON object so nested {...} structures match the outermost
+# closing brace. The fence boundaries already disambiguate.
+_JSON_FENCE_RE = re.compile(r"```(?:json)?\s*(\{.*\})\s*```", re.DOTALL)
 
 
 def _extract_json_block(text: str) -> Dict[str, Any]:
@@ -51,7 +53,7 @@ def _build_prompt(bundle: dict) -> str:
         for c in (bundle.get("comments") or [])
     ) or "(no comments)"
 
-    is_winner = bundle["status"].lower() in (
+    is_winner = (bundle.get("status") or "").lower() in (
         "winner", "mild winner", "scale", "complete")
     verdict_word = "won" if is_winner else "died"
 

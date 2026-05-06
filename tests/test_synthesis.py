@@ -96,3 +96,22 @@ def test_extract_json_block_handles_fenced_and_unfenced():
     assert fenced == {"a": 1}
     unfenced = synthesis._extract_json_block('blah\n{"a": 2}\nblah')
     assert unfenced == {"a": 2}
+
+
+def test_synthesise_task_raises_on_timeout():
+    import subprocess as _sp
+    with patch("tools.strategist.synthesis.subprocess.run") as run:
+        run.side_effect = _sp.TimeoutExpired(cmd=["claude"], timeout=300)
+        try:
+            synthesis.synthesise_task(_TASK_BUNDLE)
+        except synthesis.SynthesisError as e:
+            assert "timed out" in str(e).lower()
+        else:
+            assert False, "expected SynthesisError on timeout"
+
+
+def test_extract_json_block_handles_nested_objects():
+    """Regression: greedy regex must capture nested {...} structures."""
+    payload = '```json\n{"outer": {"inner": {"deep": 1}}, "x": 2}\n```'
+    out = synthesis._extract_json_block(payload)
+    assert out == {"outer": {"inner": {"deep": 1}}, "x": 2}

@@ -138,3 +138,45 @@ def test_aggregate_combinations_that_win():
     assert c["creative_structure"]   == "UGC"
     assert c["hook_type"]            == "Curiosity"
     assert sorted(c["evidence_task_ids"]) == ["t1", "t2"]
+
+
+def test_aggregate_loser_briefs_shape():
+    b = _brief(angle="Bad", why="why-text")
+    b["why_it_died"] = "tested 5 different hooks, none clicked"
+    rows = [_row("t9", False, "loser", b, spend=200, revenue=20)]
+    out = aggregate.build_memory_json("p", "P", rows)
+    assert len(out["loser_briefs"]) == 1
+    lb = out["loser_briefs"][0]
+    assert lb["task_id"]    == "t9"
+    assert lb["status"]     == "loser"
+    assert lb["why_it_died"] == "tested 5 different hooks, none clicked"
+    assert lb["performance"]["roi"] == 20.0 / 200.0
+
+
+def test_aggregate_combinations_that_die():
+    b = _brief(angle="Z", persona="P9", structure="UGC", hook="POV")
+    rows = [
+        _row("t1", False, "loser", b),
+        _row("t2", False, "killed", b),
+    ]
+    out = aggregate.build_memory_json("p", "P", rows)
+    combos = out["combinations_that_die"]
+    assert len(combos) == 1
+    c = combos[0]
+    assert c["angle"]              == "Z"
+    assert c["persona"]            == "P9"
+    assert c["creative_structure"] == "UGC"
+    assert c["hook_type"]          == "POV"
+    assert sorted(c["evidence_task_ids"]) == ["t1", "t2"]
+
+
+def test_aggregate_brief_keys_cannot_clobber_explicit_fields():
+    """Regression: an injected task_id in brief_json must not override the row's task_id."""
+    b = _brief(angle="A")
+    b["task_id"] = "INJECTED-EVIL-ID"
+    b["status"]  = "INJECTED-STATUS"
+    rows = [_row("real-id", True, "winner", b)]
+    out = aggregate.build_memory_json("p", "P", rows)
+    wb = out["winner_briefs"][0]
+    assert wb["task_id"] == "real-id"
+    assert wb["status"]  == "winner"

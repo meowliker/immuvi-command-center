@@ -8,6 +8,16 @@ from collections import defaultdict
 from datetime import datetime, timezone
 from typing import List, Dict, Any, Optional
 
+# Map raw ClickUp status string → stats key.
+STATUS_KEY_MAP = {
+    "winner": "winner",
+    "mild winner": "mild_winner",
+    "scale": "scale",
+    "complete": "complete",
+    "loser": "loser",
+    "killed": "killed",
+}
+
 
 def _empty_dim_entry():
     return {"wins": 0, "losses": 0,
@@ -37,11 +47,13 @@ def _add_to_dim(dimmap: dict, key: str, row: dict):
 
 
 def _finalise_dim(dimmap: dict, name_key: str = "name") -> List[dict]:
+    """Return a sorted list of finalised dim entries. Does not mutate inputs."""
     out = []
     for k, e in dimmap.items():
-        e[name_key] = k
-        e["roi"] = _roi(e["spend"], e["revenue"])
-        out.append(e)
+        finalised = dict(e)  # shallow copy
+        finalised[name_key] = k
+        finalised["roi"] = _roi(finalised["spend"], finalised["revenue"])
+        out.append(finalised)
     out.sort(key=lambda x: (-(x["wins"]), x["losses"]))
     return out
 
@@ -94,11 +106,9 @@ def build_memory_json(product_id: str, product_name: str,
 
     for r in processed_rows:
         st = r["status"]
-        if st in out["stats"]:
-            out["stats"][st] += 1
-        # "mild winner" status → "mild_winner" stats key
-        if st == "mild winner":
-            out["stats"]["mild_winner"] += 1
+        stats_key = STATUS_KEY_MAP.get(st)
+        if stats_key:
+            out["stats"][stats_key] += 1
         out["stats"]["judged_total"] += 1
 
         spend_known = r["spend"] is not None and r["revenue"] is not None
@@ -136,8 +146,9 @@ def build_memory_json(product_id: str, product_name: str,
             (win_combos if r["is_winner"] else lose_combos)[combo].append(
                 r["clickup_task_id"])
 
-        # Per-task brief
+        # Per-task brief — explicit keys must win over anything in brief_json.
         brief_entry = {
+            **b,
             "task_id": r["clickup_task_id"],
             "status": r["status"],
             "performance": {
@@ -146,7 +157,6 @@ def build_memory_json(product_id: str, product_name: str,
                 "roi":     _roi(float(r["spend"]), float(r["revenue"])) if spend_known else None,
                 "spend_data_complete": spend_known,
             },
-            **b,
         }
         if r["is_winner"]:
             out["winner_briefs"].append(brief_entry)

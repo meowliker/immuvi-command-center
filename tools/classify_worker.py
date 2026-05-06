@@ -54,6 +54,9 @@ CLAUDE_CLI_TIMEOUT_SECONDS = 600  # 10 min hard ceiling per classification
 MAX_ATTEMPTS_BEFORE_FAILED = 3
 AUTO_PAUSE_CHECK_INTERVAL_SECONDS = 60
 
+# Codex CLI binary (not on PATH; use absolute path).
+CODEX_BIN = "/Applications/Codex.app/Contents/Resources/codex"
+
 
 # ── Helpers ─────────────────────────────────────────────────
 
@@ -107,6 +110,8 @@ def probe_capabilities() -> dict:
         "yt_dlp": shutil.which("yt-dlp") is not None,
         "python_version": platform.python_version(),
         "claude_code_version": _safe_run(["claude", "--version"]),
+        # Codex isn't on PATH; fall back to os.path.exists for the absolute binary.
+        "codex": shutil.which(CODEX_BIN) is not None or os.path.exists(CODEX_BIN),
     }
 
 
@@ -655,7 +660,7 @@ class Worker:
                             log(f"[strategist] poll/run failed: {e}")
                         # ── Producer queue check (Agent 2) ──
                         # Sequential with classify + strategist. Worker only invokes
-                        # claude -p with the /produce-ad-image skill — the skill itself
+                        # codex exec with the produce-ad-image skill — the skill itself
                         # claims the row, generates images, uploads, and PATCHes the
                         # row to done/failed. Worker just shells out and waits.
                         try:
@@ -689,12 +694,21 @@ class Worker:
                                 self.is_busy = True
                                 self.current_job_id = None  # producer run ids are integers, not uuids; send NULL to avoid 22P02
                                 try:
-                                    # Invoke the skill. Skill writes its own outputs.
+                                    # Invoke the skill via Codex CLI (native image gen +
+                                    # bundled ClickUp / Drive plugins, no API keys needed).
                                     # 10 min timeout to allow N parallel image gens.
                                     cmd = [
-                                        "claude", "-p",
-                                        f"/produce-ad-image {run_id}",
-                                        "--permission-mode", "bypassPermissions",
+                                        CODEX_BIN, "exec",
+                                        "--dangerously-bypass-approvals-and-sandbox",
+                                        f"Use the produce-ad-image skill on run_id {run_id}. "
+                                        f"This means: read producer_runs row {run_id} from Supabase, "
+                                        f"fetch the ClickUp task + strategist memory + user instruction, "
+                                        f"generate the requested number of ad image variations using your "
+                                        f"native image generation, upload them to Google Drive and ClickUp, "
+                                        f"set the Drive Link field, flip the ClickUp status to 'ready to launch', "
+                                        f"and PATCH producer_runs row {run_id} to status='done' with outputs. "
+                                        f"Print 'OK {run_id}' on success or 'FAIL {run_id}: <reason>' on failure "
+                                        f"as the LAST line of stdout.",
                                     ]
                                     r = subprocess.run(cmd, capture_output=True,
                                                        text=True, timeout=600)
@@ -706,7 +720,7 @@ class Worker:
                                     if r.returncode != 0 or failed:
                                         # Skill should have already PATCHed to failed,
                                         # but belt-and-braces from worker side too.
-                                        err = f"claude exit {r.returncode}: {tail}"
+                                        err = f"codex exit {r.returncode}: {tail}"
                                         try:
                                             _finish_producer_run(
                                                 supabase_url=os.environ["SUPABASE_URL"],

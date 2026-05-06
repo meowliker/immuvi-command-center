@@ -9990,6 +9990,27 @@ function _initRealtimeChannel(productId) {
     if (typeof _updatePresenceUI === 'function') _updatePresenceUI(members);
   });
 
+  // Strategist runs — flip status pill live as the worker progresses.
+  _rtChannel.on('postgres_changes',
+      { event: '*', schema: 'public', table: 'strategist_runs',
+        filter: 'product_id=eq.' + productId },
+      function (payload) {
+        // Reload state on any change to a row for this product.
+        if (typeof _strategistState !== 'undefined') {
+          _loadStrategistMemory(productId);
+        }
+      });
+
+  // Strategist memory — re-render when a new memory row is upserted.
+  _rtChannel.on('postgres_changes',
+      { event: '*', schema: 'public', table: 'strategist_memory',
+        filter: 'product_id=eq.' + productId },
+      function (payload) {
+        if (typeof _strategistState !== 'undefined') {
+          _loadStrategistMemory(productId);
+        }
+      });
+
   _rtChannel.subscribe(function(status) {
     if (status === 'SUBSCRIBED') {
       _rtChannel.track({

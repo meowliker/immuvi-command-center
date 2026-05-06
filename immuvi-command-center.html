@@ -9170,6 +9170,7 @@ button.mx-dt-action-sent .open { color:#0a84ff; font-weight:700; margin-left:4px
       <button class="tab" onclick="showTab('matrix',this)" role="tab" aria-selected="false">Creative Matrix <span class="tab-count" id="matrixCount">0</span></button>
       <button class="tab" onclick="showTab('actions',this)" role="tab" aria-selected="false">Action Plan <span class="tab-count" id="actionsCount">0</span></button>
       <button class="tab" onclick="showTab('production',this)" role="tab" aria-selected="false">Production <span class="tab-count" id="prodCount">0</span></button>
+      <button class="tab" onclick="showTab('strategist',this)" role="tab" aria-selected="false">Strategist <span class="tab-count" id="strategistCount">0</span></button>
       <button class="tab" onclick="showTab('inspiration',this)" role="tab" aria-selected="false">Inspiration <span class="tab-count" id="inspirationCount">0</span></button>
     </div>
   </nav>
@@ -9361,6 +9362,15 @@ button.mx-dt-action-sent .open { color:#0a84ff; font-weight:700; margin-left:4px
         <div class="prod-col-body" data-status="complete"
              ondragover="handleProdDragOver(event)" ondragleave="handleProdDragLeave(event)" ondrop="handleProdDrop(event)"
              id="prodDoneBody"></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="panel-strategist" class="panel" role="tabpanel">
+    <div id="strategistRoot">
+      <div class="empty-state" style="padding:48px;text-align:center;color:var(--t3)">
+        <div style="font-size:1.1rem;margin-bottom:8px">Loading strategist memory…</div>
+        <div style="font-size:0.85rem">Pick a product to see what's winning, what's dying, and the production playbook.</div>
       </div>
     </div>
   </section>

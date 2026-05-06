@@ -10,6 +10,8 @@
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&display=swap" rel="stylesheet">
   <!-- Supabase JS client (v2) -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <!-- marked — markdown renderer for Strategist narrative view -->
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
   <style>
 @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap');
 @import url('https://api.fontsource.org/v1/fonts/satoshi/latin-400-normal.css');
@@ -12007,6 +12009,156 @@ async function _queueDailyStrategistRun(productId) {
   }
 }
 
+// ── Strategist tab — narrative view + manual refresh ──
+//
+// Reads the latest strategist_memory row for the active product and
+// renders header strip + markdown body. Realtime updates land via the
+// existing per-product channel ('cc-' + productId) — see Task 16.
+
+var _strategistState = {
+  loaded: false,
+  memory: null,        // { product_id, json, markdown, updated_at }
+  latestRun: null,     // most recent strategist_runs row for the product
+  view: 'narrative',   // 'narrative' | 'structured'
+};
+
+async function _loadStrategistMemory(productId) {
+  if (!SB || !productId) return;
+  var memRes = await SB.from('strategist_memory').select('*').eq('product_id', productId).maybeSingle();
+  var runRes = await SB.from('strategist_runs').select('*')
+    .eq('product_id', productId).order('created_at', { ascending: false }).limit(1);
+  _strategistState.memory    = memRes.data || null;
+  _strategistState.latestRun = (runRes.data && runRes.data[0]) || null;
+  _strategistState.loaded    = true;
+  _renderStrategist();
+}
+
+function _renderStrategist() {
+  var root = document.getElementById('strategistRoot');
+  if (!root) return;
+  if (!_strategistState.loaded) {
+    root.innerHTML = '<div style="padding:48px;text-align:center;color:var(--t3)">Loading…</div>';
+    return;
+  }
+  var mem = _strategistState.memory;
+  var run = _strategistState.latestRun;
+
+  if (!mem) {
+    root.innerHTML = _strategistEmptyState(run);
+    return;
+  }
+
+  var stats = (mem.json && mem.json.stats) || {};
+  var updated = new Date(mem.updated_at);
+  var ago = _strategistRelativeTime(updated);
+
+  var statusPill = _strategistStatusPill(run);
+
+  var header =
+    '<div class="ap-pulse-wrap" style="padding:16px 20px">' +
+      '<div class="ap-pulse-card">' +
+        '<div class="ap-pulse-head">' +
+          '<span class="ap-pulse-eyebrow">●</span> STRATEGIST MEMORY ' +
+          '<span class="ap-pulse-sub">Last updated ' + esc(ago) + '</span>' +
+          statusPill +
+          '<button class="btn-ghost" style="margin-left:auto" onclick="_strategistRefresh()" title="Force re-synthesis now">↻ Refresh</button>' +
+        '</div>' +
+        '<div class="ap-pulse-tiles">' +
+          _strategistTile('winners',  '🏆 Winners',     stats.winner)      +
+          _strategistTile('mild',     '✨ Mild',        stats.mild_winner) +
+          _strategistTile('scaled',   '🚀 Scaled',      stats.scale)       +
+          _strategistTile('losers',   '⊘ Losers',       stats.loser)       +
+          _strategistTile('killed',   '💀 Killed',      stats.killed)      +
+          _strategistTile('roi',      '$ ROI overall', stats.roi_overall != null ? stats.roi_overall.toFixed(2) + 'x' : '—') +
+        '</div>' +
+      '</div>' +
+    '</div>';
+
+  var viewToggle =
+    '<div style="padding:0 20px 12px;display:flex;gap:8px">' +
+      '<button class="btn-ghost ' + (_strategistState.view === 'narrative' ? 'active' : '') + '" onclick="_strategistSetView(\'narrative\')">📖 Narrative</button>' +
+      '<button class="btn-ghost ' + (_strategistState.view === 'structured' ? 'active' : '') + '" onclick="_strategistSetView(\'structured\')">📊 Structured</button>' +
+    '</div>';
+
+  var body = (_strategistState.view === 'narrative')
+    ? _strategistNarrativeBody(mem)
+    : _strategistStructuredBody(mem);  // implemented in Task 15
+
+  root.innerHTML = header + viewToggle + body;
+}
+
+function _strategistTile(cls, lbl, val) {
+  return '<div class="ap-pulse-tile" style="min-width:120px">' +
+           '<div class="ap-pulse-tile-lbl">' + esc(lbl) + '</div>' +
+           '<div class="ap-pulse-tile-val">' + esc(String(val == null ? 0 : val)) + '</div>' +
+         '</div>';
+}
+
+function _strategistNarrativeBody(mem) {
+  var md = mem.markdown || '';
+  var html;
+  if (typeof marked !== 'undefined' && marked.parse) {
+    html = marked.parse(md);
+  } else {
+    // Fallback: just <pre> the raw markdown.
+    html = '<pre style="white-space:pre-wrap;font-family:inherit">' + esc(md) + '</pre>';
+  }
+  return '<div class="strategist-narrative" style="padding:0 24px 24px;max-width:880px;margin:0 auto;line-height:1.6">' +
+           html +
+         '</div>';
+}
+
+function _strategistEmptyState(run) {
+  var msg = '';
+  if (run && run.status === 'pending')  msg = 'Run queued — worker will pick it up shortly.';
+  else if (run && run.status === 'running') msg = 'Synthesising… this can take 5-15 min on first run.';
+  else if (run && run.status === 'failed')  msg = 'Last run failed: ' + esc(run.error || 'unknown') + '. Hit Refresh to retry.';
+  else msg = 'No strategist memory yet. Click Refresh to run the first synthesis.';
+  return '<div style="padding:48px;text-align:center;color:var(--t3)">' +
+           '<div style="font-size:1.1rem;margin-bottom:12px">' + msg + '</div>' +
+           '<button class="btn-primary" onclick="_strategistRefresh()">↻ Refresh / Run now</button>' +
+         '</div>';
+}
+
+function _strategistStatusPill(run) {
+  if (!run) return '';
+  var color = { pending: '#a3a3a3', running: '#fbbf24', done: '#10b981', failed: '#ef4444' }[run.status] || '#a3a3a3';
+  var lbl   = { pending: '⏳ Queued', running: '⚙ Running', done: '✓ Up to date', failed: '✗ Failed' }[run.status] || run.status;
+  return '<span style="margin-left:12px;padding:4px 10px;border-radius:999px;background:' + color + '22;color:' + color + ';font-size:0.75rem;font-weight:500">' + lbl + '</span>';
+}
+
+function _strategistRelativeTime(d) {
+  var s = (Date.now() - d.getTime()) / 1000;
+  if (s < 60)        return Math.floor(s) + 's ago';
+  if (s < 3600)      return Math.floor(s / 60) + 'm ago';
+  if (s < 86400)     return Math.floor(s / 3600) + 'h ago';
+  return Math.floor(s / 86400) + 'd ago';
+}
+
+async function _strategistRefresh() {
+  if (!SB || !activeProductId) return;
+  var today = new Date().toISOString().slice(0, 10);
+  var res = await SB.from('strategist_runs').insert({
+    product_id: activeProductId, status: 'pending',
+    trigger: 'manual', run_date: today,
+  });
+  if (res.error) {
+    alert('[strategist] queue failed: ' + res.error.message);
+  } else {
+    _loadStrategistMemory(activeProductId);
+  }
+}
+
+function _strategistSetView(v) {
+  _strategistState.view = v;
+  _renderStrategist();
+}
+
+function _strategistStructuredBody(mem) {
+  // Stub — implemented fully in Task 15.
+  return '<div style="padding:24px;color:var(--t3)">Structured view coming next.</div>';
+}
+
 function nextSerialId() {
   // Bug 13: clamp counter forward past max existing AD-NNN id BEFORE consuming.
   // Without this, a stale snapshot can roll nextAdSerial backwards, leading to
@@ -13029,6 +13181,9 @@ function showTab(id, btn) {
       joinedAt:  Date.now(),
       activeTab: id
     });
+  }
+  if (id === 'strategist') {
+    _loadStrategistMemory(activeProductId);
   }
 }
 
@@ -23883,6 +24038,7 @@ async function loadState() {
 
   // Queue a daily strategist run for this product (idempotent — unique index dedupes).
   _queueDailyStrategistRun(activeProductId);
+  _loadStrategistMemory(activeProductId);
 
   // 3. Load the active product's data
   var state = null;
@@ -24131,6 +24287,7 @@ async function switchProduct(productId) {
   try { setTimeout(apRunLegacyBackfill, 600); } catch (e) {}
   // Queue a daily strategist run for the newly active product (idempotent).
   _queueDailyStrategistRun(activeProductId);
+  _loadStrategistMemory(activeProductId);
   toast('Switched to ' + prod.name, 'ok');
 }
 

@@ -56,7 +56,8 @@ create table if not exists public.strategist_processed (
   content_hash      text not null,
   brief_json        jsonb not null,
   is_winner         boolean not null,
-  status            text not null,
+  status            text not null check (status in (
+                      'winner','mild winner','scale','complete','loser','killed')),
   spend             numeric,
   revenue           numeric,
   last_synthesized  timestamptz not null default now(),

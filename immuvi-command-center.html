@@ -12395,9 +12395,11 @@ function _producerOpenModal(taskId, productId) {
     document.body.appendChild(m);
   }
   m.innerHTML =
-    '<div class="modal-overlay" onclick="_producerCloseModal()" ' +
+    // Unique class — '.modal-overlay' clashes with an existing app CSS rule
+    // that sets opacity:0 by default (it expects an .is-open toggle class).
+    '<div class="producer-modal-overlay" onclick="_producerCloseModal()" ' +
     'style="position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:9999;' +
-    'display:flex;align-items:center;justify-content:center">' +
+    'display:flex;align-items:center;justify-content:center;opacity:1 !important">' +
       '<div onclick="event.stopPropagation()" ' +
       'style="background:var(--card,#fff);border-radius:14px;padding:24px;' +
       'max-width:520px;width:92%;box-shadow:0 24px 64px rgba(0,0,0,0.2)">' +

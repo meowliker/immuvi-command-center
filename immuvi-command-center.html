@@ -10177,7 +10177,54 @@ const DB = {
     const adIds = new Set(adRows.map(function (r) { return r.id; }));
     const adOrphans = (existingAds.data || []).filter(function (r) { return !adIds.has(r.id); }).map(function (r) { return r.id; });
     if (adOrphans.length) tasks.push(SB.from('ads').delete().in('id', adOrphans));
-    if (adRows.length)    tasks.push(SB.from('ads').upsert(adRows));
+    // Realtime traffic budget (2026-05-06): skip rows whose content hash
+    // matches the last successful save. Identical hash = no change since
+    // last upsert = no need to resend the row to Supabase (and broadcast
+    // a postgres_changes event to every subscriber for nothing). See
+    // feedback_realtime_traffic_budget.md (invariant #2). Hash excludes
+    // volatile fields (_clientId, updated_at, last_status_change_at) so
+    // self-echoes don't false-positive as "changed". On any error in
+    // hash compute, fail-safe by including the row in the save.
+    var _changedAdRows = adRows;
+    try {
+      if (typeof window._adRowHashCache === 'undefined') window._adRowHashCache = {};
+      var hashCache = window._adRowHashCache;
+      var _skipped = 0;
+      _changedAdRows = adRows.filter(function (r) {
+        try {
+          // Build hash payload: clone, strip volatile keys
+          var hashRow = Object.assign({}, r);
+          if (hashRow.meta && typeof hashRow.meta === 'object') {
+            var metaCopy = Object.assign({}, hashRow.meta);
+            delete metaCopy._clientId;
+            hashRow.meta = metaCopy;
+          }
+          delete hashRow.updated_at;
+          delete hashRow.last_status_change_at;
+          var serialized = JSON.stringify(hashRow);
+          // djb2 hash — fast, stable, collision-safe enough for change detection
+          var h = 5381;
+          for (var i = 0; i < serialized.length; i++) {
+            h = ((h << 5) + h + serialized.charCodeAt(i)) | 0;
+          }
+          var hashStr = String(h);
+          if (hashCache[r.id] === hashStr) {
+            _skipped++;
+            return false; // unchanged — skip
+          }
+          hashCache[r.id] = hashStr; // remember new hash for next save
+          return true;
+        } catch (e) {
+          // Hash failed — fail-safe: include the row in the save
+          return true;
+        }
+      });
+      if (_skipped > 0) console.log('[SB] flush skipped', _skipped, 'unchanged ADs of', adRows.length, 'total');
+    } catch (e) {
+      console.warn('[SB] hash-skip filter errored, falling through to full upsert', e);
+      _changedAdRows = adRows;
+    }
+    if (_changedAdRows.length) tasks.push(SB.from('ads').upsert(_changedAdRows));
 
     // ── MATRIX CELLS (composite key, fold 3-part per-ad keys) ────
     const meta = state.MATRIX_CELL_META || {}, assigns = state.CELL_CREATIVE_ASSIGNMENTS || {};
@@ -10526,14 +10573,20 @@ const DB = {
   // Realtime subscription helper
   subscribeToProduct(productId, onChange) {
     if (!SB || !productId) return null;
+    // Realtime traffic budget (2026-05-06): subscribe ONLY to user-facing
+    // tables. inspiration_queue + inspiration_results were dropped — they're
+    // internal classify-inspiration plumbing that blasted hundreds of
+    // notifications per batch run × every open tab × every teammate. The
+    // user-visible Inspirations list still updates live via the `inspirations`
+    // table subscription. See feedback_realtime_traffic_budget.md (invariant
+    // #1). Do not re-add those two without a corresponding write-suppression
+    // plan during user sessions.
     const ch = SB.channel('product:' + productId)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'ads', filter: 'product_id=eq.' + productId }, onChange)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'matrix_cells', filter: 'product_id=eq.' + productId }, onChange)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'angles', filter: 'product_id=eq.' + productId }, onChange)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'personas', filter: 'product_id=eq.' + productId }, onChange)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'inspirations', filter: 'product_id=eq.' + productId }, onChange)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'inspiration_queue', filter: 'product_id=eq.' + productId }, onChange)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'inspiration_results', filter: 'product_id=eq.' + productId }, onChange)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'manual_actions', filter: 'product_id=eq.' + productId }, onChange)
       .subscribe();
     return ch;
@@ -22948,13 +23001,18 @@ function startAutoSync() {
   if (_autoSyncInterval)     { clearInterval(_autoSyncInterval);     _autoSyncInterval     = null; }
   if (_syncCounterInterval)  { clearInterval(_syncCounterInterval);  _syncCounterInterval  = null; }
 
-  // Bug 10: visibility-aware polling — user requested 30s foreground (was 10s)
-  // to give local edits a wider safety window before the next poll could
-  // potentially stomp them. Background tabs throttle to 60s to avoid quota burn.
+  // Realtime traffic budget (2026-05-06): foreground 30s → 60s, background
+  // 60s → 5min. Each poll fires per-field broadcasts + a snapshot save → cascade
+  // of postgres_changes events × every subscriber. Halving foreground frequency
+  // and 5×-ing background = ~50%+ reduction in poll-driven realtime traffic.
+  // Outbound writes (dashboard → ClickUp) are unaffected; only inbound
+  // (ClickUp → dashboard) latency increases for teammates editing directly in
+  // ClickUp. Manual "Sync ClickUp" button is the immediacy escape hatch — never
+  // remove it. See feedback_realtime_traffic_budget.md (invariant #3).
   function _scheduleNext() {
     if (_autoSyncInterval) { clearInterval(_autoSyncInterval); _autoSyncInterval = null; }
     var hidden = (typeof document !== 'undefined' && document.hidden);
-    var ms = hidden ? 60000 : 30000;
+    var ms = hidden ? 300000 : 60000; // 5 min hidden / 60s foreground
     _autoSyncInterval = setInterval(pollFullSync, ms);
   }
   _scheduleNext();

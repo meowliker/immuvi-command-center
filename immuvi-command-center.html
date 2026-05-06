@@ -12347,9 +12347,12 @@ function _producerButtonHtml(taskId, productId) {
 }
 
 // Single document-level delegated click handler for the 🎨 button.
-// Avoids the brittle inline-onclick + HTML-entity-decoding path.
+// CAPTURE phase (3rd arg = true) so we get the event BEFORE the parent
+// <td onclick="event.stopPropagation()"> kills bubbling. Without this
+// the button click never reaches us because TD blocks the bubble.
 if (!window.__producerClickListenerAttached) {
   window.__producerClickListenerAttached = true;
+  console.info('[producer] click listener attached (capture phase)');
   document.addEventListener('click', function (e) {
     var btn = e.target && e.target.closest && e.target.closest('.producer-btn');
     if (!btn) return;
@@ -12367,7 +12370,7 @@ if (!window.__producerClickListenerAttached) {
     } else {
       alert('[producer] open modal function missing — please hard-refresh');
     }
-  }, false);
+  }, true);  // CAPTURE phase — fires before TD's stopPropagation blocks bubbling
 }
 
 function _producerOpenModal(taskId, productId) {

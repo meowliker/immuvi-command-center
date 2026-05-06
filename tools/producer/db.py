@@ -11,39 +11,6 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 
-class _Req:
-    """Minimal urllib-compatible request object that skips URL validation.
-
-    urllib.request.Request.__init__ calls self._parse() which rejects
-    non-http(s) URLs. Using a plain object lets tests pass fake base URLs
-    while still hitting the urlopen mock boundary.
-    """
-    def __init__(self, method: str, full_url: str,
-                 data: Optional[bytes], headers: dict) -> None:
-        self.method            = method.upper()
-        self.full_url          = full_url
-        self.data              = data
-        self.headers           = {k.capitalize(): v for k, v in headers.items()}
-        self.unverifiable      = False
-        self.origin_req_host   = None
-        self.type              = full_url.split("://")[0] if "://" in full_url else "https"
-
-    def get_method(self) -> str:
-        return self.method
-
-    def get_full_url(self) -> str:
-        return self.full_url
-
-    def has_header(self, header: str) -> bool:
-        return header.capitalize() in self.headers
-
-    def get_header(self, header: str, default=None):
-        return self.headers.get(header.capitalize(), default)
-
-    def add_unredirected_header(self, key: str, val: str) -> None:
-        self.headers[key.capitalize()] = val
-
-
 def _request(method: str, url: str, service_key: str,
              body: Any = None, prefer: Optional[str] = None) -> Any:
     headers = {
@@ -55,7 +22,7 @@ def _request(method: str, url: str, service_key: str,
     if prefer:
         headers["Prefer"] = prefer
     data = json.dumps(body).encode() if body is not None else None
-    req = _Req(method, url, data, headers)
+    req = urllib.request.Request(url, data=data, method=method, headers=headers)
     with urllib.request.urlopen(req, timeout=30) as r:
         raw = r.read().decode()
     if not raw:

@@ -19,7 +19,7 @@ def test_pop_pending_run_returns_first_pending():
              "instruction": "make it pop", "trigger": "manual"}]
     with patch("tools.producer.db.urllib.request.urlopen") as m:
         m.return_value = _mock_resp(rows)
-        out = db.pop_pending_run(supabase_url="u", service_key="k",
+        out = db.pop_pending_run(supabase_url="https://x.supabase.co", service_key="k",
                                  worker_id="w-1")
     assert out["id"] == 7
     assert out["task_id"] == "ck-t1"
@@ -28,7 +28,7 @@ def test_pop_pending_run_returns_first_pending():
 def test_pop_pending_run_returns_none_when_empty():
     with patch("tools.producer.db.urllib.request.urlopen") as m:
         m.return_value = _mock_resp([])
-        assert db.pop_pending_run(supabase_url="u", service_key="k",
+        assert db.pop_pending_run(supabase_url="https://x.supabase.co", service_key="k",
                                   worker_id="w-1") is None
 
 
@@ -36,7 +36,7 @@ def test_claim_run_flips_pending_to_running():
     out_rows = [{"id": 7, "status": "running", "worker_id": "w-1"}]
     with patch("tools.producer.db.urllib.request.urlopen") as m:
         m.return_value = _mock_resp(out_rows)
-        out = db.claim_run(supabase_url="u", service_key="k",
+        out = db.claim_run(supabase_url="https://x.supabase.co", service_key="k",
                            run_id=7, worker_id="w-1")
     assert out["status"] == "running"
     assert out["worker_id"] == "w-1"
@@ -47,7 +47,7 @@ def test_claim_run_raises_when_already_claimed():
     with patch("tools.producer.db.urllib.request.urlopen") as m:
         m.return_value = _mock_resp([])
         try:
-            db.claim_run(supabase_url="u", service_key="k",
+            db.claim_run(supabase_url="https://x.supabase.co", service_key="k",
                          run_id=7, worker_id="w-1")
         except RuntimeError:
             pass
@@ -59,7 +59,7 @@ def test_finish_run_done_sends_outputs_and_finished_at():
     with patch("tools.producer.db.urllib.request.urlopen") as m:
         m.return_value = _mock_resp([{"id": 7, "status": "done"}])
         out = db.finish_run(
-            supabase_url="u", service_key="k", run_id=7,
+            supabase_url="https://x.supabase.co", service_key="k", run_id=7,
             status="done",
             outputs=[{"drive_url": "https://drive.google.com/x",
                       "clickup_attachment_id": "abc",
@@ -76,7 +76,7 @@ def test_finish_run_done_sends_outputs_and_finished_at():
 def test_finish_run_failed_sets_error():
     with patch("tools.producer.db.urllib.request.urlopen") as m:
         m.return_value = _mock_resp([{"id": 7, "status": "failed"}])
-        db.finish_run(supabase_url="u", service_key="k", run_id=7,
+        db.finish_run(supabase_url="https://x.supabase.co", service_key="k", run_id=7,
                       status="failed", outputs=None,
                       error="nano-banana exit 1: ratelimited")
     body = json.loads(m.call_args[0][0].data.decode())

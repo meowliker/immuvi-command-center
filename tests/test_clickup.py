@@ -96,3 +96,11 @@ def test_compute_content_hash_changes_on_status_change():
     h2 = clickup.compute_content_hash(
         status="loser", description="d", comments=[], custom_fields={})
     assert h1 != h2
+
+
+def test_list_tasks_passes_page_size_param():
+    with patch("tools.strategist.clickup.urllib.request.urlopen") as m:
+        m.return_value = _mock_response({"tasks": []})
+        clickup.list_tasks(api_key="k", list_id="L1")
+    req = m.call_args[0][0]
+    assert "page_size=100" in req.full_url

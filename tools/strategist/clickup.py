@@ -46,6 +46,7 @@ def list_tasks(api_key: str, list_id: str,
     while True:
         params = {
             "page": page,
+            "page_size": PAGE_SIZE,
             "subtasks": "true",
             "include_closed": "true" if include_closed else "false",
         }

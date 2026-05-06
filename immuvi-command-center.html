@@ -15694,13 +15694,27 @@ function _apActiveViewColumns() {
   var view = _apActiveView();
   var listed = {};
   view.columns.forEach(function (c) { listed[c.key] = true; });
-  // Append unseen built-ins
+  // Append unseen built-ins. Honour the default's `hidden` flag — built-ins
+  // shipped with `hidden:false` (e.g. the new `producer` column) should be
+  // VISIBLE by default for existing users, not silently hidden behind the
+  // column picker. Custom-field columns still default-hidden in the loop below.
   _AP_DEFAULT_COLUMNS.forEach(function (c) {
     if (!listed[c.key]) {
-      view.columns.push({ key:c.key, width:c.width, hidden:true });
+      view.columns.push({ key:c.key, width:c.width, hidden: !!c.hidden });
       listed[c.key] = true;
     }
   });
+  // One-time un-hide migration for the `producer` column. The original
+  // append loop mistakenly forced hidden=true for any built-in not in the
+  // saved view, so existing users got `producer` invisible after upgrade.
+  // Apply ONLY to producer, ONLY once per view (gated by a persisted flag),
+  // so a user who later intentionally hides it doesn't get it re-shown.
+  if (!view._producerColumnUnhidden) {
+    var prod = view.columns.find(function (vc) { return vc.key === 'producer'; });
+    if (prod && prod.hidden) prod.hidden = false;
+    view._producerColumnUnhidden = true;
+    _apColSave();  // persist the flag + the un-hide so this runs exactly once
+  }
   // Append unseen custom fields, hidden by default
   Object.keys(_AP_COL_REGISTRY).forEach(function (k) {
     if (k.indexOf('cf:') !== 0) return;

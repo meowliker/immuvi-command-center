@@ -40,3 +40,15 @@ def test_render_markdown_uses_bypass_perms():
     cmd = run.call_args[0][0]
     assert cmd[0] == "claude"
     assert "bypassPermissions" in cmd
+
+
+def test_render_markdown_raises_on_timeout():
+    import subprocess as _sp
+    with patch("tools.strategist.renderer.subprocess.run") as run:
+        run.side_effect = _sp.TimeoutExpired(cmd=["claude"], timeout=300)
+        try:
+            renderer.render_markdown({"product_name": "x"})
+        except renderer.RenderError as e:
+            assert "timed out" in str(e).lower()
+        else:
+            assert False, "expected RenderError on timeout"

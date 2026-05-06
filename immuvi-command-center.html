@@ -12155,8 +12155,90 @@ function _strategistSetView(v) {
 }
 
 function _strategistStructuredBody(mem) {
-  // Stub — implemented fully in Task 15.
-  return '<div style="padding:24px;color:var(--t3)">Structured view coming next.</div>';
+  var j = mem.json || {};
+  var sections = [
+    { key: 'strategy',   title: '🎯 Strategy',         dims: [
+        ['angles',           'Angles',          j.strategy_layer && j.strategy_layer.angles],
+        ['personas',         'Personas',        j.strategy_layer && j.strategy_layer.personas],
+        ['emotions_played',  'Emotions played', j.strategy_layer && j.strategy_layer.emotions_played],
+    ]},
+    { key: 'creative',   title: '🎨 Creative direction', dims: [
+        ['creative_structures', 'Creative structures', j.creative_direction_layer && j.creative_direction_layer.creative_structures],
+        ['production_styles',   'Production styles',   j.creative_direction_layer && j.creative_direction_layer.production_styles],
+        ['funnel_types',        'Funnel types',        j.creative_direction_layer && j.creative_direction_layer.funnel_types],
+        ['hook_types',          'Hook types',          j.creative_direction_layer && j.creative_direction_layer.hook_types],
+    ]},
+    { key: 'copy',       title: '✍ Copy',              dims: [
+        ['lingo',  'Lingo (winners only)', j.copy_layer && j.copy_layer.lingo, /*lingoMode*/true],
+    ]},
+    { key: 'combos',     title: '🔗 Combinations',      dims: [
+        ['win',  'Combinations that win',  j.combinations_that_win,  /*comboMode*/true],
+        ['die',  'Combinations that die',  j.combinations_that_die,  /*comboMode*/true],
+    ]},
+  ];
+
+  var html = '<div style="padding:0 24px 24px;max-width:1120px;margin:0 auto">';
+  sections.forEach(function (sec) {
+    html += '<h2 style="margin:24px 0 12px;font-size:1rem;color:var(--t1)">' + esc(sec.title) + '</h2>';
+    sec.dims.forEach(function (d) {
+      html += _strategistDimTable(d[1], d[2] || [], d[3]);
+    });
+  });
+  html += '</div>';
+  return html;
+}
+
+function _strategistDimTable(title, rows, mode) {
+  if (!rows.length) {
+    return '<div style="margin:8px 0;color:var(--t3);font-size:0.85rem">' +
+             esc(title) + ': <em>no data yet</em></div>';
+  }
+  var isCombo = (mode === true);
+
+  var headerCells, bodyRows;
+
+  if (isCombo) {
+    // Combinations table: angle × persona × structure × hook
+    headerCells = '<th>Angle</th><th>Persona</th><th>Structure</th><th>Hook</th><th class="num">Evidence</th>';
+    bodyRows = rows.map(function (r) {
+      return '<tr>' +
+        '<td>' + esc(r.angle    || '—') + '</td>' +
+        '<td>' + esc(r.persona  || '—') + '</td>' +
+        '<td>' + esc(r.creative_structure || '—') + '</td>' +
+        '<td>' + esc(r.hook_type || '—') + '</td>' +
+        '<td class="num">' + (r.evidence_task_ids || []).length + '</td>' +
+      '</tr>';
+    }).join('');
+  } else if (title.toLowerCase().indexOf('lingo') >= 0) {
+    headerCells = '<th>Phrase</th><th class="num">Winner appearances</th>';
+    bodyRows = rows.map(function (r) {
+      return '<tr><td>' + esc(r.phrase || '') + '</td>' +
+             '<td class="num">' + (r.winners || 0) + '</td></tr>';
+    }).join('');
+  } else {
+    // Standard dimension table: name | wins | losses | spend | revenue | ROI | evidence
+    headerCells = '<th>Name</th><th class="num">W</th><th class="num">L</th><th class="num">Spend</th><th class="num">Rev</th><th class="num">ROI</th><th class="num">Evidence</th>';
+    bodyRows = rows.map(function (r) {
+      var roi = (r.roi != null) ? (r.roi.toFixed(2) + 'x') : '—';
+      return '<tr>' +
+        '<td>' + esc(r.name || '—') + '</td>' +
+        '<td class="num">' + (r.wins   || 0) + '</td>' +
+        '<td class="num">' + (r.losses || 0) + '</td>' +
+        '<td class="num">' + (r.spend   ? '$' + Math.round(r.spend)   : '—') + '</td>' +
+        '<td class="num">' + (r.revenue ? '$' + Math.round(r.revenue) : '—') + '</td>' +
+        '<td class="num">' + roi + '</td>' +
+        '<td class="num">' + (r.evidence_task_ids || []).length + '</td>' +
+      '</tr>';
+    }).join('');
+  }
+
+  return '<div style="margin:8px 0 16px">' +
+           '<div style="font-size:0.78rem;color:var(--t2);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.5px">' + esc(title) + '</div>' +
+           '<table class="ap-table" style="width:100%">' +
+             '<thead><tr>' + headerCells + '</tr></thead>' +
+             '<tbody>' + bodyRows + '</tbody>' +
+           '</table>' +
+         '</div>';
 }
 
 function nextSerialId() {

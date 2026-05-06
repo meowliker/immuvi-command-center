@@ -107,3 +107,34 @@ def test_slugify_basic():
     assert taxonomy.slugify("KIDS LIFE SKILL") == "kids-life-skill"
     assert taxonomy.slugify("Canva Mastery — Scripts") == "canva-mastery-scripts"
     assert taxonomy.slugify("  multi   spaces  ") == "multi-spaces"
+
+
+def test_extract_field_value_date_returns_string():
+    # ClickUp returns ms-epoch as a string; module passes it through.
+    assert taxonomy.extract_field_value(
+        {"name": "Launch Date", "type": "date", "value": "1714900000000"}
+    ) == "1714900000000"
+
+
+def test_extract_field_value_users_returns_usernames_list():
+    field = {
+        "name": "Editor", "type": "users",
+        "value": [
+            {"id": 1, "username": "alice"},
+            {"id": 2, "username": "bob"},
+        ],
+    }
+    assert taxonomy.extract_field_value(field) == ["alice", "bob"]
+
+
+def test_extract_field_value_users_empty_list_returns_none():
+    assert taxonomy.extract_field_value(
+        {"name": "Editor", "type": "users", "value": []}
+    ) is None
+
+
+def test_extract_field_value_unknown_type_falls_through():
+    # Unknown type returns the raw value unchanged.
+    assert taxonomy.extract_field_value(
+        {"name": "X", "type": "made_up_type", "value": "raw"}
+    ) == "raw"

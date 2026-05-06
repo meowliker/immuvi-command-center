@@ -4956,20 +4956,238 @@ button.mx-dt-action-sent .open { color:#0a84ff; font-weight:700; margin-left:4px
   white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
 }
 /* Hide bulky text columns (Hypothesis / Notes / Ad Copy / Duration / Tags / Reuse)
-   so the table is single-row Excel-tight. Data still lives on the row,
-   accessible via the side drawer (Phase 3). */
+   so the table is single-row Excel-tight. Actions column (23) STAYS visible
+   so the delete + open-source + use-format buttons are reachable. */
 .ins-table th:nth-child(12), .ins-table td:nth-child(12),  /* Hypothesis */
 .ins-table th:nth-child(13), .ins-table td:nth-child(13),  /* Notes */
 .ins-table th:nth-child(14), .ins-table td:nth-child(14),  /* Ad Copy */
 .ins-table th:nth-child(16), .ins-table td:nth-child(16),  /* Duration */
-.ins-table th:nth-child(22), .ins-table td:nth-child(22),  /* Tags */
-.ins-table th:nth-child(23), .ins-table td:nth-child(23)   /* Reuse */
+.ins-table th:nth-child(21), .ins-table td:nth-child(21),  /* Tags */
+.ins-table th:nth-child(22), .ins-table td:nth-child(22)   /* Reuse */
 { display:none !important; }
 .ins-th-hide { display:none !important; }
 /* Source link cell — narrow width */
 .ins-table td:nth-child(15) { max-width:160px; }
-/* Action column — narrow */
-.ins-table td:nth-child(24) { max-width:80px; }
+/* Actions column (last) — narrow + nowrap so buttons stay inline */
+.ins-table th:nth-child(23), .ins-table td:nth-child(23) {
+  max-width:120px; min-width:90px; text-align:right; white-space:nowrap;
+}
+.ins-table td.ins-actions { padding-right:14px; }
+.ins-table td.ins-actions .ins-icon-btn { margin-left:2px; }
+/* Row hover & click affordance */
+.ins-table tbody tr { cursor:pointer; }
+.ins-table tbody tr.ins-row-active td { background:rgba(79,70,229,0.06); }
+/* Currently classifying — subtle blue highlight + pulse */
+.ins-table tbody tr.ins-row-classifying td { background:rgba(56,182,255,0.07); }
+.ins-table tbody tr.ins-row-classifying td:first-child {
+  box-shadow: inset 3px 0 0 #3b82f6;
+}
+/* Usage / Performance pill segments */
+.ins-usage-pill {
+  display:inline-flex; align-items:center; gap:5px;
+  padding:3px 9px; border-radius:7px; font-size:0.66rem; font-weight:600;
+  border:1px solid var(--b);
+  background:var(--card); color:var(--t2);
+}
+.ins-usage-pill.unused  { color:var(--t3); border-color:transparent; background:transparent; }
+.ins-usage-pill.placed  { color:#5b21b6; background:rgba(91,33,182,0.10); border-color:rgba(91,33,182,0.20); }
+.ins-usage-pill.testing { color:#1d4ed8; background:rgba(29,78,216,0.10); border-color:rgba(29,78,216,0.22); }
+.ins-usage-pill.winner  { color:#92400e; background:rgba(180,109,9,0.14); border-color:rgba(180,109,9,0.28); }
+.ins-usage-pill.loser   { color:#b91c1c; background:rgba(185,28,28,0.10); border-color:rgba(185,28,28,0.22); }
+.ins-usage-pill.mixed   {
+  background:linear-gradient(90deg, rgba(180,109,9,0.14) 0%, rgba(185,28,28,0.10) 100%);
+  color:#92400e; border-color:rgba(180,109,9,0.20);
+}
+
+/* Worker pill in toolbar — replaces 'cloud online' badge */
+.ins-worker-pill-tb {
+  display:inline-flex; align-items:center; gap:6px;
+  padding:5px 10px; border-radius:8px;
+  font-size:0.7rem; font-weight:500; cursor:pointer;
+  border:1px solid var(--b); background:var(--card); color:var(--t2);
+  transition:all 0.12s; max-width:340px;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
+.ins-worker-pill-tb:hover { background:var(--el); color:var(--t1); }
+.ins-worker-pill-tb .ins-wp-dot {
+  width:7px; height:7px; border-radius:50%; flex-shrink:0;
+}
+.ins-worker-pill-tb .ins-wp-dot.idle    { background:#10b981; }
+.ins-worker-pill-tb .ins-wp-dot.busy    { background:#3b82f6; animation:ins-worker-pulse 1.5s infinite; }
+.ins-worker-pill-tb .ins-wp-dot.offline { background:#9ca3af; }
+.ins-worker-pill-tb .ins-wp-eta { color:var(--t3); font-size:0.64rem; margin-left:4px; }
+
+/* "Run on" picker in Add-to-Queue toolbar */
+.ins-runon-pill {
+  display:inline-flex; align-items:center; gap:5px;
+  padding:5px 8px 5px 12px; border-radius:8px;
+  border:1px solid var(--b); background:var(--card);
+  font-size:0.7rem; color:var(--t2); cursor:pointer; position:relative;
+}
+.ins-runon-pill .lbl { font-weight:600; color:var(--t3); font-size:0.6rem; text-transform:uppercase; letter-spacing:0.04em; margin-right:4px; }
+.ins-runon-pill select {
+  appearance:none; -webkit-appearance:none; background:transparent;
+  border:0; outline:none; padding:0 12px 0 0; font-size:0.7rem; color:var(--t1);
+  cursor:pointer; min-width:90px;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 10 10' fill='none' stroke='%23999' stroke-width='1.5'%3E%3Cpath d='M2 4l3 3 3-3'/%3E%3C/svg%3E");
+  background-repeat:no-repeat; background-position:right 0 center;
+}
+
+/* ── Placement drawer ───────────────────────────────────────── */
+.ins-drw-bd {
+  position:fixed; inset:0; background:rgba(15,15,20,0.18);
+  z-index:1499; opacity:0; pointer-events:none;
+  transition:opacity 0.16s;
+}
+.ins-drw-bd.open { opacity:1; pointer-events:auto; }
+.ins-drw {
+  position:fixed; top:0; right:0; bottom:0; width:480px; max-width:90vw;
+  background:var(--card); border-left:1px solid var(--b);
+  box-shadow:-12px 0 32px rgba(15,15,20,0.08);
+  z-index:1500; transform:translateX(100%);
+  transition:transform 0.18s ease-out;
+  display:flex; flex-direction:column;
+}
+.ins-drw.open { transform:translateX(0); }
+.ins-drw-hdr {
+  display:flex; align-items:flex-start; gap:12px;
+  padding:18px 20px 14px; border-bottom:1px solid var(--b);
+}
+.ins-drw-hdr-meta { flex:1; min-width:0; }
+.ins-drw-eyebrow {
+  display:inline-block; padding:2px 8px; border-radius:5px;
+  font-size:0.58rem; font-weight:700; letter-spacing:0.08em; text-transform:uppercase;
+  color:#5b21b6; background:rgba(91,33,182,0.10); border:1px solid rgba(91,33,182,0.20);
+  margin-bottom:8px;
+}
+.ins-drw-title {
+  font-size:1.1rem; font-weight:600; color:var(--t1); margin:0 0 4px;
+  font-family:'Source Serif 4', 'Source Serif Pro', serif;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
+.ins-drw-sub { font-size:0.7rem; color:var(--t3); }
+.ins-drw-close {
+  background:transparent; border:0; cursor:pointer;
+  font-size:1.6rem; line-height:1; color:var(--t3); padding:0 4px;
+}
+.ins-drw-close:hover { color:var(--t1); }
+.ins-drw-body { flex:1; overflow-y:auto; padding:18px 22px 28px; }
+
+.ins-drw-section { margin-bottom:18px; }
+.ins-drw-section-hdr {
+  font-size:0.6rem; font-weight:700; letter-spacing:0.07em; text-transform:uppercase;
+  color:var(--t3); margin-bottom:8px;
+  display:flex; align-items:center; gap:6px;
+}
+.ins-drw-grid {
+  display:grid; grid-template-columns:90px 1fr; gap:6px 12px;
+  font-size:0.74rem;
+}
+.ins-drw-grid dt { color:var(--t3); }
+.ins-drw-grid dd { color:var(--t1); margin:0; word-break:break-word; }
+.ins-drw-prose {
+  font-size:0.78rem; line-height:1.55; color:var(--t1);
+  background:var(--el); border-radius:8px; padding:12px 14px;
+  border:1px solid var(--b);
+  max-height:160px; overflow-y:auto; white-space:pre-wrap;
+}
+.ins-drw-prose.empty { color:var(--t3); font-style:italic; }
+
+.ins-drw-cell-card {
+  border:1px solid var(--b); border-radius:12px; padding:14px 16px;
+  background:linear-gradient(180deg, var(--card), var(--el));
+}
+.ins-drw-cell-title {
+  font-size:0.92rem; font-weight:600; color:var(--t1);
+  margin-bottom:6px;
+}
+.ins-drw-cell-stats {
+  display:flex; gap:10px; flex-wrap:wrap;
+  font-size:0.68rem; color:var(--t2); margin:6px 0 12px;
+}
+.ins-drw-cell-stats .ins-st-chip {
+  padding:2px 8px; border-radius:6px;
+  background:var(--card); border:1px solid var(--b);
+}
+.ins-drw-place-btn {
+  display:inline-flex; align-items:center; gap:6px; width:100%; justify-content:center;
+  padding:10px 16px; border-radius:10px; font-weight:600; font-size:0.82rem;
+  background:linear-gradient(180deg,#1d4ed8,#1e40af); color:#fff; border:1px solid #1e40af;
+  cursor:pointer; transition:all 0.14s;
+}
+.ins-drw-place-btn:hover { transform:translateY(-1px); box-shadow:0 4px 12px rgba(29,78,216,0.25); }
+.ins-drw-place-btn:disabled {
+  background:#94a3b8; border-color:#94a3b8; cursor:not-allowed; transform:none; box-shadow:none;
+}
+
+.ins-drw-manual {
+  margin-top:12px; padding-top:12px; border-top:1px dashed var(--b);
+  display:flex; gap:8px; align-items:center; flex-wrap:wrap;
+}
+.ins-drw-manual select {
+  padding:6px 10px; border:1px solid var(--b); border-radius:6px;
+  font-size:0.72rem; background:var(--card); cursor:pointer;
+}
+.ins-drw-manual button {
+  padding:6px 12px; border:1px solid var(--b); border-radius:6px;
+  background:var(--card); cursor:pointer; font-size:0.72rem;
+}
+.ins-drw-manual button:hover { background:var(--el); }
+
+.ins-drw-usage-list { font-size:0.74rem; color:var(--t1); }
+.ins-drw-usage-row {
+  display:flex; align-items:center; gap:8px; padding:6px 0;
+  border-bottom:1px dashed var(--b);
+}
+.ins-drw-usage-row:last-child { border-bottom:0; }
+.ins-drw-usage-row .ins-uc-cell { color:var(--t2); flex:1; }
+.ins-drw-usage-row .ins-uc-status { font-size:0.62rem; padding:2px 7px; border-radius:5px; font-weight:600; }
+.ins-drw-usage-row .ins-uc-status.testing { background:rgba(29,78,216,0.10); color:#1d4ed8; }
+.ins-drw-usage-row .ins-uc-status.winner  { background:rgba(180,109,9,0.14); color:#92400e; }
+.ins-drw-usage-row .ins-uc-status.loser   { background:rgba(185,28,28,0.10); color:#b91c1c; }
+.ins-drw-usage-row .ins-uc-status.untested { background:var(--el); color:var(--t3); }
+
+/* Sub-view tabs (Table / Trends / Insights) */
+.ins-subview-tabs { display:flex; gap:4px; margin:0 0 10px; padding:3px; background:var(--el); border:1px solid var(--b); border-radius:9px; width:fit-content; }
+.ins-subview-tab { padding:5px 12px; font-size:0.70rem; font-weight:600; color:var(--t2); border-radius:6px; cursor:pointer; border:0; background:transparent; transition:all 0.12s; letter-spacing:0.01em; }
+.ins-subview-tab:hover { color:var(--t1); background:rgba(255,255,255,0.5); }
+.ins-subview-tab.active { background:var(--card); color:var(--t1); box-shadow:0 1px 2px rgba(15,15,20,0.06); }
+.ins-subview-host { padding:6px 0; }
+.ins-insights-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(320px, 1fr)); gap:12px; }
+.ins-card { border:1px solid var(--b); background:var(--card); border-radius:12px; padding:14px 16px; }
+.ins-card-h { font-size:0.68rem; font-weight:700; color:var(--t1); text-transform:uppercase; letter-spacing:0.04em; margin:0 0 10px; display:flex; justify-content:space-between; align-items:baseline; }
+.ins-card-h .ins-card-sub { font-size:0.62rem; font-weight:500; color:var(--t3); text-transform:none; letter-spacing:0; }
+.ins-funnel { display:flex; flex-direction:column; gap:6px; }
+.ins-funnel-row { display:grid; grid-template-columns:90px 1fr 50px; align-items:center; gap:8px; font-size:0.70rem; }
+.ins-funnel-row .ins-fr-lbl { color:var(--t2); font-weight:600; }
+.ins-funnel-bar { height:18px; border-radius:4px; background:linear-gradient(90deg,#4f46e5,#7c3aed); min-width:2px; }
+.ins-funnel-bar.unused  { background:linear-gradient(90deg,#94a3b8,#cbd5e1); }
+.ins-funnel-bar.placed  { background:linear-gradient(90deg,#0ea5e9,#38bdf8); }
+.ins-funnel-bar.testing { background:linear-gradient(90deg,#a855f7,#c084fc); }
+.ins-funnel-bar.winner  { background:linear-gradient(90deg,#f59e0b,#fbbf24); }
+.ins-funnel-row .ins-fr-num { font-variant-numeric:tabular-nums; color:var(--t1); font-weight:700; text-align:right; }
+.ins-mini-table { width:100%; border-collapse:collapse; font-size:0.70rem; }
+.ins-mini-table th, .ins-mini-table td { padding:5px 8px; text-align:left; border-bottom:1px solid var(--b); }
+.ins-mini-table th { font-size:0.60rem; text-transform:uppercase; letter-spacing:0.04em; color:var(--t3); font-weight:700; }
+.ins-mini-table td.num { font-variant-numeric:tabular-nums; text-align:right; color:var(--t1); font-weight:600; }
+.ins-mini-table tr:last-child td { border-bottom:0; }
+.ins-mini-table .ins-winrate-bar { display:inline-block; height:4px; background:linear-gradient(90deg,#84e1aa,#22c55e); border-radius:2px; vertical-align:middle; margin-right:6px; min-width:2px; }
+.ins-empty-cell { color:var(--t3); font-style:italic; padding:14px; text-align:center; font-size:0.70rem; }
+.ins-gold { display:flex; flex-direction:column; gap:6px; max-height:280px; overflow-y:auto; }
+.ins-gold-pill { display:flex; align-items:center; gap:8px; padding:7px 10px; background:var(--el); border:1px solid var(--b); border-radius:8px; cursor:pointer; transition:all 0.12s; }
+.ins-gold-pill:hover { background:var(--card); border-color:var(--t3); }
+.ins-gold-pill .ins-gold-id { font-family:'JetBrains Mono','SF Mono',monospace; font-size:0.62rem; color:var(--t3); }
+.ins-gold-pill .ins-gold-name { flex:1; font-size:0.70rem; color:var(--t1); font-weight:500; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.ins-gold-pill .ins-gold-meta { font-size:0.60rem; color:var(--t3); }
+.ins-trends-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(360px, 1fr)); gap:12px; }
+.ins-trend-chart { display:flex; align-items:flex-end; gap:3px; height:120px; padding:6px 0; }
+.ins-trend-col { flex:1; display:flex; flex-direction:column; align-items:center; gap:3px; min-width:0; }
+.ins-trend-bar { width:100%; background:linear-gradient(180deg,#4f46e5,#7c3aed); border-radius:3px 3px 0 0; min-height:1px; transition:opacity 0.12s; }
+.ins-trend-bar.placed { background:linear-gradient(180deg,#0ea5e9,#38bdf8); }
+.ins-trend-col:hover .ins-trend-bar { opacity:0.7; }
+.ins-trend-day { font-size:0.55rem; color:var(--t3); transform:rotate(-30deg); transform-origin:top left; white-space:nowrap; margin-top:6px; }
+.ins-trend-axis { display:flex; justify-content:space-between; font-size:0.60rem; color:var(--t3); margin-top:24px; padding:0 4px; border-top:1px dashed var(--b); padding-top:4px; }
+
 .ins-table tbody tr:last-child td { border-bottom:none; }
 .ins-table tbody tr { transition:background 0.12s ease; }
 .ins-table tbody tr:hover td { background:rgba(14,14,16,0.02); }
@@ -9212,6 +9430,21 @@ button.mx-dt-action-sent .open { color:#0a84ff; font-weight:700; margin-left:4px
           <span class="caret">▾</span>
         </label>
 
+        <label class="ap-filter-pill ins-filter-pill" data-key="performance">
+          <span class="ap-pill-icon"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 13.5h11M4 11l2-3 2.5 2 3-5"/><circle cx="11.5" cy="5" r="1.2" fill="currentColor"/></svg></span>
+          <span class="lbl">Performance</span>
+          <select id="insFiltPerformance" onchange="renderInspirations();_insFltPaint()">
+            <option value="">All</option>
+            <option value="unused">🟡 Unused</option>
+            <option value="placed">📌 Placed</option>
+            <option value="testing">🧪 Testing</option>
+            <option value="winner">🏆 Has winner</option>
+            <option value="loser">💀 Has loser</option>
+            <option value="mixed">⚖ Mixed</option>
+          </select>
+          <span class="caret">▾</span>
+        </label>
+
         <label class="ap-filter-pill ins-filter-pill" data-key="format">
           <span class="ap-pill-icon"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="2.5" width="11" height="11" rx="1.5"/><path d="M2.5 6.5h11M6.5 2.5v11"/></svg></span>
           <span class="lbl">Format</span>
@@ -9277,6 +9510,20 @@ button.mx-dt-action-sent .open { color:#0a84ff; font-weight:700; margin-left:4px
       <div class="ins-empty-title">No inspirations yet</div>
       <div class="ins-empty-sub">Paste a competitor ad URL above and click "+ Add to Queue", then "Process All with Claude"</div>
     </div>
+
+    <!-- Phase 3: placement drawer (slide-in panel) — populated by _insOpenDrawer -->
+    <div id="insoDrawerBackdrop" class="ins-drw-bd" onclick="_insCloseDrawer()"></div>
+    <aside id="insoDrawer" class="ins-drw" aria-hidden="true">
+      <header class="ins-drw-hdr">
+        <div class="ins-drw-hdr-meta">
+          <span class="ins-drw-eyebrow" id="insoDrwEyebrow">Inspiration</span>
+          <h2 class="ins-drw-title" id="insoDrwTitle">—</h2>
+          <div class="ins-drw-sub" id="insoDrwSub">—</div>
+        </div>
+        <button class="ins-drw-close" onclick="_insCloseDrawer()" title="Close (Esc)">×</button>
+      </header>
+      <div class="ins-drw-body" id="insoDrwBody"></div>
+    </aside>
   </section>
 
   <!-- ===== MODAL ===== -->
@@ -10763,13 +11010,17 @@ const DB = {
   // Replaces bridge POST /queue
   async enqueueInspirations(productId, items) {
     if (!SB || !items || !items.length) return { ok: false };
+    // Pick up the user's "Run on" choice (set by the picker in the toolbar).
+    // Defaults to 'auto' so any worker may claim the row.
+    var assignment = (typeof window !== 'undefined' && window._insRunOnAssignment) || 'auto';
     const rows = items.map(function (it) {
       return {
         ins_id: it.id || it.ins_id || ('INS-' + Date.now()),
         product_id: productId,
         url: it.url,
         platform: it.platform || null,
-        status: 'pending'
+        status: 'pending',
+        worker_assignment: assignment,
       };
     });
     const { error } = await SB.from('inspiration_queue').upsert(rows, { onConflict: 'ins_id,product_id' });
@@ -11109,7 +11360,7 @@ const CFG = {
 };
 
 // === CONSTANTS ===
-let STATUSES = ['Untested', 'Approved', 'In Production', 'Ready to Launch', 'Testing', 'Winner', 'Loser', 'Scale', 'Complete'];
+let STATUSES = ['Untested', 'Approved', 'In Production', 'Ready to Launch', 'Testing', 'Mild Winner', 'Winner', 'Loser', 'Scale', 'Complete'];
 const CREATIVE_STRUCTURES = ['UGC', 'Testimonial', 'Demo', 'Tutorial / How-To', 'Story / Narrative', 'Hook + Offer', 'Listicle', 'Static / Photo', 'Comparison', 'Interview', 'Skit / Roleplay', 'AI / Voiceover'];
 const CREATIVE_STRUCTURE_DESC = {
   'UGC': 'Real person, phone-shot, authentic feel',
@@ -11568,6 +11819,7 @@ function classify(status) {
     'in-production':   { cls: 'ready',     lbl: 'In Production' },
     'ready-to-launch': { cls: 'test',      lbl: 'Ready to Launch' },
     'testing':         { cls: 'test',      lbl: 'Testing' },
+    'mild-winner':     { cls: 'win',       lbl: 'Mild Winner' },
     'winner':          { cls: 'win',       lbl: 'Winner' },
     'loser':           { cls: 'lose',      lbl: 'Loser' },
     'scale':           { cls: 'win',       lbl: 'Scale' },
@@ -11712,6 +11964,37 @@ async function _refreshDeletedAdIdsCache(productId) {
       _deletedAdIdsCacheProductId = productId;
     }
   } catch (e) { console.warn('[deleted_ads cache] refresh failed', e); }
+}
+
+// ── Strategist memory: queue a daily run for the active product (idempotent) ──
+// On dashboard load AND every product switch, insert a strategist_runs row
+// with trigger='daily' and run_date=today. Unique index
+// ux_strategist_runs_daily_dedup means at most ONE daily row per product per
+// day — concurrent inserts from multiple tabs land on the dedup constraint
+// and the second silently no-ops via on_conflict=do_nothing.
+async function _queueDailyStrategistRun(productId) {
+  if (!SB || !productId) return;
+  try {
+    var today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+    var res = await SB
+      .from('strategist_runs')
+      .upsert(
+        { product_id: productId, status: 'pending',
+          trigger: 'daily', run_date: today },
+        { onConflict: 'product_id,run_date',
+          ignoreDuplicates: true }
+      );
+    if (res.error) {
+      // Conflict on the partial unique index is expected and fine —
+      // means the daily run for this product+today is already queued.
+      // Other errors are logged but non-fatal (UI keeps working).
+      console.debug('[strategist] daily queue:', res.error.message);
+    } else {
+      console.log('[strategist] daily run queued for', productId);
+    }
+  } catch (e) {
+    console.warn('[strategist] daily queue failed (non-fatal):', e);
+  }
 }
 
 function nextSerialId() {
@@ -12299,7 +12582,7 @@ function buildCreativeUsageIndex() {
 
   // ── Step 1: Auto-populate CELL_CREATIVE_ASSIGNMENTS from Creative Tracker ADS ──
   // Any ad with angle + persona set gets mapped to its matrix cell automatically
-  var AUTO_STATUSES = ['Winner', 'Testing', 'Loser', 'Ready to Launch', 'In Progress', 'Not Started', 'Scale'];
+  var AUTO_STATUSES = ['Winner', 'Mild Winner', 'Testing', 'Loser', 'Ready to Launch', 'In Progress', 'Not Started', 'Scale'];
   var angleNames   = ANGLES.map(function(a){ return a.name; });
   var personaNames = PERSONAS.map(function(p){ return p.name; });
 
@@ -23588,6 +23871,9 @@ async function loadState() {
 
   if (!activeProductId) return false;
 
+  // Queue a daily strategist run for this product (idempotent — unique index dedupes).
+  _queueDailyStrategistRun(activeProductId);
+
   // 3. Load the active product's data
   var state = null;
   try {
@@ -23833,6 +24119,8 @@ async function switchProduct(productId) {
   // Adopts every pre-v2 production-tagged AD into MANUAL_ACTIONS so the
   // Action Plan reflects the team's full backlog, not just app-pushed tasks.
   try { setTimeout(apRunLegacyBackfill, 600); } catch (e) {}
+  // Queue a daily strategist run for the newly active product (idempotent).
+  _queueDailyStrategistRun(activeProductId);
   toast('Switched to ' + prod.name, 'ok');
 }
 
@@ -33801,7 +34089,41 @@ function renderInspirations() {
   var status   = (document.getElementById('insFiltStatus')||{}).value || '';
   var hook     = (document.getElementById('insFiltHook')||{}).value || '';
   var typeFlt  = (document.getElementById('insFiltType')||{}).value || '';
+  var perfFlt  = (document.getElementById('insFiltPerformance')||{}).value || '';
   var search   = ((document.getElementById('insFiltSearch')||{}).value || '').toLowerCase();
+
+  // Build a verdict map per inspiration once (avoids recomputing inside the filter loop)
+  var perfVerdicts = {};
+  if (perfFlt && typeof window._insRenderUsageBadge === 'function') {
+    INSPIRATIONS.forEach(function (ins) {
+      var ads = (typeof ADS !== 'undefined' && Array.isArray(ADS))
+        ? ADS.filter(function (a) { return a && a._fromInspoId === ins.id; }) : [];
+      var w = 0, l = 0, t = 0, p = 0;
+      ads.forEach(function (a) {
+        var s = (a.status || '').toLowerCase();
+        if (s === 'winner' || s === 'scale' || s === 'complete') w++;
+        else if (s === 'loser' || s === 'killed') l++;
+        else if (s === 'testing' || s === 'in production' || s === 'ready to launch') t++;
+        else p++;
+      });
+      var v;
+      if (!ads.length) v = 'unused';
+      else if (w && l) v = 'mixed';
+      else if (w) v = 'winner';
+      else if (l) v = 'loser';
+      else if (t) v = 'testing';
+      else v = 'placed';
+      perfVerdicts[ins.id] = v;
+    });
+  }
+
+  // Pulse-strip filter: build a queueRow lookup so today_pending / today_classifying /
+  // today_failed work too. INSPIRATIONS only contains classified rows, so for queue-state
+  // filters we widen to inspiration_queue rows instead — handled below.
+  var pipeFilter = window._insPipeFilter || '';
+  var queueRows = (window.INSPIRATION_QUEUE && Array.isArray(window.INSPIRATION_QUEUE)) ? window.INSPIRATION_QUEUE : [];
+  var queueByInsId = {};
+  queueRows.forEach(function (q) { if (q && q.ins_id) queueByInsId[q.ins_id] = q; });
 
   var filtered = INSPIRATIONS.filter(function(ins) {
     if (platform && ins.platform !== platform) return false;
@@ -33809,6 +34131,11 @@ function renderInspirations() {
     if (status && ins.status !== status) return false;
     if (hook && ins.hookType !== hook) return false;
     if (typeFlt && (ins.adType || '') !== typeFlt) return false;
+    if (perfFlt && perfVerdicts[ins.id] !== perfFlt) return false;
+    if (pipeFilter && typeof window._insPipelinePassesFilter === 'function') {
+      var qr = queueByInsId[ins.id] || null;
+      if (!window._insPipelinePassesFilter(ins, qr)) return false;
+    }
     if (search) {
       var hay = [ins.brand,ins.angle,ins.persona,ins.creativeUSP,ins.notes,ins.sourceUrl,ins.formatName].join(' ').toLowerCase();
       if (!hay.includes(search)) return false;
@@ -33820,6 +34147,7 @@ function renderInspirations() {
   (function _sortIns(){
     var s = window._insTableSortState || { col: 'created', dir: 'desc' };
     var col = s.col, dir = s.dir;
+    if (window._insSortDebug) console.log('[ins-sort] running with col=', col, 'dir=', dir, 'rows=', filtered.length);
     var get = function(ins){
       switch (col) {
         case 'ins-id':     return ins.id || '';
@@ -34034,14 +34362,15 @@ function renderInspirations() {
         var iso = new Date(t).toISOString().slice(0,10);
         return '<td title="' + iso + '" style="font-size:0.68rem;color:var(--t2);font-family:\'JetBrains Mono\',monospace">' + esc(rel) + '</td>';
       })() +
-      // 18. Cells Used
+      // 18. Usage / Performance \u2014 replaces the plain "Cells Used" count
+      // with a segmented pill that shows winners / losers / testing /
+      // placed status across all ADs spawned from this inspiration.
+      // Click \u2192 opens drawer (the row's normal click handler picks this up).
       (function(){
-        var cellTasks = ADS.filter(function(a){ return a._fromInspoId === ins.id; });
-        var cnt = cellTasks.length;
-        if (cnt === 0) {
-          return '<td><span class="ins-cells-badge no-cells">\u2014</span></td>';
-        }
-        return '<td><button class="ins-cells-badge has-cells" onclick="showInspoCellsPopup(\''+escAttr(ins.id)+'\')" title="View '+cnt+' task'+(cnt>1?'s':'')+' created from this inspo">'+cnt+' task'+(cnt>1?'s':'')+'</button></td>';
+        var pill = (typeof window._insRenderUsageBadge === 'function')
+          ? window._insRenderUsageBadge(ins.id)
+          : '<span class="ins-cells-badge no-cells">\u2014</span>';
+        return '<td>' + pill + '</td>';
       })() +
       // 19. Brief (ClickUp Doc link — resolves cross-product sources)
       (function(){
@@ -36327,7 +36656,22 @@ window._clearPendingCu = _clearPendingCu;
     }
     // Filter inputs read from DOM each render — include their values.
     function _v(id){ var el=document.getElementById(id); return el ? el.value || '' : ''; }
-    s += '#flt=' + _v('insFiltPlatform') + '|' + _v('insFiltFormat') + '|' + _v('insFiltStatus') + '|' + _v('insFiltHook') + '|' + _v('insFiltSearch');
+    s += '#flt=' + _v('insFiltPlatform') + '|' + _v('insFiltFormat') + '|' + _v('insFiltStatus') + '|' + _v('insFiltHook') + '|' + _v('insFiltType') + '|' + _v('insFiltPerformance') + '|' + _v('insFiltSearch');
+    // ADs status fingerprint — performance filter depends on it
+    if (typeof ADS !== 'undefined' && Array.isArray(ADS)) {
+      var adFp = '';
+      for (var ai = 0; ai < ADS.length; ai++) {
+        var a = ADS[ai]; if (!a || !a._fromInspoId) continue;
+        adFp += a._fromInspoId + ':' + (a.status || '') + ';';
+      }
+      s += '#ads=' + adFp;
+    }
+    // Sort state — without this, clicking a column header was a no-op because
+    // the wrapper's "data unchanged" guard short-circuited renderInspirations.
+    var ss = window._insTableSortState || {};
+    s += '#sort=' + (ss.col || '') + ':' + (ss.dir || '');
+    // Pipeline / performance filter chips (when added)
+    s += '#pipe=' + (window._insPipeFilter || '');
     return s;
   }
   var _fpComputers = {
@@ -36477,14 +36821,72 @@ window._clearPendingCu = _clearPendingCu;
   window._insPipeFilter = null;
   window._insWorkersList = [];
 
+  // Returns the [from, to] window in ms used by week-scoped filter keys.
+  // Honors the custom range picker; otherwise falls back to start-of-week → now.
+  function _insWeekWindow() {
+    var r = window._insPulseRange;
+    if (r && r.from && r.to) return [r.from, r.to];
+    var d = new Date(); d.setHours(0,0,0,0);
+    var dow = d.getDay() || 7;
+    d.setDate(d.getDate() - (dow - 1));
+    return [d.getTime(), Date.now()];
+  }
+  function _insTodayWindow() {
+    var d = new Date(); d.setHours(0,0,0,0);
+    return [d.getTime(), Date.now()];
+  }
+  function _insInsCreatedMs(ins) {
+    if (!ins) return 0;
+    var t = ins.classifiedAt || ins.created_at || ins.createdAt || ins.queuedAt;
+    if (!t) return 0;
+    if (typeof t === 'number') return t;
+    var n = new Date(t).getTime();
+    return isNaN(n) ? 0 : n;
+  }
+  function _insAdCreatedMs(a) {
+    return (a && (a.createdAt || a.dateCreated)) || 0;
+  }
+  function _insAdsForInsInWindow(ins, from, to, statusPred) {
+    if (!ins || typeof ADS === 'undefined' || !Array.isArray(ADS)) return false;
+    return ADS.some(function (a) {
+      if (!a || a._fromInspoId !== ins.id) return false;
+      var ct = _insAdCreatedMs(a);
+      if (!ct || ct < from || ct > to) return false;
+      if (statusPred) {
+        var s = (a.status || '').toLowerCase();
+        if (!statusPred(s)) return false;
+      }
+      return true;
+    });
+  }
+
   window._insPipelinePassesFilter = function (ins, queueRow) {
     var f = window._insPipeFilter;
     if (!f) return true;
+    // Pipeline-state filters (queue-driven)
     if (f === 'pending')     return queueRow && queueRow.status === 'pending';
     if (f === 'classifying') return queueRow && queueRow.status === 'classifying';
+    if (f === 'failed')      return queueRow && queueRow.status === 'failed';
     if (f === 'classified')  return ins && (ins.status === 'Saved' || ins.status === 'Classified') && !!ins._clickupDocPageUrl;
     if (f === 'placed')      return ins && Array.isArray(ADS) && ADS.some(function(a){ return a._fromInspoId === ins.id; });
-    if (f === 'failed')      return queueRow && queueRow.status === 'failed';
+    // TODAY-scoped
+    if (f === 'today_classified') {
+      var tw = _insTodayWindow(); var t = _insInsCreatedMs(ins);
+      return t >= tw[0] && t <= tw[1];
+    }
+    if (f === 'today_placed') {
+      var tw2 = _insTodayWindow();
+      return _insAdsForInsInWindow(ins, tw2[0], tw2[1], null);
+    }
+    // WEEK-scoped (honors custom range)
+    if (f === 'w_classified') {
+      var ww = _insWeekWindow(); var ti = _insInsCreatedMs(ins);
+      return ti >= ww[0] && ti <= ww[1];
+    }
+    if (f === 'w_placed')  { var w1 = _insWeekWindow(); return _insAdsForInsInWindow(ins, w1[0], w1[1], null); }
+    if (f === 'w_tested')  { var w2 = _insWeekWindow(); return _insAdsForInsInWindow(ins, w2[0], w2[1], function(s){ return s==='testing'||s==='in production'||s==='ready to launch'; }); }
+    if (f === 'w_winners') { var w3 = _insWeekWindow(); return _insAdsForInsInWindow(ins, w3[0], w3[1], function(s){ return s==='winner'||s==='scale'||s==='complete'; }); }
+    if (f === 'w_killed')  { var w4 = _insWeekWindow(); return _insAdsForInsInWindow(ins, w4[0], w4[1], function(s){ return s==='loser'||s==='killed'; }); }
     return true;
   };
 
@@ -36530,15 +36932,19 @@ window._clearPendingCu = _clearPendingCu;
       var classifiedTotal = insList.length;
 
       var todayMs = startOfDayMs();
-      var weekMs  = startOfWeekMs();
-      var lastWk  = lastWeekMs();
+      // Honor the custom range picker if set; otherwise default to Mon→now.
+      var _r = window._insPulseRange || null;
+      var weekMs  = _r ? _r.from : startOfWeekMs();
+      var weekEnd = _r ? _r.to   : Date.now();
+      var spanMs  = Math.max(1, weekEnd - weekMs);
+      var lastWk  = _r ? { from: weekMs - spanMs, to: weekMs - 1 } : lastWeekMs();
 
       var classifiedToday = 0, classifiedWeek = 0, classifiedLastWeek = 0;
       insList.forEach(function (r) {
         var t = r.created_at ? new Date(r.created_at).getTime() : 0;
         if (!t) return;
         if (t >= todayMs) classifiedToday++;
-        if (t >= weekMs)  classifiedWeek++;
+        if (t >= weekMs && t <= weekEnd) classifiedWeek++;
         if (t >= lastWk.from && t <= lastWk.to) classifiedLastWeek++;
       });
 
@@ -36553,7 +36959,7 @@ window._clearPendingCu = _clearPendingCu;
             var ct = a.createdAt || a.dateCreated || 0;
             if (!ct) return;
             if (ct >= todayMs) placedToday++;
-            if (ct >= weekMs)  placedWeek++;
+            if (ct >= weekMs && ct <= weekEnd) placedWeek++;
             if (ct >= lastWk.from && ct <= lastWk.to) placedLastWeek++;
           });
         }
@@ -36568,11 +36974,11 @@ window._clearPendingCu = _clearPendingCu;
             if (!a || !a._fromInspoId || !insIds2.has(a._fromInspoId)) return;
             var s = (a.status || '').toLowerCase();
             var ct = a.createdAt || a.dateCreated || 0;
-            var inThisWeek = ct && ct >= weekMs;
+            var inThisWeek = ct && ct >= weekMs && ct <= weekEnd;
             if (!inThisWeek) return;
             if (s === 'testing' || s === 'in production' || s === 'ready to launch') testedWeek++;
             if (s === 'winner' || s === 'scale' || s === 'complete') winnersWeek++;
-            if (s === 'loser') killedWeek++;
+            if (s === 'loser' || s === 'killed') killedWeek++;
           });
         }
       } catch(_) {}
@@ -36665,24 +37071,31 @@ window._clearPendingCu = _clearPendingCu;
     html += '<div class="ap-pulse-tiles">';
     html += tile('pending',     'Pending',      s.today.pending,     '',  'amber',    '🟡', 'pending');
     html += tile('classifying', 'Classifying',  s.today.classifying, '',  'sky',      '🔵', 'classifying');
-    html += tile('classified',  'Classified',   s.today.classified,  '',  'lime',     '✨', null);
-    html += tile('placed',      'Placed',       s.today.placed,      '',  'violet',   '📌', 'placed');
+    html += tile('classified',  'Classified',   s.today.classified,  '',  'lime',     '✨', 'today_classified');
+    html += tile('placed',      'Placed',       s.today.placed,      '',  'violet',   '📌', 'today_placed');
     html += tile('failed',      'Failed',       s.today.failed,      '',  'rose',     '⊘',  'failed');
     html += '</div>';
     html += '</div>';
 
-    // THIS WEEK card
+    // THIS WEEK card — supports custom date range like Action Plan does.
+    var _insR = window._insPulseRange || null;
+    var _wkTitle = _insR && _insR.label ? _insR.label.toUpperCase() : 'THIS WEEK';
+    var _wkSub   = _insR && _insR.label ? 'vs prior period of same length' : 'Mon → today · vs last week';
+    var _wkBtnLbl = _insR ? ('📅 ' + (_insR.label || 'Custom')) : '📅 This Week';
     html += '<div class="ap-pulse-card">';
     html += '<div class="ap-pulse-head">' +
-              '<span class="ap-pulse-eyebrow">●</span> THIS WEEK ' +
-              '<span class="ap-pulse-sub">Mon → today · vs last week</span>' +
+              '<span class="ap-pulse-eyebrow">●</span> ' + _wkTitle + ' ' +
+              '<span class="ap-pulse-sub">' + _wkSub + '</span>' +
+              '<button class="ap-pulse-range-btn ins-pulse-range-btn' + (_insR ? ' on' : '') + '"' +
+              ' onclick="event.stopPropagation();_insOpenPulseRangePicker(this)"' +
+              ' title="Pick a date range — narrows tiles and (when a tile is clicked) the table">' + _wkBtnLbl + '</button>' +
             '</div>';
     html += '<div class="ap-pulse-tiles">';
-    html += tile('w_class',  'Classified', s.week.classified, delta(s.weekDelta.classified), 'lime',    '✨', null);
-    html += tile('w_placed', 'Placed',     s.week.placed,     delta(s.weekDelta.placed),     'violet',  '📌', null);
-    html += tile('w_tested', 'Tested',     s.week.tested,     '',                            'sky',     '🧪', null);
-    html += tile('w_winners','Winners',    s.week.winners,    '',                            'gold',    '🏆', null);
-    html += tile('w_killed', 'Killed',     s.week.killed,     '',                            'stone',   '⊘',  null);
+    html += tile('w_class',  'Classified', s.week.classified, delta(s.weekDelta.classified), 'lime',    '✨', 'w_classified');
+    html += tile('w_placed', 'Placed',     s.week.placed,     delta(s.weekDelta.placed),     'violet',  '📌', 'w_placed');
+    html += tile('w_tested', 'Tested',     s.week.tested,     '',                            'sky',     '🧪', 'w_tested');
+    html += tile('w_winners','Winners',    s.week.winners,    '',                            'gold',    '🏆', 'w_winners');
+    html += tile('w_killed', 'Killed',     s.week.killed,     '',                            'stone',   '⊘',  'w_killed');
     html += '</div>';
     html += '</div>';
 
@@ -36853,7 +37266,7 @@ window._clearPendingCu = _clearPendingCu;
 
   // ── Filter pill paint: highlight pills with non-empty values ──
   window._insFltPaint = function () {
-    [['insFiltPlatform','platform'], ['insFiltStatus','status'], ['insFiltHook','hook'], ['insFiltFormat','format']].forEach(function(pair){
+    [['insFiltPlatform','platform'], ['insFiltStatus','status'], ['insFiltHook','hook'], ['insFiltType','type'], ['insFiltFormat','format'], ['insFiltPerformance','performance']].forEach(function(pair){
       var el = document.getElementById(pair[0]);
       if (!el) return;
       var pill = el.closest('.ins-filter-pill');
@@ -36864,23 +37277,29 @@ window._clearPendingCu = _clearPendingCu;
       var lbl = pill.querySelector('.lbl');
       if (lbl) {
         var defaultLbl = pair[1].charAt(0).toUpperCase() + pair[1].slice(1);
-        lbl.textContent = hot ? el.value : defaultLbl;
+        // Performance filter shows the selected option's text, not the value key
+        var displayValue = hot
+          ? (pair[1] === 'performance' ? (el.options[el.selectedIndex] ? el.options[el.selectedIndex].textContent : el.value) : el.value)
+          : defaultLbl;
+        lbl.textContent = displayValue;
       }
     });
     // Clear-filters button visibility
     var anyHot = !!(
-      (document.getElementById('insFiltPlatform') || {}).value ||
-      (document.getElementById('insFiltStatus')   || {}).value ||
-      (document.getElementById('insFiltHook')     || {}).value ||
-      (document.getElementById('insFiltFormat')   || {}).value ||
-      (document.getElementById('insFiltSearch')   || {}).value
+      (document.getElementById('insFiltPlatform')    || {}).value ||
+      (document.getElementById('insFiltStatus')      || {}).value ||
+      (document.getElementById('insFiltHook')        || {}).value ||
+      (document.getElementById('insFiltType')        || {}).value ||
+      (document.getElementById('insFiltFormat')      || {}).value ||
+      (document.getElementById('insFiltPerformance') || {}).value ||
+      (document.getElementById('insFiltSearch')      || {}).value
     );
     var btn = document.getElementById('insClearFiltersBtn');
     if (btn) btn.style.display = anyHot ? '' : 'none';
   };
 
   window._insClearAllFilters = function () {
-    ['insFiltPlatform','insFiltStatus','insFiltHook','insFiltFormat','insFiltSearch'].forEach(function(id){
+    ['insFiltPlatform','insFiltStatus','insFiltHook','insFiltType','insFiltFormat','insFiltPerformance','insFiltSearch'].forEach(function(id){
       var el = document.getElementById(id);
       if (el) el.value = '';
     });
@@ -36912,7 +37331,755 @@ window._clearPendingCu = _clearPendingCu;
 
   // Initial paint
   setTimeout(function(){ try { window._insFltPaint(); } catch(_) {} }, 300);
+
+  // ════════════════════════════════════════════════════════════════
+  // Phase 3 — Placement drawer
+  // ────────────────────────────────────────────────────────────────
+  // Click an inspirations row → opens a slide-in drawer with the full
+  // classification (Hypothesis/Notes/Ad Copy that we hid from the
+  // table), a "Suggested cell" card with one-click placement, manual
+  // angle/persona override, and a Usage list of every AD already
+  // spawned from this inspiration.
+  // ════════════════════════════════════════════════════════════════
+
+  // Compute usage for an inspiration: list of cells + statuses + verdict.
+  function _insComputeUsage(insId) {
+    if (typeof ADS === 'undefined' || !Array.isArray(ADS)) return { ads: [], total: 0, verdict: 'unused', counts: {} };
+    var ads = ADS.filter(function(a){ return a && a._fromInspoId === insId; });
+    var counts = { placed:0, testing:0, winners:0, losers:0 };
+    ads.forEach(function (a) {
+      var s = (a.status || '').toLowerCase();
+      if (s === 'winner' || s === 'scale' || s === 'complete') counts.winners++;
+      else if (s === 'loser' || s === 'killed') counts.losers++;
+      else if (s === 'testing' || s === 'in production' || s === 'ready to launch') counts.testing++;
+      else counts.placed++;
+    });
+    var verdict;
+    if (!ads.length) verdict = 'unused';
+    else if (counts.winners && counts.losers) verdict = 'mixed';
+    else if (counts.winners) verdict = 'winner';
+    else if (counts.losers) verdict = 'loser';
+    else if (counts.testing) verdict = 'testing';
+    else verdict = 'placed';
+    return { ads: ads, total: ads.length, verdict: verdict, counts: counts };
+  }
+
+  // Render the Usage cell content (replaces "Cells Used" badge content)
+  window._insRenderUsageBadge = function (insId) {
+    var u = _insComputeUsage(insId);
+    if (u.total === 0) return '<span class="ins-usage-pill unused">— unused</span>';
+    var label, cls;
+    if (u.verdict === 'winner') { cls = 'winner'; label = '🏆 ' + u.counts.winners + ' winner' + (u.counts.winners > 1 ? 's' : ''); }
+    else if (u.verdict === 'loser') { cls = 'loser'; label = '💀 ' + u.counts.losers + ' loser' + (u.counts.losers > 1 ? 's' : ''); }
+    else if (u.verdict === 'mixed')  {
+      cls = 'mixed';
+      label = '🏆 ' + u.counts.winners + 'W · 💀 ' + u.counts.losers + 'L' + (u.counts.testing ? ' · 🧪 ' + u.counts.testing : '');
+    }
+    else if (u.verdict === 'testing') { cls = 'testing'; label = '🧪 ' + u.counts.testing + ' testing'; }
+    else                                { cls = 'placed';  label = '📌 ' + u.total + ' placed'; }
+    return '<span class="ins-usage-pill ' + cls + '" title="Click to view details">' + label + '</span>';
+  };
+
+  function _findIns(insId) {
+    if (typeof INSPIRATIONS === 'undefined' || !Array.isArray(INSPIRATIONS)) return null;
+    for (var i = 0; i < INSPIRATIONS.length; i++) {
+      if (INSPIRATIONS[i] && INSPIRATIONS[i].id === insId) return INSPIRATIONS[i];
+    }
+    return null;
+  }
+
+  function _cellStats(angleName, personaName) {
+    if (typeof ADS === 'undefined' || !Array.isArray(ADS)) return { total:0, testing:0, winners:0 };
+    var key = angleName + '||' + personaName;
+    var ids = (typeof CELL_CREATIVE_ASSIGNMENTS !== 'undefined' && CELL_CREATIVE_ASSIGNMENTS[key]) || [];
+    var t = 0, w = 0;
+    ids.forEach(function(id){
+      var ad = ADS.find(function(a){ return a && a.id === id; });
+      if (!ad) return;
+      var s = (ad.status || '').toLowerCase();
+      if (s === 'testing' || s === 'in production' || s === 'ready to launch') t++;
+      if (s === 'winner' || s === 'scale' || s === 'complete') w++;
+    });
+    return { total: ids.length, testing: t, winners: w };
+  }
+
+  window._insOpenDrawer = function (insId) {
+    var ins = _findIns(insId);
+    if (!ins) return;
+    var dr = document.getElementById('insoDrawer');
+    var bd = document.getElementById('insoDrawerBackdrop');
+    if (!dr || !bd) return;
+    dr.setAttribute('data-ins-id', insId);
+    _insRenderDrawer(ins);
+    dr.classList.add('open');
+    bd.classList.add('open');
+    dr.setAttribute('aria-hidden', 'false');
+    // Highlight active row
+    document.querySelectorAll('.ins-table tbody tr').forEach(function(tr){ tr.classList.remove('ins-row-active'); });
+    var activeTr = document.querySelector('.ins-table tbody tr[data-ins-id="' + insId + '"]');
+    if (activeTr) activeTr.classList.add('ins-row-active');
+  };
+
+  window._insCloseDrawer = function () {
+    var dr = document.getElementById('insoDrawer');
+    var bd = document.getElementById('insoDrawerBackdrop');
+    if (dr) { dr.classList.remove('open'); dr.setAttribute('aria-hidden', 'true'); }
+    if (bd) bd.classList.remove('open');
+    document.querySelectorAll('.ins-table tbody tr').forEach(function(tr){ tr.classList.remove('ins-row-active'); });
+  };
+
+  // Esc closes the drawer
+  document.addEventListener('keydown', function(e){
+    if (e.key === 'Escape') {
+      var dr = document.getElementById('insoDrawer');
+      if (dr && dr.classList.contains('open')) window._insCloseDrawer();
+    }
+  });
+
+  function _insRenderDrawer(ins) {
+    var t = document.getElementById('insoDrwTitle');
+    var sub = document.getElementById('insoDrwSub');
+    var body = document.getElementById('insoDrwBody');
+    if (!t || !body) return;
+    t.textContent = ins.formatName || ins.title || ins.id;
+    sub.textContent = (ins.brand || '—') + ' · ' + (ins.platform || '—') + ' · ' + (ins.id || '');
+
+    var usage = _insComputeUsage(ins.id);
+    var sugAngle = ins.angle || '';
+    var sugPersona = ins.persona || '';
+    var sugStats = (sugAngle && sugPersona) ? _cellStats(sugAngle, sugPersona) : null;
+    var hasSuggestion = !!(sugAngle && sugPersona);
+
+    var html = '';
+
+    // Quick links row
+    html += '<div class="ins-drw-section" style="display:flex;gap:8px;flex-wrap:wrap">';
+    if (ins.sourceUrl) html += '<a class="ap-tb-btn" href="' + escAttr(ins.sourceUrl) + '" target="_blank" rel="noopener">🔗 Source</a>';
+    if (ins._clickupDocPageUrl) html += '<a class="ap-tb-btn" href="' + escAttr(ins._clickupDocPageUrl) + '" target="_blank" rel="noopener">📄 Brief</a>';
+    html += '</div>';
+
+    // Classification facts
+    html += '<div class="ins-drw-section">';
+    html += '<div class="ins-drw-section-hdr">CLASSIFICATION</div>';
+    html += '<dl class="ins-drw-grid">';
+    var pairs = [
+      ['Angle', ins.angle], ['Persona', ins.persona], ['Hook', ins.hookType],
+      ['Structure', ins.creativeStructure], ['Production', ins.productionStyle],
+      ['Funnel', ins.funnelStage], ['Type', ins.adType], ['Status', ins.status],
+      ['Created', _humanRel(ins.classifiedAt || ins.created_at || ins.queuedAt)]
+    ];
+    pairs.forEach(function(p){ html += '<dt>' + esc(p[0]) + '</dt><dd>' + esc(p[1] || '—') + '</dd>'; });
+    html += '</dl>';
+    html += '</div>';
+
+    // Hypothesis
+    html += '<div class="ins-drw-section">';
+    html += '<div class="ins-drw-section-hdr">HYPOTHESIS</div>';
+    html += '<div class="ins-drw-prose ' + (ins.creativeHypothesis ? '' : 'empty') + '">' + esc(ins.creativeHypothesis || '— not set') + '</div>';
+    html += '</div>';
+
+    // Notes
+    if (ins.notes) {
+      html += '<div class="ins-drw-section">';
+      html += '<div class="ins-drw-section-hdr">NOTES</div>';
+      html += '<div class="ins-drw-prose">' + esc(ins.notes) + '</div>';
+      html += '</div>';
+    }
+
+    // Ad Copy / Body Copy
+    if (ins.bodyCopy) {
+      html += '<div class="ins-drw-section">';
+      html += '<div class="ins-drw-section-hdr">AD COPY (BODY)</div>';
+      html += '<div class="ins-drw-prose">' + esc(ins.bodyCopy) + '</div>';
+      html += '</div>';
+    }
+
+    // Place into matrix
+    html += '<div class="ins-drw-section">';
+    html += '<div class="ins-drw-section-hdr">PLACE INTO MATRIX</div>';
+    if (hasSuggestion) {
+      html += '<div class="ins-drw-cell-card">';
+      html += '<div class="ins-drw-cell-title">' + esc(sugAngle) + ' × ' + esc(sugPersona) + '</div>';
+      if (sugStats) {
+        html += '<div class="ins-drw-cell-stats">';
+        html += '<span class="ins-st-chip">' + sugStats.total + ' AD' + (sugStats.total !== 1 ? 's' : '') + ' in cell</span>';
+        if (sugStats.testing) html += '<span class="ins-st-chip">🧪 ' + sugStats.testing + ' testing</span>';
+        if (sugStats.winners) html += '<span class="ins-st-chip">🏆 ' + sugStats.winners + ' winners</span>';
+        html += '</div>';
+      }
+      html += '<button class="ins-drw-place-btn" onclick="_insPlaceSuggested(\'' + escAttr(ins.id) + '\')">+ Place in this cell</button>';
+      html += '</div>';
+    } else {
+      html += '<div class="ins-drw-prose empty">No suggested cell — angle or persona is missing on this inspiration.</div>';
+    }
+
+    // Manual cell pick
+    var allAngles   = (typeof ANGLES !== 'undefined') ? ANGLES.map(function(a){return a.name;}) : [];
+    var allPersonas = (typeof PERSONAS !== 'undefined') ? PERSONAS.map(function(p){return p.name;}) : [];
+    html += '<div class="ins-drw-manual">';
+    html += '<select id="insoDrwCustomAngle"><option value="">Pick angle…</option>' + allAngles.map(function(a){return '<option' + (a === sugAngle ? ' selected' : '') + '>' + esc(a) + '</option>';}).join('') + '</select>';
+    html += '<select id="insoDrwCustomPersona"><option value="">Pick persona…</option>' + allPersonas.map(function(p){return '<option' + (p === sugPersona ? ' selected' : '') + '>' + esc(p) + '</option>';}).join('') + '</select>';
+    html += '<button onclick="_insPlaceCustom(\'' + escAttr(ins.id) + '\')">+ Place</button>';
+    html += '</div>';
+    html += '</div>';
+
+    // Usage
+    html += '<div class="ins-drw-section">';
+    html += '<div class="ins-drw-section-hdr">USAGE — ' + (usage.total === 0 ? 'never replicated yet' : usage.total + ' AD' + (usage.total !== 1 ? 's' : '') + ' spawned') + '</div>';
+    if (usage.total === 0) {
+      html += '<div class="ins-drw-prose empty">This inspiration hasn\'t been placed in any cell. Use the suggested cell above to spawn an AD from it.</div>';
+    } else {
+      html += '<div class="ins-drw-usage-list">';
+      usage.ads.forEach(function (ad) {
+        var statusCls = (function(){
+          var s = (ad.status || '').toLowerCase();
+          if (s === 'winner' || s === 'scale' || s === 'complete') return 'winner';
+          if (s === 'loser' || s === 'killed') return 'loser';
+          if (s === 'testing' || s === 'in production' || s === 'ready to launch') return 'testing';
+          return 'untested';
+        })();
+        html += '<div class="ins-drw-usage-row">';
+        html += '<span><b>' + esc(ad.formatName || ad.id) + '</b></span>';
+        html += '<span class="ins-uc-cell">' + esc((ad.angle || '?') + ' × ' + (ad.persona || '?')) + '</span>';
+        html += '<span class="ins-uc-status ' + statusCls + '">' + esc(ad.status || 'Untested') + '</span>';
+        html += '</div>';
+      });
+      html += '</div>';
+    }
+    html += '</div>';
+
+    body.innerHTML = html;
+  }
+
+  function _humanRel(ts) {
+    if (!ts) return '—';
+    var t = (typeof ts === 'string') ? new Date(ts).getTime() : Number(ts);
+    if (!t) return '—';
+    var sec = Math.floor((Date.now() - t) / 1000);
+    if (sec < 60) return sec + 's ago';
+    if (sec < 3600) return Math.floor(sec/60) + 'm ago';
+    if (sec < 86400) return Math.floor(sec/3600) + 'h ago';
+    return Math.floor(sec/86400) + 'd ago';
+  }
+
+  // Placement — calls the existing addInspoToCell from earlier in the codebase.
+  window._insPlaceSuggested = function (insId) {
+    var ins = _findIns(insId);
+    if (!ins) return;
+    if (!ins.angle || !ins.persona) {
+      try { toast('Missing angle or persona on this inspiration', 'warn'); } catch(_) {}
+      return;
+    }
+    if (typeof addInspoToCell !== 'function') {
+      try { toast('Placement function not available', 'err'); } catch(_) {}
+      return;
+    }
+    addInspoToCell(insId, ins.angle, ins.persona);
+    try { toast('Placed ' + (ins.formatName || insId) + ' in ' + ins.angle + ' × ' + ins.persona, 'ok'); } catch(_) {}
+    // Re-render drawer so the Usage section updates
+    setTimeout(function(){ var i = _findIns(insId); if (i) _insRenderDrawer(i); }, 200);
+  };
+
+  window._insPlaceCustom = function (insId) {
+    var a = (document.getElementById('insoDrwCustomAngle')   || {}).value || '';
+    var p = (document.getElementById('insoDrwCustomPersona') || {}).value || '';
+    if (!a || !p) {
+      try { toast('Pick both angle and persona', 'warn'); } catch(_) {}
+      return;
+    }
+    if (typeof addInspoToCell !== 'function') return;
+    addInspoToCell(insId, a, p);
+    try { toast('Placed in ' + a + ' × ' + p, 'ok'); } catch(_) {}
+    setTimeout(function(){ var i = _findIns(insId); if (i) _insRenderDrawer(i); }, 200);
+  };
+
+  // Row click → open drawer (skip clicks on form elements / buttons / links)
+  document.addEventListener('click', function (e) {
+    var tbody = document.querySelector('.ins-table tbody');
+    if (!tbody || !tbody.contains(e.target)) return;
+    // Walk up to the row
+    var node = e.target;
+    while (node && node !== tbody && node.tagName !== 'TR') node = node.parentNode;
+    if (!node || node.tagName !== 'TR') return;
+    // Bail if click landed on an interactive child (so dropdowns / delete still work)
+    var t = e.target;
+    while (t && t !== node) {
+      var tag = (t.tagName || '').toLowerCase();
+      if (tag === 'select' || tag === 'button' || tag === 'a' || tag === 'input' || tag === 'textarea') return;
+      // Cells/Brief popups also short-circuit
+      if (t.classList && (t.classList.contains('ins-cells-badge') || t.classList.contains('ins-platform-badge'))) return;
+      t = t.parentNode;
+    }
+    var insId = node.getAttribute('data-ins-id');
+    if (insId) window._insOpenDrawer(insId);
+  });
+
+  // ════════════════════════════════════════════════════════════════
+  // P1 — Worker pill (replaces 'cloud online' badge with smart status)
+  // ════════════════════════════════════════════════════════════════
+  function _insAvgClassifySec() {
+    // Heuristic: assume ~60s per FB ad library URL, ~120s for IG/TT video.
+    // Could be improved by storing skill durations on the queue row.
+    return 90;
+  }
+
+  async function _insRefreshWorkerBadge() {
+    var badge = document.getElementById('insServerBadge');
+    if (!badge) return;
+    if (typeof SB === 'undefined' || !SB) {
+      badge.className = 'ins-worker-pill-tb';
+      badge.innerHTML = '<span class="ins-wp-dot offline"></span><span>cloud offline</span>';
+      return;
+    }
+    try {
+      var [workersResp, queuePending, queueClassifying] = await Promise.all([
+        SB.from('worker_registry').select('*'),
+        SB.from('inspiration_queue').select('id', { count:'exact', head:true }).eq('status', 'pending'),
+        SB.from('inspiration_queue').select('id, claimed_by, ins_id', { count:'exact' }).eq('status', 'classifying'),
+      ]);
+      var workers = workersResp.data || [];
+      var live = workers.filter(function(w){
+        if (!w || w.enabled === false) return false;
+        var hb = w.last_heartbeat ? new Date(w.last_heartbeat).getTime() : 0;
+        return hb && (Date.now() - hb) < 120000;
+      });
+      var busy = live.filter(function(w){ return w.status === 'busy'; });
+      var pendingCnt = (queuePending && queuePending.count) || 0;
+      var classifyingCnt = (queueClassifying && queueClassifying.count) || 0;
+      var classifyingRows = (queueClassifying && queueClassifying.data) || [];
+
+      var iconCls, label;
+      if (!live.length) {
+        iconCls = 'offline';
+        label = 'No workers · ' + pendingCnt + ' queued';
+      } else if (busy.length && classifyingRows.length) {
+        iconCls = 'busy';
+        var first = classifyingRows[0];
+        var who = first.claimed_by || (busy[0] && busy[0].worker_id) || 'worker';
+        var totalToGo = pendingCnt + classifyingCnt;
+        var etaMin = Math.max(1, Math.ceil((totalToGo * _insAvgClassifySec()) / 60));
+        label = who + ' · ' + (first.ins_id || '—') + ' (' + totalToGo + ' left · ~' + etaMin + 'm)';
+      } else if (pendingCnt > 0) {
+        iconCls = 'idle';
+        var w0 = live[0] && live[0].worker_id;
+        label = (w0 || 'worker') + ' · ' + pendingCnt + ' queued';
+      } else {
+        iconCls = 'idle';
+        label = (live.length === 1 ? live[0].worker_id : (live.length + ' workers')) + ' · idle';
+      }
+      badge.className = 'ins-worker-pill-tb';
+      badge.title = 'Click to open Workers panel · ' + live.length + ' live · ' + pendingCnt + ' pending · ' + classifyingCnt + ' classifying';
+      badge.innerHTML = '<span class="ins-wp-dot ' + iconCls + '"></span><span>' + esc(label) + '</span>';
+      badge.onclick = function(e){ e.preventDefault(); window._insWorkersToggleDrawer && window._insWorkersToggleDrawer(); };
+    } catch (e) {
+      badge.className = 'ins-worker-pill-tb';
+      badge.innerHTML = '<span class="ins-wp-dot offline"></span><span>cloud error</span>';
+    }
+  }
+  window._insRefreshWorkerBadge = _insRefreshWorkerBadge;
+  // Refresh on tab visibility + every 15s while visible
+  setInterval(function(){ if (isInspirationsTabVisible()) _insRefreshWorkerBadge(); }, 15000);
+
+  // Wrap the existing checkBridgeStatus so it routes to our pill
+  if (typeof window.checkBridgeStatus === 'function' && !window._chBridgeWrappedForWorker) {
+    window._chBridgeWrappedForWorker = true;
+    var origCB = window.checkBridgeStatus;
+    window.checkBridgeStatus = function () { return _insRefreshWorkerBadge(); };
+  }
+
+  // ════════════════════════════════════════════════════════════════
+  // P1 — "Run on" picker for Add to Queue
+  // ════════════════════════════════════════════════════════════════
+  function _insInjectRunOnPicker() {
+    var addBtn = document.getElementById('insAddBtn');
+    if (!addBtn || addBtn.parentNode.querySelector('.ins-runon-pill')) return;
+    var pill = document.createElement('label');
+    pill.className = 'ins-runon-pill';
+    pill.title = 'Pick which worker handles this URL — Auto picks the first available worker';
+    pill.innerHTML = '<span class="lbl">Run on</span>' +
+                     '<select id="insRunOnSelect"><option value="auto">Auto</option></select>';
+    addBtn.parentNode.insertBefore(pill, addBtn);
+    _insRefreshRunOnPicker();
+  }
+  async function _insRefreshRunOnPicker() {
+    var sel = document.getElementById('insRunOnSelect');
+    if (!sel) return;
+    try {
+      var r = await SB.from('worker_registry').select('worker_id, status, last_heartbeat, enabled');
+      var workers = r.data || [];
+      var prev = sel.value;
+      sel.innerHTML = '<option value="auto">Auto (any free worker)</option>';
+      workers.forEach(function (w) {
+        var hb = w.last_heartbeat ? new Date(w.last_heartbeat).getTime() : 0;
+        var live = hb && (Date.now() - hb) < 120000;
+        var status = (w.enabled === false) ? '⏸ paused' : (live ? (w.status || 'idle') : '🔴 offline');
+        var opt = document.createElement('option');
+        opt.value = w.worker_id;
+        opt.textContent = w.worker_id + ' · ' + status;
+        if (!live || w.enabled === false) opt.disabled = true;
+        sel.appendChild(opt);
+      });
+      sel.value = prev || 'auto';
+    } catch (e) { /* keep default */ }
+  }
+  window._insRefreshRunOnPicker = _insRefreshRunOnPicker;
+
+  // Hook addToInsQueue to apply the worker_assignment
+  if (typeof window.addToInsQueue === 'function' && !window._addToInsQueueWrapped) {
+    window._addToInsQueueWrapped = true;
+    var origAdd = window.addToInsQueue;
+    window.addToInsQueue = function () {
+      var sel = document.getElementById('insRunOnSelect');
+      window._insRunOnAssignment = (sel && sel.value) || 'auto';
+      return origAdd.apply(this, arguments);
+    };
+  }
+
+  setTimeout(_insInjectRunOnPicker, 800);
+
+  // ─────────────────────────────────────────────────────────────────────
+  // Sub-view tabs: Table / Trends / Insights
+  // ─────────────────────────────────────────────────────────────────────
+  var _insSubView = 'table';
+
+  function _insInjectSubViews() {
+    var wrap = document.querySelector('.ins-table-wrap');
+    if (!wrap || document.getElementById('insSubViewTabs')) return;
+    var tabs = document.createElement('div');
+    tabs.id = 'insSubViewTabs';
+    tabs.className = 'ins-subview-tabs';
+    tabs.innerHTML =
+      '<button class="ins-subview-tab active" data-sv="table">📋 Table</button>' +
+      '<button class="ins-subview-tab" data-sv="trends">📈 Trends</button>' +
+      '<button class="ins-subview-tab" data-sv="insights">💡 Insights</button>';
+    wrap.parentNode.insertBefore(tabs, wrap);
+
+    var host = document.createElement('div');
+    host.id = 'insSubViewHost';
+    host.className = 'ins-subview-host';
+    host.style.display = 'none';
+    wrap.parentNode.insertBefore(host, wrap.nextSibling);
+
+    tabs.addEventListener('click', function (e) {
+      var btn = e.target.closest('.ins-subview-tab');
+      if (!btn) return;
+      _insSetSubView(btn.dataset.sv);
+    });
+  }
+
+  function _insSetSubView(view) {
+    _insSubView = view;
+    var tabs = document.querySelectorAll('#insSubViewTabs .ins-subview-tab');
+    tabs.forEach(function (t) { t.classList.toggle('active', t.dataset.sv === view); });
+    var wrap = document.querySelector('.ins-table-wrap');
+    var host = document.getElementById('insSubViewHost');
+    var empty = document.getElementById('insEmpty');
+    if (view === 'table') {
+      if (wrap) wrap.style.display = '';
+      if (host) host.style.display = 'none';
+    } else {
+      if (wrap) wrap.style.display = 'none';
+      if (empty) empty.style.display = 'none';
+      if (host) {
+        host.style.display = '';
+        if (view === 'trends')   host.innerHTML = _insRenderTrends();
+        if (view === 'insights') host.innerHTML = _insRenderInsights();
+      }
+    }
+  }
+
+  function _insClassifyVerdict(ins) {
+    var ads = (typeof ADS !== 'undefined' ? ADS : []).filter(function (a) { return a && a._fromInspoId === ins.id; });
+    var w=0, l=0, t=0, p=0;
+    ads.forEach(function (a) {
+      var s = (a.status || '').toLowerCase();
+      if (s==='winner'||s==='scale'||s==='complete') w++;
+      else if (s==='loser'||s==='killed') l++;
+      else if (s==='testing'||s==='in production'||s==='ready to launch') t++;
+      else p++;
+    });
+    if (!ads.length) return { v:'unused', ads:0, w:0, l:0, t:0 };
+    if (w && l) return { v:'mixed', ads:ads.length, w:w, l:l, t:t };
+    if (w) return { v:'winner', ads:ads.length, w:w, l:l, t:t };
+    if (l) return { v:'loser',  ads:ads.length, w:w, l:l, t:t };
+    if (t) return { v:'testing',ads:ads.length, w:w, l:l, t:t };
+    return    { v:'placed', ads:ads.length, w:w, l:l, t:t };
+  }
+
+  function _insRenderInsights() {
+    var insps = (typeof INSPIRATIONS !== 'undefined' ? INSPIRATIONS : []) || [];
+    if (!insps.length) {
+      return '<div class="ins-card"><div class="ins-empty-cell">No inspirations yet — add some to see analytics.</div></div>';
+    }
+
+    // Funnel counts
+    var funnel = { unused:0, placed:0, testing:0, winner:0, loser:0, mixed:0 };
+    var verdicts = {};
+    insps.forEach(function (ins) {
+      var v = _insClassifyVerdict(ins);
+      verdicts[ins.id] = v;
+      funnel[v.v] = (funnel[v.v]||0) + 1;
+    });
+    var total = insps.length;
+    var maxF = Math.max(1, funnel.unused, funnel.placed, funnel.testing, funnel.winner+funnel.mixed, funnel.loser);
+    function fbar(label, n, cls) {
+      var pct = Math.round((n/maxF)*100);
+      return '<div class="ins-funnel-row">' +
+             '<span class="ins-fr-lbl">'+label+'</span>' +
+             '<div class="ins-funnel-bar '+cls+'" style="width:'+Math.max(2,pct)+'%"></div>' +
+             '<span class="ins-fr-num">'+n+'</span></div>';
+    }
+    var funnelHTML =
+      '<div class="ins-funnel">' +
+      fbar('🟡 Unused',  funnel.unused,  'unused') +
+      fbar('📌 Placed',  funnel.placed,  'placed') +
+      fbar('🧪 Testing', funnel.testing, 'testing') +
+      fbar('🏆 Winner',  funnel.winner+funnel.mixed, 'winner') +
+      fbar('💀 Loser',   funnel.loser, '') +
+      '</div>';
+
+    // Win-rate by angle
+    function winRateGroup(field, label) {
+      var groups = {};
+      insps.forEach(function (ins) {
+        var key = (ins[field] || '').trim() || '—';
+        if (!groups[key]) groups[key] = { total:0, w:0, l:0, t:0, ads:0 };
+        groups[key].total++;
+        var v = verdicts[ins.id];
+        groups[key].w += v.w; groups[key].l += v.l; groups[key].t += v.t; groups[key].ads += v.ads;
+      });
+      var rows = Object.keys(groups).map(function (k) {
+        var g = groups[k];
+        var decided = g.w + g.l;
+        var wr = decided ? (g.w/decided) : null;
+        return { name:k, total:g.total, w:g.w, l:g.l, t:g.t, ads:g.ads, wr:wr };
+      }).filter(function (r) { return r.name !== '—' || r.ads > 0; })
+        .sort(function (a,b) {
+          if (a.wr === null && b.wr === null) return b.ads - a.ads;
+          if (a.wr === null) return 1;
+          if (b.wr === null) return -1;
+          return b.wr - a.wr;
+        });
+      if (!rows.length) return '<div class="ins-empty-cell">No '+label.toLowerCase()+' yet.</div>';
+      var html = '<table class="ins-mini-table"><thead><tr><th>'+label+'</th><th>Inspos</th><th>Ads (W/L)</th><th>Win-rate</th></tr></thead><tbody>';
+      rows.slice(0, 8).forEach(function (r) {
+        var wrPct = r.wr === null ? '—' : Math.round(r.wr*100)+'%';
+        var barW  = r.wr === null ? 0 : Math.round(r.wr*60);
+        html += '<tr>' +
+          '<td>'+_h(r.name)+'</td>' +
+          '<td class="num">'+r.total+'</td>' +
+          '<td class="num">'+r.w+'/'+r.l+'</td>' +
+          '<td class="num"><span class="ins-winrate-bar" style="width:'+barW+'px"></span>'+wrPct+'</td>' +
+          '</tr>';
+      });
+      html += '</tbody></table>';
+      return html;
+    }
+
+    function _h(s) { return String(s).replace(/[&<>"']/g, function (c) { return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+
+    // Unused gold mine — recently added, never placed
+    var goldRows = insps
+      .filter(function (ins) { return verdicts[ins.id].v === 'unused'; })
+      .sort(function (a,b) {
+        var at = new Date(a.created_at || a.createdAt || 0).getTime();
+        var bt = new Date(b.created_at || b.createdAt || 0).getTime();
+        return bt - at;
+      });
+    var goldHTML;
+    if (!goldRows.length) {
+      goldHTML = '<div class="ins-empty-cell">All your inspirations have been placed. Nice.</div>';
+    } else {
+      goldHTML = '<div class="ins-gold">' + goldRows.slice(0, 30).map(function (ins) {
+        var name = ins.formatName || ins.format_name || ins.id;
+        var ageDays = Math.round(((Date.now() - new Date(ins.created_at || ins.createdAt || Date.now()).getTime())/86400000));
+        var ageStr = (isNaN(ageDays) || ageDays < 1) ? 'today' : (ageDays + 'd ago');
+        return '<div class="ins-gold-pill" onclick="(window._insOpenDrawer||function(){})(\''+ins.id+'\')" title="Click to open drawer">' +
+          '<span class="ins-gold-id">'+_h(ins.id)+'</span>' +
+          '<span class="ins-gold-name">'+_h(name)+'</span>' +
+          '<span class="ins-gold-meta">'+ageStr+'</span>' +
+          '</div>';
+      }).join('') + (goldRows.length > 30 ? '<div class="ins-empty-cell" style="padding:6px">+ '+(goldRows.length-30)+' more</div>' : '') + '</div>';
+    }
+
+    // Compose grid
+    return '<div class="ins-insights-grid">' +
+      '<div class="ins-card"><div class="ins-card-h">Replication Funnel <span class="ins-card-sub">'+total+' inspirations</span></div>'+funnelHTML+'</div>' +
+      '<div class="ins-card"><div class="ins-card-h">Win-rate by Angle</div>'+winRateGroup('angle', 'Angle')+'</div>' +
+      '<div class="ins-card"><div class="ins-card-h">Win-rate by Hook</div>'+winRateGroup('hookType', 'Hook')+'</div>' +
+      '<div class="ins-card"><div class="ins-card-h">Unused Gold Mine <span class="ins-card-sub">'+goldRows.length+' never-placed</span></div>'+goldHTML+'</div>' +
+      '</div>';
+  }
+
+  function _insRenderTrends() {
+    var insps = (typeof INSPIRATIONS !== 'undefined' ? INSPIRATIONS : []) || [];
+    if (!insps.length) {
+      return '<div class="ins-card"><div class="ins-empty-cell">No data yet.</div></div>';
+    }
+    function dayKey(d) { return d.toISOString().slice(0,10); }
+    function fmtDay(s) { var d=new Date(s+'T00:00:00'); return (d.getMonth()+1)+'/'+d.getDate(); }
+    // Last 14 days
+    var days = [];
+    var today = new Date(); today.setHours(0,0,0,0);
+    for (var i=13; i>=0; i--) {
+      var d = new Date(today.getTime() - i*86400000);
+      days.push(dayKey(d));
+    }
+    // Bucket: classified per day, placed per day
+    var classified = {}, placed = {};
+    days.forEach(function (k) { classified[k]=0; placed[k]=0; });
+    insps.forEach(function (ins) {
+      // classified = created_at within window AND has hookType/structure
+      var ts = ins.created_at || ins.createdAt;
+      if (ts) {
+        var k = dayKey(new Date(ts));
+        if (classified[k] !== undefined && (ins.hookType || ins.creativeStructure || ins.angle)) classified[k]++;
+      }
+    });
+    // Placed = ADs whose _fromInspoId is set, bucketed by AD created_at
+    var ADarr = (typeof ADS !== 'undefined' ? ADS : []) || [];
+    ADarr.forEach(function (a) {
+      if (!a || !a._fromInspoId) return;
+      var ts = a.created_at || a.createdAt;
+      if (!ts) return;
+      var k = dayKey(new Date(ts));
+      if (placed[k] !== undefined) placed[k]++;
+    });
+
+    function chart(map, cls, title, totalLbl) {
+      var max = Math.max(1, Math.max.apply(null, days.map(function (k) { return map[k]; })));
+      var sum = days.reduce(function (s, k) { return s + map[k]; }, 0);
+      var bars = days.map(function (k) {
+        var n = map[k];
+        var h = Math.round((n/max) * 100);
+        return '<div class="ins-trend-col" title="'+fmtDay(k)+': '+n+'">' +
+               '<div class="ins-trend-bar '+cls+'" style="height:'+Math.max(1,h)+'px"></div>' +
+               '<div class="ins-trend-day">'+fmtDay(k)+'</div></div>';
+      }).join('');
+      return '<div class="ins-card">' +
+        '<div class="ins-card-h">'+title+' <span class="ins-card-sub">'+sum+' '+totalLbl+' / 14d</span></div>' +
+        '<div class="ins-trend-chart">'+bars+'</div></div>';
+    }
+
+    return '<div class="ins-trends-grid">' +
+      chart(classified, '', '📥 Inspirations Added', 'classified') +
+      chart(placed, 'placed', '📌 Placed in Matrix', 'placed') +
+      '</div>';
+  }
+
+  // Re-render the active sub-view when data changes
+  if (typeof window.renderInspirations === 'function' && !window._insSubViewWrapped) {
+    window._insSubViewWrapped = true;
+    var _origRI = window.renderInspirations;
+    window.renderInspirations = function () {
+      var r = _origRI.apply(this, arguments);
+      if (_insSubView !== 'table') {
+        var host = document.getElementById('insSubViewHost');
+        if (host) {
+          if (_insSubView === 'trends')   host.innerHTML = _insRenderTrends();
+          if (_insSubView === 'insights') host.innerHTML = _insRenderInsights();
+        }
+      }
+      return r;
+    };
+  }
+
+  setTimeout(_insInjectSubViews, 850);
+
+  // ─────────────────────────────────────────────────────────────────────
+  // Inspirations pulse-strip date range picker (sibling of AP's picker).
+  // State: window._insPulseRange = { from: ms, to: ms, label: string } | null.
+  // ─────────────────────────────────────────────────────────────────────
+  (function _installInsPulseRangePicker() {
+    if (window._insPulseRangePickerInstalled) return;
+    window._insPulseRangePickerInstalled = true;
+    function close() {
+      var p = document.getElementById('insPulseRangePop');
+      if (p && p.parentNode) p.parentNode.removeChild(p);
+      document.removeEventListener('click', _outside, true);
+      document.removeEventListener('keydown', _esc, true);
+    }
+    function _outside(e) {
+      var p = document.getElementById('insPulseRangePop');
+      if (!p) return close();
+      if (!p.contains(e.target) && !(e.target && e.target.closest && e.target.closest('.ins-pulse-range-btn'))) close();
+    }
+    function _esc(e) { if (e.key === 'Escape') close(); }
+    function fmt(ms) { if (!ms) return ''; return new Date(ms).toISOString().slice(0,10); }
+    function presets() {
+      var now = Date.now();
+      function dayStartMs(off) { var d=new Date(); d.setHours(0,0,0,0); d.setDate(d.getDate()-off); return d.getTime(); }
+      var dow = (new Date()).getDay() || 7;
+      var monStart = (function () { var d=new Date(); d.setDate(d.getDate()-(dow-1)); d.setHours(0,0,0,0); return d.getTime(); })();
+      return [
+        { lbl:'Today',      from: dayStartMs(0),  to: now },
+        { lbl:'Yesterday',  from: dayStartMs(1),  to: dayStartMs(0)-1 },
+        { lbl:'This Week',  from: monStart,       to: now },
+        { lbl:'Last 7d',    from: dayStartMs(6),  to: now },
+        { lbl:'Last 14d',   from: dayStartMs(13), to: now },
+        { lbl:'Last 30d',   from: dayStartMs(29), to: now },
+        { lbl:'This month', from: (function(){var d=new Date();d.setDate(1);d.setHours(0,0,0,0);return d.getTime();})(), to: now },
+        { lbl:'Last month', from: (function(){var d=new Date();d.setMonth(d.getMonth()-1);d.setDate(1);d.setHours(0,0,0,0);return d.getTime();})(),
+                            to:   (function(){var d=new Date();d.setDate(0);d.setHours(23,59,59,999);return d.getTime();})() }
+      ];
+    }
+    function applyRange(from, to, label) {
+      if (!from || !to) {
+        window._insPulseRange = null;
+      } else {
+        window._insPulseRange = { from: from, to: to, label: label || (fmt(from) + ' → ' + fmt(to)) };
+      }
+      close();
+      // Refresh stats so tile numbers reflect the new range, and re-render the
+      // table so an already-active period filter narrows to the new window.
+      if (typeof window._insPipelineRefresh === 'function') window._insPipelineRefresh();
+      if (typeof renderInspirations === 'function') renderInspirations();
+    }
+    window._insApplyPulseRange = applyRange;
+    window._insOpenPulseRangePicker = function (anchorEl) {
+      close();
+      var cur = window._insPulseRange || {};
+      var presetsHtml = presets().map(function (p) {
+        return '<button onclick="_insApplyPulseRange(' + p.from + ',' + p.to + ',\'' + p.lbl + '\')">' + p.lbl + '</button>';
+      }).join('');
+      var html =
+        '<div id="insPulseRangePop" class="ap-pulse-range-pop">' +
+          '<h5>📅 Custom date range</h5>' +
+          '<div class="ap-pr-presets">' + presetsHtml + '</div>' +
+          '<div class="ap-pr-grid">' +
+            '<div><label>From</label><input type="date" id="insPrFrom" value="' + (cur.from ? fmt(cur.from) : '') + '"></div>' +
+            '<div><label>To</label><input type="date" id="insPrTo" value="' + (cur.to ? fmt(cur.to) : '') + '"></div>' +
+          '</div>' +
+          '<div class="ap-pr-actions">' +
+            '<button class="ap-pr-reset" onclick="_insApplyPulseRange(null,null,null)">Reset to default</button>' +
+            '<button class="ap-pr-apply" onclick="(function(){' +
+              'var f=document.getElementById(\'insPrFrom\').value;' +
+              'var t=document.getElementById(\'insPrTo\').value;' +
+              'if(!f||!t)return;' +
+              'var fm=Date.parse(f+\'T00:00:00\');' +
+              'var tm=Date.parse(t+\'T23:59:59\');' +
+              'if(isNaN(fm)||isNaN(tm))return;' +
+              '_insApplyPulseRange(fm,tm,f+\' → \'+t);' +
+            '})()">Apply</button>' +
+          '</div>' +
+        '</div>';
+      document.body.insertAdjacentHTML('beforeend', html);
+      var pop = document.getElementById('insPulseRangePop');
+      if (!pop || !anchorEl) return;
+      var rect = anchorEl.getBoundingClientRect();
+      var left = Math.min(rect.left, window.innerWidth - 340);
+      var top  = rect.bottom + 6 + window.scrollY;
+      pop.style.left = Math.max(10, left) + 'px';
+      pop.style.top  = top + 'px';
+      setTimeout(function () {
+        document.addEventListener('click',   _outside, true);
+        document.addEventListener('keydown', _esc, true);
+      }, 0);
+    };
+  })();
+
 })();
+
 </script>
 </body>
 </html>

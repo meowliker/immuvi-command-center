@@ -75,7 +75,7 @@ def load_env() -> dict:
         k, v = line.split("=", 1)
         env[k.strip()] = v.strip()
         os.environ[k.strip()] = v.strip()
-    required = ("SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY")
+    required = ("SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY", "CLICKUP_API_KEY")
     for key in required:
         if not env.get(key):
             log(f"FATAL: {key} missing in {ENV_FILE}")
@@ -611,6 +611,41 @@ class Worker:
 
                     job = self.claim_next_job()
                     if not job:
+                        # ── Strategist queue check ──
+                        # No classify job this iteration — try the strategist
+                        # queue. Sequential: never two claude -p in flight.
+                        try:
+                            from tools.strategist.pipeline import run_strategist_for_product
+                            from tools.strategist.db import pop_pending_run
+                            run = pop_pending_run(
+                                supabase_url=os.environ["SUPABASE_URL"],
+                                service_key=os.environ["SUPABASE_SERVICE_ROLE_KEY"],
+                                worker_id=self.worker_id,
+                            )
+                            if run is not None:
+                                log(f"[strategist] picking up run id={run['id']} "
+                                    f"product={run['product_id']} "
+                                    f"trigger={run['trigger']}")
+                                self.is_busy = True
+                                self.current_job_id = f"strategist:{run['id']}"
+                                try:
+                                    run_strategist_for_product(
+                                        supabase_url=os.environ["SUPABASE_URL"],
+                                        service_key=os.environ["SUPABASE_SERVICE_ROLE_KEY"],
+                                        clickup_api_key=os.environ["CLICKUP_API_KEY"],
+                                        run_id=run["id"],
+                                        product_id=run["product_id"],
+                                        worker_id=self.worker_id,
+                                        snapshot_dir=str(Path(__file__).parent /
+                                                         "strategist_memory"),
+                                        log=log,
+                                    )
+                                finally:
+                                    self.is_busy = False
+                                    self.current_job_id = None
+                                continue
+                        except Exception as e:
+                            log(f"[strategist] poll/run failed: {e}")
                         self.shutdown.wait(self.poll_interval)
                         continue
 

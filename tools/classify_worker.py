@@ -32,6 +32,13 @@ import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 
+# Ensure project root is on sys.path so `from tools.strategist...` and
+# `from tools.producer...` imports resolve regardless of how the worker
+# is invoked (python3 tools/classify_worker.py vs python3 -m tools.classify_worker).
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent
+if str(_PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(_PROJECT_ROOT))
+
 # ── Configuration ───────────────────────────────────────────
 
 ENV_FILE = Path.home() / ".classify-inspiration.env"
@@ -627,7 +634,7 @@ class Worker:
                                     f"product={run['product_id']} "
                                     f"trigger={run['trigger']}")
                                 self.is_busy = True
-                                self.current_job_id = f"strategist:{run['id']}"
+                                self.current_job_id = None  # strategist run ids are not uuids; send NULL to avoid 22P02
                                 try:
                                     run_strategist_for_product(
                                         supabase_url=os.environ["SUPABASE_URL"],
@@ -680,7 +687,7 @@ class Worker:
                                     log(f"[producer] claim race lost on run {run_id}: {e}")
                                     return  # back to outer loop; another worker has it
                                 self.is_busy = True
-                                self.current_job_id = str(run_id)
+                                self.current_job_id = None  # producer run ids are integers, not uuids; send NULL to avoid 22P02
                                 try:
                                     # Invoke the skill. Skill writes its own outputs.
                                     # 10 min timeout to allow N parallel image gens.

@@ -12314,29 +12314,60 @@ function _producerChipHtml(taskId) {
   var lbl   = { pending: '⏳ Queued', running: '⚙ Running',
                 done: '✓ ' + ((r.outputs || []).length) + ' ads',
                 failed: '✗ Failed' }[r.status] || r.status;
-  var click = '';
+
+  var clickAttr = '';
+  var cursorStyle = '';
   if (r.status === 'done' && r.outputs && r.outputs.length) {
     var driveUrl = (r.outputs.find(function(o){ return o.drive_url; }) || {}).drive_url;
     if (driveUrl) {
-      click = ' onclick="window.open(\'' + escAttr(driveUrl) + '\',\'_blank\')" ' +
-              'style="cursor:pointer"';
+      clickAttr = ' onclick="window.open(\'' + escAttr(driveUrl) + '\',\'_blank\')"';
+      cursorStyle = 'cursor:pointer;';
     }
   } else if (r.status === 'failed' && r.error) {
-    click = ' onclick="alert(' + JSON.stringify(r.error).replace(/"/g, '&quot;') + ')" ' +
-            'style="cursor:pointer"';
+    var safeErr = JSON.stringify(r.error).replace(/"/g, '&quot;');
+    clickAttr = ' onclick="alert(' + safeErr + ')"';
+    cursorStyle = 'cursor:pointer;';
   }
-  return '<span class="producer-chip" ' + click +
-         ' style="display:inline-flex;align-items:center;gap:4px;padding:2px 8px;' +
-         'border-radius:999px;background:' + color + '22;color:' + color + ';' +
-         'font-size:0.7rem;font-weight:500;margin-left:4px">' + esc(lbl) + '</span>';
+
+  var style = cursorStyle +
+    'display:inline-flex;align-items:center;gap:4px;padding:2px 8px;' +
+    'border-radius:999px;background:' + color + '22;color:' + color + ';' +
+    'font-size:0.7rem;font-weight:500;margin-left:4px';
+
+  return '<span class="producer-chip"' + clickAttr +
+         ' style="' + style + '">' + esc(lbl) + '</span>';
 }
 
 function _producerButtonHtml(taskId, productId) {
   return '<button class="btn-ghost producer-btn" ' +
-         'onclick="event.stopPropagation();_producerOpenModal(\'' + escAttr(taskId) +
-         '\',\'' + escAttr(productId) + '\')" ' +
+         'data-producer-task="' + escAttr(taskId) + '" ' +
+         'data-producer-product="' + escAttr(productId) + '" ' +
          'title="Generate ad images" ' +
-         'style="padding:2px 6px;font-size:0.85rem">🎨</button>';
+         'style="padding:2px 6px;font-size:0.85rem;cursor:pointer">🎨</button>';
+}
+
+// Single document-level delegated click handler for the 🎨 button.
+// Avoids the brittle inline-onclick + HTML-entity-decoding path.
+if (!window.__producerClickListenerAttached) {
+  window.__producerClickListenerAttached = true;
+  document.addEventListener('click', function (e) {
+    var btn = e.target && e.target.closest && e.target.closest('.producer-btn');
+    if (!btn) return;
+    e.stopPropagation();
+    e.preventDefault();
+    var taskId = btn.getAttribute('data-producer-task') || '';
+    var productId = btn.getAttribute('data-producer-product') || '';
+    console.log('[producer] button click', { taskId: taskId, productId: productId });
+    if (!taskId) {
+      alert('[producer] no task id — please refresh and try again');
+      return;
+    }
+    if (typeof _producerOpenModal === 'function') {
+      _producerOpenModal(taskId, productId);
+    } else {
+      alert('[producer] open modal function missing — please hard-refresh');
+    }
+  }, false);
 }
 
 function _producerOpenModal(taskId, productId) {

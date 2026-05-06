@@ -12348,21 +12348,25 @@ function _producerButtonHtml(taskId, productId) {
 
 // Single document-level delegated click handler for the 🎨 button.
 // CAPTURE phase (3rd arg = true) so we get the event BEFORE the parent
-// <td onclick="event.stopPropagation()"> kills bubbling. Without this
-// the button click never reaches us because TD blocks the bubble.
+// <td onclick="event.stopPropagation()"> kills bubbling AND before any
+// other capture-phase listener (e.g. row-drawer opener) reacts.
+//
+// We also use stopImmediatePropagation() — stopPropagation alone would
+// still let other capture-phase listeners on the same node fire, which
+// caused the row drawer to open simultaneously with the modal.
 if (!window.__producerClickListenerAttached) {
   window.__producerClickListenerAttached = true;
   console.info('[producer] click listener attached (capture phase)');
   document.addEventListener('click', function (e) {
     var btn = e.target && e.target.closest && e.target.closest('.producer-btn');
     if (!btn) return;
-    e.stopPropagation();
+    e.stopImmediatePropagation();  // stop ALL further listeners (capture + bubble)
     e.preventDefault();
     var taskId = btn.getAttribute('data-producer-task') || '';
     var productId = btn.getAttribute('data-producer-product') || '';
     console.log('[producer] button click', { taskId: taskId, productId: productId });
     if (!taskId) {
-      alert('[producer] no task id — please refresh and try again');
+      alert('[producer] no task id — push this task to ClickUp first (use the "+ ClickUp" button)');
       return;
     }
     if (typeof _producerOpenModal === 'function') {
@@ -12370,7 +12374,15 @@ if (!window.__producerClickListenerAttached) {
     } else {
       alert('[producer] open modal function missing — please hard-refresh');
     }
-  }, true);  // CAPTURE phase — fires before TD's stopPropagation blocks bubbling
+  }, true);  // CAPTURE phase — fires before TD/row stopPropagation handlers
+
+  // Same protection for the row-drawer opener: a mousedown/touchstart on a
+  // .producer-btn must not start dragging or open anything else.
+  document.addEventListener('mousedown', function (e) {
+    if (e.target && e.target.closest && e.target.closest('.producer-btn')) {
+      e.stopImmediatePropagation();
+    }
+  }, true);
 }
 
 function _producerOpenModal(taskId, productId) {
@@ -15604,8 +15616,17 @@ var _AP_COL_REGISTRY = {
   producer: {
     label: '🎨', locked: true, sortable: false,
     renderCell: function (r) {
-      var taskId = r.act.id;
+      // CRITICAL: pass the ClickUp task id, NOT the local manual_actions id.
+      // The producer skill fetches the task from ClickUp by this id.
+      // Order: explicit a.clickupTaskId → a._clickupId → '' (no button rendered).
+      var act = r.act || {};
+      var taskId = act.clickupTaskId || act._clickupId || '';
       var productId = (typeof activeProductId !== 'undefined' && activeProductId) || '';
+      // If no ClickUp task yet, render a disabled placeholder so the user
+      // knows they need to push to ClickUp first via the "+ ClickUp" button.
+      if (!taskId) {
+        return '<td onclick="event.stopPropagation()" style="white-space:nowrap;opacity:0.35" title="Push this task to ClickUp first">🎨</td>';
+      }
       return '<td onclick="event.stopPropagation()" style="white-space:nowrap">' +
         _producerButtonHtml(taskId, productId) +
         _producerChipHtml(taskId) +

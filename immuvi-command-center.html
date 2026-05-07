@@ -9121,9 +9121,232 @@ button.mx-dt-action-sent .open { color:#0a84ff; font-weight:700; margin-left:4px
   .row-anim-ghost-wrap { display: none !important; }
 }
 
+/* ════════════════════════════════════════════════════════════════════════
+   USER MANAGEMENT — login overlay, force-pw-change, header pill, admin tab
+   Designed for the dashboard's light theme (--card #fff, --bg #F3F4F6).
+   ════════════════════════════════════════════════════════════════════════ */
+.auth-overlay {
+  position: fixed; inset: 0; z-index: 99999;
+  background: linear-gradient(135deg, rgba(15,23,42,0.55), rgba(67,56,202,0.40));
+  display: none; align-items: center; justify-content: center;
+  -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
+}
+.auth-overlay.on { display: flex; }
+.auth-card {
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 16px;
+  padding: 32px 30px 24px;
+  width: 380px; max-width: calc(100vw - 32px);
+  box-shadow: 0 24px 60px rgba(15,23,42,0.30);
+  display: flex; flex-direction: column; gap: 10px;
+}
+.auth-brand { font-size: 1.2rem; font-weight: 700; color: #0f172a; letter-spacing: -.01em; }
+.auth-sub { font-size: .8rem; color: #64748b; margin-bottom: 10px; }
+.auth-lbl { font-size: .7rem; font-weight: 600; color: #334155; margin-top: 6px; letter-spacing: .04em; text-transform: uppercase; }
+.auth-inp {
+  background: #f8fafc;
+  border: 1px solid #d1d5db;
+  color: #0f172a;
+  padding: 10px 12px; border-radius: 8px; font-size: .92rem; width: 100%;
+  outline: none; transition: border-color .15s, box-shadow .15s;
+  box-sizing: border-box;
+}
+.auth-inp:focus { border-color: #6d28d9; box-shadow: 0 0 0 3px rgba(109,40,217,0.12); background: #fff; }
+.auth-btn {
+  background: linear-gradient(135deg, #6d28d9, #4338ca);
+  color: white; font-weight: 600; font-size: .92rem;
+  padding: 12px 18px; border: 0; border-radius: 8px; cursor: pointer;
+  margin-top: 12px; transition: filter .15s, transform .05s;
+}
+.auth-btn:hover { filter: brightness(1.08); }
+.auth-btn:active { transform: translateY(1px); }
+.auth-btn:disabled { opacity: .6; cursor: wait; }
+.auth-err {
+  background: #fef2f2; color: #b91c1c;
+  border: 1px solid #fecaca; border-radius: 6px;
+  padding: 8px 12px; font-size: .78rem; line-height: 1.4;
+}
+.auth-foot { font-size: .72rem; color: #64748b; text-align: center; margin-top: 8px; }
+.auth-foot a { color: #6d28d9; }
+
+/* Header user pill — adapts to light header */
+.user-pill {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 4px 4px 4px 10px;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  border-radius: 999px;
+  font-size: .74rem; color: #334155;
+}
+.user-pill-name { font-weight: 600; max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.user-pill-badge {
+  font-size: .6rem; font-weight: 700; padding: 2px 7px; border-radius: 999px;
+  background: #e2e8f0; color: #475569; letter-spacing: .06em;
+}
+.user-pill-badge-admin {
+  background: linear-gradient(135deg, #6d28d9, #4338ca); color: white;
+}
+.user-pill-logout {
+  background: #fff; border: 1px solid #e2e8f0; color: #64748b;
+  width: 22px; height: 22px; border-radius: 50%;
+  cursor: pointer; font-size: .8rem; line-height: 1;
+  display: inline-flex; align-items: center; justify-content: center;
+  transition: all .12s;
+}
+.user-pill-logout:hover { background: #fef2f2; color: #b91c1c; border-color: #fecaca; }
+
+/* Admin tab badge */
+.admin-tab { background: linear-gradient(135deg, rgba(109,40,217,.12), rgba(67,56,202,.12)) !important; }
+.admin-tab.on { background: linear-gradient(135deg, #6d28d9, #4338ca) !important; color: white !important; }
+
+/* Admin panel — light theme */
+#panel-admin { padding: 24px; }
+.admin-grid { display: grid; gap: 18px; max-width: 1200px; }
+.admin-card {
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px; padding: 20px 22px;
+  box-shadow: 0 1px 3px rgba(15,23,42,0.04);
+}
+.admin-card-title { font-size: 1rem; font-weight: 700; color: #0f172a; margin-bottom: 4px; }
+.admin-card-sub { font-size: .8rem; color: #64748b; margin-bottom: 14px; line-height: 1.5; }
+.admin-create-grid {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+}
+.admin-create-grid label,
+.admin-create-pw { font-size: .68rem; font-weight: 600; color: #475569; display: flex; flex-direction: column; gap: 4px; letter-spacing: .04em; text-transform: uppercase; }
+.admin-inp {
+  background: #f8fafc;
+  border: 1px solid #d1d5db;
+  color: #0f172a;
+  padding: 8px 10px; border-radius: 6px; font-size: .85rem; outline: none;
+  font-weight: 400; text-transform: none; letter-spacing: 0;
+  transition: border-color .15s, box-shadow .15s;
+  box-sizing: border-box;
+}
+.admin-inp:focus { border-color: #6d28d9; box-shadow: 0 0 0 3px rgba(109,40,217,0.12); background: #fff; }
+.admin-prod-grid { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+.admin-prod-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 6px 12px; background: #f1f5f9;
+  border: 1px solid #e2e8f0; border-radius: 999px;
+  font-size: .78rem; color: #334155; cursor: pointer;
+  transition: all .12s;
+}
+.admin-prod-chip input { margin: 0; cursor: pointer; accent-color: #6d28d9; }
+.admin-prod-chip:hover { border-color: #c4b5fd; background: #faf5ff; }
+.admin-prod-chip:has(input:checked) { background: #ede9fe; border-color: #a78bfa; color: #5b21b6; }
+.admin-actions { display: flex; align-items: center; gap: 12px; margin-top: 16px; flex-wrap: wrap; }
+.admin-create-btn { margin-top: 0; }
+.admin-err {
+  background: #fef2f2; color: #b91c1c;
+  border: 1px solid #fecaca; border-radius: 6px;
+  padding: 8px 12px; font-size: .78rem; flex: 1; min-width: 200px;
+}
+.admin-ok {
+  background: #f0fdf4; color: #166534;
+  border: 1px solid #bbf7d0; border-radius: 6px;
+  padding: 10px 12px; font-size: .82rem; flex: 1; min-width: 250px; line-height: 1.6;
+}
+.admin-ok code {
+  background: #ffffff; padding: 2px 6px; border-radius: 4px;
+  font-family: ui-monospace, monospace; font-size: .82rem; color: #0f172a;
+  border: 1px solid #d1fae5;
+}
+.admin-ok button {
+  background: #16a34a; color: white; border: 0;
+  padding: 5px 12px; border-radius: 4px; cursor: pointer; font-size: .72rem;
+  font-weight: 600; margin-top: 8px;
+}
+.admin-table { width: 100%; border-collapse: collapse; font-size: .85rem; }
+.admin-table th {
+  text-align: left; padding: 10px 10px; font-size: .68rem;
+  text-transform: uppercase; letter-spacing: .06em;
+  color: #64748b; border-bottom: 1px solid #e5e7eb;
+  font-weight: 600;
+}
+.admin-table td {
+  padding: 12px 10px; border-bottom: 1px solid #f1f5f9;
+  color: #334155; vertical-align: middle;
+}
+.admin-table tr:hover td { background: #f8fafc; }
+.admin-fullname { font-size: .72rem; color: #94a3b8; margin-top: 2px; }
+.admin-role-admin {
+  background: linear-gradient(135deg, #6d28d9, #4338ca);
+  color: white; font-size: .65rem; font-weight: 700;
+  padding: 3px 9px; border-radius: 999px; letter-spacing: .04em;
+}
+.admin-role-member {
+  background: #e2e8f0; color: #475569;
+  font-size: .65rem; font-weight: 700;
+  padding: 3px 9px; border-radius: 999px; letter-spacing: .04em;
+}
+.admin-prod-list { display: flex; flex-wrap: wrap; gap: 4px; max-width: 320px; }
+.admin-prod-tag {
+  background: #ede9fe; color: #5b21b6;
+  padding: 2px 8px; border-radius: 4px; font-size: .7rem; font-weight: 500;
+}
+.admin-act {
+  background: #ffffff; color: #475569;
+  border: 1px solid #d1d5db; border-radius: 5px;
+  padding: 5px 10px; font-size: .72rem; cursor: pointer;
+  margin-right: 4px; font-weight: 500;
+  transition: all .12s;
+}
+.admin-act:hover { background: #f1f5f9; border-color: #94a3b8; }
+.admin-act-warn { color: #b45309; border-color: #fcd34d; }
+.admin-act-warn:hover { background: #fef3c7; }
+.admin-act-danger { color: #b91c1c; border-color: #fecaca; }
+.admin-act-danger:hover { background: #fef2f2; }
+.admin-empty { padding: 30px; text-align: center; color: #94a3b8; font-size: .85rem; }
+.admin-server-banner {
+  background: #fffbeb; border: 1px solid #fcd34d;
+  color: #92400e; padding: 12px 16px; border-radius: 8px;
+  font-size: .82rem; margin-bottom: 16px;
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+}
+.admin-server-banner code {
+  background: #ffffff; padding: 2px 6px; border-radius: 4px;
+  font-family: ui-monospace, monospace; font-size: .78rem; border: 1px solid #fde68a;
+}
+.admin-edit-products {
+  display: flex; flex-wrap: wrap; gap: 8px; padding: 8px 0;
+}
+
 </style>
 </head>
 <body>
+
+  <!-- ===== AUTH OVERLAYS (login + force-pw-change) ===== -->
+  <div class="auth-overlay on" id="loginOverlay">
+    <form class="auth-card" id="loginForm" onsubmit="return _doLogin(event)">
+      <div class="auth-brand">Immuvi Command Center</div>
+      <div class="auth-sub">Sign in to continue</div>
+      <label class="auth-lbl" for="loginIdentifier">Email</label>
+      <input type="email" id="loginIdentifier" class="auth-inp" autocomplete="username" autofocus required />
+      <label class="auth-lbl" for="loginPassword">Password</label>
+      <input type="password" id="loginPassword" class="auth-inp" autocomplete="current-password" required />
+      <div class="auth-err" id="loginError" style="display:none"></div>
+      <button type="submit" class="auth-btn" id="loginBtn">Sign in</button>
+      <div class="auth-foot">Need access? Contact your admin.</div>
+    </form>
+  </div>
+
+  <div class="auth-overlay" id="pwChangeOverlay">
+    <form class="auth-card" id="pwChangeForm" onsubmit="return _doForcePwChange(event)">
+      <div class="auth-brand">Set a new password</div>
+      <div class="auth-sub">Your admin issued a temporary password. Choose a new one to continue.</div>
+      <label class="auth-lbl" for="pwChangeNew">New password</label>
+      <input type="password" id="pwChangeNew" class="auth-inp" autocomplete="new-password" minlength="8" required />
+      <label class="auth-lbl" for="pwChangeConfirm">Confirm password</label>
+      <input type="password" id="pwChangeConfirm" class="auth-inp" autocomplete="new-password" minlength="8" required />
+      <div class="auth-err" id="pwChangeError" style="display:none"></div>
+      <button type="submit" class="auth-btn" id="pwChangeBtn">Set new password</button>
+      <div class="auth-foot"><a href="#" onclick="_logout();return false;" style="color:var(--t3)">Sign out</a></div>
+    </form>
+  </div>
 
   <!-- ===== HEADER ===== -->
   <header class="hdr">
@@ -9152,6 +9375,7 @@ button.mx-dt-action-sent .open { color:#0a84ff; font-weight:700; margin-left:4px
           <span class="live-sync-lbl" id="statusLbl">Not synced</span>
           <button class="btn-sync-now" id="syncNowBtn" onclick="triggerManualSync()" title="Sync now">&#8635;</button>
         </div>
+        <div id="userPill" class="user-pill" style="display:none"></div>
         <div id="presence-bar" style="position:relative;display:flex;align-items:center;gap:6px;font-size:12px;color:#94a3b8;cursor:pointer;" onclick="_togglePresencePanel(event)">
           <span id="presence-dots"></span>
           <span id="presence-label">&#9679; 1 online</span>
@@ -9174,6 +9398,7 @@ button.mx-dt-action-sent .open { color:#0a84ff; font-weight:700; margin-left:4px
       <button class="tab" onclick="showTab('production',this)" role="tab" aria-selected="false">Production <span class="tab-count" id="prodCount">0</span></button>
       <button class="tab" onclick="showTab('strategist',this)" role="tab" aria-selected="false">Strategist <span class="tab-count" id="strategistCount">0</span></button>
       <button class="tab" onclick="showTab('inspiration',this)" role="tab" aria-selected="false">Inspiration <span class="tab-count" id="inspirationCount">0</span></button>
+      <button class="tab admin-tab" id="tabBtnAdmin" onclick="showTab('admin',this)" role="tab" aria-selected="false" style="display:none">Admin</button>
     </div>
   </nav>
 
@@ -9538,6 +9763,53 @@ button.mx-dt-action-sent .open { color:#0a84ff; font-weight:700; margin-left:4px
     </aside>
   </section>
 
+  <!-- ===== PANEL: ADMIN (admin-only, hidden until role check) ===== -->
+  <section id="panel-admin" class="panel" role="tabpanel">
+    <div class="admin-server-banner" id="adminServerBanner" style="display:none">
+      <strong>Admin helper server is offline.</strong>
+      User-management actions are disabled. Start it with:<br>
+      <code>python3 tools/auth/admin_server.py &amp; disown</code>
+      <button class="admin-act" onclick="_adminLoad()" style="margin-left:auto">Recheck</button>
+    </div>
+
+    <div class="admin-grid">
+      <div class="admin-card">
+        <div class="admin-card-title">Invite a user</div>
+        <div class="admin-card-sub">Create a login. Share the credentials with the user — they'll be forced to change the password on first sign-in.</div>
+        <div class="admin-create-grid">
+          <label>Email <input type="email" id="adminCreateEmail" class="admin-inp" placeholder="user@team.com" /></label>
+          <label>Username <input type="text" id="adminCreateUsername" class="admin-inp" placeholder="optional" /></label>
+          <label>Full name <input type="text" id="adminCreateFullName" class="admin-inp" placeholder="optional" /></label>
+          <label>Role
+            <select id="adminCreateRole" class="admin-inp">
+              <option value="member">Member</option>
+              <option value="admin">Admin</option>
+            </select>
+          </label>
+          <label class="admin-create-pw">Temp password
+            <span style="display:flex;gap:6px">
+              <input type="text" id="adminCreatePw" class="admin-inp" placeholder="auto-generate if empty" />
+              <button type="button" class="admin-act" onclick="_adminFillGenPw()">Generate</button>
+            </span>
+          </label>
+        </div>
+        <div class="admin-card-title" style="margin-top:14px;font-size:.85rem">Products this user can access</div>
+        <div class="admin-prod-grid" id="adminCreateProducts"></div>
+        <div class="admin-actions">
+          <button class="auth-btn admin-create-btn" onclick="_adminCreateUser()">Create user</button>
+          <div class="admin-err" id="adminCreateError" style="display:none"></div>
+          <div class="admin-ok"  id="adminCreateOk"  style="display:none"></div>
+        </div>
+      </div>
+
+      <div class="admin-card">
+        <div class="admin-card-title">Users</div>
+        <div class="admin-card-sub">Manage access. Admins see all products by default. Members see only products you assign.</div>
+        <div id="adminUsersTable">Loading…</div>
+      </div>
+    </div>
+  </section>
+
   <!-- ===== MODAL ===== -->
   <div class="modal-overlay" id="modalOverlay" onclick="if(event.target===this)closeModal()">
     <div class="modal" id="modalDialog">
@@ -9587,11 +9859,513 @@ const SB_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsIn
 let SB = null;
 try {
   SB = window.supabase.createClient(SB_URL, SB_ANON, {
-    realtime: { params: { eventsPerSecond: 4 } }
+    realtime: { params: { eventsPerSecond: 4 } },
+    auth: {
+      persistSession: true,
+      autoRefreshToken: true,
+      detectSessionInUrl: false,
+      storage: window.localStorage,
+      storageKey: 'immuvi-auth'
+    }
   });
   console.log('[SB] Supabase client ready →', SB_URL);
 } catch (e) {
   console.error('[SB] Client init failed:', e);
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   USER MANAGEMENT — auth gate + admin tab module
+   See docs/superpowers/specs/2026-05-08-user-management-design.md
+   ════════════════════════════════════════════════════════════════════════ */
+window.AUTH = {
+  user: null,
+  profile: null,
+  productIds: null,
+  isAdmin: function() { return !!(this.profile && this.profile.role === 'admin'); },
+  hasProduct: function(pid) {
+    if (!this.profile) return false;
+    if (this.isAdmin()) return true;
+    return Array.isArray(this.productIds) && this.productIds.indexOf(pid) >= 0;
+  }
+};
+
+const ADMIN_API = 'http://127.0.0.1:8103';
+
+function _authEsc(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){
+    return ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' })[c];
+  });
+}
+
+function _showLogin(errMsg) {
+  var ov = document.getElementById('loginOverlay'); if (!ov) return;
+  ov.classList.add('on');
+  document.getElementById('pwChangeOverlay').classList.remove('on');
+  if (errMsg) {
+    var el = document.getElementById('loginError');
+    if (el) { el.textContent = errMsg; el.style.display = ''; }
+  }
+}
+function _hideLogin() {
+  var ov = document.getElementById('loginOverlay'); if (ov) ov.classList.remove('on');
+  var pw = document.getElementById('pwChangeOverlay'); if (pw) pw.classList.remove('on');
+}
+
+async function _doLogin(ev) {
+  ev && ev.preventDefault && ev.preventDefault();
+  var idEl = document.getElementById('loginIdentifier');
+  var pwEl = document.getElementById('loginPassword');
+  var errEl = document.getElementById('loginError');
+  var btn  = document.getElementById('loginBtn');
+  errEl.style.display = 'none';
+  if (!idEl.value || !pwEl.value) {
+    errEl.textContent = 'Email and password required.';
+    errEl.style.display = '';
+    return false;
+  }
+  btn.disabled = true; btn.textContent = 'Signing in…';
+  try {
+    var r = await SB.auth.signInWithPassword({
+      email: idEl.value.trim(),
+      password: pwEl.value
+    });
+    if (r.error) {
+      errEl.textContent = r.error.message || 'Sign-in failed.';
+      errEl.style.display = '';
+      btn.disabled = false; btn.textContent = 'Sign in';
+      return false;
+    }
+    // Reload so the entire boot runs under the new authed session.
+    location.reload();
+  } catch (e) {
+    errEl.textContent = (e && e.message) || 'Sign-in error.';
+    errEl.style.display = '';
+    btn.disabled = false; btn.textContent = 'Sign in';
+  }
+  return false;
+}
+
+async function _logout() {
+  try { await SB.auth.signOut(); } catch (e) {}
+  // Clear product so member doesn't return to a now-disallowed selection.
+  try { localStorage.removeItem('immuvi_active_product'); } catch(e) {}
+  location.reload();
+}
+
+async function _doForcePwChange(ev) {
+  ev && ev.preventDefault && ev.preventDefault();
+  var newPw = document.getElementById('pwChangeNew').value;
+  var confirmPw = document.getElementById('pwChangeConfirm').value;
+  var errEl = document.getElementById('pwChangeError');
+  errEl.style.display = 'none';
+  if (!newPw || newPw.length < 8) {
+    errEl.textContent = 'Password must be at least 8 characters.';
+    errEl.style.display = ''; return false;
+  }
+  if (newPw !== confirmPw) {
+    errEl.textContent = 'Passwords do not match.';
+    errEl.style.display = ''; return false;
+  }
+  var btn = document.getElementById('pwChangeBtn');
+  btn.disabled = true; btn.textContent = 'Updating…';
+  try {
+    var u = await SB.auth.updateUser({ password: newPw });
+    if (u.error) {
+      errEl.textContent = u.error.message;
+      errEl.style.display = '';
+      btn.disabled = false; btn.textContent = 'Set new password';
+      return false;
+    }
+    if (AUTH.user) {
+      await SB.from('profiles').update({ must_change_password: false }).eq('id', AUTH.user.id);
+    }
+    location.reload();
+  } catch (e) {
+    errEl.textContent = (e && e.message) || 'Update failed.';
+    errEl.style.display = '';
+    btn.disabled = false; btn.textContent = 'Set new password';
+  }
+  return false;
+}
+
+function _renderUserPill() {
+  var el = document.getElementById('userPill');
+  if (!el || !AUTH.profile) return;
+  var u = AUTH.profile;
+  var label = u.username || u.email || '';
+  var isAdmin = u.role === 'admin';
+  var badge = isAdmin
+    ? '<span class="user-pill-badge user-pill-badge-admin">Admin</span>'
+    : '<span class="user-pill-badge">Member</span>';
+  el.innerHTML =
+    '<span class="user-pill-name" title="' + _authEsc(u.email) + '">' + _authEsc(label) + '</span>' +
+    badge +
+    '<button class="user-pill-logout" onclick="_logout()" title="Sign out">⏻</button>';
+  el.style.display = 'inline-flex';
+}
+
+function _toggleAdminTabVisibility() {
+  var tab = document.getElementById('tabBtnAdmin');
+  var panel = document.getElementById('panel-admin');
+  var amAdmin = AUTH.isAdmin();
+  if (tab) tab.style.display = amAdmin ? '' : 'none';
+  if (panel) {
+    if (!amAdmin) {
+      panel.classList.remove('on');
+      panel.style.display = 'none';
+    } else {
+      panel.style.display = '';
+    }
+  }
+  // If a non-admin's last-saved tab was admin (e.g., a previous admin
+  // session in the same browser), force them to Command HQ.
+  if (!amAdmin) {
+    try {
+      if (localStorage.getItem('immuvi_active_tab') === 'admin') {
+        localStorage.setItem('immuvi_active_tab', 'hq');
+      }
+    } catch(e) {}
+    var hqBtn = document.querySelector('.tab[onclick*="\'hq\'"]');
+    if (hqBtn && typeof showTab === 'function') {
+      try { showTab('hq', hqBtn); } catch(e) {}
+    }
+  }
+}
+
+async function _waitForBootProducts(timeoutMs) {
+  var start = Date.now();
+  return new Promise(function(resolve) {
+    function tick() {
+      // Boot has completed when window 'load' has fired AND PRODUCTS is an array.
+      // We use _adsProductId as the "loadState finished" signal (it's set after).
+      var prodReady = (typeof PRODUCTS !== 'undefined' && Array.isArray(PRODUCTS));
+      var bootReady = (typeof _adsProductId !== 'undefined');
+      if (prodReady && bootReady) return resolve();
+      if (Date.now() - start > (timeoutMs || 15000)) return resolve();
+      setTimeout(tick, 90);
+    }
+    tick();
+  });
+}
+
+async function _applyUserProductFilter() {
+  if (typeof PRODUCTS === 'undefined' || !Array.isArray(PRODUCTS)) return;
+  if (!AUTH.profile) return;
+  if (AUTH.isAdmin()) return; // admins see everything
+
+  var allowed = {};
+  (AUTH.productIds || []).forEach(function(p){ allowed[p] = true; });
+  PRODUCTS = PRODUCTS.filter(function(p){ return allowed[p.id]; });
+
+  // If active product is not in the allowed set, switch.
+  if (typeof activeProductId !== 'undefined' && (!activeProductId || !PRODUCTS.some(function(p){ return p.id === activeProductId; }))) {
+    var newActive = PRODUCTS.length ? PRODUCTS[0].id : null;
+    activeProductId = newActive;
+    try {
+      if (newActive) localStorage.setItem('immuvi_active_product', newActive);
+      else localStorage.removeItem('immuvi_active_product');
+    } catch(e) {}
+    if (newActive && typeof loadState === 'function') {
+      try { await loadState(); } catch(e) { console.error('[auth] reload after product switch failed', e); }
+      // Re-render whatever depends on the active product.
+      if (typeof render === 'function') { try { render(); } catch(e){} }
+    }
+    // Re-init realtime channel for the new product.
+    if (newActive && typeof _initRealtimeChannel === 'function') {
+      try { _initRealtimeChannel(newActive); } catch(e){}
+    }
+  }
+
+  // Update the visible product name in the header.
+  if (activeProductId) {
+    var p = PRODUCTS.find(function(p){ return p.id === activeProductId; });
+    var nameEl = document.getElementById('hdrProdName');
+    if (nameEl && p) nameEl.textContent = p.name || p.id;
+  } else {
+    var nameEl2 = document.getElementById('hdrProdName');
+    if (nameEl2) nameEl2.textContent = PRODUCTS.length ? 'Select product' : 'No products assigned';
+  }
+}
+
+async function _onSession(session) {
+  AUTH.user = session.user;
+  // Wire realtime to the authed JWT so RLS-protected channels work.
+  try { SB.realtime.setAuth(session.access_token); } catch(e) {}
+
+  var profRes = await SB.from('profiles').select('*').eq('id', session.user.id).single();
+  if (profRes.error || !profRes.data) {
+    console.error('[auth] profile lookup failed', profRes.error);
+    await SB.auth.signOut();
+    _showLogin('Profile not found. Contact your admin.');
+    return;
+  }
+  if (!profRes.data.is_active) {
+    await SB.auth.signOut();
+    _showLogin('Your account has been deactivated.');
+    return;
+  }
+  AUTH.profile = profRes.data;
+
+  // Best-effort last_login_at update.
+  SB.from('profiles').update({ last_login_at: new Date().toISOString() })
+    .eq('id', AUTH.profile.id).then(function(){}).catch(function(){});
+
+  if (AUTH.profile.role === 'admin') {
+    AUTH.productIds = null;
+  } else {
+    var upRes = await SB.from('user_products').select('product_id').eq('user_id', AUTH.profile.id);
+    AUTH.productIds = (upRes.data || []).map(function(r){ return r.product_id; });
+  }
+
+  // Force-pw-change gate.
+  if (AUTH.profile.must_change_password) {
+    document.getElementById('loginOverlay').classList.remove('on');
+    document.getElementById('pwChangeOverlay').classList.add('on');
+    return;
+  }
+
+  // Render the header pill + reveal admin tab if admin.
+  _renderUserPill();
+  _toggleAdminTabVisibility();
+
+  // Wait for the existing boot to finish populating PRODUCTS, then filter.
+  await _waitForBootProducts(15000);
+  await _applyUserProductFilter();
+
+  // All gating done — reveal the dashboard.
+  _hideLogin();
+}
+
+async function _authInit() {
+  if (!SB) {
+    _showLogin('Supabase failed to initialize.');
+    return;
+  }
+  try {
+    var s = await SB.auth.getSession();
+    var session = s.data && s.data.session;
+    if (!session) {
+      _showLogin();
+      return;
+    }
+    await _onSession(session);
+  } catch (e) {
+    console.error('[auth] init failed', e);
+    _showLogin('Sign-in error. Check console.');
+  }
+}
+
+// Kick off auth-gating at page load.
+document.addEventListener('DOMContentLoaded', _authInit);
+
+/* ─── Admin tab ───────────────────────────────────────────────────────── */
+async function _adminApiCall(path, body) {
+  var s = await SB.auth.getSession();
+  var session = s.data && s.data.session;
+  if (!session) throw new Error('not signed in');
+  var r = await fetch(ADMIN_API + path, {
+    method: 'POST',
+    headers: {
+      'Authorization': 'Bearer ' + session.access_token,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(body || {})
+  });
+  var json;
+  try { json = await r.json(); } catch (e) { json = {}; }
+  if (!r.ok) throw new Error(json.error || ('HTTP ' + r.status));
+  return json;
+}
+
+async function _adminCheckHealth() {
+  try {
+    var r = await fetch(ADMIN_API + '/health');
+    return r.ok;
+  } catch (e) { return false; }
+}
+
+function _adminGenPassword() {
+  var alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789!@#$%';
+  var p = '';
+  for (var i = 0; i < 14; i++) p += alphabet[Math.floor(Math.random() * alphabet.length)];
+  return p;
+}
+function _adminFillGenPw() {
+  document.getElementById('adminCreatePw').value = _adminGenPassword();
+}
+
+async function _adminLoad() {
+  if (!AUTH.isAdmin()) return;
+  var banner = document.getElementById('adminServerBanner');
+  var ok = await _adminCheckHealth();
+  if (banner) banner.style.display = ok ? 'none' : 'flex';
+
+  // Fetch products (for create form + table) + users.
+  var prodRes = await SB.from('products').select('id, name').order('id');
+  var products = prodRes.data || [];
+  var prodMap = {};
+  products.forEach(function(p){ prodMap[p.id] = p.name || p.id; });
+
+  // Fill create-form product checkboxes.
+  var createBox = document.getElementById('adminCreateProducts');
+  if (createBox) {
+    createBox.innerHTML = products.map(function(p){
+      return '<label class="admin-prod-chip"><input type="checkbox" value="' + _authEsc(p.id) + '"> ' + _authEsc(p.name || p.id) + '</label>';
+    }).join('') || '<em style="color:var(--t3)">No products in this workspace.</em>';
+  }
+
+  // Fetch users via the view (admins bypass RLS).
+  var uRes = await SB.from('profiles_with_products').select('*').order('created_at', { ascending: false });
+  var users = uRes.data || [];
+
+  var tbl = document.getElementById('adminUsersTable');
+  if (!tbl) return;
+  if (!users.length) {
+    tbl.innerHTML = '<div class="admin-empty">No users yet. Use the form above to invite someone.</div>';
+    return;
+  }
+  tbl.innerHTML = _adminRenderUsersTable(users, prodMap);
+}
+
+function _adminRenderUsersTable(users, prodMap) {
+  var meId = (AUTH.user && AUTH.user.id) || '';
+  var rows = users.map(function(u){
+    var prodTags;
+    if (u.role === 'admin') prodTags = '<em style="color:var(--t3)">all (admin)</em>';
+    else if (!u.product_ids || !u.product_ids.length) prodTags = '<em style="color:var(--t3)">none</em>';
+    else prodTags = u.product_ids.map(function(pid){
+      return '<span class="admin-prod-tag">' + _authEsc(prodMap[pid] || pid) + '</span>';
+    }).join('');
+
+    var actions =
+      '<button class="admin-act" onclick="_adminEditProducts(\'' + _authEsc(u.id) + '\')">Products</button>' +
+      '<button class="admin-act" onclick="_adminToggleRole(\'' + _authEsc(u.id) + '\', \'' + _authEsc(u.role) + '\')">' +
+        (u.role === 'admin' ? 'Demote' : 'Promote') + '</button>' +
+      '<button class="admin-act" onclick="_adminResetPw(\'' + _authEsc(u.id) + '\')">Reset PW</button>' +
+      (u.is_active
+        ? '<button class="admin-act admin-act-warn" onclick="_adminDeactivate(\'' + _authEsc(u.id) + '\')">Deactivate</button>'
+        : '<button class="admin-act" onclick="_adminReactivate(\'' + _authEsc(u.id) + '\')">Reactivate</button>') +
+      (u.id !== meId
+        ? '<button class="admin-act admin-act-danger" onclick="_adminDelete(\'' + _authEsc(u.id) + '\', \'' + _authEsc(u.email) + '\')">Delete</button>'
+        : '');
+
+    return '<tr data-uid="' + _authEsc(u.id) + '">' +
+      '<td><div>' + _authEsc(u.email) + '</div>' +
+        (u.full_name ? '<div class="admin-fullname">' + _authEsc(u.full_name) + '</div>' : '') + '</td>' +
+      '<td>' + _authEsc(u.username || '') + '</td>' +
+      '<td>' + (u.role === 'admin' ? '<span class="admin-role-admin">Admin</span>' : '<span class="admin-role-member">Member</span>') + '</td>' +
+      '<td>' + (u.is_active ? '<span style="color:#86efac">✓</span>' : '<span style="color:#fca5a5">✗</span>') + '</td>' +
+      '<td><div class="admin-prod-list">' + prodTags + '</div></td>' +
+      '<td>' + actions + '</td>' +
+    '</tr>';
+  }).join('');
+
+  return '<table class="admin-table">' +
+    '<thead><tr><th>Email</th><th>Username</th><th>Role</th><th>Active</th><th>Products</th><th>Actions</th></tr></thead>' +
+    '<tbody>' + rows + '</tbody></table>';
+}
+
+async function _adminCreateUser() {
+  var email   = (document.getElementById('adminCreateEmail').value || '').trim().toLowerCase();
+  var uname   = (document.getElementById('adminCreateUsername').value || '').trim();
+  var fname   = (document.getElementById('adminCreateFullName').value || '').trim();
+  var role    = document.getElementById('adminCreateRole').value;
+  var tempPw  = (document.getElementById('adminCreatePw').value || '').trim() || _adminGenPassword();
+  var pidEls  = document.querySelectorAll('#adminCreateProducts input:checked');
+  var pids    = Array.prototype.slice.call(pidEls).map(function(i){ return i.value; });
+
+  var errEl = document.getElementById('adminCreateError');
+  var okEl  = document.getElementById('adminCreateOk');
+  errEl.style.display = okEl.style.display = 'none';
+
+  if (!email || email.indexOf('@') === -1) {
+    errEl.textContent = 'Valid email required.';
+    errEl.style.display = ''; return;
+  }
+  try {
+    var r = await _adminApiCall('/admin/create-user', {
+      email: email, username: uname, full_name: fname,
+      role: role, temp_password: tempPw, product_ids: pids
+    });
+    okEl.innerHTML =
+      'Created <b>' + _authEsc(r.email) + '</b>. Share these creds:<br>' +
+      'Email: <code>' + _authEsc(r.email) + '</code><br>' +
+      'Temp Password: <code>' + _authEsc(r.temp_password) + '</code><br>' +
+      '<button onclick="navigator.clipboard.writeText(\'Email: ' + _authEsc(r.email) +
+        '\\nPassword: ' + _authEsc(r.temp_password) + '\'); this.textContent=\'Copied ✓\'">Copy creds</button>';
+    okEl.style.display = '';
+    document.getElementById('adminCreateEmail').value = '';
+    document.getElementById('adminCreateUsername').value = '';
+    document.getElementById('adminCreateFullName').value = '';
+    document.getElementById('adminCreatePw').value = '';
+    Array.prototype.slice.call(pidEls).forEach(function(i){ i.checked = false; });
+    _adminLoad();
+  } catch (e) {
+    errEl.textContent = (e && e.message) || 'Create failed.';
+    errEl.style.display = '';
+  }
+}
+
+async function _adminEditProducts(userId) {
+  var prodRes = await SB.from('products').select('id, name').order('id');
+  var assignedRes = await SB.from('user_products').select('product_id').eq('user_id', userId);
+  var assigned = {}; (assignedRes.data || []).forEach(function(r){ assigned[r.product_id] = true; });
+  var html = '<div class="admin-edit-products">' +
+    (prodRes.data || []).map(function(p){
+      return '<label class="admin-prod-chip">' +
+        '<input type="checkbox" value="' + _authEsc(p.id) + '"' + (assigned[p.id] ? ' checked' : '') + '>' +
+        ' ' + _authEsc(p.name || p.id) + '</label>';
+    }).join('') +
+    '</div>';
+  openModal('Edit products for user', html,
+    '<button class="btn-ghost btn-sm" onclick="closeModal()">Cancel</button>' +
+    '<button class="btn-sync" onclick="_adminSaveProducts(\'' + _authEsc(userId) + '\')">Save</button>');
+}
+
+async function _adminSaveProducts(userId) {
+  var ids = Array.prototype.slice.call(
+    document.querySelectorAll('.admin-edit-products input:checked')
+  ).map(function(i){ return i.value; });
+  try {
+    await _adminApiCall('/admin/update-products', { user_id: userId, product_ids: ids });
+    closeModal(); _adminLoad();
+  } catch (e) { alert('Failed: ' + e.message); }
+}
+
+async function _adminResetPw(userId) {
+  if (!confirm('Reset this user\'s password? They will get a new temporary password.')) return;
+  try {
+    var r = await _adminApiCall('/admin/reset-password', { user_id: userId });
+    var msg = 'New temporary password:\n\n' + r.temp_password +
+      '\n\nShare this with the user — they\'ll be forced to change it on next login.';
+    if (window.prompt) window.prompt(msg, r.temp_password);
+    else alert(msg);
+  } catch (e) { alert('Failed: ' + e.message); }
+}
+
+async function _adminToggleRole(userId, currentRole) {
+  var newRole = currentRole === 'admin' ? 'member' : 'admin';
+  var verb = newRole === 'admin' ? 'PROMOTE this user to admin' : 'DEMOTE this user to member';
+  if (!confirm(verb + '? They will ' + (newRole === 'admin' ? 'gain' : 'lose') + ' full access.')) return;
+  try {
+    await _adminApiCall('/admin/set-role', { user_id: userId, role: newRole });
+    _adminLoad();
+  } catch (e) { alert('Failed: ' + e.message); }
+}
+
+async function _adminDeactivate(userId) {
+  if (!confirm('Deactivate this user? They will not be able to sign in.')) return;
+  try { await _adminApiCall('/admin/deactivate', { user_id: userId }); _adminLoad(); }
+  catch (e) { alert('Failed: ' + e.message); }
+}
+async function _adminReactivate(userId) {
+  try { await _adminApiCall('/admin/reactivate', { user_id: userId }); _adminLoad(); }
+  catch (e) { alert('Failed: ' + e.message); }
+}
+async function _adminDelete(userId, email) {
+  if (!confirm('Permanently delete user ' + email + '? This cannot be undone.')) return;
+  try { await _adminApiCall('/admin/delete-user', { user_id: userId }); _adminLoad(); }
+  catch (e) { alert('Failed: ' + e.message); }
 }
 
 // ── REALTIME BROADCAST CHANNEL (live sync as you type) ──────────────────────
@@ -13457,6 +14231,12 @@ function getActionForAd(adId) {
 // ============================================================
 
 function showTab(id, btn) {
+  // Block non-admins from the admin tab — defense in depth (RLS already
+  // returns empty results, but we don't want to even render the shell).
+  if (id === 'admin' && !(window.AUTH && AUTH.isAdmin && AUTH.isAdmin())) {
+    id = 'hq';
+    btn = document.querySelector('.tab[onclick*="\'hq\'"]') || document.querySelector('.tab');
+  }
   var panels = document.querySelectorAll('.panel');
   var tabs = document.querySelectorAll('.tab');
   for (var i = 0; i < panels.length; i++) {
@@ -13487,6 +14267,9 @@ function showTab(id, btn) {
   }
   if (id === 'strategist') {
     _loadStrategistMemory(activeProductId);
+  }
+  if (id === 'admin') {
+    if (typeof _adminLoad === 'function') _adminLoad();
   }
 }
 

@@ -10048,9 +10048,34 @@ async function _waitForBootProducts(timeoutMs) {
   });
 }
 
+// Wraps DB.listProducts so every call (including those triggered later by
+// loadState / switchProduct / refresh flows) returns only the products the
+// signed-in member is allowed to see. Admins bypass. Without this patch,
+// any in-flight loadState() call after _applyUserProductFilter resets
+// PRODUCTS back to the full list, and the dropdown re-renders unfiltered.
+function _patchDBForUser() {
+  if (!window.DB || typeof DB.listProducts !== 'function' || DB.__userPatched) return false;
+  var orig = DB.listProducts.bind(DB);
+  DB.listProducts = async function() {
+    var all = await orig();
+    if (!window.AUTH || !AUTH.profile) return all;
+    if (AUTH.isAdmin()) return all;
+    var allowed = {};
+    (AUTH.productIds || []).forEach(function(p){ allowed[p] = true; });
+    return (all || []).filter(function(p){ return allowed[p.id]; });
+  };
+  DB.__userPatched = true;
+  return true;
+}
+
 async function _applyUserProductFilter() {
   if (typeof PRODUCTS === 'undefined' || !Array.isArray(PRODUCTS)) return;
   if (!AUTH.profile) return;
+
+  // Always install the DB patch — covers admin too (no-op for admins) so
+  // any later listProducts call stays consistent.
+  _patchDBForUser();
+
   if (AUTH.isAdmin()) return; // admins see everything
 
   var allowed = {};
@@ -10076,6 +10101,10 @@ async function _applyUserProductFilter() {
     }
   }
 
+  // Belt-and-braces: even with the patch, re-filter once more in case any
+  // code path mutated PRODUCTS in flight.
+  PRODUCTS = (PRODUCTS || []).filter(function(p){ return allowed[p.id]; });
+
   // Update the visible product name in the header.
   if (activeProductId) {
     var p = PRODUCTS.find(function(p){ return p.id === activeProductId; });
@@ -10084,6 +10113,18 @@ async function _applyUserProductFilter() {
   } else {
     var nameEl2 = document.getElementById('hdrProdName');
     if (nameEl2) nameEl2.textContent = PRODUCTS.length ? 'Select product' : 'No products assigned';
+  }
+
+  // Force the dropdown to rebuild from the filtered list next time it opens.
+  // (renderHdrProdDropdown is called lazily by toggleHdrProdSwitcher; if the
+  // dropdown was already rendered with the unfiltered list, clear it now.)
+  var dd = document.getElementById('hdrProdDd');
+  if (dd) dd.innerHTML = '';
+  if (typeof renderHdrProdDropdown === 'function') {
+    try { renderHdrProdDropdown(); } catch(e) {}
+  }
+  if (typeof updateHeaderProductName === 'function') {
+    try { updateHeaderProductName(); } catch(e) {}
   }
 }
 
@@ -25800,7 +25841,10 @@ function applyFieldOptionsEverywhere() {
 function renderProductProfile() {
   var el = document.getElementById('productProfileSection');
   if (!el) return;
-  var html = '<div class="pp-header"><span class="pp-title">Product Profiles</span><button class="btn-ghost btn-sm" onclick="openAddProductModal()">+ Add Product</button></div>';
+  var _ppAdmin = !window.AUTH || !AUTH.profile || AUTH.isAdmin();
+  var html = '<div class="pp-header"><span class="pp-title">Product Profiles</span>' +
+    (_ppAdmin ? '<button class="btn-ghost btn-sm" onclick="openAddProductModal()">+ Add Product</button>' : '') +
+    '</div>';
   html += '<div class="pp-chips">';
   for (var i = 0; i < PRODUCTS.length; i++) {
     var p = PRODUCTS[i];
@@ -25968,10 +26012,14 @@ function renderHdrProdDropdown() {
     if (isActive) html += '<svg width="10" height="8" viewBox="0 0 10 8" fill="none" style="color:var(--win)"><path d="M1 4L3.5 6.5L9 1" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
     html += '</div>';
   }
-  html += '<div class="hdr-prod-dd-item" onclick="openAddProductModal();closeHdrProdSwitcher()">';
-  html += '<svg width="12" height="12" viewBox="0 0 12 12" fill="none" style="color:var(--inprog)"><path d="M6 1v10M1 6h10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>';
-  html += '<span class="hdr-prod-dd-add">Add Product</span>';
-  html += '</div>';
+  // "Add Product" only for admins (or pre-auth, so first-time setups still work).
+  var amAdmin = !window.AUTH || !AUTH.profile || AUTH.isAdmin();
+  if (amAdmin) {
+    html += '<div class="hdr-prod-dd-item" onclick="openAddProductModal();closeHdrProdSwitcher()">';
+    html += '<svg width="12" height="12" viewBox="0 0 12 12" fill="none" style="color:var(--inprog)"><path d="M6 1v10M1 6h10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>';
+    html += '<span class="hdr-prod-dd-add">Add Product</span>';
+    html += '</div>';
+  }
   dd.innerHTML = html;
 }
 

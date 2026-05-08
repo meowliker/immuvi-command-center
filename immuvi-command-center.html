@@ -3887,6 +3887,79 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 
 /* Column manager picker — extends .ap-picker, larger to accommodate the two
    stacked lists. */
+/* ── Producer pill (replaces 🎨 emoji button + chip) ── */
+.producer-pill {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 3px 10px; border-radius: 999px;
+  border: 1px solid rgba(15,23,42,0.10);
+  background: linear-gradient(135deg, rgba(245,158,11,0.08) 0%, rgba(139,92,246,0.10) 100%);
+  color: #6d28d9; font-size: 0.72rem; font-weight: 600; line-height: 1;
+  cursor: pointer; transition: background 200ms, color 200ms, box-shadow 200ms, transform 80ms;
+  position: relative; white-space: nowrap;
+}
+.producer-pill:hover { box-shadow: 0 1px 6px rgba(139,92,246,0.18); transform: translateY(-0.5px); }
+.producer-pill .producer-sparkle { transition: transform 400ms; }
+.producer-pill[data-producer-state="pending"] {
+  background: rgba(148,163,184,0.10); color: #475569; border-color: rgba(148,163,184,0.30);
+}
+.producer-pill[data-producer-state="pending"] .producer-sparkle { animation: producer-pulse 1.6s ease-in-out infinite; }
+.producer-pill[data-producer-state="running"] {
+  background: rgba(14,165,233,0.10); color: #0369a1; border-color: rgba(14,165,233,0.35);
+  box-shadow: 0 0 0 0 rgba(14,165,233,0.45);
+  animation: producer-running-glow 2s ease-in-out infinite;
+}
+.producer-pill[data-producer-state="running"] .producer-sparkle { animation: producer-spin 2s linear infinite; }
+.producer-pill[data-producer-state="done"] {
+  background: rgba(16,185,129,0.12); color: #047857; border-color: rgba(16,185,129,0.35);
+}
+.producer-pill[data-producer-state="failed"] {
+  background: rgba(239,68,68,0.10); color: #b91c1c; border-color: rgba(239,68,68,0.35);
+}
+.producer-pill-lbl { font-weight: 600; letter-spacing: 0.01em; }
+
+@keyframes producer-spin { to { transform: rotate(360deg); } }
+@keyframes producer-pulse { 0%,100% { opacity: 0.5; transform: scale(0.92); } 50% { opacity: 1; transform: scale(1.08); } }
+@keyframes producer-running-glow {
+  0%   { box-shadow: 0 0 0 0   rgba(14,165,233,0.45); }
+  70%  { box-shadow: 0 0 0 8px rgba(14,165,233,0.0);  }
+  100% { box-shadow: 0 0 0 0   rgba(14,165,233,0.0);  }
+}
+
+/* ── Producer detail popover ── */
+.producer-detail-pop {
+  width: 340px; background: #fff;
+  border: 1px solid rgba(15,23,42,0.12); border-radius: 12px;
+  box-shadow: 0 18px 40px rgba(15,23,42,0.18);
+  font-size: 0.85rem; overflow: hidden;
+  animation: producer-pop-in 160ms cubic-bezier(0.22,1,0.36,1);
+}
+@keyframes producer-pop-in { from { opacity: 0; transform: translateY(-4px) scale(0.98); } to { opacity: 1; transform: translateY(0) scale(1); } }
+.producer-pop-head { display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; border-bottom: 1px solid rgba(15,23,42,0.06); background: linear-gradient(135deg, rgba(245,158,11,0.05) 0%, rgba(139,92,246,0.06) 100%); }
+.producer-pop-title { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; color: #6d28d9; font-size: 0.85rem; }
+.producer-pop-x { background: transparent; border: none; cursor: pointer; color: var(--t3); font-size: 0.95rem; padding: 2px 6px; border-radius: 6px; }
+.producer-pop-x:hover { background: rgba(15,23,42,0.06); }
+.producer-pop-body { padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; }
+.producer-pop-row { display: flex; gap: 10px; }
+.producer-pop-row .k { width: 60px; flex-shrink: 0; color: var(--t3); font-weight: 500; font-size: 0.78rem; padding-top: 2px; }
+.producer-pop-row .v { flex: 1; color: var(--t1); font-weight: 500; font-size: 0.82rem; word-break: break-word; }
+.producer-pop-row .v.producer-pop-instr { color: var(--t2); font-style: italic; font-size: 0.8rem; }
+.producer-pop-state { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 0.72rem; font-weight: 600; }
+.producer-pop-state.s-pending { background: rgba(148,163,184,0.12); color: #475569; }
+.producer-pop-state.s-running { background: rgba(14,165,233,0.12); color: #0369a1; }
+.producer-pop-state.s-done    { background: rgba(16,185,129,0.12); color: #047857; }
+.producer-pop-state.s-failed  { background: rgba(239,68,68,0.12); color: #b91c1c; }
+.producer-pop-progress { margin-top: 4px; }
+.producer-pop-bar { height: 6px; border-radius: 999px; background: rgba(15,23,42,0.06); overflow: hidden; }
+.producer-pop-bar > span { display: block; height: 100%; background: linear-gradient(90deg, #38bdf8, #818cf8); transition: width 600ms cubic-bezier(0.22,1,0.36,1); }
+.producer-pop-eta { display: flex; justify-content: space-between; font-size: 0.74rem; color: var(--t3); margin-top: 4px; }
+.producer-pop-outputs .producer-pop-thumbs { display: flex; flex-wrap: wrap; gap: 4px; padding-top: 2px; }
+.producer-pop-thumb { display: inline-block; padding: 4px 8px; border-radius: 8px; background: rgba(16,185,129,0.10); color: #047857; font-size: 0.74rem; font-weight: 500; text-decoration: none; }
+.producer-pop-thumb:hover { background: rgba(16,185,129,0.18); }
+.producer-pop-error .v { color: #b91c1c; font-size: 0.78rem; background: rgba(239,68,68,0.06); padding: 6px 8px; border-radius: 6px; line-height: 1.4; }
+.producer-pop-foot { display: flex; gap: 6px; padding: 8px 12px; border-top: 1px solid rgba(15,23,42,0.06); background: rgba(15,23,42,0.02); }
+.producer-pop-btn { background: #fff; border: 1px solid rgba(15,23,42,0.12); border-radius: 8px; padding: 5px 10px; font-size: 0.78rem; color: var(--t1); cursor: pointer; text-decoration: none; }
+.producer-pop-btn:hover { background: rgba(15,23,42,0.04); }
+
 .ap-adopt-chip.on { background: rgba(139,92,246,0.10); color: #6d28d9; border-color: rgba(139,92,246,0.35); }
 .ap-dismiss-chip.on { background: rgba(14,165,233,0.10); color: #0369a1; border-color: rgba(14,165,233,0.35); }
 .ap-cp-picker { min-width: 280px; padding: 8px; }
@@ -13540,9 +13613,27 @@ async function _producerLoadForProduct(productId) {
     console.warn('[producer] load failed:', res.error.message);
     return;
   }
+  // Toast trigger: detect transitions to done/failed since last load.
+  var prev = _producerState.byTask || {};
   var byTask = {};
   (res.data || []).forEach(function (r) {
     if (!byTask[r.task_id]) byTask[r.task_id] = r;
+  });
+  // Update history cache for the moving-average ETA.
+  _producerHistory.update(res.data || []);
+  // Compare new vs old; toast on state changes that just transitioned to done/failed.
+  Object.keys(byTask).forEach(function (taskId) {
+    var newR = byTask[taskId];
+    var oldR = prev[taskId];
+    if (!oldR || oldR.id !== newR.id) return; // different run — first sighting; skip toast
+    if (oldR.status !== newR.status) {
+      if (newR.status === 'done') {
+        var n = (newR.outputs || []).length;
+        if (typeof toast === 'function') toast('✨ ' + n + ' image' + (n!==1?'s':'') + ' ready · ' + (newR.task_id || ''), 'ok');
+      } else if (newR.status === 'failed') {
+        if (typeof toast === 'function') toast('Producer failed · ' + (newR.task_id || '') + ' — click for details', 'err');
+      }
+    }
   });
   _producerState.byTask = byTask;
   // Re-render Action Plan to show chips.
@@ -13551,44 +13642,136 @@ async function _producerLoadForProduct(productId) {
   }
 }
 
-function _producerChipHtml(taskId) {
-  var r = _producerState.byTask[taskId];
-  if (!r) return '';
-  var color = { pending: '#a3a3a3', running: '#fbbf24',
-                done: '#10b981', failed: '#ef4444' }[r.status] || '#a3a3a3';
-  var lbl   = { pending: '⏳ Queued', running: '⚙ Running',
-                done: '✓ ' + ((r.outputs || []).length) + ' ads',
-                failed: '✗ Failed' }[r.status] || r.status;
-
-  var clickAttr = '';
-  var cursorStyle = '';
-  if (r.status === 'done' && r.outputs && r.outputs.length) {
-    var driveUrl = (r.outputs.find(function(o){ return o.drive_url; }) || {}).drive_url;
-    if (driveUrl) {
-      clickAttr = ' onclick="window.open(\'' + escAttr(driveUrl) + '\',\'_blank\')"';
-      cursorStyle = 'cursor:pointer;';
-    }
-  } else if (r.status === 'failed' && r.error) {
-    var safeErr = JSON.stringify(r.error).replace(/"/g, '&quot;');
-    clickAttr = ' onclick="alert(' + safeErr + ')"';
-    cursorStyle = 'cursor:pointer;';
+// ── Producer ETA estimator ──
+// Static formula: 30s setup + count * 70s (gen+upload). After 5+ historical
+// `done` runs, switch to per-image moving average from this product's history.
+var _producerHistory = {
+  durationsPerImage: [], // array of seconds-per-image from done runs
+  update: function (rows) {
+    var arr = [];
+    (rows || []).forEach(function (r) {
+      if (r.status !== 'done') return;
+      if (!r.claimed_at || !r.completed_at) return;
+      var n = (r.outputs || []).length || r.count || 1;
+      var t0 = Date.parse(r.claimed_at);
+      var t1 = Date.parse(r.completed_at);
+      if (isNaN(t0) || isNaN(t1) || t1 <= t0) return;
+      arr.push((t1 - t0) / 1000 / Math.max(1, n));
+    });
+    // Take latest 10 only.
+    this.durationsPerImage = arr.slice(0, 10);
   }
-
-  var style = cursorStyle +
-    'display:inline-flex;align-items:center;gap:4px;padding:2px 8px;' +
-    'border-radius:999px;background:' + color + '22;color:' + color + ';' +
-    'font-size:0.7rem;font-weight:500;margin-left:4px';
-
-  return '<span class="producer-chip"' + clickAttr +
-         ' style="' + style + '">' + esc(lbl) + '</span>';
+};
+function _producerEtaSeconds(count) {
+  count = Math.max(1, count || 1);
+  if (_producerHistory.durationsPerImage.length >= 5) {
+    var arr = _producerHistory.durationsPerImage;
+    var sum = 0;
+    for (var i = 0; i < arr.length; i++) sum += arr[i];
+    var avg = sum / arr.length;
+    return Math.round(30 + avg * count);
+  }
+  return 30 + count * 70;
+}
+function _producerFormatSeconds(s) {
+  s = Math.max(0, Math.round(s));
+  if (s < 60) return s + 's';
+  var m = Math.floor(s / 60);
+  var rem = s - m * 60;
+  return m + 'm' + (rem ? ' ' + rem + 's' : '');
+}
+// Tick every 5s to keep "ETA / elapsed" labels live for running rows.
+var _producerLiveTickInterval = null;
+function _producerStartLiveTick() {
+  if (_producerLiveTickInterval) return;
+  _producerLiveTickInterval = setInterval(function () {
+    var any = false;
+    Object.keys(_producerState.byTask).forEach(function (k) {
+      var r = _producerState.byTask[k];
+      if (r && (r.status === 'running' || r.status === 'pending')) any = true;
+    });
+    if (!any) return;
+    // Cheap targeted update of just the time labels — no full render.
+    document.querySelectorAll('[data-producer-eta]').forEach(function (el) {
+      var taskId = el.getAttribute('data-producer-eta');
+      var r = _producerState.byTask[taskId];
+      if (!r) return;
+      el.textContent = _producerLiveTimeLabel(r);
+    });
+  }, 5000);
+}
+function _producerLiveTimeLabel(r) {
+  if (!r) return '';
+  if (r.status === 'pending') return 'Queued';
+  if (r.status === 'running') {
+    var startMs = Date.parse(r.claimed_at || r.created_at) || 0;
+    var elapsed = (Date.now() - startMs) / 1000;
+    var total = _producerEtaSeconds(r.count || 1);
+    var remaining = Math.max(0, total - elapsed);
+    if (remaining < 5) return 'finalizing…';
+    return '~' + _producerFormatSeconds(remaining) + ' left';
+  }
+  if (r.status === 'done') return ((r.outputs || []).length) + ' ready';
+  if (r.status === 'failed') return 'failed';
+  return r.status || '';
 }
 
+// Sparkle SVG — replaces the old 🎨 emoji. Same icon for every state; the
+// surrounding pill changes color + animation. CSS class drives the visual.
+var _PRODUCER_SPARKLE_SVG =
+  '<svg class="producer-sparkle" viewBox="0 0 24 24" width="14" height="14" ' +
+  'fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+  '<path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"/>' +
+  '<path d="M12 8a4 4 0 0 1 4 4 4 4 0 0 1-4 4 4 4 0 0 1-4-4 4 4 0 0 1 4-4z" fill="currentColor" stroke="none" opacity="0.85"/>' +
+  '</svg>';
+
+function _producerChipHtml(taskId) {
+  // Returned content moved into the unified state pill (rendered inside
+  // _producerButtonHtml). Kept as a no-op so existing callers don't break.
+  return '';
+}
+
+// Single-pill renderer for the producer surface. Replaces the dual
+// button + chip with one state-driven control. States:
+//   idle     — neutral sparkle, click to open submit modal
+//   pending  — sparkle + "Queued" pulse
+//   running  — sparkle rotating + ring + ETA countdown
+//   done     — sparkle + "N ready" green; click to open detail popover
+//   failed   — sparkle + "Failed" red; click to open detail popover
 function _producerButtonHtml(taskId, productId) {
-  return '<button class="btn-ghost producer-btn" ' +
-         'data-producer-task="' + escAttr(taskId) + '" ' +
-         'data-producer-product="' + escAttr(productId) + '" ' +
-         'title="Generate ad images" ' +
-         'style="padding:2px 6px;font-size:0.85rem;cursor:pointer">🎨</button>';
+  var r = (_producerState && _producerState.byTask) ? _producerState.byTask[taskId] : null;
+  var state = (r && r.status) || 'idle';
+  var label = '';
+  switch (state) {
+    case 'pending': label = 'Queued'; break;
+    case 'running': label = _producerLiveTimeLabel(r); break;
+    case 'done':    label = (r.outputs || []).length + ' ready'; break;
+    case 'failed':  label = 'Failed'; break;
+    default:        label = ''; break;
+  }
+  // The pill always opens the detail popover EXCEPT when idle — idle goes
+  // to the submit modal. Both flows handled in the capture-phase listener.
+  var dataState = ' data-producer-state="' + state + '"';
+  var dataTask = ' data-producer-task="' + escAttr(taskId) + '"';
+  var dataProd = ' data-producer-product="' + escAttr(productId) + '"';
+  var dataEta  = (state === 'running' || state === 'pending')
+    ? ' data-producer-eta="' + escAttr(taskId) + '"' : '';
+  var title;
+  switch (state) {
+    case 'pending': title = 'Queued — worker will pick up shortly · click for details'; break;
+    case 'running': title = 'Generating images · click for details'; break;
+    case 'done':    title = (r.outputs || []).length + ' images ready · click to view details'; break;
+    case 'failed':  title = 'Producer failed · click for error details'; break;
+    default:        title = 'Generate ad image variations';
+  }
+  var labelHtml = label
+    ? '<span class="producer-pill-lbl"' + (dataEta || '') + '>' + esc(label) + '</span>'
+    : '';
+  return '<button class="producer-pill"' + dataState + dataTask + dataProd +
+         ' title="' + escAttr(title) + '">' +
+           _PRODUCER_SPARKLE_SVG +
+           labelHtml +
+         '</button>';
 }
 
 // Single document-level delegated click handler for the 🎨 button.
@@ -13603,28 +13786,31 @@ if (!window.__producerClickListenerAttached) {
   window.__producerClickListenerAttached = true;
   console.info('[producer] click listener attached (capture phase)');
   document.addEventListener('click', function (e) {
-    var btn = e.target && e.target.closest && e.target.closest('.producer-btn');
+    var btn = e.target && e.target.closest && e.target.closest('.producer-pill, .producer-btn');
     if (!btn) return;
     e.stopImmediatePropagation();  // stop ALL further listeners (capture + bubble)
     e.preventDefault();
     var taskId = btn.getAttribute('data-producer-task') || '';
     var productId = btn.getAttribute('data-producer-product') || '';
-    console.log('[producer] button click', { taskId: taskId, productId: productId });
+    var state = btn.getAttribute('data-producer-state') || 'idle';
     if (!taskId) {
       alert('[producer] no task id — push this task to ClickUp first (use the "+ ClickUp" button)');
       return;
     }
-    if (typeof _producerOpenModal === 'function') {
-      _producerOpenModal(taskId, productId);
+    // Route by state: idle → submit modal; everything else → detail popover.
+    if (state === 'idle') {
+      if (typeof _producerOpenModal === 'function') _producerOpenModal(taskId, productId);
+      else alert('[producer] open modal function missing — please hard-refresh');
     } else {
-      alert('[producer] open modal function missing — please hard-refresh');
+      if (typeof _producerOpenDetailPopover === 'function') _producerOpenDetailPopover(taskId, btn);
+      else alert('[producer] detail popover function missing — please hard-refresh');
     }
   }, true);  // CAPTURE phase — fires before TD/row stopPropagation handlers
 
   // Same protection for the row-drawer opener: a mousedown/touchstart on a
-  // .producer-btn must not start dragging or open anything else.
+  // .producer-pill must not start dragging or open anything else.
   document.addEventListener('mousedown', function (e) {
-    if (e.target && e.target.closest && e.target.closest('.producer-btn')) {
+    if (e.target && e.target.closest && e.target.closest('.producer-pill, .producer-btn')) {
       e.stopImmediatePropagation();
     }
   }, true);
@@ -13675,6 +13861,111 @@ function _producerOpenModal(taskId, productId) {
   }, 50);
 }
 
+// Detail popover for non-idle states. Shows current run progress, ETA,
+// outputs (when done), error (when failed). Anchored to the clicked pill.
+function _producerOpenDetailPopover(taskId, anchorEl) {
+  // Close any other open popovers first.
+  document.querySelectorAll('.producer-detail-pop').forEach(function (n) { n.remove(); });
+  var r = (_producerState && _producerState.byTask) ? _producerState.byTask[taskId] : null;
+  if (!r) return;
+  var status = r.status || 'unknown';
+  var startedAt = r.claimed_at || r.created_at;
+  var startedMs = startedAt ? Date.parse(startedAt) : 0;
+  var elapsedSec = startedMs ? Math.max(0, Math.round((Date.now() - startedMs) / 1000)) : 0;
+  var totalSec = _producerEtaSeconds(r.count || 1);
+  var pctRaw = totalSec ? Math.min(100, (elapsedSec / totalSec) * 100) : 0;
+  // Pending → 5%; running ramps; done → 100%.
+  var pct = status === 'pending' ? 5
+          : status === 'running' ? Math.max(8, Math.min(95, pctRaw))
+          : status === 'done'    ? 100
+          : 100;
+  var statusBadge = ({
+    pending: '<span class="producer-pop-state s-pending">⏳ Queued</span>',
+    running: '<span class="producer-pop-state s-running">⚙ Running</span>',
+    done:    '<span class="producer-pop-state s-done">✓ Complete</span>',
+    failed:  '<span class="producer-pop-state s-failed">✕ Failed</span>'
+  })[status] || '<span class="producer-pop-state">' + esc(status) + '</span>';
+
+  var html = '<div class="producer-detail-pop" data-task="' + escAttr(taskId) + '">';
+  html += '<div class="producer-pop-head">';
+  html +=   '<span class="producer-pop-title">' + _PRODUCER_SPARKLE_SVG + ' Producer Run #' + (r.id || '?') + '</span>';
+  html +=   '<button class="producer-pop-x" onclick="event.stopPropagation(); this.closest(\'.producer-detail-pop\').remove()">✕</button>';
+  html += '</div>';
+  html += '<div class="producer-pop-body">';
+  html +=   '<div class="producer-pop-row"><span class="k">Status</span><span class="v">' + statusBadge + '</span></div>';
+  html +=   '<div class="producer-pop-row"><span class="k">Task</span><span class="v">' + esc(r.task_id || '—') + '</span></div>';
+  html +=   '<div class="producer-pop-row"><span class="k">Count</span><span class="v">' + esc(String(r.count || 1)) + '</span></div>';
+  if (r.instruction) {
+    html += '<div class="producer-pop-row"><span class="k">Brief</span><span class="v producer-pop-instr">' + esc(String(r.instruction).slice(0, 220)) + '</span></div>';
+  }
+  if (status === 'pending' || status === 'running') {
+    html += '<div class="producer-pop-progress">';
+    html +=   '<div class="producer-pop-bar"><span style="width:' + pct.toFixed(1) + '%"></span></div>';
+    html +=   '<div class="producer-pop-eta">';
+    if (status === 'pending') {
+      html += '<span>Queued — picking up shortly</span>';
+    } else {
+      var remainingSec = Math.max(0, totalSec - elapsedSec);
+      html += '<span>Elapsed ' + _producerFormatSeconds(elapsedSec) + '</span>';
+      html += '<span>~' + _producerFormatSeconds(remainingSec) + ' remaining</span>';
+    }
+    html +=   '</div>';
+    html += '</div>';
+  }
+  if (status === 'done' && r.outputs && r.outputs.length) {
+    html += '<div class="producer-pop-outputs"><span class="k">Outputs</span><div class="v producer-pop-thumbs">';
+    r.outputs.forEach(function (o, i) {
+      var url = o.clickup_attachment_url || o.drive_url || o.file_path || '#';
+      var lbl = (o.variation_id || ('v' + (i + 1)));
+      html += '<a class="producer-pop-thumb" href="' + escAttr(url) + '" target="_blank" rel="noopener" title="' + escAttr(lbl) + '">' + esc(lbl) + ' ↗</a>';
+    });
+    html += '</div></div>';
+  }
+  if (status === 'failed' && r.error) {
+    var errStr = (typeof r.error === 'string') ? r.error : JSON.stringify(r.error);
+    html += '<div class="producer-pop-error"><span class="k">Error</span><div class="v">' + esc(errStr.slice(0, 600)) + '</div></div>';
+  }
+  html += '</div>'; // .producer-pop-body
+
+  // Footer actions
+  var clickupUrl = (r.task_id && r.task_id.length > 4) ? ('https://app.clickup.com/t/' + r.task_id) : '';
+  html += '<div class="producer-pop-foot">';
+  if (clickupUrl) html += '<a class="producer-pop-btn" href="' + escAttr(clickupUrl) + '" target="_blank" rel="noopener">Open ClickUp ↗</a>';
+  if (status === 'failed') html += '<button class="producer-pop-btn" onclick="event.stopPropagation(); _producerRequeue(' + (r.id || 0) + ')">Re-queue</button>';
+  if (status === 'done')   html += '<button class="producer-pop-btn" onclick="event.stopPropagation(); _producerOpenModal(\'' + escAttr(r.task_id) + '\',\'' + escAttr(r.product_id) + '\')">Run again</button>';
+  html += '</div>';
+  html += '</div>';
+
+  var pop = document.createElement('div');
+  pop.style.position = 'fixed';
+  pop.style.zIndex = 9999;
+  pop.innerHTML = html;
+  document.body.appendChild(pop);
+  var rect = anchorEl ? anchorEl.getBoundingClientRect() : { left: 100, top: 100, bottom: 130 };
+  var inner = pop.querySelector('.producer-detail-pop');
+  inner.style.position = 'fixed';
+  inner.style.left = Math.max(8, Math.min(window.innerWidth - 360, rect.left)) + 'px';
+  inner.style.top = (rect.bottom + 6) + 'px';
+  // Outside-click close.
+  setTimeout(function () {
+    var closer = function (e) {
+      if (!inner.contains(e.target)) {
+        inner.remove();
+        document.removeEventListener('mousedown', closer, true);
+      }
+    };
+    document.addEventListener('mousedown', closer, true);
+  }, 30);
+}
+
+async function _producerRequeue(runId) {
+  if (!SB || !runId) return;
+  var res = await SB.from('producer_runs').update({ status: 'pending', error: null, claimed_at: null, claimed_by: null }).eq('id', runId);
+  if (res.error) { alert('Re-queue failed: ' + res.error.message); return; }
+  document.querySelectorAll('.producer-detail-pop').forEach(function (n) { n.remove(); });
+  if (typeof toast === 'function') toast('Re-queued', 'ok');
+}
+
 function _producerCloseModal() {
   var m = document.getElementById('producerModal');
   if (m) m.style.display = 'none';
@@ -13703,6 +13994,18 @@ async function _producerSubmit() {
     return;
   }
   _producerCloseModal();
+  // Optimistic UI: synthesize a 'pending' row so the pill flips immediately
+  // (don't wait for realtime echo). The next _producerLoadForProduct overwrites
+  // with the canonical row from Supabase.
+  _producerState.byTask[taskId] = {
+    id: '_pending_' + Date.now(),
+    task_id: taskId, product_id: productId,
+    instruction: instr, count: count,
+    status: 'pending', created_at: new Date().toISOString()
+  };
+  if (typeof renderActionPlan === 'function') { try { renderActionPlan(); } catch (_) {} }
+  if (typeof _producerStartLiveTick === 'function') _producerStartLiveTick();
+  if (typeof toast === 'function') toast('Queued · ETA ~' + _producerFormatSeconds(_producerEtaSeconds(count)), 'ok');
   // Force fetch for immediate feedback; realtime will also update.
   _producerLoadForProduct(productId);
 }
@@ -26117,6 +26420,7 @@ async function loadState() {
   _queueDailyStrategistRun(activeProductId);
   _loadStrategistMemory(activeProductId);
   _producerLoadForProduct(activeProductId);
+  if (typeof _producerStartLiveTick === 'function') _producerStartLiveTick();
 
   // 3. Load the active product's data
   var state = null;
@@ -26387,6 +26691,7 @@ async function switchProduct(productId) {
   _queueDailyStrategistRun(activeProductId);
   _loadStrategistMemory(activeProductId);
   _producerLoadForProduct(activeProductId);
+  if (typeof _producerStartLiveTick === 'function') _producerStartLiveTick();
   toast('Switched to ' + prod.name, 'ok');
 }
 

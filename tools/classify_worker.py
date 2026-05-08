@@ -711,18 +711,92 @@ class Worker:
                                     # Invoke the skill via Codex CLI (native image gen +
                                     # bundled ClickUp / Drive plugins, no API keys needed).
                                     # 10 min timeout to allow N parallel image gens.
+                                    # 2026-05-09 v2: identifier-only contract + explicit model
+                                    # config (GPT-5.5, image gpt-image-1.5 high quality,
+                                    # match_inspiration aspect ratio). Strategist memory is
+                                    # PASSED INLINE so the skill doesn't need an extra DB
+                                    # round-trip. Worker still stays "dumb": it just fetches
+                                    # the memory row and shells out. The OK/FAIL stdout
+                                    # contract is unchanged.
+                                    _instr = (prod_run.get("instruction") or "").replace("\n", " ").strip()
+
+                                    # Fetch strategist memory for the product (best-effort —
+                                    # missing memory is fine, the skill still works).
+                                    _strategist_memory_blob = ""
+                                    try:
+                                        _mem_qs = urllib.parse.urlencode({
+                                            "select": "json,markdown,updated_at",
+                                            "product_id": "eq." + str(prod_run["product_id"]),
+                                            "limit": "1",
+                                        })
+                                        _mem_url = (f"{os.environ['SUPABASE_URL']}/rest/v1/"
+                                                    f"strategist_memory?{_mem_qs}")
+                                        _mem_req = urllib.request.Request(_mem_url, headers={
+                                            "apikey":        os.environ["SUPABASE_SERVICE_ROLE_KEY"],
+                                            "Authorization": "Bearer " + os.environ["SUPABASE_SERVICE_ROLE_KEY"],
+                                            "Accept":        "application/json",
+                                        })
+                                        with urllib.request.urlopen(_mem_req, timeout=10) as _mr:
+                                            _rows = json.loads(_mr.read().decode() or "[]")
+                                        if _rows:
+                                            _row0 = _rows[0]
+                                            _mj = _row0.get("json") or {}
+                                            _md = _row0.get("markdown") or ""
+                                            _strategist_memory_blob = (
+                                                "## Strategist memory (JSON)\n```json\n"
+                                                + json.dumps(_mj, indent=2)
+                                                + "\n```\n\n"
+                                                "## Strategist memory (markdown)\n"
+                                                + _md.strip() + "\n"
+                                            )
+                                        else:
+                                            _strategist_memory_blob = "(none — no strategist memory yet for this product)\n"
+                                    except Exception as _mem_err:
+                                        log(f"[producer] strategist memory fetch failed: {_mem_err}")
+                                        _strategist_memory_blob = "(strategist memory fetch failed — proceed without)\n"
+
+                                    _prompt = (
+                                        "Use the immuvi-creative-producer skill.\n"
+                                        "Use model: GPT-5.5.\n"
+                                        "Use reasoning effort: high.\n"
+                                        "Use image model: gpt-image-1.5.\n"
+                                        "Use image quality: high.\n"
+                                        "Use image size/aspect ratio: match the inspiration image unless the task specifies another size. Do NOT hard-code 1024x1536. If inspiration dimensions are unavailable, fall back to the task/platform default, then 4:5 for static social ads.\n\n"
+                                        "Run producer job:\n"
+                                        f"- task_id: {prod_run['task_id']}\n"
+                                        f"- product_id: {prod_run['product_id']}\n"
+                                        f"- producer_run_id: {run_id}\n"
+                                        f"- count: {prod_run.get('count', 5)}\n"
+                                        f"- instruction: {_instr}\n\n"
+                                        "Creative Strategist data:\n"
+                                        f"{_strategist_memory_blob}\n"
+                                        "Required flow:\n"
+                                        "1. Read ClickUp task details and custom fields.\n"
+                                        "2. Read ClickUp task comments.\n"
+                                        "3. Find inspiration doc link and source image link from description/comments.\n"
+                                        "4. Read the ClickUp inspiration doc page.\n"
+                                        "5. Download and visually analyze the source inspiration image.\n"
+                                        "6. Extract inspiration dimensions/aspect ratio and use that for generation (do NOT hard-code 1024x1536).\n"
+                                        "7. Build a structured creative brief before image generation.\n"
+                                        "8. Use Creative Strategist data to reuse winning elements and avoid losing combos.\n"
+                                        "9. Generate the requested number of images using gpt-image-1.5 high quality.\n"
+                                        "10. Quality gate each image before upload — persona match, offer/benefit clarity, readable typography, mechanic match, brand fit, not generic.\n"
+                                        "11. Regenerate once if quality gate fails.\n"
+                                        "12. Upload final images to ClickUp.\n"
+                                        "13. Add ClickUp comment with summary and output links.\n"
+                                        "14. Set ClickUp task status to Ready to Launch only after upload succeeds.\n"
+                                        "15. PATCH producer_runs row "
+                                        f"{run_id} with status='done' and outputs as a JSON array of objects each "
+                                        "containing: variation_id, file_path, clickup_attachment_url, source_inspiration, "
+                                        "inspiration_dimensions, aspect_ratio, prompt, image_model, quality_gate. "
+                                        "On failure PATCH status='failed' with a useful error string.\n\n"
+                                        f"Print 'OK {run_id}' on success or 'FAIL {run_id}: <reason>' on failure "
+                                        "as the LAST line of stdout."
+                                    )
                                     cmd = [
                                         CODEX_BIN, "exec",
                                         "--dangerously-bypass-approvals-and-sandbox",
-                                        f"Use the produce-ad-image skill on run_id {run_id}. "
-                                        f"This means: read producer_runs row {run_id} from Supabase, "
-                                        f"fetch the ClickUp task + strategist memory + user instruction, "
-                                        f"generate the requested number of ad image variations using your "
-                                        f"native image generation, upload them to Google Drive and ClickUp, "
-                                        f"set the Drive Link field, flip the ClickUp status to 'ready to launch', "
-                                        f"and PATCH producer_runs row {run_id} to status='done' with outputs. "
-                                        f"Print 'OK {run_id}' on success or 'FAIL {run_id}: <reason>' on failure "
-                                        f"as the LAST line of stdout.",
+                                        _prompt,
                                     ]
                                     r = subprocess.run(cmd, capture_output=True,
                                                        text=True, timeout=600)

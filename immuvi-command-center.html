@@ -25232,6 +25232,18 @@ function _writeAdRowDirect(ad) {
   if (!activeProductId) return Promise.resolve({ ok: false, reason: 'no-product' });
   try {
     var row = _adToRow(ad, activeProductId);
+    // Bug 9 v3 (2026-05-08): if this is an explicit fresh user spawn
+    // (_localNew flag set by addInspoToCell / executeMxv4Add /
+    // executeMxv4Blank / addFormatToCell), explicitly mark the row as
+    // alive. _adToRow doesn't touch deleted_at by design (invariant #1)
+    // — that protects against accidental resurrection from stale-memory
+    // saves. But for fresh spawns the user is explicitly creating a NEW
+    // task; if the id collides with a tombstone (cache race), preserving
+    // deleted_at would silently kill the new task. The user's intent
+    // wins: clear deleted_at on fresh spawns only.
+    if (ad._localNew) {
+      row.deleted_at = null;
+    }
     return SB.from('ads').upsert(row).then(function (r) {
       if (r && r.error) {
         console.warn('[SB] _writeAdRowDirect error', r.error);
@@ -25488,10 +25500,14 @@ async function loadState() {
   if (typeof _reconcileCellAssignments === 'function') { try { _reconcileCellAssignments(); } catch (e) {} }
   // Multi-tab resurrection fix (2026-05-05): prime the deleted_ads cache so
   // nextSerialId() can skip tombstoned ids and _flushStateToSupabase can
-  // filter them out before any save lands. Fire-and-forget — first save
-  // after load awaits its own fresh fetch as a safety net.
+  // filter them out before any save lands.
+  // Bug 9 v3 (2026-05-08): AWAIT the refresh. Previous fire-and-forget had
+  // a race: user could click "+ Add" before the refresh completed, and
+  // nextSerialId would use a stale cache (possibly empty for this product
+  // if the user just switched), reuse a tombstoned id, and the upsert
+  // would land in a born-deleted state.
   if (typeof _refreshDeletedAdIdsCache === 'function') {
-    try { _refreshDeletedAdIdsCache(activeProductId); } catch (e) {}
+    try { await _refreshDeletedAdIdsCache(activeProductId); } catch (e) {}
   }
   return true;
 }
@@ -25638,6 +25654,16 @@ async function switchProduct(productId) {
   _freshLoadInProgress = false;
   // Data is now aligned with the active product — safe for saves/syncs to proceed.
   _adsProductId = activeProductId;
+  // Bug 9 v3 (2026-05-08): refresh the deleted-ad cache for the NEW product.
+  // switchProduct previously didn't refresh, so the cache stayed populated
+  // with the OLD product's tombstones. nextSerialId would then either
+  // skip ids that aren't actually tombstoned in the new product (wasting
+  // numbers, harmless) OR — the bug — return a tombstoned id from the
+  // new product because it wasn't in the stale cache. Result: born-deleted
+  // upsert. Awaited so any spawn that fires post-switch sees a valid cache.
+  if (typeof _refreshDeletedAdIdsCache === 'function') {
+    try { await _refreshDeletedAdIdsCache(activeProductId); } catch (e) {}
+  }
   P = process(ADS);
   if (typeof deriveWinners === 'function') deriveWinners();
   if (typeof genActions === 'function') genActions();

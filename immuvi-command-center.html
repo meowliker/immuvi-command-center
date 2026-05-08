@@ -34530,9 +34530,16 @@ function addFormatToCell(angle, persona, sourceAdId, formatName, adType) {
 // ================================================
 // createVariationFromMatrix — batch variations with AD-001-V1 naming
 // ================================================
-function createVariationFromMatrix(parentId, count) {
+async function createVariationFromMatrix(parentId, count) {
   var parent = ADS.find(function (a) { return a.id === parentId; });
   if (!parent) return;
+
+  // Bug 9 v2 (2026-05-08): same fix as _varlabConfirmSpawn — refresh the
+  // deleted-cache so the V-number picker below skips tombstoned ids
+  // instead of reusing them and producing born-deleted variations.
+  if (typeof _refreshDeletedAdIdsCache === 'function' && typeof activeProductId !== 'undefined' && activeProductId) {
+    try { await _refreshDeletedAdIdsCache(activeProductId); } catch (e) {}
+  }
 
   // Gather checked variation options
   var checksEl = document.getElementById('var-checks-' + parentId);
@@ -34571,14 +34578,26 @@ function createVariationFromMatrix(parentId, count) {
   var existingVars = ADS.filter(function (a) { return a.parentAdId === parentId; });
   var _maxVarNum = 0;
   existingVars.forEach(function(v) { if ((v.variationNumber || 0) > _maxVarNum) _maxVarNum = v.variationNumber || 0; });
+  // Also consult the deleted-cache for soft-deleted vars under this parent
+  // so startNum jumps past their V numbers, not just live ones.
+  if (typeof _deletedAdIdsCache !== 'undefined' && _deletedAdIdsCache) {
+    var _vPrefix = parentId + '-V';
+    _deletedAdIdsCache.forEach(function (cachedId) {
+      if (typeof cachedId === 'string' && cachedId.indexOf(_vPrefix) === 0) {
+        var n = parseInt(cachedId.slice(_vPrefix.length), 10);
+        if (!isNaN(n) && n > _maxVarNum) _maxVarNum = n;
+      }
+    });
+  }
   var startNum = _maxVarNum + 1;
 
   for (var i = 0; i < count; i++) {
     var varNum = startNum + i;
     var varId = parentId + '-V' + varNum;
 
-    // Check if this ID already exists (shouldn't but be safe)
-    while (ADS.find(function (a) { return a.id === varId; })) {
+    // Check if this ID already exists OR is tombstoned/soft-deleted.
+    while (ADS.find(function (a) { return a.id === varId; })
+        || (typeof _deletedAdIdsCache !== 'undefined' && _deletedAdIdsCache.has(varId))) {
       varNum++;
       varId = parentId + '-V' + varNum;
     }
@@ -37636,7 +37655,7 @@ window._clearPendingCu = _clearPendingCu;
   };
 
   // ── Spawn — creates ADs + MANUAL_ACTIONS, pushes each to ClickUp.
-  window._varlabConfirmSpawn = function () {
+  window._varlabConfirmSpawn = async function () {
     syncAllRowsFromDom();
     if (!_vlMod.parentId) { try { toast('No parent selected', 'err'); } catch (e) {} return; }
     var parent = ADS.find(function (a) { return a.id === _vlMod.parentId; });
@@ -37654,16 +37673,39 @@ window._clearPendingCu = _clearPendingCu;
     });
     saveCustomAxes(custom);
 
+    // Bug 9 v2 (2026-05-08): variation IDs are derived from parent.id + '-V<n>'.
+    // Without consulting the deleted-cache, soft-deleted vars (e.g. V1, V2)
+    // get reused → the upsert hits the dirty row → _flushStateToSupabase
+    // filters it back out → variation "disappears" within seconds. Refresh
+    // the cache so the V-number picker below skips tombstoned/soft-deleted
+    // ids, the same way nextSerialId does for AD-NNN spawns.
+    if (typeof _refreshDeletedAdIdsCache === 'function' && typeof activeProductId !== 'undefined' && activeProductId) {
+      try { await _refreshDeletedAdIdsCache(activeProductId); } catch (e) {}
+    }
+
     var existingVars = (typeof ADS !== 'undefined' ? ADS : []).filter(function (a) { return a.parentAdId === parent.id; });
     var maxNum = 0;
     existingVars.forEach(function (v) { if ((v.variationNumber || 0) > maxNum) maxNum = v.variationNumber || 0; });
+    // Also walk the deleted-cache for parent-prefixed vars so startNum
+    // jumps past any soft-deleted V numbers, not just live ones.
+    if (typeof _deletedAdIdsCache !== 'undefined' && _deletedAdIdsCache) {
+      var _prefix = parent.id + '-V';
+      _deletedAdIdsCache.forEach(function (cachedId) {
+        if (typeof cachedId === 'string' && cachedId.indexOf(_prefix) === 0) {
+          var n = parseInt(cachedId.slice(_prefix.length), 10);
+          if (!isNaN(n) && n > maxNum) maxNum = n;
+        }
+      });
+    }
     var startNum = maxNum + 1;
 
     var spawnedAds = [];
     rows.forEach(function (r, idx) {
       var num = startNum + idx;
       var varId = parent.id + '-V' + num;
-      while (ADS.find(function (a) { return a.id === varId; })) {
+      // Skip BOTH live ADS (in-memory dup) AND tombstoned/soft-deleted ids.
+      while (ADS.find(function (a) { return a.id === varId; })
+          || (typeof _deletedAdIdsCache !== 'undefined' && _deletedAdIdsCache.has(varId))) {
         num++; varId = parent.id + '-V' + num;
       }
       var axisName = (r.axis === '__custom__' ? (r.customAxis || 'Custom') : r.axis) || 'Hook';

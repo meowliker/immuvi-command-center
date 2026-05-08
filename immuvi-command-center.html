@@ -3879,6 +3879,8 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 
 /* Column manager picker — extends .ap-picker, larger to accommodate the two
    stacked lists. */
+.ap-adopt-chip.on { background: rgba(139,92,246,0.10); color: #6d28d9; border-color: rgba(139,92,246,0.35); }
+.ap-dismiss-chip.on { background: rgba(14,165,233,0.10); color: #0369a1; border-color: rgba(14,165,233,0.35); }
 .ap-cp-picker { min-width: 280px; padding: 8px; }
 .ap-cp-sub { font-size: 12px; color: var(--t3); padding: 4px 8px 8px; }
 .ap-cp-btn { display: block; width: 100%; text-align: left; padding: 8px 10px; margin: 2px 0; border: 1px solid rgba(15,23,42,0.08); border-radius: 8px; background: #fff; cursor: pointer; font-size: 13px; }
@@ -10235,6 +10237,10 @@ async function _onSession(session) {
     return;
   }
   AUTH.profile = profRes.data;
+  // Hydrate per-user "Clear from my AP" dismiss list from the profile row.
+  if (typeof _apHydrateDismissedFromProfile === 'function') {
+    try { _apHydrateDismissedFromProfile(); } catch (e) {}
+  }
 
   // Best-effort last_login_at update.
   SB.from('profiles').update({ last_login_at: new Date().toISOString() })
@@ -16935,7 +16941,21 @@ var _AP_COL_REGISTRY = {
   del: {
     label: '', locked: true, sortable: false,
     renderCell: function (r) {
-      return '<td onclick="event.stopPropagation()"><button class="ap-del-btn" title="Remove from Action Plan" onclick="if(confirm(\'Remove from Action Plan?\')) deleteManualAction(\'' + escAttr(r.act.id) + '\')">🗑</button></td>';
+      var adId = (r.ad && r.ad.id) || r.act.sourceAdId || r.act.adId || '';
+      // "Clear" = soft per-user dismiss. Works for both real and virtual cards.
+      // For real MAs, the underlying MA stays in the table — only this user's
+      // view hides it (other team members keep seeing it). To hard-delete,
+      // bulk-toolbar still has the Delete action.
+      var clearBtn = '<button class="ap-del-btn" title="Clear from my AP (soft hide; reversible via Show cleared)" onclick="event.stopPropagation(); apClearCard(\'' + escAttr(adId) + '\')">✕</button>';
+      // For real MAs we also expose the legacy "Delete from project" via long-press menu
+      // — keep the existing 🗑 only when the card is NOT virtual (deleting a virtual
+      // means deleting the AD, which is a much bigger action; do that from matrix).
+      if (r.act && r.act._virtual) {
+        return '<td onclick="event.stopPropagation()">' + clearBtn + '</td>';
+      }
+      return '<td onclick="event.stopPropagation()">' + clearBtn +
+             '<button class="ap-del-btn" style="margin-left:4px;opacity:0.5" title="Delete this task from project (irreversible)" onclick="if(confirm(\'Delete this task from the project? This removes the MA AND soft-deletes the AD.\')) deleteManualAction(\'' + escAttr(r.act.id) + '\')">🗑</button>' +
+             '</td>';
     }
   },
   producer: {
@@ -17623,7 +17643,9 @@ var _apState = (function () {
       adTypes: [],                  // [] = all types
       sources: [],                  // [] = all sources
       hygieneOnly: false,           // toggled by hygiene banner "Show only these"
-      anomaliesOnly: false          // toggled by Anomalies chip in filterbar
+      anomaliesOnly: false,         // toggled by Anomalies chip in filterbar
+      includeAdopted: true,         // 2026-05-09: auto-adopt ClickUp-only ADs into AP (toggle in filter strip)
+      showDismissed: false          // 2026-05-09: reveal cards the user has cleared
     },
     sort: { col: 'age', dir: -1 },  // column id + direction (1 asc, -1 desc)
     selected: {},                   // { actionId: true } for bulk operations
@@ -17716,6 +17738,9 @@ function apApplyFilters(resolved) {
   var range = _apDateRange();
   return resolved.filter(function (r) {
     if (!r) return false;
+    // Dismiss filter — soft-hide cards the user has cleared from their own AP.
+    // Bypassed when "Show hidden" toggle is ON.
+    if (!f.showDismissed && r.ad && r.ad.id && typeof _apIsDismissed === 'function' && _apIsDismissed(r.ad.id)) return false;
     if (f.statuses.length) {
       // Case-insensitive match — saved selections may have legacy casing.
       var _rsLc = String(r.display.status || '').toLowerCase();
@@ -18060,6 +18085,36 @@ function renderApFilterStrip(allResolved, filtered) {
                 '<span class="ap-pill-icon">⚠</span>' +
                 'Needs Attention' +
                 ' <span class="ap-anom-count">' + _hyg.total + '</span>' +
+              '</button>';
+    }
+  } catch (e) {}
+  // ── Auto-adopt toggle + dismissed counter (2026-05-09) ──
+  // "All work" = include ClickUp-born ADs as virtual cards. Default ON.
+  // Counter chips below show app-MA vs adopted breakdown for visibility.
+  try {
+    var _adoptedCount = 0, _appCount = 0;
+    for (var _ri = 0; _ri < allResolved.length; _ri++) {
+      var _rr = allResolved[_ri];
+      if (_rr && _rr._virtual) _adoptedCount++;
+      else if (_rr) _appCount++;
+    }
+    var _incA = (f.includeAdopted !== false);
+    html += '<button class="ap-anom-chip ap-adopt-chip' + (_incA ? ' on' : '') + '"' +
+            ' onclick="apToggleIncludeAdopted(' + (!_incA) + ')"' +
+            ' title="Show every linked ClickUp task in AP (' + _appCount + ' app · ' + _adoptedCount + ' adopted)">' +
+              '<span class="ap-pill-icon">🌐</span>' +
+              (_incA ? 'All work' : 'App-only') +
+              ' <span class="ap-anom-count">' + (_incA ? (_appCount + _adoptedCount) : _appCount) + '</span>' +
+            '</button>';
+    var _dCount = (typeof _apDismissedCount === 'function') ? _apDismissedCount() : 0;
+    if (_dCount > 0) {
+      var _showD = !!f.showDismissed;
+      html += '<button class="ap-anom-chip ap-dismiss-chip' + (_showD ? ' on' : '') + '"' +
+              ' onclick="apToggleShowDismissed(' + (!_showD) + ')"' +
+              ' title="' + (_showD ? 'Hide dismissed cards again' : 'Reveal cards you cleared') + '">' +
+                '<span class="ap-pill-icon">👁</span>' +
+                (_showD ? 'Hide cleared' : 'Show cleared') +
+                ' <span class="ap-anom-count">' + _dCount + '</span>' +
               '</button>';
     }
   } catch (e) {}
@@ -25204,7 +25259,11 @@ function apResolveCard(act) {
 
   // Provenance: figure out where the card came from (inspiration / variation /
   // tracker-format / blank brief). Drives the "Origin" chip on the row.
-  var source = { kind: 'manual', label: 'Manual', refId: null, refUrl: null };
+  // Auto-adopted virtual cards override to "adopted" so the rose-colored CU
+  // chip surfaces in the Source column.
+  var source = (act && act._virtual)
+    ? { kind: 'adopted', label: 'From ClickUp', refId: null, refUrl: null }
+    : { kind: 'manual', label: 'Manual', refId: null, refUrl: null };
   if (ad) {
     if (ad._fromInspoId) {
       source.kind = 'inspo';
@@ -25504,11 +25563,158 @@ function apComputeAnomalies(card) {
 function apResolveAllCards() {
   if (typeof MANUAL_ACTIONS === 'undefined' || !Array.isArray(MANUAL_ACTIONS)) return [];
   var out = [];
+  // Track AD ids that already have an MA card so the auto-adopt pass below
+  // doesn't double-render them as virtuals.
+  var maCoveredAdIds = {};
   for (var i = 0; i < MANUAL_ACTIONS.length; i++) {
-    var r = apResolveCard(MANUAL_ACTIONS[i]);
-    if (r) out.push(r);
+    var ma = MANUAL_ACTIONS[i];
+    var r = apResolveCard(ma);
+    if (r) {
+      out.push(r);
+      var sid = (ma && (ma.sourceAdId || ma.adId)) || (r.ad && r.ad.id);
+      if (sid) maCoveredAdIds[sid] = true;
+    }
   }
+  // ── Auto-adopt: synthesize virtual cards for any AD in the active product
+  // that doesn't yet have an MA. Render-only — no DB writes. Lazy-promotes
+  // to a real MA only when the user does a bulk action that needs one.
+  // Toggle: _apState.filters.includeAdopted (default ON). All statuses
+  // including terminals are adopted (user picked option A 2026-05-09).
+  // Bug 9 + AP-merge invariants: untouched (pure read-side synthesis).
+  try {
+    var includeAdopted = !_apState || !_apState.filters || _apState.filters.includeAdopted !== false;
+    if (includeAdopted && typeof ADS !== 'undefined' && Array.isArray(ADS)) {
+      for (var ai = 0; ai < ADS.length; ai++) {
+        var ad = ADS[ai];
+        if (!ad || !ad.id) continue;
+        if (ad.deleted_at || ad.deletedAt) continue;
+        if (maCoveredAdIds[ad.id]) continue;
+        // Synthesize a minimal act so apResolveCard can build a card around it.
+        var synAct = {
+          id: 'va:' + ad.id,
+          sourceAdId: ad.id,
+          adId: ad.id,
+          title: ad.formatName || ad.id,
+          _clickupId: ad._clickupId || ad.clickupTaskId || null,
+          _origin: 'auto-adopted',
+          _virtual: true,
+          _adoptedAt: Date.now(),
+          sourceAngle: ad.angle || '',
+          sourcePersona: ad.persona || '',
+          funnelStage: ad.funnelStage || '',
+          format: ad.adType || '',
+          liveStatus: ad.status || 'Untested'
+        };
+        var rv = apResolveCard(synAct);
+        if (rv) {
+          rv._virtual = true;
+          out.push(rv);
+        }
+      }
+    }
+  } catch (e) {}
   return out;
+}
+
+// Per-user dismiss list — soft-hides cards from the user's own AP view.
+// Persisted on `profiles.ap_dismissed_ad_ids` (JSONB array). Read into
+// `_apDismissedAdIds` (Set) at boot + on profile-change broadcast.
+var _apDismissedAdIds = (function () {
+  // Hydrate from localStorage as a fast-path; profile fetch will replace it.
+  try {
+    var raw = localStorage.getItem('ap.dismissedAdIds.v1');
+    var arr = raw ? JSON.parse(raw) : [];
+    var s = {}; (arr || []).forEach(function (id) { if (id) s[id] = true; }); return s;
+  } catch (e) { return {}; }
+})();
+function _apIsDismissed(adId) { return !!(adId && _apDismissedAdIds[adId]); }
+function _apDismissedCount() { return Object.keys(_apDismissedAdIds).length; }
+function _apPersistDismissed() {
+  var arr = Object.keys(_apDismissedAdIds);
+  try { localStorage.setItem('ap.dismissedAdIds.v1', JSON.stringify(arr)); } catch (e) {}
+  // Persist to profiles row (best-effort; failure leaves localStorage as truth)
+  try {
+    var uid = (typeof AUTH !== 'undefined' && AUTH && AUTH.profile) ? AUTH.profile.id : null;
+    if (uid && typeof SB !== 'undefined' && SB) {
+      SB.from('profiles').update({ ap_dismissed_ad_ids: arr }).eq('id', uid).then(function () {});
+    }
+  } catch (e) {}
+}
+// Hydrate dismiss list from the logged-in profile (called once after auth).
+function _apHydrateDismissedFromProfile() {
+  try {
+    var prof = (typeof AUTH !== 'undefined' && AUTH && AUTH.profile) ? AUTH.profile : null;
+    if (!prof) return;
+    var arr = prof.ap_dismissed_ad_ids;
+    if (!Array.isArray(arr)) arr = [];
+    _apDismissedAdIds = {};
+    arr.forEach(function (id) { if (id) _apDismissedAdIds[id] = true; });
+    try { localStorage.setItem('ap.dismissedAdIds.v1', JSON.stringify(arr)); } catch (e) {}
+  } catch (e) {}
+}
+function apClearCard(adId) {
+  if (!adId) return;
+  _apDismissedAdIds[adId] = true;
+  _apPersistDismissed();
+  if (typeof renderActionPlan === 'function') renderActionPlan();
+}
+function apUnclearCard(adId) {
+  if (!adId) return;
+  delete _apDismissedAdIds[adId];
+  _apPersistDismissed();
+  if (typeof renderActionPlan === 'function') renderActionPlan();
+}
+function apToggleShowDismissed(on) {
+  if (!_apState || !_apState.filters) return;
+  _apState.filters.showDismissed = !!on;
+  if (typeof _apSaveState === 'function') _apSaveState();
+  if (typeof renderActionPlan === 'function') renderActionPlan();
+}
+function apToggleIncludeAdopted(on) {
+  if (!_apState || !_apState.filters) return;
+  _apState.filters.includeAdopted = !!on;
+  if (typeof _apSaveState === 'function') _apSaveState();
+  if (typeof renderActionPlan === 'function') renderActionPlan();
+}
+
+// Lazy-promote: turn a virtual card's AD into a real MA on first action that
+// needs one (bulk delete, push-to-CU, MA-only field edits). Idempotent —
+// returns existing MA id if one already covers this AD.
+function _lazyPromoteVirtual(ad) {
+  if (!ad || !ad.id) return null;
+  if (typeof MANUAL_ACTIONS !== 'undefined' && Array.isArray(MANUAL_ACTIONS)) {
+    for (var i = 0; i < MANUAL_ACTIONS.length; i++) {
+      var ma = MANUAL_ACTIONS[i];
+      if (!ma) continue;
+      if (ma.sourceAdId === ad.id || ma.adId === ad.id) return ma.id;
+      if (ad._clickupId && ma._clickupId === ad._clickupId) return ma.id;
+    }
+  }
+  // No MA — create one. Mirrors the "→ Plan" flow but minimal.
+  var nowMs = Date.now();
+  var newAct = {
+    id: 'auto-' + ad.id + '-' + nowMs,
+    sourceAdId: ad.id,
+    adId: ad.id,
+    title: ad.formatName || ad.id,
+    sourceAngle: ad.angle || '',
+    sourcePersona: ad.persona || '',
+    funnelStage: ad.funnelStage || '',
+    format: ad.adType || '',
+    liveStatus: ad.status || 'Untested',
+    _clickupId: ad._clickupId || ad.clickupTaskId || null,
+    _origin: 'auto-adopted',
+    _adoptedAt: nowMs,
+    _pushedAt: nowMs
+  };
+  if (typeof MANUAL_ACTIONS !== 'undefined' && Array.isArray(MANUAL_ACTIONS)) {
+    MANUAL_ACTIONS.push(newAct);
+  }
+  if (typeof saveState === 'function') { try { saveState(); } catch (e) {} }
+  if (typeof _writeManualActionRowDirect === 'function') {
+    try { _writeManualActionRowDirect(newAct); } catch (e) {}
+  }
+  return newAct.id;
 }
 
 function updateSyncLabel() {

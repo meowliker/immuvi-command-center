@@ -14192,7 +14192,7 @@ function showUsagePopup(adId) {
   );
 }
 
-function createActionFromMatrix(adId, angleName, personaName, btnEl) {
+function createActionFromMatrix(adId, angleName, personaName, btnEl, _opts) {
   var ad = null;
   for (var i = 0; i < ADS.length; i++) {
     if (ADS[i].id === adId) { ad = ADS[i]; break; }
@@ -14238,7 +14238,13 @@ function createActionFromMatrix(adId, angleName, personaName, btnEl) {
   // for brand-new ADs. Bug 8 protection — see memory/feedback_bug8_orphan_protection.md.
   try {
     if (typeof _writeManualActionRowDirect === 'function') {
-      _writeManualActionRowDirect(newAction);
+      // Stash the Promise on newAction so batch callers (variation spawn)
+      // can await it. Without awaiting, the direct insert races with the
+      // debounced full-state flush — both INSERT under the same payload.id,
+      // creating two DB rows that the snapshot recovery + dedup loop later
+      // resolves by deleting one (sometimes the wrong one). Bug 9 v3
+      // (2026-05-08).
+      newAction._directWritePromise = _writeManualActionRowDirect(newAction);
     }
   } catch (e) { console.warn('[createActionFromMatrix] direct DB write failed', e); }
   // Clear any tombstone matching this task's identifiers — user is
@@ -14286,18 +14292,38 @@ function createActionFromMatrix(adId, angleName, personaName, btnEl) {
       _tabCounter.classList.add('ap-tab-pulse');
     }
   } catch (e) {}
-  saveState();                           // debounced persist
+  // Bug 9 v3 (2026-05-08): skip the debounced saveState too when called
+  // in batch (variation spawn). Each saveState resets the debounce timer
+  // and the eventual flush computes orphans + recovery against in-flight
+  // direct-inserts. Multiple createActionFromMatrix calls in rapid
+  // succession produce a single mid-spawn flush that races with the
+  // direct-writes. Batch caller does ONE saveState at the very end.
+  if (!_opts || !_opts.skipImmediateSave) {
+    saveState();                           // debounced persist
+  }
   // Toast with an Open CTA — clicking jumps to the Action Plan tab and
   // scrolls/highlights the new row. The toast wins over the silent
   // "added" message because the user immediately knows where it went.
-  toast('Added to Action Plan · <a href="#" onclick="event.preventDefault();apJumpToCard(\'' + escAttr(actionId) + '\');return false;" style="color:#0a84ff;font-weight:700;text-decoration:underline">Open</a>', 'ok', 6000);
+  // Skip when called in batch (e.g. variation spawn) — the batch caller
+  // shows its own summary toast.
+  if (!_opts || !_opts.silent) {
+    toast('Added to Action Plan · <a href="#" onclick="event.preventDefault();apJumpToCard(\'' + escAttr(actionId) + '\');return false;" style="color:#0a84ff;font-weight:700;text-decoration:underline">Open</a>', 'ok', 6000);
+  }
   // Clear the new-row highlight after a beat so subsequent re-renders
   // don't keep flashing.
   setTimeout(function () { newAction._highlightNew = false; renderActionPlan(); }, 2500);
   // Bug 7: persist the new MANUAL_ACTION immediately so other tabs pick it up
   // through the post-flush sync-needed broadcast (the apBroadcastActionAdded
   // call above already covers the fast-path render, this hardens the DB write).
-  if (typeof saveStateNow === 'function') saveStateNow();
+  // Bug 9 v3 (2026-05-08): skip the immediate full-state flush when the
+  // caller is doing a batch spawn — N concurrent flushes race in
+  // saveProductData's recovery loop and produce ON CONFLICT 21000 errors
+  // that wipe the entire batch. The batch caller does ONE saveState at the
+  // end. _writeManualActionRowDirect (called above) already lands the MA
+  // in DB durably, so skipping the snapshot flush is safe.
+  if (!_opts || !_opts.skipImmediateSave) {
+    if (typeof saveStateNow === 'function') saveStateNow();
+  }
   return actionId;
 }
 
@@ -37776,26 +37802,74 @@ window._clearPendingCu = _clearPendingCu;
       spawnedAds.push({ ad: newAd, brief: fullBrief, axisName: axisName, due: r.due });
     });
 
-    // Persist + render
+    // Bug 9 v3 (2026-05-08): mirror inspiration spawn semantics.
+    // Each variation = brand new independent task. Per-variation:
+    //   1. push to ADS (already done in loop above)
+    //   2. wire into CELL_CREATIVE_ASSIGNMENTS NOW (done in inline block below)
+    //   3. await _writeAdRowDirect → AD lands in DB durably before next step
+    //   4. await createActionFromMatrix(..., {skipImmediateSave, silent}) → MA
+    //      lands via _writeManualActionRowDirect, but no per-call saveStateNow
+    // Then ONE _writeMatrixCellDirect + ONE saveState at the very end.
+    //
+    // Why this fixes the bug: the previous flow had setTimeout cascades that
+    // each forced a saveStateNow → N concurrent full-state flushes raced over
+    // in-flight direct-inserts → recovery loop in saveProductData produced
+    // duplicate ids in the upsert payload → Postgres 21000 → entire batch
+    // failed → variations vanished on refresh.
+    var _spawnCellKey = parent.angle + '||' + parent.persona;
+    if (!CELL_CREATIVE_ASSIGNMENTS[_spawnCellKey]) CELL_CREATIVE_ASSIGNMENTS[_spawnCellKey] = [];
+    for (var _spawnI = 0; _spawnI < spawnedAds.length; _spawnI++) {
+      var _newAd = spawnedAds[_spawnI].ad;
+      // Wire into cell assignments immediately so the realtime broadcast
+      // (and any peer that reads CELL_CREATIVE_ASSIGNMENTS) sees a coherent
+      // snapshot from the moment the AD is born.
+      if (CELL_CREATIVE_ASSIGNMENTS[_spawnCellKey].indexOf(_newAd.id) === -1) {
+        CELL_CREATIVE_ASSIGNMENTS[_spawnCellKey].push(_newAd.id);
+      }
+      // Direct-write the AD — AWAITED so the row commits before the loop
+      // moves on. No race window for snapshot flushes to compute orphans
+      // against in-flight inserts.
+      if (typeof _writeAdRowDirect === 'function') {
+        try { await _writeAdRowDirect(_newAd); }
+        catch (e) { console.warn('[varlab] direct AD write failed for', _newAd.id, e); }
+      }
+    }
+
+    // Re-derive + render once after all variations land in memory.
     if (typeof process === 'function') P = process(ADS);
     if (typeof deriveWinners === 'function') deriveWinners();
     if (typeof genActions === 'function') genActions();
     if (typeof renderAll === 'function') renderAll();
+
+    // Direct-write the cell so peers see the cell + assignments coherently.
+    if (typeof _writeMatrixCellDirect === 'function') {
+      try { await _writeMatrixCellDirect(_spawnCellKey); } catch (e) {}
+    }
+
+    // Bug 9 v3 (2026-05-08): DO NOT auto-push variations to Action Plan in
+    // this batch flow. Mirrors inspiration spawn (which doesn't auto-push)
+    // — variation ADs land in matrix cell + DB, user clicks → Plan on each
+    // row separately for AP push. Auto-pushing N MAs in rapid succession
+    // produces a snapshot-flush + direct-insert race that drops MAs (the
+    // genActions snapshot/restore in createActionFromMatrix combined with
+    // _flushStateToSupabase's recovery loop creates duplicate-id
+    // conditions in the upsert payload). The user's reported intent
+    // ("treat each variation as a new task just like inspiration") matches
+    // this no-auto-push behavior.
+    var _pushedToPlan = 0;
+
+    // ONE final saveState (debounced) — coalesces any remaining in-memory
+    // state mutations into a single flush. The variations + their MAs are
+    // already durably in DB via the direct-writes above; this just keeps
+    // matrix_cells / cell-meta / etc. in sync.
     if (typeof saveState === 'function') saveState();
 
-    // Push each to Action Plan + ClickUp
-    spawnedAds.forEach(function (entry, idx) {
-      setTimeout(function () {
-        try {
-          if (typeof createActionFromMatrix === 'function') {
-            createActionFromMatrix(entry.ad.id, entry.ad.angle, entry.ad.persona, null);
-          }
-        } catch (e) { console.warn('[varlab] action push failed', entry.ad.id, e); }
-      }, 200 + idx * 250);
-    });
-
     closeModal();
-    try { toast(spawnedAds.length + ' variation' + (spawnedAds.length === 1 ? '' : 's') + ' spawned for ' + parent.id + ' · pushing to Action Plan…', 'ok'); } catch (e) {}
+    try {
+      toast(spawnedAds.length + ' variation' + (spawnedAds.length === 1 ? '' : 's') +
+        ' spawned for ' + parent.id +
+        ' · click → Plan on each row to push to Action Plan', 'ok');
+    } catch (e) {}
   };
 
   // ── AP "Variations" subtab renderer (called from renderActionPlan when

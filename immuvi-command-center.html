@@ -6806,7 +6806,7 @@ button.mx-dt-action-sent .open { color:#0a84ff; font-weight:700; margin-left:4px
 .mxv4-pkr-tbl tbody td.col-notes { white-space: nowrap; max-width: 220px; overflow: hidden; text-overflow: ellipsis; color: var(--b-ink2); font-weight: 400; }
 .mxv4-pkr-tbl tbody td.col-date { color: var(--b-ink3); font-family: 'JetBrains Mono', monospace; font-size: 0.72rem; }
 .mxv4-pkr-tbl tbody td.col-link { text-align: center; }
-.mxv4-pkr-tbl tbody td.col-check { width: 32px; padding-left: 14px; padding-right: 0; }
+.mxv4-pkr-tbl tbody td.col-check { width: 32px; padding-left: 14px; padding-right: 8px; }
 
 /* Custom checkbox — replaces native for visual cohesion */
 .mxv4-pkr-cb {
@@ -6870,6 +6870,23 @@ button.mx-dt-action-sent .open { color:#0a84ff; font-weight:700; margin-left:4px
 .mxv4-pkr-link:hover { background: rgba(5,150,105,0.22); transform: scale(1.06); }
 .mxv4-pkr-link.inspo { background: rgba(37,99,235,0.10); color: #1d4ed8; }
 .mxv4-pkr-link.inspo:hover { background: rgba(37,99,235,0.22); }
+/* Inspo-id label inside the picker INSPO column. Replaces the bare 🔗 icon
+   so the user can see WHICH inspiration each row is from at a glance. */
+.mxv4-pkr-inspo-num {
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 0.66rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+.mxv4-pkr-inspo-num.plain { color: #64748b; opacity: 0.65; }
+.mxv4-pkr-link.inspo .mxv4-pkr-inspo-num { color: inherit; }
+.mxv4-pkr-tbl tbody td.col-inspo-id,
+.mxv4-pkr-tbl thead th.col-inspo-id-h {
+  padding: 0 10px 0 16px;
+  min-width: 78px;
+  white-space: nowrap;
+}
 .mxv4-pkr-already {
   display: inline-block; margin-left: 8px;
   font-size: 0.62rem; font-weight: 600;
@@ -32351,7 +32368,26 @@ function setMxv4AddSearch(v) {
 function toggleMxv4AddSelect(id) {
   if (_mxv4.addSelected[id]) delete _mxv4.addSelected[id];
   else _mxv4.addSelected[id] = true;
+  // Preserve the picker table's scroll position across the re-render.
+  // Without this, every checkbox click resets scroll to top — painful
+  // when the user is partway through a long list. Same wrap is used by
+  // both Creative Tracker and From Inspiration pickers, so this fix
+  // covers both tabs. Capture BEFORE the render, restore AFTER on the
+  // next frame so the new DOM has settled.
+  var _prevScrollTop = 0;
+  try {
+    var _wrapBefore = document.querySelector('.mxv4-pkr-tbl-wrap');
+    if (_wrapBefore) _prevScrollTop = _wrapBefore.scrollTop || 0;
+  } catch (e) {}
   renderMxv4Modal();
+  if (_prevScrollTop > 0) {
+    var _restore = function () {
+      var _w = document.querySelector('.mxv4-pkr-tbl-wrap');
+      if (_w) _w.scrollTop = _prevScrollTop;
+    };
+    if (typeof requestAnimationFrame === 'function') requestAnimationFrame(_restore);
+    else setTimeout(_restore, 0);
+  }
 }
 function toggleMxv4AddPushAction() {
   _mxv4.addPushAction = !_mxv4.addPushAction;
@@ -32996,6 +33032,13 @@ function _mxv4RenderAddInspiration(angleName, personaName) {
     rows.sort(function (a, b) { return (b.addedAt || b.createdAt || 0) - (a.addedAt || a.createdAt || 0); });
   } else {
     rows = _f7ApplySort(rows, 'inspo', {
+      // Sort by the trailing number of the inspiration id so "INS-9" comes
+      // before "INS-10" instead of lexicographic order.
+      inspoId: function (i) {
+        var raw = String(i.id || '');
+        var m = raw.match(/(\d+)\s*$/);
+        return m ? parseInt(m[1], 10) : Number.MAX_SAFE_INTEGER;
+      },
       name:    function (i) { return i.formatName || i.title || i.name || i.brand || ''; },
       status:  function (i) { return (i.status || 'Queued').toLowerCase(); },
       type:    function (i) { return i.adType || ''; },
@@ -33019,15 +33062,18 @@ function _mxv4RenderAddInspiration(angleName, personaName) {
   }
 
   var html = '<div class="mxv4-pkr-tbl-wrap"><table class="mxv4-pkr-tbl">';
+  // INSPO id moved to column #2 (right after checkbox) per user request —
+  // makes the inspiration's identifier the first thing the eye lands on
+  // when scanning rows. Sortable via _f7HeaderTh('inspo', 'inspoId', ...).
   html += '<thead><tr>' +
             '<th></th>' +
+            _f7HeaderTh('inspo', 'inspoId', 'INS #') +
             _f7HeaderTh('inspo', 'name',   'Task Name') +
             _f7HeaderTh('inspo', 'status', 'Status') +
             _f7HeaderTh('inspo', 'type',   'Type') +
             _f7HeaderTh('inspo', 'funnel', 'Funnel') +
             _f7HeaderTh('inspo', 'angle',  'Angle') +
             _f7HeaderTh('inspo', 'added',  'Added') +
-            '<th>Inspo</th>' +
             '<th>Drive</th>' +
             _f7HeaderTh('inspo', 'notes',  'Notes') +
           '</tr></thead><tbody>';
@@ -33044,13 +33090,20 @@ function _mxv4RenderAddInspiration(angleName, personaName) {
     var rowClick = disabled ? '' : 'toggleMxv4AddSelect(\'inspo:' + escAttr(inspoId) + '\')';
     html += '<tr class="' + rowCls + '" onclick="' + rowClick + '">';
     html += '<td class="col-check"><span class="mxv4-pkr-cb' + (checked ? ' on' : '') + (disabled ? ' disabled' : '') + '"></span></td>';
+    // INS # column — extract trailing INS-NNN from the inspiration's id.
+    var inspoIdMatch = inspoId && String(inspoId).match(/INS-?\d+/i);
+    var inspoNumLabel = inspoIdMatch ? inspoIdMatch[0].toUpperCase() : (inspoId || '');
+    html += '<td class="col-inspo-id">' +
+              (inspoLink
+                ? '<a class="mxv4-pkr-link inspo" href="' + escAttr(inspoLink) + '" target="_blank" rel="noopener" data-tip="Open inspiration · ' + escAttr(inspoId) + '" onclick="event.stopPropagation()"><span class="mxv4-pkr-inspo-num">' + esc(inspoNumLabel) + '</span></a>'
+                : '<span class="mxv4-pkr-inspo-num plain" data-tip="' + escAttr(inspoId) + '">' + esc(inspoNumLabel) + '</span>') +
+            '</td>';
     html += '<td class="col-name" data-tip="' + escAttr(ttl) + '">' + esc(ttl) + (disabled ? '<span class="mxv4-pkr-already">✓ used here</span>' : '') + '</td>';
     html += '<td><span class="mxv4-pkr-pill ' + sCls + '">' + esc(sLbl) + '</span></td>';
     html += '<td>' + (i.adType ? '<span class="mxv4-pkr-chip">' + esc(i.adType) + '</span>' : '') + '</td>';
     html += '<td>' + (i.funnelStage ? '<span class="mxv4-pkr-chip">' + esc(i.funnelStage) + '</span>' : '') + '</td>';
     html += '<td>' + (i.angle ? '<span class="mxv4-pkr-chip" data-tip="' + escAttr(i.angle) + '">' + esc(i.angle) + '</span>' : '') + '</td>';
     html += '<td class="col-date">' + esc(dateStr) + '</td>';
-    html += '<td class="col-link">' + (inspoLink ? '<a class="mxv4-pkr-link inspo" href="' + escAttr(inspoLink) + '" target="_blank" rel="noopener" data-tip="Open inspiration" onclick="event.stopPropagation()">🔗</a>' : '') + '</td>';
     html += '<td class="col-link">' + (i.driveLink ? '<a class="mxv4-pkr-link" href="' + escAttr(i.driveLink) + '" target="_blank" rel="noopener" data-tip="Open Drive" onclick="event.stopPropagation()">📁</a>' : '') + '</td>';
     html += '<td class="col-notes" data-tip="' + escAttr(i.notes || '') + '">' + esc(i.notes || '') + '</td>';
     html += '</tr>';

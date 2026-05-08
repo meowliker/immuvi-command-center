@@ -18799,13 +18799,23 @@ function _apRel(ts) {
 }
 
 // Click-outside auto-close for filter dropdowns.
+// Tight check: only skip-close when the click is on the open dropdown
+// itself (multi-select stays open) or on a filter pill button (where
+// toggleApFilter already handles open/switch/close). Clicks anywhere
+// else — including the filterbar's empty padding rows, the table,
+// other tabs — close the dropdown. The previous version returned
+// early on ANY click inside .ap-filterbar, which made the dropdown
+// "stuck" until the user clicked the pill again.
 if (typeof window !== 'undefined' && !window._apFilterOutsideBound) {
   document.addEventListener('click', function (e) {
     if (!_apState.openFilter) return;
-    var bar = document.querySelector('.ap-filterbar');
+    var t = e.target;
+    if (!t) return;
+    // Inside the open dropdown panel? Leave it open.
     var drop = document.querySelector('.ap-fdrop');
-    if (bar && bar.contains(e.target)) return;
-    if (drop && drop.contains(e.target)) return;
+    if (drop && drop.contains(t)) return;
+    // On a filter pill button? toggleApFilter handles it.
+    if (t.closest && t.closest('.ap-filter-pill')) return;
     _apState.openFilter = null;
     if (typeof renderActionPlan === 'function') renderActionPlan();
   });

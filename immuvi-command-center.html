@@ -9945,7 +9945,13 @@ window.AUTH = {
   }
 };
 
-const ADMIN_API = 'http://127.0.0.1:8103';
+// Admin API endpoint. Local dev uses the standalone Python helper
+// (tools/auth/admin_server.py on :8103). Production hits the Vercel
+// serverless function at /api/admin/<op>. The helper paths the
+// frontend already uses (/admin/create-user, /admin/reset-password,
+// etc.) get mapped in _adminApiCall.
+const _IS_LOCAL_HOST = (location.hostname === 'localhost' || location.hostname === '127.0.0.1');
+const ADMIN_API = _IS_LOCAL_HOST ? 'http://127.0.0.1:8103' : '';
 
 function _authEsc(s) {
   return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){
@@ -10256,11 +10262,20 @@ async function _authInit() {
 document.addEventListener('DOMContentLoaded', _authInit);
 
 /* ─── Admin tab ───────────────────────────────────────────────────────── */
+// Map a logical admin path (e.g. '/admin/create-user') to the right URL.
+// Local dev: http://127.0.0.1:8103/admin/create-user
+// Vercel:    /api/admin/create-user (same origin, no CORS needed)
+function _adminUrl(path) {
+  if (ADMIN_API) return ADMIN_API + path;
+  // path comes in as '/admin/<op>' — rewrite to '/api/admin/<op>'.
+  return '/api' + path;
+}
+
 async function _adminApiCall(path, body) {
   var s = await SB.auth.getSession();
   var session = s.data && s.data.session;
   if (!session) throw new Error('not signed in');
-  var r = await fetch(ADMIN_API + path, {
+  var r = await fetch(_adminUrl(path), {
     method: 'POST',
     headers: {
       'Authorization': 'Bearer ' + session.access_token,
@@ -10276,7 +10291,7 @@ async function _adminApiCall(path, body) {
 
 async function _adminCheckHealth() {
   try {
-    var r = await fetch(ADMIN_API + '/health');
+    var r = await fetch(_adminUrl('/admin/health'));
     return r.ok;
   } catch (e) { return false; }
 }

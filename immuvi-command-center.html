@@ -3879,6 +3879,16 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 
 /* Column manager picker — extends .ap-picker, larger to accommodate the two
    stacked lists. */
+.ap-cp-picker { min-width: 280px; padding: 8px; }
+.ap-cp-sub { font-size: 12px; color: var(--t3); padding: 4px 8px 8px; }
+.ap-cp-btn { display: block; width: 100%; text-align: left; padding: 8px 10px; margin: 2px 0; border: 1px solid rgba(15,23,42,0.08); border-radius: 8px; background: #fff; cursor: pointer; font-size: 13px; }
+.ap-cp-btn:hover { background: rgba(15,23,42,0.04); }
+.ap-cp-g  { color: #15803d; }
+.ap-cp-g2 { color: #65a30d; }
+.ap-cp-b  { color: #1d4ed8; }
+.ap-cp-r  { color: #b91c1c; }
+.ap-cp-y  { color: #a16207; background: rgba(234,179,8,0.08); }
+.ap-cp-divider { height: 1px; background: rgba(15,23,42,0.08); margin: 6px 0; }
 .ap-picker.cols { min-width: 320px; max-width: 360px; max-height: 480px; }
 .ap-picker.cols .ap-pk-list { padding: 4px 8px 8px; }
 .ap-pk-colrow {
@@ -11282,6 +11292,11 @@ function _adToRow(a, productId) {
     // "Last decided Xd ago" hover-card line. Nullable — for rows
     // pre-dating the field, the date filter falls back to updatedAt.
     last_status_change_at: a.lastStatusChangeAt || null,
+    // Testing-stage checkpoint tracking (2026-05-09): Day-7 review prompt,
+    // single 7-day snooze, then Day-14 final-call. Reset on every Testing
+    // entry/exit by _stampAdStatusChange.
+    testing_deferred_at: a.testingDeferredAt || null,
+    testing_defer_count: typeof a.testingDeferCount === 'number' ? a.testingDeferCount : 0,
     // ── Multi-tab resurrection fix (2026-05-05) ──────────────────────
     // Previously this row included `deleted_at: null` on EVERY upsert
     // to cover Bug 9 v3 (id-reuse from nextSerialId). Side effect: any
@@ -11328,6 +11343,9 @@ function _rowToAd(r) {
     // last_status_change_at is BIGINT (post-migration), updated_at is timestamp
     // with time zone — _normalizeTs handles both.
     lastStatusChangeAt: _normalizeTs(r.last_status_change_at) || _normalizeTs(r.updated_at) || null,
+    // Testing checkpoint tracking — see _adToRow for context.
+    testingDeferredAt: r.testing_deferred_at || null,
+    testingDeferCount: typeof r.testing_defer_count === 'number' ? r.testing_defer_count : 0,
     // Deterministically derive the ClickUp task URL so tracker "↗ ClickUp" pills render
     _clickupUrl: clickupId ? ('https://app.clickup.com/t/' + clickupId) : ''
   };
@@ -11399,9 +11417,266 @@ function _normalizeTs(v) {
 function _stampAdStatusChange(ad, newStatus) {
   if (!ad) return false;
   var changed = ad.status !== newStatus;
+  var oldStatus = ad.status;
   ad.status = newStatus;
-  if (changed) ad.lastStatusChangeAt = Date.now();
+  if (changed) {
+    ad.lastStatusChangeAt = Date.now();
+    // Testing-checkpoint reset rule: any time the row leaves OR enters
+    // Testing, the snooze cycle starts fresh. So clear both fields on every
+    // genuine status change. Going forward (post-fix) entry into Testing
+    // begins a clean Day-0 → Day-7 → Day-14 cycle.
+    var oldT = String(oldStatus || '').toLowerCase().trim();
+    var newT = String(newStatus || '').toLowerCase().trim();
+    if (oldT === 'testing' || newT === 'testing') {
+      ad.testingDeferredAt = null;
+      ad.testingDeferCount = 0;
+    }
+  }
   return changed;
+}
+
+// ── Testing-stage checkpoint state machine (2026-05-09) ──
+//
+// Phase derivation from existing fields — no separate "phase" column to
+// drift out of sync. Cycle clock = max(lastStatusChangeAt, Launch Date) for
+// Testing entry; if buyer clicks "Needs more testing", testingDeferredAt
+// becomes the new clock.
+//
+//   Day 0–6   → 'none'    (silent, normal age pill)
+//   Day 7+    → 'first'   (yellow chip, popover offers 4 statuses + Snooze)
+//   Day 14+   → 'final'   (red chip, popover offers 4 statuses ONLY)
+//                         OR 7+ days after testingDeferredAt
+//
+// Hard cap: testingDeferCount === 1 means snooze already used; the
+// "Needs more testing" button is hidden in the final popover.
+var TESTING_FIRST_REVIEW_MS = 7  * 86400000;
+var TESTING_FINAL_REVIEW_MS = 14 * 86400000;
+function _testingCheckpointState(ad) {
+  if (!ad) return { phase: 'none' };
+  var status = String(ad.status || '').toLowerCase().trim();
+  if (status !== 'testing') return { phase: 'none' };
+  // Use the same authoritative read the AP age column uses, so we benefit
+  // from the polluted-baseline override (Launch Date for Testing).
+  var entered = (typeof _bestStatusChangeAt === 'function' ? _bestStatusChangeAt(ad) : null)
+              || ad.lastStatusChangeAt
+              || null;
+  if (!entered) return { phase: 'none' };
+  var now = Date.now();
+  var deferAt = ad.testingDeferredAt || null;
+  var deferCount = typeof ad.testingDeferCount === 'number' ? ad.testingDeferCount : 0;
+  // Final-call window: 7+ days after a snooze, OR 14+ days from entry.
+  if (deferAt) {
+    if (now - deferAt >= TESTING_FIRST_REVIEW_MS) {
+      return { phase: 'final', enteredAt: entered, dueAt: deferAt + TESTING_FIRST_REVIEW_MS, snoozed: true };
+    }
+    return { phase: 'snoozed', enteredAt: entered, dueAt: deferAt + TESTING_FIRST_REVIEW_MS, snoozed: true };
+  }
+  if (now - entered >= TESTING_FINAL_REVIEW_MS) {
+    return { phase: 'final', enteredAt: entered, dueAt: entered + TESTING_FINAL_REVIEW_MS, snoozed: false };
+  }
+  if (now - entered >= TESTING_FIRST_REVIEW_MS) {
+    return { phase: 'first', enteredAt: entered, dueAt: entered + TESTING_FIRST_REVIEW_MS, snoozed: false };
+  }
+  return { phase: 'none', enteredAt: entered, dueAt: entered + TESTING_FIRST_REVIEW_MS };
+}
+
+// Buyer clicks "Needs more testing" — record snooze. Hard cap at 1.
+function markTestingDeferred(adId) {
+  if (!adId || typeof ADS === 'undefined') return false;
+  var ad = null;
+  for (var i = 0; i < ADS.length; i++) { if (ADS[i].id === adId) { ad = ADS[i]; break; } }
+  if (!ad) return false;
+  if (String(ad.status || '').toLowerCase().trim() !== 'testing') return false;
+  if ((ad.testingDeferCount || 0) >= 1) return false; // already snoozed
+  ad.testingDeferredAt = Date.now();
+  ad.testingDeferCount = 1;
+  // Persist via the existing direct-write path so other tabs see it.
+  if (typeof _writeAdRowDirect === 'function') {
+    try { _writeAdRowDirect(ad); } catch (e) {}
+  }
+  if (typeof saveState === 'function') { try { saveState(); } catch (e) {} }
+  if (typeof renderActionPlan === 'function') { try { renderActionPlan(); } catch (e) {} }
+  if (typeof toast === 'function') toast('Snoozed 7 more days — final review at Day 14.', 'ok');
+  return true;
+}
+
+// ── Status-age fallback: derive lastStatusChangeAt from custom fields ──
+//
+// Why: ClickUp's GET /task/{id} returns status_history:null on Free/Unlimited
+// plans; /task/{id}/time_in_status returns 403 (Business+ only). The May 2026
+// migration backfilled last_status_change_at = floor(updated_at*1000), which
+// produced a "shared baseline" timestamp on hundreds of ads (e.g. value
+// 1777576913529 shared by 203 KIDS LIFE SKILL ads). That made every age
+// column show the same misleading "8d".
+//
+// Workaround: derive the transition timestamp from custom fields per status:
+//   Untested        → date_created
+//   In Production   → Approved Date
+//   Ready to Launch → linked production task's date_done (precedes the flip
+//                     by ~8s; lazily fetched + cached in localStorage)
+//   Testing         → Launch Date
+//   Winner / Loser  → Launch Date (labeled "since launch")
+//   Complete        → date_done (proxied via updatedAt locally)
+//
+// Going forward _stampAdStatusChange (above) records every flip in real time
+// from pollFullSync, so this only matters for OLD tasks. To distinguish
+// pre-fix polluted timestamps from real post-fix stamps, we detect polluted
+// values heuristically: a lsc shared by 5+ ads in the same product is
+// guaranteed to be a migration artifact (real ms-granularity transitions
+// don't collide). Real stamps win; polluted ones get overridden by derived.
+//
+// READ-ONLY: this is purely a display-side override. Does NOT write to DB,
+// does NOT touch the realtime hash filter, does NOT mutate AD ids or MA
+// rows. Bug 9 / realtime budget invariants unaffected.
+
+// localStorage cache: { adId: linkedTaskDoneMs }
+var _ageInStatusLinkedDoneCache = (function () {
+  try { return JSON.parse(localStorage.getItem('mxv4.linkedDoneCache.v1') || '{}') || {}; }
+  catch (e) { return {}; }
+})();
+function _ageInStatusCacheLinkedDone(adId, ts) {
+  if (!adId || ts == null) return;
+  _ageInStatusLinkedDoneCache[adId] = ts;
+  try { localStorage.setItem('mxv4.linkedDoneCache.v1', JSON.stringify(_ageInStatusLinkedDoneCache)); } catch (e) {}
+}
+
+// Pull the raw epoch ms out of an ad's custom-field map under a lcName key.
+function _ageInStatusReadCfMs(ad, lcName) {
+  if (!ad) return null;
+  var raw = ad._customFieldsRaw && ad._customFieldsRaw[lcName];
+  if (raw == null || raw === '') {
+    raw = ad._customFields && ad._customFields[lcName];
+  }
+  if (raw == null || raw === '') return null;
+  var n = parseInt(raw, 10);
+  if (!isNaN(n) && n > 1000000000000) return n; // looks like ms
+  var p = Date.parse(raw);
+  if (!isNaN(p)) return p;
+  return null;
+}
+
+// Normalize ad.createdAt / ad.updatedAt to ms (they may be ISO strings).
+function _ageInStatusToMs(v) {
+  if (v == null || v === '') return null;
+  if (typeof v === 'number') return v;
+  var p = Date.parse(v);
+  return isNaN(p) ? null : p;
+}
+
+// Derive best-known transition timestamp for ad's CURRENT status using
+// custom fields + cached linked-done. Returns ms or null.
+function _deriveStatusChangeAt(ad) {
+  if (!ad) return null;
+  var status   = String(ad.status || '').toLowerCase().trim();
+  var approved = _ageInStatusReadCfMs(ad, 'approved date');
+  var launched = _ageInStatusReadCfMs(ad, 'launch date');
+  var created  = _ageInStatusToMs(ad.createdAt);
+  var updated  = _ageInStatusToMs(ad.updatedAt);
+  var linkedDone = _ageInStatusLinkedDoneCache[ad.id] || null;
+  switch (status) {
+    case 'untested':         return created || null;
+    case 'in production':    return approved || created || null;
+    case 'ready to launch':  return linkedDone || approved || updated || created || null;
+    case 'testing':          return launched || approved || updated || null;
+    case 'loser':
+    case 'winner':           return launched || updated || null;
+    case 'complete':         return updated || null;
+    default:                 return null;
+  }
+}
+
+// Detect polluted-baseline lsc values: any value shared by 5+ ads in the
+// current ADS array is almost certainly a migration artifact. ms-granular
+// real transitions don't collide. Cached; cleared on product switch.
+var _pollutedLscSet = null;
+function _resetPollutedLscCache() { _pollutedLscSet = null; }
+function _ensurePollutedLscSet() {
+  if (_pollutedLscSet !== null) return _pollutedLscSet;
+  var counts = {};
+  if (typeof ADS !== 'undefined' && Array.isArray(ADS)) {
+    for (var i = 0; i < ADS.length; i++) {
+      var v = ADS[i] && ADS[i].lastStatusChangeAt;
+      if (!v) continue;
+      counts[v] = (counts[v] || 0) + 1;
+    }
+  }
+  var s = {};
+  Object.keys(counts).forEach(function (k) { if (counts[k] >= 5) s[k] = true; });
+  _pollutedLscSet = s;
+  return s;
+}
+function _isLscPolluted(lsc) {
+  if (!lsc) return false;
+  return !!_ensurePollutedLscSet()[lsc];
+}
+
+// Authoritative read for "when did this ad enter its current status".
+// Real stamps (post-fix-ship transitions via _stampAdStatusChange) win.
+// Polluted migration values get overridden by custom-field derivation.
+function _bestStatusChangeAt(ad) {
+  if (!ad) return null;
+  var lsc = ad.lastStatusChangeAt || null;
+  if (lsc && !_isLscPolluted(lsc)) return lsc;
+  var derived = _deriveStatusChangeAt(ad);
+  return derived || lsc || null;
+}
+
+// Lazy fetch: for RTL ads with no cached linkedDone, pull the linked
+// production task's date_done from ClickUp once, cache in localStorage,
+// and trigger a single re-render. Throttled, dedupe via cache.
+function _lazyFetchLinkedDoneForRtl(rows) {
+  if (!rows || !rows.length || typeof apiFetch !== 'function') return;
+  var candidates = [];
+  rows.forEach(function (r) {
+    var ad = r && r.ad ? r.ad : r;
+    if (!ad || !ad.id) return;
+    if (String(ad.status || '').toLowerCase().trim() !== 'ready to launch') return;
+    var clickupId = ad.clickupTaskId || ad._clickupId;
+    if (!clickupId) return;
+    if (_ageInStatusLinkedDoneCache[ad.id] != null) return; // already resolved
+    candidates.push({ ad: ad, clickupId: clickupId });
+  });
+  if (!candidates.length) return;
+  var idx = 0;
+  var anyChanged = false;
+  function next() {
+    if (idx >= candidates.length) {
+      if (anyChanged) {
+        try { if (typeof renderActionPlan === 'function') renderActionPlan(); } catch (e) {}
+      }
+      return;
+    }
+    var c = candidates[idx++];
+    apiFetch('/task/' + c.clickupId)
+      .then(function (t) {
+        var links = (t && t.linked_tasks) || [];
+        var linkedIds = [];
+        links.forEach(function (l) {
+          var lid = l && l.link_id;
+          if (lid && lid !== c.clickupId) linkedIds.push(lid);
+        });
+        if (!linkedIds.length) {
+          _ageInStatusCacheLinkedDone(c.ad.id, 0); // mark resolved with no link
+          setTimeout(next, 200);
+          return;
+        }
+        // Fetch the first linked task's date_done.
+        apiFetch('/task/' + linkedIds[0])
+          .then(function (lt) {
+            var dd = lt && lt.date_done ? parseInt(lt.date_done, 10) : 0;
+            if (dd > 0) {
+              _ageInStatusCacheLinkedDone(c.ad.id, dd);
+              anyChanged = true;
+            } else {
+              _ageInStatusCacheLinkedDone(c.ad.id, 0);
+            }
+            setTimeout(next, 200);
+          })
+          .catch(function () { _ageInStatusCacheLinkedDone(c.ad.id, 0); setTimeout(next, 200); });
+      })
+      .catch(function () { _ageInStatusCacheLinkedDone(c.ad.id, 0); setTimeout(next, 200); });
+  }
+  next();
 }
 
 // DB object: all shared state I/O goes through here
@@ -16438,6 +16713,56 @@ function _apPickStatus(adId, newStatus) {
   }, 30);
 }
 
+// Testing-checkpoint popover (Day-7 + Day-14).
+//   Day-7  → 4 status options + "Needs more testing" snooze
+//   Day-14 → 4 status options ONLY (snooze cap reached)
+// Reuses .ap-picker styling for visual consistency.
+function openTestingCheckpointPopover(adId, anchorEl) {
+  if (typeof _apClosePickers === 'function') _apClosePickers();
+  if (!adId || typeof ADS === 'undefined') return;
+  var ad = null;
+  for (var i = 0; i < ADS.length; i++) { if (ADS[i].id === adId) { ad = ADS[i]; break; } }
+  if (!ad) return;
+  var cp = (typeof _testingCheckpointState === 'function') ? _testingCheckpointState(ad) : { phase: 'none' };
+  var canSnooze = (cp.phase === 'first') && (ad.testingDeferCount || 0) === 0;
+  var headLabel = (cp.phase === 'final') ? 'FINAL CALL · DAY 14' : 'DAY 7 REVIEW';
+  var subLine = (cp.phase === 'final')
+    ? 'Snooze used. Pick a final decision below.'
+    : 'Pick a decision OR snooze 7 more days for spend data.';
+  var btn = function (label, action, color) {
+    return '<button class="ap-picker-row ap-cp-btn ap-cp-' + color + '" type="button"' +
+           ' onclick="event.stopPropagation(); ' + action + '">' + label + '</button>';
+  };
+  var html = '<div class="ap-picker ap-cp-picker" data-ad="' + escAttr(adId) + '">'
+    + '<div class="ap-pk-head"><span>' + headLabel + '</span><span class="ap-pk-meta">' + esc(ad.formatName || ad.id) + '</span></div>'
+    + '<div class="ap-cp-sub">' + subLine + '</div>'
+    + btn('🏆 Winner',      "_apPickStatus('" + escAttr(adId) + "','Winner')",     'g')
+    + btn('✨ Mild Winner',  "_apPickStatus('" + escAttr(adId) + "','Mild Winner')",'g2')
+    + btn('📈 Scale',        "_apPickStatus('" + escAttr(adId) + "','Scale')",      'b')
+    + btn('💀 Loser',        "_apPickStatus('" + escAttr(adId) + "','Loser')",      'r');
+  if (canSnooze) {
+    html += '<div class="ap-cp-divider"></div>'
+         +  btn('⏳ Needs more testing (+7d)', "markTestingDeferred('" + escAttr(adId) + "'); _apClosePickers();", 'y');
+  }
+  html += '</div>';
+  var pop = document.createElement('div');
+  pop.className = 'ap-picker-wrap';
+  pop.innerHTML = html;
+  document.body.appendChild(pop);
+  var rect = anchorEl ? anchorEl.getBoundingClientRect() : { left: 100, bottom: 100, top: 100 };
+  var inner = pop.querySelector('.ap-picker');
+  inner.style.position = 'fixed';
+  inner.style.left = Math.max(8, rect.left) + 'px';
+  inner.style.top = (rect.bottom + 6) + 'px';
+  inner.style.zIndex = 9999;
+  setTimeout(function () {
+    document.addEventListener('mousedown', _apClosePickers, true);
+    document.addEventListener('keydown',   _apPickerKey,    true);
+    window.addEventListener('scroll',      _apClosePickers, true);
+    window.addEventListener('resize',      _apClosePickers);
+  }, 10);
+}
+
 // ═════════════════════════════════════════════════════════════════════
 // COLUMN TOOLBOX — view-driven table render + column manager + resize
 // + reorder + saved views. State persists per-product to localStorage so
@@ -16554,7 +16879,11 @@ var _AP_COL_REGISTRY = {
   age: {
     label: 'Age in status', sortable: true, sortKey: 'age',
     renderCell: function (r) {
-      return '<td><span class="ap-age-pill age-' + r.age.state + '" title="' + escAttr(r.age.tooltip) + '">' + r.age.label + '</span></td>';
+      var adId = (r.ad && r.ad.id) || r.act.sourceAdId || r.act.adId || '';
+      // Testing checkpoint pills are clickable — open the decision popover.
+      var isCheckpoint = r.age && r.age.label && (r.age.label === 'Day 7 review' || (typeof r.age.label === 'string' && r.age.label.indexOf('Final') === 0));
+      var clickAttr = isCheckpoint ? ' onclick="event.stopPropagation(); openTestingCheckpointPopover(\'' + escAttr(adId) + '\', this)" style="cursor:pointer;text-decoration:underline dotted"' : '';
+      return '<td><span class="ap-age-pill age-' + r.age.state + '"' + clickAttr + ' title="' + escAttr(r.age.tooltip) + '">' + r.age.label + '</span></td>';
     }
   },
   editor: {
@@ -17253,6 +17582,18 @@ function renderActionPlan() {
   }
 
   container.innerHTML = html;
+
+  // Lazy fetch linked-task date_done for any RTL rows we haven't resolved
+  // yet. Throttled (200ms between calls), one-time per ad (cached in
+  // localStorage). Triggers a single re-render when at least one row gets
+  // a real linkedDone value. The old _mxv4LazyBackfillStatusHistory has
+  // been a no-op forever on this ClickUp plan (status_history paywalled);
+  // the linked-done path is what actually works.
+  try {
+    if (typeof _lazyFetchLinkedDoneForRtl === 'function' && filtered && filtered.length) {
+      setTimeout(function () { _lazyFetchLinkedDoneForRtl(filtered); }, 400);
+    }
+  } catch (e) {}
 
   // Update the side tab counter badge.
   var el = document.getElementById('actionsCount');
@@ -24364,6 +24705,29 @@ function apThresholdsForProduct(pid) {
 // Compute age (days) and color state for a given action/ad pairing.
 //   row = { status, lastStatusChangeAt, dueDate, _dueDateMs }
 // Returns: { days, label, state: 'green'|'yellow'|'red'|'none', tooltip }
+// Terminal / closed statuses: decisions already made — no urgency styling,
+// no "Needs Attention", no hygiene flag. Number stays visible (informational
+// "since launch") but state is forced to 'none' so it's neutral gray and
+// doesn't surface in red filters. Hardcoded set covers known terminals;
+// if CLICKUP_STATUSES is loaded we also trust the workspace's own
+// type='closed' / type='done' grouping.
+function _isTerminalStatus(status) {
+  if (!status) return false;
+  var s = String(status).toLowerCase().trim();
+  if (s === 'winner' || s === 'loser' || s === 'scale' || s === 'mild winner'
+      || s === 'killed' || s === 'complete' || s === 'archived') return true;
+  if (typeof CLICKUP_STATUSES !== 'undefined' && Array.isArray(CLICKUP_STATUSES)) {
+    for (var i = 0; i < CLICKUP_STATUSES.length; i++) {
+      var cs = CLICKUP_STATUSES[i];
+      if (!cs || !cs.status) continue;
+      if (String(cs.status).toLowerCase().trim() !== s) continue;
+      var ty = String(cs.type || '').toLowerCase();
+      if (ty === 'closed' || ty === 'done') return true;
+    }
+  }
+  return false;
+}
+
 function apAgeStateForRow(row) {
   if (!row) return { days: null, label: '—', state: 'none', tooltip: '' };
   var statusKey = (row.status || '').toLowerCase().trim();
@@ -24371,6 +24735,20 @@ function apAgeStateForRow(row) {
   var t = thresholds[statusKey];
   var sinceMs = row.lastStatusChangeAt || row.updatedAt || row.createdAt;
   if (!sinceMs) return { days: null, label: '—', state: 'none', tooltip: 'No status timestamp yet' };
+  // Terminal statuses: keep the number (it's still useful as "since launch")
+  // but neutralize state so red/yellow attention treatments skip the row.
+  if (_isTerminalStatus(row.status)) {
+    var _ageMsT = Date.now() - sinceMs;
+    var _daysT = _ageMsT / 86400000;
+    var _rdT = _daysT < 1 ? Math.max(0, Math.round(_daysT * 10) / 10) : Math.round(_daysT);
+    var _lblT = (_daysT < 1 / 24) ? 'just now'
+              : (_daysT < 1) ? Math.round(_daysT * 24) + 'h'
+              : _rdT + 'd';
+    return {
+      days: _rdT, label: _lblT, state: 'none',
+      tooltip: 'Terminal status (' + (row.status || '—') + ') · ' + _lblT + ' since launch'
+    };
+  }
   var ageMs = Date.now() - sinceMs;
   var days = ageMs / (1000 * 60 * 60 * 24);
   var roundedDays = days < 1 ? Math.max(0, Math.round(days * 10) / 10) : Math.round(days);
@@ -24397,6 +24775,30 @@ function apAgeStateForRow(row) {
     if (days >= t.red) state = 'red';
     else if (days >= t.yellow) state = 'yellow';
     else state = 'green';
+  }
+
+  // Testing checkpoint override: when a Testing row crosses Day-7, force
+  // it into "Needs Attention" (state='red') with the right label. Day-14
+  // stays red. Snoozed (Day-7→14 grace window after a snooze) returns to
+  // neutral so the buyer isn't pestered until the final-call lands.
+  if (typeof _testingCheckpointState === 'function') {
+    // Look up the live AD so _bestStatusChangeAt sees the full object
+    // (custom fields, linked-done cache key, etc.) — the row passed in is
+    // a slim subset.
+    var _liveAd = null;
+    if (row._adId && typeof ADS !== 'undefined') {
+      for (var _ai = 0; _ai < ADS.length; _ai++) { if (ADS[_ai].id === row._adId) { _liveAd = ADS[_ai]; break; } }
+    }
+    var _cp = _testingCheckpointState(_liveAd || { id: row._adId, status: row.status, lastStatusChangeAt: row.lastStatusChangeAt, testingDeferredAt: row.testingDeferredAt, testingDeferCount: row.testingDeferCount, _customFieldsRaw: row._customFieldsRaw, _customFields: row._customFields, createdAt: row.createdAt, updatedAt: row.updatedAt });
+    if (_cp.phase === 'first') {
+      return { days: roundedDays, label: 'Day 7 review', state: 'red', tooltip: 'Day-7 checkpoint — review or snooze' };
+    }
+    if (_cp.phase === 'final') {
+      return { days: roundedDays, label: 'Final · ' + roundedDays + 'd', state: 'red', tooltip: 'Day-14 final-call — pick Winner / Loser / Mild Winner / Scale' };
+    }
+    if (_cp.phase === 'snoozed') {
+      return { days: roundedDays, label: roundedDays + 'd (snoozed)', state: 'none', tooltip: 'Snoozed until ' + new Date(_cp.dueAt).toLocaleDateString() };
+    }
   }
 
   var tooltipBits = [];
@@ -24997,7 +25399,10 @@ function apResolveCard(act) {
   // Live status — prefer ad.status (kept in sync with ClickUp via 3-way
   // sync). act.liveStatus is only the snapshot at push moment.
   var status = (ad && ad.status) || act.liveStatus || 'Untested';
-  var lastStatusChangeAt = (ad && ad.lastStatusChangeAt) || act._statusChangedAt || act._pushedAt || null;
+  // Custom-field-derived fallback (handles the migration-baseline pollution
+  // and gives correct ages for old tasks). Real post-fix stamps win
+  // automatically inside _bestStatusChangeAt.
+  var lastStatusChangeAt = _bestStatusChangeAt(ad) || act._statusChangedAt || act._pushedAt || null;
 
   // Due date: act.dueDate is treated as a card-level override; if not set,
   // fall back to the AD's dueDate.
@@ -25047,12 +25452,18 @@ function apResolveCard(act) {
 
   // Compute age + color state for the Age column.
   var age = apAgeStateForRow({
+    _adId: ad && ad.id,
     status: display.status,
     lastStatusChangeAt: display.lastStatusChangeAt,
     dueDate: display.dueDate,
     _dueDateMs: display._dueDateMs,
     updatedAt: display.updatedAt,
-    createdAt: display.createdAt
+    createdAt: display.createdAt,
+    // Forward checkpoint fields so apAgeStateForRow can derive the phase.
+    testingDeferredAt: ad && ad.testingDeferredAt || null,
+    testingDeferCount: (ad && typeof ad.testingDeferCount === 'number') ? ad.testingDeferCount : 0,
+    _customFields: display._customFields,
+    _customFieldsRaw: display._customFieldsRaw
   });
 
   return { act: act, ad: ad, display: display, source: source, age: age };
@@ -25526,6 +25937,9 @@ async function loadState() {
   if (typeof _refreshDeletedAdIdsCache === 'function') {
     try { await _refreshDeletedAdIdsCache(activeProductId); } catch (e) {}
   }
+  // Invalidate the polluted-lsc cache so the new product's ADS get scanned
+  // fresh on first AP render. Different products have different baseline values.
+  if (typeof _resetPollutedLscCache === 'function') _resetPollutedLscCache();
   return true;
 }
 
@@ -25681,6 +26095,9 @@ async function switchProduct(productId) {
   if (typeof _refreshDeletedAdIdsCache === 'function') {
     try { await _refreshDeletedAdIdsCache(activeProductId); } catch (e) {}
   }
+  // Invalidate the polluted-lsc cache so the new product's ADS get scanned
+  // fresh on first AP render. Different products have different baseline values.
+  if (typeof _resetPollutedLscCache === 'function') _resetPollutedLscCache();
   P = process(ADS);
   if (typeof deriveWinners === 'function') deriveWinners();
   if (typeof genActions === 'function') genActions();
@@ -30679,6 +31096,7 @@ function _mxv4LazyBackfillStatusHistory(adsInCell) {
         // Persist + re-render so the UI reflects the new precise timestamps
         try { saveState(); } catch (e) {}
         try { renderMatrix(); } catch (e) {}
+        try { if (typeof renderActionPlan === 'function') renderActionPlan(); } catch (e) {}
       }
       return;
     }

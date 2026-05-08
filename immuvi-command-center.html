@@ -3658,6 +3658,14 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   color:var(--t3); cursor:pointer; border-radius:6px;
 }
 .ap-del-btn:hover { color:#dc2626; background:rgba(220,38,38,0.08); }
+.ap-del-cell { white-space: nowrap; min-width: 78px; }
+.ap-del-cell .ap-del-btn { display: inline-block; vertical-align: middle; }
+.ap-del-cell .ap-del-btn + .ap-del-btn { margin-left: 6px; }
+/* Cleared (dismissed) state: muted appearance + green restore on hover */
+.ap-del-btn.is-cleared { color: #0ea5e9; background: rgba(14,165,233,0.10); }
+.ap-del-btn.is-cleared:hover { color: #0369a1; background: rgba(14,165,233,0.18); }
+.ap-row.is-cleared td { opacity: 0.55; }
+.ap-row.is-cleared td.ap-del-cell { opacity: 1; }
 
 /* Empty state */
 .ap-empty {
@@ -16792,7 +16800,7 @@ var _AP_DEFAULT_COLUMNS = [
   { key:'due',      width:120, hidden:false },
   { key:'clickup',  width:100, hidden:false },
   { key:'producer', width:90,  hidden:false },
-  { key:'del',      width:36,  hidden:false }
+  { key:'del',      width:96,  hidden:false }
 ];
 
 // Built-in column registry — head label, sort key, lock flag, render fns.
@@ -16939,23 +16947,26 @@ var _AP_COL_REGISTRY = {
     }
   },
   del: {
-    label: '', locked: true, sortable: false,
+    label: 'Actions', locked: true, sortable: false,
     renderCell: function (r) {
       var adId = (r.ad && r.ad.id) || r.act.sourceAdId || r.act.adId || '';
-      // "Clear" = soft per-user dismiss. Works for both real and virtual cards.
-      // For real MAs, the underlying MA stays in the table — only this user's
-      // view hides it (other team members keep seeing it). To hard-delete,
-      // bulk-toolbar still has the Delete action.
-      var clearBtn = '<button class="ap-del-btn" title="Clear from my AP (soft hide; reversible via Show cleared)" onclick="event.stopPropagation(); apClearCard(\'' + escAttr(adId) + '\')">✕</button>';
-      // For real MAs we also expose the legacy "Delete from project" via long-press menu
-      // — keep the existing 🗑 only when the card is NOT virtual (deleting a virtual
-      // means deleting the AD, which is a much bigger action; do that from matrix).
-      if (r.act && r.act._virtual) {
-        return '<td onclick="event.stopPropagation()">' + clearBtn + '</td>';
-      }
-      return '<td onclick="event.stopPropagation()">' + clearBtn +
-             '<button class="ap-del-btn" style="margin-left:4px;opacity:0.5" title="Delete this task from project (irreversible)" onclick="if(confirm(\'Delete this task from the project? This removes the MA AND soft-deletes the AD.\')) deleteManualAction(\'' + escAttr(r.act.id) + '\')">🗑</button>' +
-             '</td>';
+      var isCleared = (typeof _apIsDismissed === 'function') && _apIsDismissed(adId);
+      // Eye toggle. Same icon for both states — tooltip + visual style
+      // signal the difference. Click hides; click again restores.
+      var clearTitle = isCleared
+        ? 'This card is currently hidden from your AP — click to bring it back'
+        : 'Hide this card from your own AP (other team members still see it)';
+      var clearBtn = '<button class="ap-del-btn' + (isCleared ? ' is-cleared' : '') + '" title="' + escAttr(clearTitle) + '" onclick="event.stopPropagation(); apToggleClearCard(\'' + escAttr(adId) + '\')">👁</button>';
+      // 🗑 Delete — hard delete across project + ClickUp. Same behavior on
+      // every card: real MAs go through deleteManualAction; virtuals go
+      // directly through deleteAdEverywhere (no MA exists). Both paths
+      // soft-delete the AD, tombstone it, and delete the ClickUp task.
+      var isVirtual = r.act && r.act._virtual;
+      var deleteCall = isVirtual
+        ? "if(confirm('Delete this task from the project? Removes it from Action Plan, Matrix, and ClickUp. Cannot be undone.')) (typeof deleteAdEverywhere === 'function' ? deleteAdEverywhere('" + escAttr(adId) + "') : null)"
+        : "if(confirm('Delete this task from the project? Removes it from Action Plan, Matrix, and ClickUp. Cannot be undone.')) deleteManualAction('" + escAttr(r.act.id) + "')";
+      var deleteBtn = '<button class="ap-del-btn" title="Delete this task from project (removes from AP, Matrix, and ClickUp — irreversible)" onclick="event.stopPropagation(); ' + deleteCall + '">🗑</button>';
+      return '<td class="ap-del-cell" onclick="event.stopPropagation()">' + clearBtn + deleteBtn + '</td>';
     }
   },
   producer: {
@@ -17083,6 +17094,14 @@ function _apActiveViewColumns() {
     if (prod && prod.hidden) prod.hidden = false;
     view._producerColumnUnhidden = true;
     _apColSave();  // persist the flag + the un-hide so this runs exactly once
+  }
+  // 2026-05-09: del column was 36px (single 🗑 icon). Now holds 👁 + 🗑 — needs
+  // ≥96px to fit both buttons. One-time bump for users with the old saved width.
+  if (!view._delColumnWidthMigrated) {
+    var del = view.columns.find(function (vc) { return vc.key === 'del'; });
+    if (del && (!del.width || del.width < 96)) del.width = 96;
+    view._delColumnWidthMigrated = true;
+    _apColSave();
   }
   // Append unseen custom fields, hidden by default
   Object.keys(_AP_COL_REGISTRY).forEach(function (k) {
@@ -18741,7 +18760,9 @@ function renderApTableView(rows) {
   rows.forEach(function (r) {
     var act = r.act, age = r.age;
     var sel = !!_apState.selected[act.id];
-    var rowCls = 'ap-row age-' + age.state + (sel ? ' selected' : '') + (act._highlightNew ? ' new-row' : '');
+    var _adIdForRow = (r.ad && r.ad.id) || act.sourceAdId || act.adId || '';
+    var _rowCleared = (typeof _apIsDismissed === 'function') && _apIsDismissed(_adIdForRow);
+    var rowCls = 'ap-row age-' + age.state + (sel ? ' selected' : '') + (act._highlightNew ? ' new-row' : '') + (_rowCleared ? ' is-cleared' : '');
     var _isAdopted = (act._origin === 'adopted' || !!act._adoptedAt);
     html += '<tr class="' + rowCls + '" data-action-id="' + escAttr(act.id) + '"' + (_isAdopted ? ' data-adopted="1"' : '') + ' onclick="apOpenDrawer(\'' + escAttr(act.id) + '\')">';
     visCols.forEach(function (c) {
@@ -25663,6 +25684,13 @@ function apUnclearCard(adId) {
   delete _apDismissedAdIds[adId];
   _apPersistDismissed();
   if (typeof renderActionPlan === 'function') renderActionPlan();
+}
+// Single toggle for the per-row Clear button. If currently dismissed,
+// restores to AP; otherwise hides it. Used by the ✕/↶ button.
+function apToggleClearCard(adId) {
+  if (!adId) return;
+  if (_apIsDismissed(adId)) apUnclearCard(adId);
+  else apClearCard(adId);
 }
 function apToggleShowDismissed(on) {
   if (!_apState || !_apState.filters) return;

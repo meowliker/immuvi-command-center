@@ -26815,26 +26815,24 @@ async function _flushStateToSupabase(productIdArg) {
       MANUAL_ACTIONS: MANUAL_ACTIONS,
       ANGLE_PERSONAS: ANGLE_PERSONAS  // BUG-003: persist explicit assignments
     });
-    // Keep the ACTIVE product's record in sync (catches rename / color / list
-    // changes for the product the user is currently working on).
+    // ── PRODUCTS WRITE INTENTIONALLY SKIPPED HERE ────────────────────
+    // 2026-05-11 (v2): the products table is owned by explicit save paths,
+    // never by the bulk flush. These are the ONLY legitimate write paths:
+    //   - addProduct (~line 27160) — creates a new product
+    //   - saveProductClickUpLink (~line 27200) — user picks a ClickUp list
+    //   - confirmDeleteProduct (~line 27260) — user deletes a product
+    //   - sync metadata update (~line 23400) — records lastSyncedAt/Count
     //
-    // 2026-05-11 fix: restricted to active-product-only. The previous loop
-    // upserted EVERY product on EVERY flush, which silently overwrote fresh
-    // DB rows with this tab's stale in-memory copy. Symptoms hit by users:
-    //   - Therapy's ClickUp list blanking out after save
-    //   - Couple Workbook reverting to old "75+ Crochet Patterns" list
-    //   - Deleted Medical product resurrecting (cross-tab)
-    // All legitimate product mutations already have their own explicit
-    // DB.upsertProduct call (addProduct, saveProductClickUpLink, sync
-    // metadata update ~line 23240). The blanket loop was a redundant
-    // safety net that became a footgun.
-    var _activeProd = null;
-    for (var pi = 0; pi < PRODUCTS.length; pi++) {
-      if (PRODUCTS[pi].id === pid) { _activeProd = PRODUCTS[pi]; break; }
-    }
-    if (_activeProd && !_recentlyDeletedProductIds.has(pid)) {
-      await DB.upsertProduct(_activeProd);
-    }
+    // v1 fix wrote the active product on every flush. Still bad: if a tab
+    // had STALE PRODUCTS[i].config in memory (e.g. another tab updated the
+    // list, but realtime echo hadn't landed yet, or the tab is on cached
+    // old JS), this would clobber DB with stale config. Symptom: Therapy's
+    // ClickUp list keeps reverting to blank, Couple Workbook reverts to old
+    // "75+ Crochet Patterns" — even AFTER v1 fix was deployed.
+    //
+    // Removing the loop entirely. Explicit save paths cover all real
+    // mutations. The blanket flush was always dead weight (no UI for
+    // product rename / color change exists today).
   } finally {
     _lastSaveCompletedAt = Date.now();
     _saveInFlight = false;

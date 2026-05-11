@@ -80,8 +80,8 @@ Expected worker prompt shape:
 
 ```text
 Use the immuvi-creative-producer skill.
-Use model: GPT-5.4.
-Use reasoning effort: high.
+Use model: GPT-5.5.
+Use reasoning effort: medium.
 Generate images using your native image generation capability (same as Codex chat). Do NOT hard-code a specific model name.
 Use image quality: high.
 Use image size/aspect ratio: match the inspiration image unless the task specifies another size.
@@ -103,8 +103,8 @@ If the worker can set runtime config directly, use this default configuration:
 
 ```json
 {
-  "codex_model": "gpt-5.4",
-  "reasoning_effort": "high",
+  "codex_model": "gpt-5.5",
+  "reasoning_effort": "medium",
   "image_model": "native",
   "image_quality": "high",
   "image_size_strategy": "match_inspiration"

@@ -457,8 +457,8 @@ class Worker:
 
             _prompt = (
                 "Use the immuvi-creative-producer skill.\n"
-                "Use model: GPT-5.4.\n"
-                "Use reasoning effort: high.\n"
+                "Use model: GPT-5.5.\n"
+                "Use reasoning effort: medium.\n"
                 "Generate the images using your native image generation capability — the same one you use in the Codex chat. Do not specify or hard-code a particular image model name; use whatever native image tool is available.\n"
                 "Use image quality: high.\n"
                 "Use image size/aspect ratio: match the inspiration image unless the task specifies another size. Do NOT hard-code 1024x1536. If inspiration dimensions are unavailable, fall back to the task/platform default, then 4:5 for static social ads.\n\n"
@@ -494,10 +494,17 @@ class Worker:
                 f"Print 'OK {run_id}' on success or 'FAIL {run_id}: <reason>' on failure "
                 "as the LAST line of stdout."
             )
+            # 2026-05-11: force GPT-5.5 + medium reasoning at the runtime
+            # level via CLI flags. The prompt-text "Use model: X" hints don't
+            # actually change the model — only --model / -c flags do. Without
+            # these, codex exec falls back to ~/.codex/config.toml defaults
+            # (which had reasoning_effort=low → poor image-gen output).
             cmd = [
                 CODEX_BIN, "exec",
                 "--dangerously-bypass-approvals-and-sandbox",
                 "-c", "shell_environment_policy.inherit=all",
+                "--model", "gpt-5.5",
+                "-c", "model_reasoning_effort=medium",
                 _prompt,
             ]
             try:

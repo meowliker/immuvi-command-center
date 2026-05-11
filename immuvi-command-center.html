@@ -3953,6 +3953,137 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   20%, 40%, 60%, 80% { transform: translateX(1.5px); }
 }
 
+/* Row-flash on completion — green sweep for done, red for failed. Used by
+   _producerUpdateAllPillsInPlace to notify the user without yelling. */
+.producer-row-flash { animation: producer-row-glow 2.0s cubic-bezier(0.22,1,0.36,1) 1; }
+.producer-row-flash.failed { animation: producer-row-glow-fail 2.0s cubic-bezier(0.22,1,0.36,1) 1; }
+@keyframes producer-row-glow {
+  0%   { background-color: rgba(16,185,129,0.00); box-shadow: inset 3px 0 0 rgba(16,185,129,0); }
+  18%  { background-color: rgba(16,185,129,0.20); box-shadow: inset 3px 0 0 rgba(16,185,129,0.9); }
+  60%  { background-color: rgba(16,185,129,0.10); box-shadow: inset 3px 0 0 rgba(16,185,129,0.5); }
+  100% { background-color: rgba(16,185,129,0.00); box-shadow: inset 3px 0 0 rgba(16,185,129,0); }
+}
+@keyframes producer-row-glow-fail {
+  0%   { background-color: rgba(239,68,68,0.00); box-shadow: inset 3px 0 0 rgba(239,68,68,0); }
+  18%  { background-color: rgba(239,68,68,0.18); box-shadow: inset 3px 0 0 rgba(239,68,68,0.9); }
+  60%  { background-color: rgba(239,68,68,0.08); box-shadow: inset 3px 0 0 rgba(239,68,68,0.5); }
+  100% { background-color: rgba(239,68,68,0.00); box-shadow: inset 3px 0 0 rgba(239,68,68,0); }
+}
+
+/* ── Phase 2: custom-dropdown trigger button (replaces native select) ── */
+.ap-td-tagsel { padding: 3px 4px; position: relative; }
+.ap-tag-trigger {
+  display: inline-flex; align-items: center; justify-content: space-between;
+  gap: 6px; width: 100%; min-width: 110px; max-width: 220px;
+  font-size: 0.78rem; font-family: inherit; font-weight: 500;
+  color: var(--t1); line-height: 1;
+  background: rgba(15,23,42,0.02);
+  border: 1px solid rgba(15,23,42,0.06); border-radius: 7px;
+  padding: 5px 10px 5px 11px;
+  cursor: pointer; user-select: none;
+  transition: background 140ms, border-color 140ms, box-shadow 140ms, transform 80ms;
+  position: relative;
+}
+.ap-tag-trigger:hover { background: rgba(15,23,42,0.05); border-color: rgba(15,23,42,0.14); }
+.ap-tag-trigger:active { transform: translateY(0.5px); }
+.ap-tag-trigger.open { background: #fff; border-color: rgba(132,204,22,0.45); box-shadow: 0 0 0 2px rgba(132,204,22,0.12); }
+.ap-tag-trigger-val { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 0; }
+.ap-tag-trigger-val.empty { color: var(--t3); font-weight: 400; }
+.ap-tag-trigger-chev {
+  flex-shrink: 0; width: 10px; height: 10px; opacity: 0.55;
+  transition: transform 200ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.ap-tag-trigger.open .ap-tag-trigger-chev { transform: rotate(180deg); opacity: 1; }
+
+/* The popover panel itself — floats in document.body, position:fixed */
+.ap-tag-pop {
+  position: fixed; z-index: 9999; min-width: 220px; max-width: 320px; max-height: 320px;
+  background: #fff;
+  border: 1px solid rgba(15,23,42,0.10); border-radius: 10px;
+  box-shadow: 0 18px 48px rgba(15,23,42,0.18), 0 4px 12px rgba(15,23,42,0.06);
+  overflow: hidden;
+  display: flex; flex-direction: column;
+  animation: ap-tag-pop-in 180ms cubic-bezier(0.22, 1, 0.36, 1);
+  transform-origin: top center;
+}
+@keyframes ap-tag-pop-in {
+  from { opacity: 0; transform: translateY(-6px) scale(0.96); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+.ap-tag-pop-search {
+  flex-shrink: 0; padding: 8px 10px; border-bottom: 1px solid rgba(15,23,42,0.06);
+  background: rgba(15,23,42,0.015);
+}
+.ap-tag-pop-search input {
+  width: 100%; border: 1px solid rgba(15,23,42,0.10); border-radius: 7px;
+  padding: 6px 10px; font-size: 0.78rem; font-family: inherit; color: var(--t1);
+  background: #fff; outline: none;
+  transition: border-color 140ms, box-shadow 140ms;
+}
+.ap-tag-pop-search input:focus {
+  border-color: rgba(132,204,22,0.45); box-shadow: 0 0 0 2px rgba(132,204,22,0.12);
+}
+.ap-tag-pop-list {
+  flex: 1; min-height: 0; overflow-y: auto; padding: 4px 4px 6px;
+}
+.ap-tag-pop-item {
+  display: flex; align-items: center; gap: 8px; padding: 7px 10px;
+  font-size: 0.79rem; color: var(--t1); border-radius: 6px;
+  cursor: pointer; user-select: none;
+  transition: background 80ms, color 80ms, transform 80ms;
+  animation: ap-tag-item-in 220ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+}
+.ap-tag-pop-item:nth-child(1)  { animation-delay: 0ms; }
+.ap-tag-pop-item:nth-child(2)  { animation-delay: 14ms; }
+.ap-tag-pop-item:nth-child(3)  { animation-delay: 28ms; }
+.ap-tag-pop-item:nth-child(4)  { animation-delay: 42ms; }
+.ap-tag-pop-item:nth-child(5)  { animation-delay: 56ms; }
+.ap-tag-pop-item:nth-child(6)  { animation-delay: 70ms; }
+.ap-tag-pop-item:nth-child(7)  { animation-delay: 84ms; }
+.ap-tag-pop-item:nth-child(8)  { animation-delay: 98ms; }
+.ap-tag-pop-item:nth-child(n+9) { animation-delay: 112ms; }
+@keyframes ap-tag-item-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.ap-tag-pop-item:hover,
+.ap-tag-pop-item.kbd-active {
+  background: linear-gradient(135deg, rgba(132,204,22,0.08), rgba(139,92,246,0.08));
+  color: #1e293b;
+}
+.ap-tag-pop-item.selected {
+  background: rgba(132,204,22,0.12); color: #365314; font-weight: 600;
+}
+.ap-tag-pop-item.selected:hover { background: rgba(132,204,22,0.20); }
+.ap-tag-pop-item-tick {
+  width: 14px; height: 14px; flex-shrink: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  color: #65a30d;
+}
+.ap-tag-pop-item:not(.selected) .ap-tag-pop-item-tick { visibility: hidden; }
+.ap-tag-pop-item-lbl { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ap-tag-pop-empty {
+  padding: 16px 12px; text-align: center; color: var(--t3); font-size: 0.78rem; font-style: italic;
+}
+.ap-tag-pop-clear {
+  margin: 4px 0 0; padding: 6px 10px; border-top: 1px solid rgba(15,23,42,0.06);
+  font-size: 0.74rem; color: var(--t3); cursor: pointer; text-align: center;
+  background: rgba(15,23,42,0.02); transition: background 120ms, color 120ms;
+}
+.ap-tag-pop-clear:hover { background: rgba(239,68,68,0.06); color: #b91c1c; }
+
+/* Phase 3: subtle fade on column reorder — applied to .ap-table-wrap for
+   ~280ms after a successful drop. Pure opacity (no transforms that could
+   get stuck), so even if interrupted the layout stays correct. */
+.ap-table-wrap.ap-cols-just-moved .ap-table {
+  animation: ap-cols-just-moved-fade 300ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+@keyframes ap-cols-just-moved-fade {
+  0%   { opacity: 0.55; }
+  60%  { opacity: 1; }
+  100% { opacity: 1; }
+}
+
 /* ── Producer detail popover ── */
 .producer-detail-pop {
   width: 360px; background: #fff;
@@ -13888,8 +14019,24 @@ function _producerUpdateAllPillsInPlace() {
     if (typeof _producerRenderPillContent === 'function') {
       var fresh = _producerRenderPillContent(r);
       if (fresh && fresh.html !== undefined) {
-        if (el.getAttribute('data-producer-state') !== fresh.state) {
+        var prevState = el.getAttribute('data-producer-state');
+        if (prevState !== fresh.state) {
           el.setAttribute('data-producer-state', fresh.state);
+          // ── Phase 1: row highlight on transition to done/failed ──
+          // Brief green/red pulse on the parent row so the user notices
+          // completion without staring at the pill. CSS-only animation,
+          // self-cleans via animationend.
+          if (fresh.state === 'done' || fresh.state === 'failed') {
+            var row = el.closest('tr') || el.closest('.ap-task-card');
+            if (row && !row.classList.contains('producer-row-flash')) {
+              var cls = fresh.state === 'done' ? 'producer-row-flash done' : 'producer-row-flash failed';
+              row.classList.add('producer-row-flash');
+              if (fresh.state === 'failed') row.classList.add('failed');
+              setTimeout(function () {
+                if (row && row.classList) { row.classList.remove('producer-row-flash', 'failed'); }
+              }, 2200);
+            }
+          }
         }
         if (el.innerHTML !== fresh.html) el.innerHTML = fresh.html;
         updated++;
@@ -17682,15 +17829,325 @@ function _apEnsureCfColumns() {
         var ad = r.ad;
         var meta = (typeof CLICKUP_FIELD_META !== 'undefined') ? CLICKUP_FIELD_META[lcName] : null;
         var displayVal = (ad && ad._customFields && ad._customFields[lcName]) || '';
+        var adId = ad ? ad.id : '';
         if (meta && meta.type === 'users') {
           var raw = ad && ad._customFieldsRaw && ad._customFieldsRaw[lcName];
-          return _apPeopleCellHtml(ad ? ad.id : '', lcName, Array.isArray(raw) ? raw : null);
+          return _apPeopleCellHtml(adId, lcName, Array.isArray(raw) ? raw : null);
+        }
+        // ── Phase 2: editable dropdowns for known typed fields ──
+        // angle tag / persona tag → populate from local ANGLES/PERSONAS arrays
+        // dropdown-type ClickUp fields → populate from meta.options
+        // Everything else falls through to read-only text (existing behavior).
+        if (!ad) {
+          return '<td class="ap-mono">—</td>';
+        }
+        var options = null;
+        var fieldMapKey = null;
+        if (lcName === 'angle tag' && typeof ANGLES !== 'undefined' && Array.isArray(ANGLES)) {
+          options = ANGLES.map(function (a) { return a.name; });
+          fieldMapKey = 'angle tag';
+        } else if (lcName === 'persona tag' && typeof PERSONAS !== 'undefined' && Array.isArray(PERSONAS)) {
+          options = PERSONAS.map(function (p) { return p.name; });
+          fieldMapKey = 'persona tag';
+        } else if (meta && (meta.type === 'drop_down' || meta.type === 'labels') && Array.isArray(meta.options)) {
+          options = meta.options.map(function (o) { return o.name || o.label || String(o); });
+          fieldMapKey = lcName;
+        }
+        if (options && options.length && adId) {
+          // Custom dropdown trigger (replaces native select for animation +
+          // styling control). The popover panel mounts to document.body on
+          // click — see apOpenTagDropdown.
+          var labelHtml = displayVal
+            ? '<span class="ap-tag-trigger-val">' + esc(displayVal) + '</span>'
+            : '<span class="ap-tag-trigger-val empty">—</span>';
+          var chevSvg = '<svg class="ap-tag-trigger-chev" viewBox="0 0 10 10" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">'
+            + '<path d="M2 4l3 3 3-3" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>'
+            + '</svg>';
+          // Encode options as a JSON-in-attribute so the click handler can
+          // read them without re-walking the registry.
+          var optsAttr = escAttr(JSON.stringify(options));
+          return '<td class="ap-td-tagsel" onclick="event.stopPropagation()">' +
+            '<button type="button" class="ap-tag-trigger" ' +
+              'data-ad-id="' + escAttr(adId) + '" ' +
+              'data-field-key="' + escAttr(fieldMapKey) + '" ' +
+              'data-current="' + escAttr(displayVal) + '" ' +
+              'data-options="' + optsAttr + '" ' +
+              'onclick="event.stopPropagation(); apOpenTagDropdown(this)">' +
+              labelHtml + chevSvg +
+            '</button></td>';
         }
         var fullText = displayVal || '';
         return '<td class="ap-mono" title="' + escAttr(fullText) + '">' + (displayVal ? esc(displayVal) : '—') + '</td>';
       }
     };
   });
+}
+
+// ── Phase 2: custom dropdown popover (replaces native <select> with a
+// styled, animated, keyboard-friendly picker). Mounts to document.body
+// so it can escape table-overflow clipping. Single global instance —
+// opening a new one closes any previous.
+var _apTagPopState = { panel: null, trigger: null, options: [], adId: null, fieldKey: null, current: null, kbdIdx: -1, filter: '' };
+
+function apOpenTagDropdown(triggerBtn) {
+  if (!triggerBtn) return;
+  // Toggle close if already open on this trigger
+  if (_apTagPopState.trigger === triggerBtn && _apTagPopState.panel) {
+    apCloseTagDropdown();
+    return;
+  }
+  apCloseTagDropdown(); // close any previous
+  var adId = triggerBtn.getAttribute('data-ad-id') || '';
+  var fieldKey = triggerBtn.getAttribute('data-field-key') || '';
+  var current = triggerBtn.getAttribute('data-current') || '';
+  var options = [];
+  try { options = JSON.parse(triggerBtn.getAttribute('data-options') || '[]'); } catch (e) { options = []; }
+
+  _apTagPopState.options = options;
+  _apTagPopState.adId = adId;
+  _apTagPopState.fieldKey = fieldKey;
+  _apTagPopState.current = current;
+  _apTagPopState.kbdIdx = -1;
+  _apTagPopState.filter = '';
+  _apTagPopState.trigger = triggerBtn;
+  triggerBtn.classList.add('open');
+
+  var panel = document.createElement('div');
+  panel.className = 'ap-tag-pop';
+  panel.setAttribute('role', 'listbox');
+  panel.innerHTML = apRenderTagDropdownPanel();
+  document.body.appendChild(panel);
+  _apTagPopState.panel = panel;
+
+  // Position below the trigger
+  apPositionTagDropdown();
+
+  // Focus search field for instant typing-to-filter
+  setTimeout(function () {
+    var search = panel.querySelector('.ap-tag-pop-search input');
+    if (search) search.focus();
+  }, 30);
+
+  // Outside-click handler
+  setTimeout(function () {
+    document.addEventListener('mousedown', _apTagPopOutsideClick, true);
+    document.addEventListener('keydown', _apTagPopKeyDown, true);
+    window.addEventListener('scroll', apCloseTagDropdown, true);
+    window.addEventListener('resize', apCloseTagDropdown);
+  }, 0);
+}
+
+function apRenderTagDropdownPanel() {
+  var filter = (_apTagPopState.filter || '').toLowerCase();
+  var current = _apTagPopState.current || '';
+  var filtered = _apTagPopState.options.filter(function (o) {
+    return !filter || String(o).toLowerCase().indexOf(filter) !== -1;
+  });
+  var tickSvg = '<svg viewBox="0 0 14 14" xmlns="http://www.w3.org/2000/svg">'
+    + '<path d="M3 7.5L6 10.5L11 4.5" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+
+  var html = '<div class="ap-tag-pop-search"><input type="text" placeholder="Search..." oninput="apTagDropdownFilter(this.value)" onkeydown="event.stopPropagation()"></div>';
+  html += '<div class="ap-tag-pop-list">';
+  if (!filtered.length) {
+    html += '<div class="ap-tag-pop-empty">No matches</div>';
+  } else {
+    filtered.forEach(function (opt, idx) {
+      var selected = (opt === current) ? ' selected' : '';
+      html += '<div class="ap-tag-pop-item' + selected + '" data-val="' + escAttr(opt) + '" data-idx="' + idx + '" '
+        + 'onclick="apTagDropdownPick(this)" '
+        + 'onmouseenter="apTagDropdownHoverIdx(' + idx + ')">'
+        + '<span class="ap-tag-pop-item-tick">' + tickSvg + '</span>'
+        + '<span class="ap-tag-pop-item-lbl">' + esc(opt) + '</span>'
+        + '</div>';
+    });
+  }
+  html += '</div>';
+  // Clear-current option if there's a value
+  if (current) {
+    html += '<div class="ap-tag-pop-clear" onclick="apTagDropdownPickValue(\'\')">Clear value</div>';
+  }
+  return html;
+}
+
+function apPositionTagDropdown() {
+  var panel = _apTagPopState.panel;
+  var trigger = _apTagPopState.trigger;
+  if (!panel || !trigger) return;
+  var r = trigger.getBoundingClientRect();
+  var panelRect = panel.getBoundingClientRect();
+  // Default: anchor below the trigger, left-aligned to it
+  var top = r.bottom + 4;
+  var left = r.left;
+  // Flip up if there's no room below
+  if (top + panelRect.height > window.innerHeight - 8) {
+    top = Math.max(8, r.top - panelRect.height - 4);
+  }
+  // Keep within viewport horizontally
+  if (left + panelRect.width > window.innerWidth - 8) {
+    left = Math.max(8, window.innerWidth - panelRect.width - 8);
+  }
+  panel.style.top = top + 'px';
+  panel.style.left = left + 'px';
+}
+
+function apTagDropdownFilter(val) {
+  _apTagPopState.filter = val || '';
+  _apTagPopState.kbdIdx = -1;
+  if (_apTagPopState.panel) {
+    _apTagPopState.panel.innerHTML = apRenderTagDropdownPanel();
+    // Re-focus the search after innerHTML rebuild
+    var search = _apTagPopState.panel.querySelector('.ap-tag-pop-search input');
+    if (search) {
+      search.value = val;
+      search.focus();
+      // Restore caret to end
+      try { var len = val.length; search.setSelectionRange(len, len); } catch (e) {}
+    }
+  }
+}
+
+function apTagDropdownHoverIdx(idx) { _apTagPopState.kbdIdx = idx; }
+
+function apTagDropdownPick(itemEl) {
+  if (!itemEl) return;
+  var val = itemEl.getAttribute('data-val') || '';
+  apTagDropdownPickValue(val);
+}
+
+function apTagDropdownPickValue(val) {
+  var adId = _apTagPopState.adId;
+  var fieldKey = _apTagPopState.fieldKey;
+  var trigger = _apTagPopState.trigger;
+  // Update the trigger's visible label immediately (optimistic UI).
+  if (trigger) {
+    var valEl = trigger.querySelector('.ap-tag-trigger-val');
+    if (valEl) {
+      if (val) {
+        valEl.textContent = val;
+        valEl.classList.remove('empty');
+      } else {
+        valEl.textContent = '—';
+        valEl.classList.add('empty');
+      }
+    }
+    trigger.setAttribute('data-current', val);
+  }
+  apCloseTagDropdown();
+  if (adId && fieldKey) {
+    apEditAdField(adId, fieldKey, val);
+  }
+}
+
+function _apTagPopOutsideClick(e) {
+  if (!_apTagPopState.panel) return;
+  if (_apTagPopState.panel.contains(e.target)) return;
+  if (_apTagPopState.trigger && _apTagPopState.trigger.contains(e.target)) return;
+  apCloseTagDropdown();
+}
+
+function _apTagPopKeyDown(e) {
+  if (!_apTagPopState.panel) return;
+  if (e.key === 'Escape') {
+    e.preventDefault();
+    apCloseTagDropdown();
+    return;
+  }
+  var items = _apTagPopState.panel.querySelectorAll('.ap-tag-pop-item');
+  if (!items.length) return;
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+    e.preventDefault();
+    var dir = e.key === 'ArrowDown' ? 1 : -1;
+    _apTagPopState.kbdIdx = (_apTagPopState.kbdIdx + dir + items.length) % items.length;
+    items.forEach(function (it, i) { it.classList.toggle('kbd-active', i === _apTagPopState.kbdIdx); });
+    items[_apTagPopState.kbdIdx].scrollIntoView({ block: 'nearest' });
+  } else if (e.key === 'Enter') {
+    e.preventDefault();
+    var active = _apTagPopState.kbdIdx >= 0 ? items[_apTagPopState.kbdIdx] : null;
+    if (active) apTagDropdownPick(active);
+  }
+}
+
+function apCloseTagDropdown() {
+  if (_apTagPopState.trigger) _apTagPopState.trigger.classList.remove('open');
+  if (_apTagPopState.panel && _apTagPopState.panel.parentNode) {
+    _apTagPopState.panel.parentNode.removeChild(_apTagPopState.panel);
+  }
+  _apTagPopState = { panel: null, trigger: null, options: [], adId: null, fieldKey: null, current: null, kbdIdx: -1, filter: '' };
+  document.removeEventListener('mousedown', _apTagPopOutsideClick, true);
+  document.removeEventListener('keydown', _apTagPopKeyDown, true);
+  window.removeEventListener('scroll', apCloseTagDropdown, true);
+  window.removeEventListener('resize', apCloseTagDropdown);
+}
+
+// ── Phase 2: edit-AD-field helper used by AP inline dropdowns ──
+// Updates the in-memory AD, persists to Supabase, pushes to ClickUp,
+// broadcasts the change to peers, and re-renders only the affected cell.
+async function apEditAdField(adId, fieldKey, value) {
+  if (!adId || !fieldKey) return;
+  var ad = null;
+  for (var i = 0; i < ADS.length; i++) {
+    if (ADS[i].id === adId) { ad = ADS[i]; break; }
+  }
+  if (!ad) { console.warn('[apEditAdField] AD not found', adId); return; }
+  value = value || '';
+  // Map the field key to the in-memory AD attribute we actually mutate.
+  // For 'angle tag' / 'persona tag' the AD has top-level fields (ad.angle, ad.persona).
+  // For other custom fields, write into ad._customFields[lcName].
+  var lc = String(fieldKey).toLowerCase();
+  if (lc === 'angle tag') {
+    ad.angle = value;
+  } else if (lc === 'persona tag') {
+    ad.persona = value;
+  }
+  // Always mirror into the custom-fields cache too — the AP cell reads from there
+  // and the next ClickUp sync expects this shape.
+  if (!ad._customFields) ad._customFields = {};
+  ad._customFields[lc] = value;
+  // Best-effort DB write — short_text/dropdown fields land in ads.angle /
+  // ads.persona columns for the two named cases, and in ads.meta for everything
+  // else (handled by _adToRow on the next save).
+  try {
+    if (SB && activeProductId) {
+      var patch = {};
+      if (lc === 'angle tag') patch.angle = value;
+      if (lc === 'persona tag') patch.persona = value;
+      // Always update the meta jsonb mirror so downstream readers see it
+      patch.meta = (ad.meta && typeof ad.meta === 'object') ? Object.assign({}, ad.meta) : {};
+      patch.meta._customFields = Object.assign({}, ad._customFields);
+      patch.updated_at = new Date().toISOString();
+      await SB.from('ads').update(patch).eq('id', adId);
+    }
+  } catch (e) {
+    console.warn('[apEditAdField] Supabase update failed (non-fatal)', e);
+  }
+  // Push to ClickUp custom field (best-effort; pushFieldToClickUp exists).
+  try {
+    if (typeof pushFieldToClickUp === 'function' && ad._clickupId) {
+      // For our two named cases, push as the top-level concept (angle/persona);
+      // pushFieldToClickUp's mapping handles dual-push (short_text + dropdown).
+      if (lc === 'angle tag') pushFieldToClickUp(ad, 'angle', value);
+      else if (lc === 'persona tag') pushFieldToClickUp(ad, 'persona', value);
+      // For other custom fields, route via the generic custom-field helper if available.
+      else if (typeof pushCustomFieldToClickUp === 'function') {
+        pushCustomFieldToClickUp(ad, lc, value);
+      }
+    }
+  } catch (e) {
+    console.warn('[apEditAdField] ClickUp push failed (non-fatal)', e);
+  }
+  // Broadcast to other tabs via the existing field-update event so they
+  // update in place without a full refresh.
+  if (typeof _rtChannel !== 'undefined' && _rtChannel) {
+    try {
+      _rtChannel.send({
+        type: 'broadcast', event: 'field-update',
+        payload: {
+          adId: adId, field: lc, value: value, kind: 'custom',
+          rawValue: value, clientId: _myClientId
+        }
+      });
+    } catch (e) {}
+  }
 }
 
 // State load/save — keyed per-product so each product has independent views.
@@ -18186,9 +18643,20 @@ function _apThDrop(e) {
   if (!_apThDrag.key) return;
   var th = e.currentTarget;
   var targetKey = th.getAttribute('data-col');
-  if (!targetKey || targetKey === _apThDrag.key) return;
+  if (!targetKey || targetKey === _apThDrag.key) {
+    _apThClearDropMarkers();
+    _apThDrag = { key: null, el: null, lastTarget: null, lastSide: null };
+    return;
+  }
   var def = _AP_COL_REGISTRY[targetKey];
-  if (def && def.locked) return;
+  if (def && def.locked) {
+    // User dropped on a locked column (Status, Title, Actions etc.) — let
+    // them know visually instead of silently rejecting.
+    _apThClearDropMarkers();
+    _apThDrag = { key: null, el: null, lastTarget: null, lastSide: null };
+    try { if (typeof toast === 'function') toast('That column is locked — drop on another header', 'warn', 3000); } catch(_){}
+    return;
+  }
   e.preventDefault();
   var rect = th.getBoundingClientRect();
   var before = (e.clientX - rect.left) < (rect.width / 2);
@@ -18196,7 +18664,11 @@ function _apThDrop(e) {
   // Reorder the active view's columns array.
   var view = _apActiveView();
   var fromIdx = view.columns.findIndex(function (c) { return c.key === _apThDrag.key; });
-  if (fromIdx === -1) { _apThClearDropMarkers(); return; }
+  if (fromIdx === -1) {
+    _apThClearDropMarkers();
+    _apThDrag = { key: null, el: null, lastTarget: null, lastSide: null };
+    return;
+  }
   var moved = view.columns.splice(fromIdx, 1)[0];
   // Recompute target index after splice (may have shifted).
   var toIdx = view.columns.findIndex(function (c) { return c.key === targetKey; });
@@ -18207,7 +18679,22 @@ function _apThDrop(e) {
 
   _apThClearDropMarkers();
   _apThDrag = { key: null, el: null, lastTarget: null, lastSide: null };
-  if (typeof renderActionPlan === 'function') renderActionPlan();
+
+  // Re-render the Action Plan from scratch so the new column order applies
+  // to both headers AND data cells. Wrapped in a microtask so any pending
+  // event-loop work (dragend, dragleave) completes first.
+  setTimeout(function () {
+    if (typeof renderActionPlan === 'function') renderActionPlan();
+    // Subtle row-by-row fade-in on the new layout — pure CSS class toggle,
+    // no inline transforms (which were getting stuck on interruption).
+    requestAnimationFrame(function () {
+      var wrap = document.querySelector('.ap-table-wrap');
+      if (wrap) {
+        wrap.classList.add('ap-cols-just-moved');
+        setTimeout(function () { wrap.classList.remove('ap-cols-just-moved'); }, 320);
+      }
+    });
+  }, 0);
 }
 
 function _apThDragEnd(e) {

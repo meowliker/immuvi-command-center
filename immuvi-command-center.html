@@ -10672,6 +10672,156 @@ var _myClientId = 'client-' + Math.random().toString(36).substr(2, 9);
 // saveAdNotes writes here; render reads here first; cleared when DB confirms the value.
 var _notesCache = {};
 
+// ── GLOBAL PRODUCTS CHANNEL (2026-05-11) ─────────────────────────────────
+// Why a SEPARATE channel from _rtChannel: _rtChannel is per-product
+// (`cc-${productId}`) and gets recreated on every switchProduct. The products
+// table is GLOBAL — changes here affect the header dropdown and every product's
+// config regardless of which one is active. A separate session-long channel
+// avoids resubscribing on each switch (per Producer invariant #3 — extend
+// existing channels, don't burn quota).
+//
+// Memory: feedback_realtime_traffic_budget.md — Pro plan 5M cap. Products
+// change INFREQUENTLY (a few times per day across team), so this adds <1000
+// events/month. Well within budget.
+var _productsChannel = null;
+
+function _convertProductRow(p) {
+  if (!p) return null;
+  var c = p.config || {};
+  return {
+    id: p.id,
+    name: p.name,
+    clickupListId: c.clickup_list_id || '',
+    clickupListName: c.clickup_list_name || '',
+    color: c.color || '',
+    insPrefix: c.ins_prefix || '',
+    createdAt: c.created_at_ms || null,
+    lastSyncedAt: c.last_synced_at_ms || null,
+    lastSyncedCount: c.last_synced_count || 0,
+  };
+}
+
+// Quick diff: returns true if any user-visible field differs. Skips re-render
+// for no-op echoes (own-tab upserts that came back via postgres_changes).
+function _productFieldsDiffer(a, b) {
+  if (!a || !b) return true;
+  return a.name !== b.name ||
+         a.clickupListId !== b.clickupListId ||
+         a.clickupListName !== b.clickupListName ||
+         a.color !== b.color ||
+         a.insPrefix !== b.insPrefix;
+}
+
+function _initProductsRealtimeChannel() {
+  if (!SB) return;
+  if (_productsChannel) { try { SB.removeChannel(_productsChannel); } catch(e){} _productsChannel = null; }
+
+  _productsChannel = SB.channel('cc-global-products');
+
+  _productsChannel.on('postgres_changes',
+    { event: '*', schema: 'public', table: 'products' },
+    function (payload) {
+      try {
+        // User-permission filter: non-admin users only see their allowed products.
+        // Matches the patch installed by _patchDBForUser. Admin sees everything.
+        var isAdmin = !!(window.AUTH && AUTH.isAdmin && AUTH.isAdmin());
+        var allowed = null;
+        if (!isAdmin && window.AUTH && AUTH.profile) {
+          allowed = {};
+          (AUTH.productIds || []).forEach(function (pid) { allowed[pid] = true; });
+        }
+
+        var evt = payload.eventType || payload.event || '';
+        var newRec = payload.new ? _convertProductRow(payload.new) : null;
+        var oldRec = payload.old ? _convertProductRow(payload.old) : null;
+        var targetId = (newRec && newRec.id) || (oldRec && oldRec.id) || null;
+        if (!targetId) return;
+        // Permission gate: skip events for products this user can't see.
+        if (allowed && !allowed[targetId]) return;
+        // Recent-delete tombstone: a peer creating a product we just deleted
+        // shouldn't resurrect it in our view either.
+        if (evt === 'INSERT' && typeof _recentlyDeletedProductIds !== 'undefined' &&
+            _recentlyDeletedProductIds.has(targetId)) {
+          return;
+        }
+
+        var changed = false;
+
+        if (evt === 'DELETE') {
+          var beforeLen = PRODUCTS.length;
+          PRODUCTS = PRODUCTS.filter(function (p) { return p.id !== targetId; });
+          if (PRODUCTS.length !== beforeLen) {
+            changed = true;
+            // If our active product just got deleted, switch to another.
+            if (activeProductId === targetId) {
+              var fallback = PRODUCTS.length ? PRODUCTS[0].id : null;
+              activeProductId = fallback;
+              try {
+                if (fallback) localStorage.setItem('immuvi_active_product', fallback);
+                else localStorage.removeItem('immuvi_active_product');
+              } catch(e) {}
+              if (fallback && typeof switchProduct === 'function') {
+                try { switchProduct(fallback); } catch(e) {}
+              } else {
+                if (typeof renderProductProfile === 'function') try { renderProductProfile(); } catch(e){}
+              }
+              try { toast('Active product was deleted by another user — switched view', 'warn', 6000); } catch(e){}
+            }
+          }
+        } else if (evt === 'INSERT') {
+          var exists = PRODUCTS.some(function (p) { return p.id === targetId; });
+          if (!exists && newRec) {
+            PRODUCTS.push(newRec);
+            // Keep alphabetical (matches DB.listProducts order)
+            PRODUCTS.sort(function (a, b) { return (a.name || '').localeCompare(b.name || ''); });
+            changed = true;
+          }
+        } else { // UPDATE
+          var idx = -1;
+          for (var i = 0; i < PRODUCTS.length; i++) {
+            if (PRODUCTS[i].id === targetId) { idx = i; break; }
+          }
+          if (idx >= 0 && newRec) {
+            // Echo-skip: if nothing user-visible changed, drop the event.
+            if (!_productFieldsDiffer(PRODUCTS[idx], newRec)) return;
+            // Preserve any in-memory fields not represented in DB (none today, but
+            // safe forward-compat — merge rather than replace).
+            PRODUCTS[idx] = Object.assign({}, PRODUCTS[idx], newRec);
+            changed = true;
+          } else if (idx < 0 && newRec) {
+            // Race: we missed an INSERT, treat this UPDATE as the seed
+            PRODUCTS.push(newRec);
+            PRODUCTS.sort(function (a, b) { return (a.name || '').localeCompare(b.name || ''); });
+            changed = true;
+          }
+        }
+
+        if (!changed) return;
+
+        // Re-render the surfaces that read PRODUCTS
+        if (typeof renderProductProfile === 'function') try { renderProductProfile(); } catch(e){}
+        if (typeof updateHeaderProductName === 'function') try { updateHeaderProductName(); } catch(e){}
+        // If the active product's metadata changed (e.g. clickupListId became
+        // valid), refresh anything that gates on it.
+        if (evt === 'UPDATE' && targetId === activeProductId) {
+          var dd = document.getElementById('hdrProdDd');
+          if (dd && dd.classList.contains('open') && typeof renderHdrProdDropdown === 'function') {
+            try { renderHdrProdDropdown(); } catch(e){}
+          }
+        }
+      } catch (e) {
+        console.warn('[products-realtime] handler error', e);
+      }
+    }
+  );
+
+  _productsChannel.subscribe(function (status) {
+    if (status === 'SUBSCRIBED') {
+      // No periodic traffic — pure passive listen. Nothing to track.
+    }
+  });
+}
+
 function _initRealtimeChannel(productId) {
   if (_rtChannel) { SB.removeChannel(_rtChannel); _rtChannel = null; }
   if (!productId || !SB) return;
@@ -26708,6 +26858,15 @@ async function loadState() {
     console.error('[SB] listProducts failed', e);
     PRODUCTS = [];
   }
+
+  // 1a. Subscribe to products-table realtime so peer edits (rename, color,
+  // ClickUp list link, add/delete) propagate to this tab without refresh.
+  // 2026-05-11 — closes the last realtime gap; every other editable table
+  // already had a subscription (ads, manual_actions, angles, personas,
+  // matrix_cells, inspirations, strategist_*, producer_runs, worker_registry).
+  // Pairs with the active-product-only flush fix so writes can't blank peers'
+  // values either way.
+  try { _initProductsRealtimeChannel(); } catch (e) { console.warn('[products-realtime] init failed', e); }
 
   // 2. Resolve active product: last saved UI preference → first product → none
   var savedActiveId = localStorage.getItem('immuvi_active_product');

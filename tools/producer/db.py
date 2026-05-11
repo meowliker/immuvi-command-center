@@ -32,16 +32,67 @@ def _request(method: str, url: str, service_key: str,
 
 def pop_pending_run(supabase_url: str, service_key: str,
                     worker_id: str) -> Optional[dict]:
-    """Find the oldest pending producer_runs row. Caller follows up with claim_run."""
-    qs = urllib.parse.urlencode({
+    """Find the oldest pending producer_runs row this worker is allowed to claim.
+
+    Honors `preferred_worker_id`:
+      - NULL → any worker can claim
+      - matches my worker_id → I can claim
+      - other worker_id → I skip UNLESS the preferred worker hasn't heartbeated
+        for >5 min (stale). In that case any worker can claim it as fallback.
+    """
+    # Stage 1: rows with no preferred worker, OR explicitly preferring this worker.
+    qs1 = urllib.parse.urlencode({
         "status": "eq.pending",
+        "or":     f"(preferred_worker_id.is.null,preferred_worker_id.eq.{worker_id})",
         "select": "*",
         "order":  "created_at.asc",
         "limit":  "1",
     })
-    url = f"{supabase_url}/rest/v1/producer_runs?{qs}"
-    rows = _request("GET", url, service_key) or []
-    return rows[0] if rows else None
+    url1 = f"{supabase_url}/rest/v1/producer_runs?{qs1}"
+    rows = _request("GET", url1, service_key) or []
+    if rows:
+        return rows[0]
+
+    # Stage 2: stale-preference fallback. Pending rows with a preference
+    # whose preferred worker hasn't been seen alive for 5+ min.
+    qs2 = urllib.parse.urlencode({
+        "status": "eq.pending",
+        "preferred_worker_id": "not.is.null",
+        "select": "*",
+        "order":  "created_at.asc",
+        "limit":  "10",
+    })
+    url2 = f"{supabase_url}/rest/v1/producer_runs?{qs2}"
+    candidates = _request("GET", url2, service_key) or []
+    if not candidates:
+        return None
+
+    pref_ids = list({r["preferred_worker_id"] for r in candidates if r.get("preferred_worker_id")})
+    if not pref_ids:
+        return None
+    in_filter = "in.(" + ",".join(pref_ids) + ")"
+    qs3 = urllib.parse.urlencode({
+        "worker_id": in_filter,
+        "select":    "worker_id,last_heartbeat",
+    })
+    url3 = f"{supabase_url}/rest/v1/worker_registry?{qs3}"
+    hb_rows = _request("GET", url3, service_key) or []
+    now = datetime.now(timezone.utc)
+    fresh = set()
+    for hb in hb_rows:
+        ts = hb.get("last_heartbeat")
+        if not ts:
+            continue
+        try:
+            t = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+            if (now - t).total_seconds() < 300:
+                fresh.add(hb["worker_id"])
+        except Exception:
+            continue
+    for r in candidates:
+        if r.get("preferred_worker_id") not in fresh:
+            return r
+    return None
 
 
 def claim_run(supabase_url: str, service_key: str,

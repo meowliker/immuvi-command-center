@@ -3889,76 +3889,147 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
    stacked lists. */
 /* ── Producer pill (replaces 🎨 emoji button + chip) ── */
 .producer-pill {
-  display: inline-flex; align-items: center; gap: 6px;
-  padding: 3px 10px; border-radius: 999px;
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  padding: 4px 11px; border-radius: 999px; min-height: 22px;
   border: 1px solid rgba(15,23,42,0.10);
   background: linear-gradient(135deg, rgba(245,158,11,0.08) 0%, rgba(139,92,246,0.10) 100%);
   color: #6d28d9; font-size: 0.72rem; font-weight: 600; line-height: 1;
   cursor: pointer; transition: background 200ms, color 200ms, box-shadow 200ms, transform 80ms;
-  position: relative; white-space: nowrap;
+  position: relative; white-space: nowrap; vertical-align: middle;
 }
 .producer-pill:hover { box-shadow: 0 1px 6px rgba(139,92,246,0.18); transform: translateY(-0.5px); }
-.producer-pill .producer-sparkle { transition: transform 400ms; }
+.producer-pill .producer-sparkle { transition: transform 400ms; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.producer-pill .producer-sparkle svg { display: block; }
+
+/* Idle (no run yet) — subtle 4s breathe */
+.producer-pill[data-producer-state="idle"] .producer-sparkle { animation: producer-breathe 4s ease-in-out infinite; }
+
 .producer-pill[data-producer-state="pending"] {
   background: rgba(148,163,184,0.10); color: #475569; border-color: rgba(148,163,184,0.30);
 }
 .producer-pill[data-producer-state="pending"] .producer-sparkle { animation: producer-pulse 1.6s ease-in-out infinite; }
+
 .producer-pill[data-producer-state="running"] {
   background: rgba(14,165,233,0.10); color: #0369a1; border-color: rgba(14,165,233,0.35);
   box-shadow: 0 0 0 0 rgba(14,165,233,0.45);
   animation: producer-running-glow 2s ease-in-out infinite;
 }
 .producer-pill[data-producer-state="running"] .producer-sparkle { animation: producer-spin 2s linear infinite; }
+
 .producer-pill[data-producer-state="done"] {
   background: rgba(16,185,129,0.12); color: #047857; border-color: rgba(16,185,129,0.35);
+  animation: producer-done-pop 540ms cubic-bezier(0.22,1,0.36,1) 1;
 }
+.producer-pill[data-producer-state="done"] .producer-sparkle { animation: producer-done-bounce 600ms cubic-bezier(0.34,1.56,0.64,1) 1; }
+
 .producer-pill[data-producer-state="failed"] {
   background: rgba(239,68,68,0.10); color: #b91c1c; border-color: rgba(239,68,68,0.35);
+  animation: producer-fail-shake 420ms cubic-bezier(0.36,0.07,0.19,0.97) 1;
 }
+
 .producer-pill-lbl { font-weight: 600; letter-spacing: 0.01em; }
 
 @keyframes producer-spin { to { transform: rotate(360deg); } }
 @keyframes producer-pulse { 0%,100% { opacity: 0.5; transform: scale(0.92); } 50% { opacity: 1; transform: scale(1.08); } }
+@keyframes producer-breathe { 0%,100% { opacity: 0.55; } 50% { opacity: 1; } }
 @keyframes producer-running-glow {
   0%   { box-shadow: 0 0 0 0   rgba(14,165,233,0.45); }
   70%  { box-shadow: 0 0 0 8px rgba(14,165,233,0.0);  }
   100% { box-shadow: 0 0 0 0   rgba(14,165,233,0.0);  }
 }
+@keyframes producer-done-pop {
+  0%   { transform: scale(0.9); }
+  60%  { transform: scale(1.08); }
+  100% { transform: scale(1); }
+}
+@keyframes producer-done-bounce {
+  0%   { transform: scale(0.6) rotate(-12deg); }
+  50%  { transform: scale(1.25) rotate(8deg); }
+  100% { transform: scale(1) rotate(0deg); }
+}
+@keyframes producer-fail-shake {
+  0%, 100% { transform: translateX(0); }
+  10%, 30%, 50%, 70%, 90% { transform: translateX(-1.5px); }
+  20%, 40%, 60%, 80% { transform: translateX(1.5px); }
+}
 
 /* ── Producer detail popover ── */
 .producer-detail-pop {
-  width: 340px; background: #fff;
-  border: 1px solid rgba(15,23,42,0.12); border-radius: 12px;
-  box-shadow: 0 18px 40px rgba(15,23,42,0.18);
+  width: 360px; background: #fff;
+  border: 1px solid rgba(15,23,42,0.10); border-radius: 14px;
+  box-shadow: 0 24px 56px rgba(15,23,42,0.20), 0 4px 12px rgba(15,23,42,0.06);
   font-size: 0.85rem; overflow: hidden;
-  animation: producer-pop-in 160ms cubic-bezier(0.22,1,0.36,1);
+  animation: producer-pop-in 220ms cubic-bezier(0.22,1,0.36,1);
 }
-@keyframes producer-pop-in { from { opacity: 0; transform: translateY(-4px) scale(0.98); } to { opacity: 1; transform: translateY(0) scale(1); } }
-.producer-pop-head { display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; border-bottom: 1px solid rgba(15,23,42,0.06); background: linear-gradient(135deg, rgba(245,158,11,0.05) 0%, rgba(139,92,246,0.06) 100%); }
-.producer-pop-title { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; color: #6d28d9; font-size: 0.85rem; }
-.producer-pop-x { background: transparent; border: none; cursor: pointer; color: var(--t3); font-size: 0.95rem; padding: 2px 6px; border-radius: 6px; }
+@keyframes producer-pop-in { from { opacity: 0; transform: translateY(-6px) scale(0.97); } to { opacity: 1; transform: translateY(0) scale(1); } }
+.producer-pop-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 14px; border-bottom: 1px solid rgba(15,23,42,0.06);
+  background: linear-gradient(135deg, rgba(245,158,11,0.05) 0%, rgba(139,92,246,0.07) 100%);
+}
+.producer-pop-title { display: inline-flex; align-items: center; gap: 7px; font-weight: 600; color: #6d28d9; font-size: 0.88rem; letter-spacing: -0.01em; }
+.producer-pop-title .producer-sparkle { animation: producer-breathe 3s ease-in-out infinite; }
+.producer-pop-x { background: transparent; border: none; cursor: pointer; color: var(--t3); font-size: 1rem; padding: 4px 8px; border-radius: 6px; line-height: 1; transition: background 120ms; }
 .producer-pop-x:hover { background: rgba(15,23,42,0.06); }
-.producer-pop-body { padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; }
-.producer-pop-row { display: flex; gap: 10px; }
-.producer-pop-row .k { width: 60px; flex-shrink: 0; color: var(--t3); font-weight: 500; font-size: 0.78rem; padding-top: 2px; }
-.producer-pop-row .v { flex: 1; color: var(--t1); font-weight: 500; font-size: 0.82rem; word-break: break-word; }
+.producer-pop-body { padding: 12px 14px; display: flex; flex-direction: column; gap: 9px; }
+.producer-pop-row { display: flex; gap: 10px; align-items: baseline; }
+.producer-pop-row .k { width: 70px; flex-shrink: 0; color: var(--t3); font-weight: 500; font-size: 0.74rem; text-transform: uppercase; letter-spacing: 0.04em; }
+.producer-pop-row .v { flex: 1; color: var(--t1); font-weight: 500; font-size: 0.83rem; word-break: break-word; }
 .producer-pop-row .v.producer-pop-instr { color: var(--t2); font-style: italic; font-size: 0.8rem; }
-.producer-pop-state { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 0.72rem; font-weight: 600; }
-.producer-pop-state.s-pending { background: rgba(148,163,184,0.12); color: #475569; }
-.producer-pop-state.s-running { background: rgba(14,165,233,0.12); color: #0369a1; }
-.producer-pop-state.s-done    { background: rgba(16,185,129,0.12); color: #047857; }
+.producer-pop-row .v.mono { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 0.78rem; color: var(--t2); }
+.producer-pop-divider { height: 1px; background: rgba(15,23,42,0.06); margin: 2px -14px; }
+.producer-pop-state { display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px; border-radius: 999px; font-size: 0.74rem; font-weight: 600; line-height: 1; }
+.producer-pop-state.s-pending { background: rgba(148,163,184,0.14); color: #475569; }
+.producer-pop-state.s-running { background: rgba(14,165,233,0.14); color: #0369a1; }
+.producer-pop-state.s-done    { background: rgba(16,185,129,0.14); color: #047857; }
 .producer-pop-state.s-failed  { background: rgba(239,68,68,0.12); color: #b91c1c; }
 .producer-pop-progress { margin-top: 4px; }
 .producer-pop-bar { height: 6px; border-radius: 999px; background: rgba(15,23,42,0.06); overflow: hidden; }
-.producer-pop-bar > span { display: block; height: 100%; background: linear-gradient(90deg, #38bdf8, #818cf8); transition: width 600ms cubic-bezier(0.22,1,0.36,1); }
-.producer-pop-eta { display: flex; justify-content: space-between; font-size: 0.74rem; color: var(--t3); margin-top: 4px; }
-.producer-pop-outputs .producer-pop-thumbs { display: flex; flex-wrap: wrap; gap: 4px; padding-top: 2px; }
-.producer-pop-thumb { display: inline-block; padding: 4px 8px; border-radius: 8px; background: rgba(16,185,129,0.10); color: #047857; font-size: 0.74rem; font-weight: 500; text-decoration: none; }
-.producer-pop-thumb:hover { background: rgba(16,185,129,0.18); }
-.producer-pop-error .v { color: #b91c1c; font-size: 0.78rem; background: rgba(239,68,68,0.06); padding: 6px 8px; border-radius: 6px; line-height: 1.4; }
-.producer-pop-foot { display: flex; gap: 6px; padding: 8px 12px; border-top: 1px solid rgba(15,23,42,0.06); background: rgba(15,23,42,0.02); }
-.producer-pop-btn { background: #fff; border: 1px solid rgba(15,23,42,0.12); border-radius: 8px; padding: 5px 10px; font-size: 0.78rem; color: var(--t1); cursor: pointer; text-decoration: none; }
-.producer-pop-btn:hover { background: rgba(15,23,42,0.04); }
+.producer-pop-bar > span { display: block; height: 100%; background: linear-gradient(90deg, #38bdf8, #818cf8, #a78bfa); background-size: 200% 100%; animation: producer-bar-shimmer 2.4s linear infinite; transition: width 600ms cubic-bezier(0.22,1,0.36,1); }
+@keyframes producer-bar-shimmer { 0% { background-position: 0% 0; } 100% { background-position: 200% 0; } }
+.producer-pop-eta { display: flex; justify-content: space-between; font-size: 0.74rem; color: var(--t3); margin-top: 5px; }
+.producer-pop-outputs .producer-pop-thumbs { display: flex; flex-wrap: wrap; gap: 6px; padding-top: 4px; }
+.producer-pop-thumb {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 5px 10px; border-radius: 8px; background: rgba(16,185,129,0.10);
+  color: #047857; font-size: 0.76rem; font-weight: 600; text-decoration: none;
+  transition: background 160ms, transform 80ms;
+  animation: producer-thumb-in 320ms cubic-bezier(0.22,1,0.36,1) backwards;
+}
+.producer-pop-thumb:nth-child(1) { animation-delay: 0ms; }
+.producer-pop-thumb:nth-child(2) { animation-delay: 60ms; }
+.producer-pop-thumb:nth-child(3) { animation-delay: 120ms; }
+.producer-pop-thumb:nth-child(4) { animation-delay: 180ms; }
+.producer-pop-thumb:nth-child(5) { animation-delay: 240ms; }
+.producer-pop-thumb:nth-child(n+6) { animation-delay: 300ms; }
+.producer-pop-thumb:hover { background: rgba(16,185,129,0.20); transform: translateY(-1px); }
+@keyframes producer-thumb-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+.producer-pop-error .v { color: #b91c1c; font-size: 0.78rem; background: rgba(239,68,68,0.06); padding: 7px 9px; border-radius: 7px; line-height: 1.45; border-left: 2px solid rgba(239,68,68,0.45); }
+.producer-pop-foot {
+  display: flex; gap: 6px; padding: 9px 14px;
+  border-top: 1px solid rgba(15,23,42,0.06);
+  background: rgba(15,23,42,0.02);
+}
+.producer-pop-btn {
+  background: #fff; border: 1px solid rgba(15,23,42,0.12); border-radius: 8px;
+  padding: 6px 11px; font-size: 0.79rem; color: var(--t1); cursor: pointer;
+  text-decoration: none; font-weight: 500; transition: background 120ms, border-color 120ms, transform 80ms;
+}
+.producer-pop-btn:hover { background: rgba(15,23,42,0.04); border-color: rgba(15,23,42,0.20); }
+.producer-pop-btn:active { transform: translateY(0.5px); }
+.producer-pop-btn.primary { background: linear-gradient(135deg, #8b5cf6, #6d28d9); color: #fff; border-color: transparent; }
+.producer-pop-btn.primary:hover { background: linear-gradient(135deg, #7c3aed, #5b21b6); }
+.producer-pop-worker-select {
+  display: inline-flex; align-items: center; gap: 4px;
+  background: #fff; border: 1px solid rgba(15,23,42,0.12); border-radius: 8px;
+  padding: 5px 8px 5px 10px; font-size: 0.76rem; color: var(--t1);
+  cursor: pointer; appearance: none; -webkit-appearance: none;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 10 10'><path d='M2 4l3 3 3-3' stroke='%2364748b' stroke-width='1.4' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>");
+  background-repeat: no-repeat; background-position: right 8px center; padding-right: 24px;
+  transition: border-color 120ms;
+}
+.producer-pop-worker-select:hover { border-color: rgba(15,23,42,0.20); }
+.producer-pop-worker-select:focus { outline: none; border-color: rgba(139,92,246,0.45); box-shadow: 0 0 0 2px rgba(139,92,246,0.12); }
 
 .ap-adopt-chip.on { background: rgba(139,92,246,0.10); color: #6d28d9; border-color: rgba(139,92,246,0.35); }
 .ap-dismiss-chip.on { background: rgba(14,165,233,0.10); color: #0369a1; border-color: rgba(14,165,233,0.35); }
@@ -13636,10 +13707,46 @@ async function _producerLoadForProduct(productId) {
     }
   });
   _producerState.byTask = byTask;
-  // Re-render Action Plan to show chips.
-  if (typeof renderActionPlan === 'function') {
+  // Refresh worker registry cache for the popover dropdown (best-effort).
+  if (typeof _producerRefreshKnownWorkers === 'function') {
+    _producerRefreshKnownWorkers();
+  }
+  // Update only the affected sparkle pills in place — fast and avoids the
+  // expensive full Action Plan repaint that was causing realtime updates to
+  // appear stuck. Falls back to full render if no pill nodes exist yet.
+  if (typeof _producerUpdateAllPillsInPlace === 'function') {
+    var painted = _producerUpdateAllPillsInPlace();
+    if (!painted && typeof renderActionPlan === 'function') {
+      try { renderActionPlan(); } catch (_) {}
+    }
+  } else if (typeof renderActionPlan === 'function') {
     try { renderActionPlan(); } catch (_) {}
   }
+}
+
+// In-place pill update — repaints existing producer pills with fresh state
+// from _producerState.byTask without doing a full Action Plan re-render.
+// Returns true if at least one pill was found + updated. Realtime fix.
+function _producerUpdateAllPillsInPlace() {
+  var nodes = document.querySelectorAll('.producer-pill[data-task-id]');
+  if (!nodes || !nodes.length) return false;
+  var updated = 0;
+  nodes.forEach(function (el) {
+    var tid = el.getAttribute('data-task-id');
+    if (!tid) return;
+    var r = _producerState.byTask[tid] || null;
+    if (typeof _producerRenderPillContent === 'function') {
+      var fresh = _producerRenderPillContent(r);
+      if (fresh && fresh.html !== undefined) {
+        if (el.getAttribute('data-producer-state') !== fresh.state) {
+          el.setAttribute('data-producer-state', fresh.state);
+        }
+        if (el.innerHTML !== fresh.html) el.innerHTML = fresh.html;
+        updated++;
+      }
+    }
+  });
+  return updated > 0;
 }
 
 // ── Producer ETA estimator ──
@@ -13704,7 +13811,7 @@ function _producerLiveTimeLabel(r) {
   if (!r) return '';
   if (r.status === 'pending') return 'Queued';
   if (r.status === 'running') {
-    var startMs = Date.parse(r.claimed_at || r.created_at) || 0;
+    var startMs = Date.parse(r.started_at || r.created_at) || 0;
     var elapsed = (Date.now() - startMs) / 1000;
     var total = _producerEtaSeconds(r.count || 1);
     var remaining = Math.max(0, total - elapsed);
@@ -13738,39 +13845,48 @@ function _producerChipHtml(taskId) {
 //   running  — sparkle rotating + ring + ETA countdown
 //   done     — sparkle + "N ready" green; click to open detail popover
 //   failed   — sparkle + "Failed" red; click to open detail popover
-function _producerButtonHtml(taskId, productId) {
-  var r = (_producerState && _producerState.byTask) ? _producerState.byTask[taskId] : null;
+// Returns { state, html } for the pill INSIDE the button. Pure function — used
+// by both initial render (_producerButtonHtml) and in-place realtime updates
+// (_producerUpdateAllPillsInPlace). Keeping the markup centralized here is
+// what makes the realtime-fix possible.
+function _producerRenderPillContent(r) {
   var state = (r && r.status) || 'idle';
   var label = '';
   switch (state) {
     case 'pending': label = 'Queued'; break;
     case 'running': label = _producerLiveTimeLabel(r); break;
-    case 'done':    label = (r.outputs || []).length + ' ready'; break;
+    case 'done':    label = ((r && r.outputs) || []).length + ' ready'; break;
     case 'failed':  label = 'Failed'; break;
     default:        label = ''; break;
   }
-  // The pill always opens the detail popover EXCEPT when idle — idle goes
-  // to the submit modal. Both flows handled in the capture-phase listener.
+  var dataEta = (state === 'running' || state === 'pending')
+    ? ' data-producer-eta="1"' : '';
+  var labelHtml = label
+    ? '<span class="producer-pill-lbl"' + dataEta + '>' + esc(label) + '</span>'
+    : '';
+  return { state: state, html: _PRODUCER_SPARKLE_SVG + labelHtml };
+}
+
+function _producerButtonHtml(taskId, productId) {
+  var r = (_producerState && _producerState.byTask) ? _producerState.byTask[taskId] : null;
+  var content = _producerRenderPillContent(r);
+  var state = content.state;
   var dataState = ' data-producer-state="' + state + '"';
-  var dataTask = ' data-producer-task="' + escAttr(taskId) + '"';
+  var dataTask  = ' data-producer-task="' + escAttr(taskId) + '"';
+  // Also expose data-task-id for the in-place pill updater (selector match).
+  var dataTaskId = ' data-task-id="' + escAttr(taskId) + '"';
   var dataProd = ' data-producer-product="' + escAttr(productId) + '"';
-  var dataEta  = (state === 'running' || state === 'pending')
-    ? ' data-producer-eta="' + escAttr(taskId) + '"' : '';
   var title;
   switch (state) {
     case 'pending': title = 'Queued — worker will pick up shortly · click for details'; break;
     case 'running': title = 'Generating images · click for details'; break;
-    case 'done':    title = (r.outputs || []).length + ' images ready · click to view details'; break;
+    case 'done':    title = ((r && r.outputs) || []).length + ' images ready · click to view details'; break;
     case 'failed':  title = 'Producer failed · click for error details'; break;
     default:        title = 'Generate ad image variations';
   }
-  var labelHtml = label
-    ? '<span class="producer-pill-lbl"' + (dataEta || '') + '>' + esc(label) + '</span>'
-    : '';
-  return '<button class="producer-pill"' + dataState + dataTask + dataProd +
+  return '<button class="producer-pill"' + dataState + dataTask + dataTaskId + dataProd +
          ' title="' + escAttr(title) + '">' +
-           _PRODUCER_SPARKLE_SVG +
-           labelHtml +
+           content.html +
          '</button>';
 }
 
@@ -13825,6 +13941,13 @@ function _producerOpenModal(taskId, productId) {
     m.id = 'producerModal';
     document.body.appendChild(m);
   }
+  // Build worker option list for submit-modal selector. Auto = any free worker.
+  var modalWorkerRows = (typeof _producerKnownWorkers === 'function') ? _producerKnownWorkers() : [];
+  var modalWorkerOpts = '<option value="">Auto (any free worker)</option>';
+  modalWorkerRows.forEach(function (w) {
+    modalWorkerOpts += '<option value="' + escAttr(w.worker_id) + '">' + esc(w.label || w.worker_id) + '</option>';
+  });
+
   m.innerHTML =
     // Unique class — '.modal-overlay' clashes with an existing app CSS rule
     // that sets opacity:0 by default (it expects an .is-open toggle class).
@@ -13841,11 +13964,19 @@ function _producerOpenModal(taskId, productId) {
         'style="width:100%;padding:8px;border:1px solid var(--b);border-radius:8px;' +
         'font-family:inherit;font-size:0.9rem;box-sizing:border-box" ' +
         'placeholder="e.g. Same angle as winning AT-114 but with mom-to-mom UGC vibe"></textarea>' +
-        '<label style="display:block;font-size:0.78rem;color:var(--t2);' +
-        'margin:12px 0 6px">How many images? (1-10)</label>' +
-        '<input id="producerCount" type="number" min="1" max="10" value="5" ' +
-        'style="width:80px;padding:6px 8px;border:1px solid var(--b);border-radius:8px;' +
-        'font-size:0.9rem">' +
+        '<div style="display:flex;gap:16px;margin-top:12px;flex-wrap:wrap">' +
+          '<div>' +
+            '<label style="display:block;font-size:0.78rem;color:var(--t2);margin-bottom:6px">How many images? (1-10)</label>' +
+            '<input id="producerCount" type="number" min="1" max="10" value="5" ' +
+            'style="width:80px;padding:6px 8px;border:1px solid var(--b);border-radius:8px;font-size:0.9rem">' +
+          '</div>' +
+          '<div style="flex:1;min-width:180px">' +
+            '<label style="display:block;font-size:0.78rem;color:var(--t2);margin-bottom:6px">Run on</label>' +
+            '<select id="producerWorkerPref" style="width:100%;padding:6px 8px;border:1px solid var(--b);border-radius:8px;font-size:0.9rem;background:#fff">' +
+              modalWorkerOpts +
+            '</select>' +
+          '</div>' +
+        '</div>' +
         '<div style="margin-top:20px;display:flex;gap:8px;justify-content:flex-end">' +
           '<button class="btn-ghost" onclick="_producerCloseModal()">Cancel</button>' +
           '<button class="btn-primary" onclick="_producerSubmit()" ' +
@@ -13869,7 +14000,7 @@ function _producerOpenDetailPopover(taskId, anchorEl) {
   var r = (_producerState && _producerState.byTask) ? _producerState.byTask[taskId] : null;
   if (!r) return;
   var status = r.status || 'unknown';
-  var startedAt = r.claimed_at || r.created_at;
+  var startedAt = r.started_at || r.created_at;
   var startedMs = startedAt ? Date.parse(startedAt) : 0;
   var elapsedSec = startedMs ? Math.max(0, Math.round((Date.now() - startedMs) / 1000)) : 0;
   var totalSec = _producerEtaSeconds(r.count || 1);
@@ -13891,11 +14022,30 @@ function _producerOpenDetailPopover(taskId, anchorEl) {
   html +=   '<span class="producer-pop-title">' + _PRODUCER_SPARKLE_SVG + ' Producer Run #' + (r.id || '?') + '</span>';
   html +=   '<button class="producer-pop-x" onclick="event.stopPropagation(); this.closest(\'.producer-detail-pop\').remove()">✕</button>';
   html += '</div>';
+  // Format absolute time + duration
+  var startedDisplay = '';
+  if (startedMs) {
+    var d = new Date(startedMs);
+    startedDisplay = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ' · ' + d.toLocaleDateString([], { month: 'short', day: 'numeric' });
+  }
+  var finishedMs = r.finished_at ? Date.parse(r.finished_at) : 0;
+  var durationSec = (startedMs && finishedMs && finishedMs > startedMs) ? Math.round((finishedMs - startedMs) / 1000) : 0;
+  var workerLabel = r.worker_id || '—';
+  var preferredLabel = r.preferred_worker_id ? (' (preferred)') : '';
+
   html += '<div class="producer-pop-body">';
   html +=   '<div class="producer-pop-row"><span class="k">Status</span><span class="v">' + statusBadge + '</span></div>';
-  html +=   '<div class="producer-pop-row"><span class="k">Task</span><span class="v">' + esc(r.task_id || '—') + '</span></div>';
-  html +=   '<div class="producer-pop-row"><span class="k">Count</span><span class="v">' + esc(String(r.count || 1)) + '</span></div>';
+  html +=   '<div class="producer-pop-row"><span class="k">Task</span><span class="v mono">' + esc(r.task_id || '—') + '</span></div>';
+  html +=   '<div class="producer-pop-row"><span class="k">Worker</span><span class="v">' + esc(workerLabel) + esc(preferredLabel) + '</span></div>';
+  html +=   '<div class="producer-pop-row"><span class="k">Count</span><span class="v">' + esc(String(r.count || 1)) + ' image' + ((r.count || 1) === 1 ? '' : 's') + '</span></div>';
+  if (startedDisplay) {
+    html += '<div class="producer-pop-row"><span class="k">Started</span><span class="v">' + esc(startedDisplay) + '</span></div>';
+  }
+  if (durationSec > 0) {
+    html += '<div class="producer-pop-row"><span class="k">Duration</span><span class="v">' + _producerFormatSeconds(durationSec) + '</span></div>';
+  }
   if (r.instruction) {
+    html += '<div class="producer-pop-divider"></div>';
     html += '<div class="producer-pop-row"><span class="k">Brief</span><span class="v producer-pop-instr">' + esc(String(r.instruction).slice(0, 220)) + '</span></div>';
   }
   if (status === 'pending' || status === 'running') {
@@ -13931,8 +14081,25 @@ function _producerOpenDetailPopover(taskId, anchorEl) {
   var clickupUrl = (r.task_id && r.task_id.length > 4) ? ('https://app.clickup.com/t/' + r.task_id) : '';
   html += '<div class="producer-pop-foot">';
   if (clickupUrl) html += '<a class="producer-pop-btn" href="' + escAttr(clickupUrl) + '" target="_blank" rel="noopener">Open ClickUp ↗</a>';
-  if (status === 'failed') html += '<button class="producer-pop-btn" onclick="event.stopPropagation(); _producerRequeue(' + (r.id || 0) + ')">Re-queue</button>';
-  if (status === 'done')   html += '<button class="producer-pop-btn" onclick="event.stopPropagation(); _producerOpenModal(\'' + escAttr(r.task_id) + '\',\'' + escAttr(r.product_id) + '\')">Run again</button>';
+  // Worker selector — only show on actionable states (failed/done) where user
+  // is about to re-trigger work. Auto = any free worker (NULL preferred).
+  if (status === 'failed' || status === 'done') {
+    var workerOptions = (typeof _producerKnownWorkers === 'function')
+      ? _producerKnownWorkers()
+      : [];
+    html += '<select class="producer-pop-worker-select" id="producerWorkerSel-' + (r.id || 0) + '" title="Pick which machine should run this">';
+    html +=   '<option value="">Auto (any free worker)</option>';
+    workerOptions.forEach(function (w) {
+      html += '<option value="' + escAttr(w.worker_id) + '">' + esc(w.label || w.worker_id) + '</option>';
+    });
+    html += '</select>';
+  }
+  if (status === 'failed') {
+    html += '<button class="producer-pop-btn primary" onclick="event.stopPropagation(); _producerRequeueWithWorker(' + (r.id || 0) + ')">Re-queue</button>';
+  }
+  if (status === 'done') {
+    html += '<button class="producer-pop-btn primary" onclick="event.stopPropagation(); _producerOpenModal(\'' + escAttr(r.task_id) + '\',\'' + escAttr(r.product_id) + '\')">Run again</button>';
+  }
   html += '</div>';
   html += '</div>';
 
@@ -13959,11 +14126,63 @@ function _producerOpenDetailPopover(taskId, anchorEl) {
 }
 
 async function _producerRequeue(runId) {
+  return _producerRequeueInternal(runId, null);
+}
+async function _producerRequeueWithWorker(runId) {
+  // Read the per-popover worker selector. Empty = auto.
+  var sel = document.getElementById('producerWorkerSel-' + runId);
+  var pref = sel ? (sel.value || null) : null;
+  return _producerRequeueInternal(runId, pref);
+}
+async function _producerRequeueInternal(runId, preferredWorkerId) {
   if (!SB || !runId) return;
-  var res = await SB.from('producer_runs').update({ status: 'pending', error: null, claimed_at: null, claimed_by: null }).eq('id', runId);
+  var patch = {
+    status: 'pending', error: null,
+    started_at: null, finished_at: null, worker_id: null,
+    preferred_worker_id: preferredWorkerId || null,
+  };
+  var res = await SB.from('producer_runs').update(patch).eq('id', runId);
   if (res.error) { alert('Re-queue failed: ' + res.error.message); return; }
   document.querySelectorAll('.producer-detail-pop').forEach(function (n) { n.remove(); });
-  if (typeof toast === 'function') toast('Re-queued', 'ok');
+  var msg = preferredWorkerId ? ('Re-queued → ' + preferredWorkerId) : 'Re-queued';
+  if (typeof toast === 'function') toast(msg, 'ok');
+}
+
+// Workers known to the registry — cached in _producerWorkerCache, refreshed
+// on demand when popovers render. Returns array of {worker_id, label, online}.
+var _producerWorkerCache = { rows: [], fetchedAt: 0 };
+function _producerKnownWorkers() {
+  // Best-effort sync return from the cache. The cache gets refreshed by
+  // _producerRefreshKnownWorkers (called from _producerLoadForProduct).
+  return (_producerWorkerCache.rows || []).map(function (w) {
+    var label = (w.hostname || w.worker_id || '');
+    if (!w.online) label += ' (offline)';
+    return { worker_id: w.worker_id, label: label, online: !!w.online };
+  });
+}
+async function _producerRefreshKnownWorkers() {
+  if (!SB) return;
+  // Don't hammer — re-fetch at most every 30s.
+  if (Date.now() - _producerWorkerCache.fetchedAt < 30000 && _producerWorkerCache.rows.length) return;
+  try {
+    var res = await SB.from('worker_registry').select('worker_id,hostname,status,last_heartbeat,enabled');
+    if (res.error || !res.data) return;
+    var now = Date.now();
+    var rows = res.data
+      .filter(function (w) { return w.enabled !== false; })
+      .map(function (w) {
+        var hb = w.last_heartbeat ? Date.parse(w.last_heartbeat) : 0;
+        var online = hb && (now - hb) < 5 * 60 * 1000;
+        return { worker_id: w.worker_id, hostname: w.hostname, online: online };
+      })
+      // Sort online first, then by hostname
+      .sort(function (a, b) {
+        if (a.online !== b.online) return a.online ? -1 : 1;
+        return (a.hostname || '').localeCompare(b.hostname || '');
+      });
+    _producerWorkerCache.rows = rows;
+    _producerWorkerCache.fetchedAt = now;
+  } catch (_) {}
 }
 
 function _producerCloseModal() {
@@ -13981,6 +14200,8 @@ async function _producerSubmit() {
   var instr = (document.getElementById('producerInstruction') || {}).value || '';
   var count = parseInt((document.getElementById('producerCount') || {}).value || '5', 10);
   if (isNaN(count) || count < 1 || count > 10) count = 5;
+  var prefSel = document.getElementById('producerWorkerPref');
+  var preferredWorkerId = (prefSel && prefSel.value) ? prefSel.value : null;
   var res = await SB.from('producer_runs').insert({
     task_id: taskId,
     product_id: productId,
@@ -13988,6 +14209,7 @@ async function _producerSubmit() {
     count: count,
     status: 'pending',
     trigger: 'manual',
+    preferred_worker_id: preferredWorkerId,
   });
   if (res.error) {
     alert('[producer] queue failed: ' + res.error.message);
@@ -15530,7 +15752,7 @@ function process(ads) {
   for (var i = 0; i < ads.length; i++) {
     var ad = ads[i];
     result.s.total++;
-    if (ad.status === 'Winner' || ad.status === 'Scale') result.s.winners++;
+    if (ad.status === 'Winner' || ad.status === 'Mild Winner' || ad.status === 'Scale') result.s.winners++;
     else if (ad.status === 'Testing') result.s.testing++;
     else if (ad.status === 'Untested') result.s.notStarted++;
     else if (ad.status === 'In Production') result.s.inProgress++;
@@ -16029,7 +16251,7 @@ function renderAngles() {
     var winners = 0;
     for (var i = 0; i < ads.length; i++) {
       if (ads[i].persona) personaSet[ads[i].persona] = true;
-      if (ads[i].status === 'Winner') winners++;
+      if (ads[i].status === 'Winner' || ads[i].status === 'Mild Winner') winners++;
     }
     var personaCount = Object.keys(personaSet).length;
     var total = ads.length;
@@ -16042,7 +16264,7 @@ function renderAngles() {
   var winCount = 0, testCount = 0, notStartCount = 0, totalAds = 0;
   for (var i = 0; i < ANGLES.length; i++) {
     var st = deriveAngleStatus(ANGLES[i].name);
-    if (st === 'Winner' || st === 'Scale') winCount++;
+    if (st === 'Winner' || st === 'Mild Winner' || st === 'Scale') winCount++;
     else if (st === 'Testing') testCount++;
     else if (st === 'Untested') notStartCount++;
     totalAds += getAngleStats(ANGLES[i].name).creatives;
@@ -16091,7 +16313,7 @@ function renderAngles() {
     var c = classify(derivedAngStatus);
     var stats = getAngleStats(ang.name);
     var winRateCls = stats.winRate >= 30 ? 'win-rate-good' : (stats.winRate > 0 ? 'win-rate-ok' : '');
-    var winnerBadge = derivedAngStatus === 'Winner' || derivedAngStatus === 'Scale' ? '<span class="tr-win-badge">&#11088; Winner</span>' : '';
+    var winnerBadge = (derivedAngStatus === 'Winner' || derivedAngStatus === 'Mild Winner' || derivedAngStatus === 'Scale') ? '<span class="tr-win-badge">&#11088; Winner</span>' : '';
     var rowCls = 'tracker-row status-' + c.cls;
 
     // Source link cell
@@ -16159,7 +16381,7 @@ function renderPersonas() {
     var winners = 0;
     for (var i = 0; i < ads.length; i++) {
       if (ads[i].angle) angleSet[ads[i].angle] = true;
-      if (ads[i].status === 'Winner') winners++;
+      if (ads[i].status === 'Winner' || ads[i].status === 'Mild Winner') winners++;
     }
     var angleCount = Object.keys(angleSet).length;
     var total = ads.length;
@@ -16171,7 +16393,7 @@ function renderPersonas() {
   var winCount = 0, testCount = 0, notStartCount = 0, totalAds = 0;
   for (var i = 0; i < PERSONAS.length; i++) {
     var st = derivePersonaStatus(PERSONAS[i].name);
-    if (st === 'Winner' || st === 'Scale') winCount++;
+    if (st === 'Winner' || st === 'Mild Winner' || st === 'Scale') winCount++;
     else if (st === 'Testing') testCount++;
     else if (st === 'Untested') notStartCount++;
     totalAds += getPersonaStats(PERSONAS[i].name).creatives;
@@ -16218,7 +16440,7 @@ function renderPersonas() {
     var c = classify(derivedPerStatus);
     var stats = getPersonaStats(per.name);
     var winRateCls = stats.winRate >= 30 ? 'win-rate-good' : (stats.winRate > 0 ? 'win-rate-ok' : '');
-    var winnerBadge = derivedPerStatus === 'Winner' || derivedPerStatus === 'Scale' ? '<span class="tr-win-badge">&#11088; Winner</span>' : '';
+    var winnerBadge = (derivedPerStatus === 'Winner' || derivedPerStatus === 'Mild Winner' || derivedPerStatus === 'Scale') ? '<span class="tr-win-badge">&#11088; Winner</span>' : '';
     var rowCls = 'tracker-row status-' + c.cls;
 
     // Source link cell
@@ -19633,9 +19855,9 @@ function _renderActionPlan_LEGACY() {
       if (i === _activeActions.length && _completedActions.length > 0) {
         html += '<div style="margin:10px 0 6px;font-size:0.62rem;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.05em;padding:0 2px;">✓ Completed (' + _completedActions.length + ')</div>';
       }
-      var statusCls = act.liveStatus === 'Complete' || act.liveStatus === 'Winner' || act.liveStatus === 'Scale' ? 'done' :
+      var statusCls = (act.liveStatus === 'Complete' || act.liveStatus === 'Winner' || act.liveStatus === 'Mild Winner' || act.liveStatus === 'Scale') ? 'done' :
                      (act.liveStatus === 'Testing' || act.liveStatus === 'In Production' || act.liveStatus === 'Ready to Launch' ? 'in-progress' : 'not-started');
-      var borderColor = (act.liveStatus === 'Winner' || act.liveStatus === 'Scale' || act.liveStatus === 'Complete') ? 'var(--win)' :
+      var borderColor = (act.liveStatus === 'Winner' || act.liveStatus === 'Mild Winner' || act.liveStatus === 'Scale' || act.liveStatus === 'Complete') ? 'var(--win)' :
         (act.liveStatus === 'Testing' || act.liveStatus === 'In Production') ? 'var(--test)' :
         (act.liveStatus === 'Ready to Launch') ? 'var(--ready)' :
         (act.liveStatus === 'Loser') ? 'var(--lose)' : 'var(--t3)';
@@ -19939,6 +20161,7 @@ function updateManualActionStatus(id, newStatus) {
       'In Production':  'in production',
       'Ready to Launch':'ready to launch',
       'Testing':        'testing',
+      'Mild Winner':    'mild winner',
       'Winner':         'winner',
       'Loser':          'loser',
       'Scale':          'scale',
@@ -20072,7 +20295,7 @@ function rebuildProdFromManual() {
   PROD = [];
   for (var i = 0; i < MANUAL_ACTIONS.length; i++) {
     var act = MANUAL_ACTIONS[i];
-    var prodStatus = (act.liveStatus === 'Winner' || act.liveStatus === 'Scale' || act.liveStatus === 'Complete' || act.liveStatus === 'Loser') ? 'complete' :
+    var prodStatus = (act.liveStatus === 'Winner' || act.liveStatus === 'Mild Winner' || act.liveStatus === 'Scale' || act.liveStatus === 'Complete' || act.liveStatus === 'Loser') ? 'complete' :
       (act.liveStatus === 'In Production' || act.liveStatus === 'Ready to Launch' || act.liveStatus === 'Testing') ? 'in progress' : 'to do';
     PROD.push({
       id: act.id,
@@ -20160,7 +20383,7 @@ function deriveAngleStatus(angleName) {
   var ads = ADS.filter(function(a) { return a.angle === angleName && !a.parentAdId; });
   if (ads.length === 0) return 'Untested';
   var statuses = ads.map(function(a) { return a.status || 'Untested'; });
-  var priority = ['Winner', 'Scale', 'Testing', 'Ready to Launch', 'In Production', 'Approved', 'Complete', 'Loser', 'Untested'];
+  var priority = ['Winner', 'Scale', 'Mild Winner', 'Testing', 'Ready to Launch', 'In Production', 'Approved', 'Complete', 'Loser', 'Untested'];
   for (var pi = 0; pi < priority.length; pi++) {
     if (statuses.indexOf(priority[pi]) !== -1) return priority[pi];
   }
@@ -20172,7 +20395,7 @@ function derivePersonaStatus(personaName) {
   var ads = ADS.filter(function(a) { return a.persona === personaName && !a.parentAdId; });
   if (ads.length === 0) return 'Untested';
   var statuses = ads.map(function(a) { return a.status || 'Untested'; });
-  var priority = ['Winner', 'Scale', 'Testing', 'Ready to Launch', 'In Production', 'Approved', 'Complete', 'Loser', 'Untested'];
+  var priority = ['Winner', 'Scale', 'Mild Winner', 'Testing', 'Ready to Launch', 'In Production', 'Approved', 'Complete', 'Loser', 'Untested'];
   for (var pi = 0; pi < priority.length; pi++) {
     if (statuses.indexOf(priority[pi]) !== -1) return priority[pi];
   }
@@ -21055,7 +21278,8 @@ function saveEditCreative(id) {
     if (ad.status !== oldStatus) {
       var cuStatusMap = {
         'Untested':'to do','Approved':'approved','In Production':'in production',
-        'Ready to Launch':'ready to launch','Testing':'testing','Winner':'winner',
+        'Ready to Launch':'ready to launch','Testing':'testing',
+        'Mild Winner':'mild winner','Winner':'winner',
         'Loser':'loser','Scale':'scale','Complete':'complete'
       };
       taskBody.status = cuStatusMap[ad.status] || ad.status.toLowerCase();
@@ -21940,7 +22164,37 @@ function createClickUpTaskFromAction(actionId, onDone, sourceAdOverride) {
   for (var i = 0; i < MANUAL_ACTIONS.length; i++) {
     if (MANUAL_ACTIONS[i].id === actionId) { act = MANUAL_ACTIONS[i]; break; }
   }
-  if (!act) return;
+  // Virtual card support (auto-adopted AP cards have id='va:<adId>' until the
+  // user triggers an MA-only action). Lazy-promote the underlying AD into a
+  // real MA, then re-find it. Without this, + ClickUp on auto-adopted winner
+  // variations was a silent no-op. See feedback_ap_auto_adopt.md invariant 2:
+  // "Lazy-promote is the ONLY path that creates an MA from a virtual" — push
+  // to CU is exactly the kind of action that needs a real MA.
+  if (!act && typeof actionId === 'string' && actionId.indexOf('va:') === 0) {
+    var _vAdId = actionId.slice(3);
+    var _vAd = null;
+    if (typeof ADS !== 'undefined' && Array.isArray(ADS)) {
+      for (var _vi = 0; _vi < ADS.length; _vi++) {
+        if (ADS[_vi].id === _vAdId) { _vAd = ADS[_vi]; break; }
+      }
+    }
+    if (_vAd && typeof _lazyPromoteVirtual === 'function') {
+      var _promotedMaId = _lazyPromoteVirtual(_vAd);
+      if (_promotedMaId) {
+        for (var _vj = 0; _vj < MANUAL_ACTIONS.length; _vj++) {
+          if (MANUAL_ACTIONS[_vj].id === _promotedMaId) { act = MANUAL_ACTIONS[_vj]; break; }
+        }
+      }
+    }
+    if (!act) {
+      toast('Could not push virtual card — AD not found in matrix', 'err');
+      return;
+    }
+  }
+  if (!act) {
+    toast('Could not find this task in Action Plan', 'err');
+    return;
+  }
   if (act._clickupId) { toast('Already in ClickUp', 'warn'); return; }
   // Action-level in-flight lock — DOM disable alone isn't enough because the
   // Action Plan can re-render mid-fetch (saveState, auto-sync, realtime echo),
@@ -22187,6 +22441,7 @@ function createClickUpTaskFromAction(actionId, onDone, sourceAdOverride) {
     'In Production':  'in production',
     'Ready to Launch':'ready to launch',
     'Testing':        'testing',
+    'Mild Winner':    'mild winner',
     'Winner':         'winner',
     'Loser':          'loser',
     'Scale':          'scale',
@@ -22762,7 +23017,17 @@ function apiFetch(path, opts) {
     return res.text().then(function(text) {
       if (!text || !text.trim()) return {};
       try { return JSON.parse(text); }
-      catch(e) { return {}; }
+      catch(e) {
+        // 2026-05-11: stop silently swallowing JSON parse failures.
+        // Couple Workbook list page-0 is ~1.5MB and occasionally truncates
+        // mid-response (network hiccup, extension interference, slow link).
+        // The old `return {}` made fetchAllTasks return 0 tasks silently,
+        // which then made cleanStaleAds destroy 160 valid ads. Throwing
+        // forces callers to see the real failure instead of acting on an
+        // empty response.
+        console.error('[apiFetch] JSON parse failed for ' + path + ' (body length ' + text.length + ')', e);
+        throw new Error('ClickUp returned a malformed/truncated response (' + text.length + ' bytes). Try again — this is usually transient.');
+      }
     });
   });
 }
@@ -23369,10 +23634,18 @@ async function importTasksFromClickUp(tasks) {
     '_sourceAdId', '_sourceProductId', '_sourceClickupId', '_sourceFormatDriveLink',
     '_sourceFormatName', '_sourceFormatAdLink', '_sourceFormatAdType'];
 
-  // Index existing local ADS by _clickupId for O(1) lookup
+  // Index existing local ADS by _clickupId for O(1) lookup.
+  // Also index by clickupTaskId (DB column mirror) as fallback — covers the
+  // case where _clickupId got dropped from in-memory state across refresh
+  // but clickup_task_id is still persisted on the AD row. Without this, the
+  // dedup miss creates a phantom AD whose id equals the CU task id while
+  // the canonical AD-NNN row keeps its clickup_task_id pointing to the same
+  // task → two rows for the same ClickUp task. (AP auto-adopt then renders
+  // both, causing the visible duplicate.)
   var localByClickupId = {};
   for (var i = 0; i < ADS.length; i++) {
-    if (ADS[i]._clickupId) localByClickupId[ADS[i]._clickupId] = ADS[i];
+    var _cuid = ADS[i]._clickupId || ADS[i].clickupTaskId;
+    if (_cuid && !localByClickupId[_cuid]) localByClickupId[_cuid] = ADS[i];
   }
 
   // Secondary index: MANUAL_ACTIONS → sourceAd. When the user pushes an
@@ -24247,6 +24520,7 @@ function saveAdFieldUnified(adId, kind, fieldKey, value) {
         'In Production':  'in production',
         'Ready to Launch':'ready to launch',
         'Testing':        'testing',
+        'Mild Winner':    'mild winner',
         'Winner':         'winner',
         'Loser':          'loser',
         'Scale':          'scale',
@@ -24435,6 +24709,10 @@ function mapClickUpStatus(s) {
   if (!s) return 'Untested';
   var lower = s.toLowerCase();
   if (lower === 'winner') return 'Winner';
+  // Mild Winner is a real status in ClickUp + local STATUSES list. Without this
+  // mapping it falls through to 'Untested', so ClickUp tasks marked "mild winner"
+  // appear as Untested in Action Plan / Creative Matrix.
+  if (lower === 'mild winner' || lower === 'mild-winner') return 'Mild Winner';
   if (lower === 'scale') return 'Scale';
   if (lower === 'complete') return 'Complete';
   if (lower === 'testing' || lower === 'in review') return 'Testing';
@@ -24595,11 +24873,25 @@ function pollFullSync() {
       var existingClickupIds = {};
       for (var i = 0; i < ADS.length; i++) {
         var ad = ADS[i];
-        if (!ad._clickupId) continue;
+        // Sibling-fix mirroring importTasksFromClickUp: accept either field as
+        // the ClickUp task identifier. _clickupId can be dropped from in-memory
+        // state across refresh, but clickupTaskId (DB column mirror) survives.
+        // Without this fallback, ADs whose _clickupId got severed are skipped
+        // here AND missing from existingClickupIds, so Pass 2 re-imports the
+        // task as a phantom AD with id=<cu_task_id>. Touch importTasksFromClickUp
+        // dedup index together — see memory feedback_pollfullsync_pass0_field_name.
+        var _cuid = ad._clickupId || ad.clickupTaskId;
+        if (!_cuid) continue;
         // Skip tombstoned ads — user deliberately deleted them, don't restore fields
-        if (_p1Tombstone[ad._clickupId] || _p1Tombstone[ad.id]) continue;
-        existingClickupIds[ad._clickupId] = true;
-        var fresh = taskMap[ad._clickupId];
+        if (_p1Tombstone[_cuid] || _p1Tombstone[ad.id]) continue;
+        existingClickupIds[_cuid] = true;
+        // Self-heal: if _clickupId was missing but clickupTaskId resolved, mirror
+        // it back so downstream code (apResolveCard, MA matchers) keeps working.
+        if (!ad._clickupId && ad.clickupTaskId) {
+          ad._clickupId = ad.clickupTaskId;
+          changed = true;
+        }
+        var fresh = taskMap[_cuid];
         if (!fresh) continue;
         var oldFormatNameForMeta = ad.formatName;  // capture for cell-meta sync below
         for (var f = 0; f < _SYNC_DIFF_FIELDS.length; f++) {
@@ -26373,13 +26665,25 @@ async function _flushStateToSupabase(productIdArg) {
       MANUAL_ACTIONS: MANUAL_ACTIONS,
       ANGLE_PERSONAS: ANGLE_PERSONAS  // BUG-003: persist explicit assignments
     });
-    // Keep products list in sync (catches rename / color / clickup list changes).
-    // Skip any id in the recent-delete tombstone — otherwise if this tab still
-    // has a product the user just deleted in another tab, upsert would
-    // resurrect it.
+    // Keep the ACTIVE product's record in sync (catches rename / color / list
+    // changes for the product the user is currently working on).
+    //
+    // 2026-05-11 fix: restricted to active-product-only. The previous loop
+    // upserted EVERY product on EVERY flush, which silently overwrote fresh
+    // DB rows with this tab's stale in-memory copy. Symptoms hit by users:
+    //   - Therapy's ClickUp list blanking out after save
+    //   - Couple Workbook reverting to old "75+ Crochet Patterns" list
+    //   - Deleted Medical product resurrecting (cross-tab)
+    // All legitimate product mutations already have their own explicit
+    // DB.upsertProduct call (addProduct, saveProductClickUpLink, sync
+    // metadata update ~line 23240). The blanket loop was a redundant
+    // safety net that became a footgun.
+    var _activeProd = null;
     for (var pi = 0; pi < PRODUCTS.length; pi++) {
-      if (_recentlyDeletedProductIds.has(PRODUCTS[pi].id)) continue;
-      await DB.upsertProduct(PRODUCTS[pi]);
+      if (PRODUCTS[pi].id === pid) { _activeProd = PRODUCTS[pi]; break; }
+    }
+    if (_activeProd && !_recentlyDeletedProductIds.has(pid)) {
+      await DB.upsertProduct(_activeProd);
     }
   } finally {
     _lastSaveCompletedAt = Date.now();
@@ -26787,6 +27091,211 @@ async function confirmDeleteProduct(productId) {
   toast('Product deleted', 'ok');
 }
 
+// ── Clean stale ads ─────────────────────────────────────────────
+// Removes ads imported from a previous ClickUp list link that no longer
+// exists in the currently-linked list. PRESERVES:
+//   - Winner Variations (ad_origin === 'Winner Variation', or has parent_ad_id)
+//   - New Find / manual ads (ad_origin === 'New Find')
+//   - Local-only ads with no clickup_task_id
+//   - Ads whose clickup_task_id IS in the current list (legitimate)
+// Soft-deletes + tombstones the rest via the same pattern used by
+// deleteAdEverywhere (memory: feedback_ad_delete_invariants.md — soft-delete
+// is authoritative + deleted_ads tombstone for cross-tab safety).
+async function cleanStaleAds(productId) {
+  var prod = null;
+  for (var i = 0; i < PRODUCTS.length; i++) {
+    if (PRODUCTS[i].id === productId) { prod = PRODUCTS[i]; break; }
+  }
+  if (!prod) { toast('Product not found', 'err'); return; }
+  if (!prod.clickupListId) {
+    toast('Link a ClickUp list to this product first', 'err');
+    return;
+  }
+  if (!CFG.key) { toast('Enter your ClickUp API key first', 'err'); return; }
+  if (productId !== activeProductId) {
+    toast('Switch to this product first', 'err');
+    return;
+  }
+
+  // 1. Fetch ALL task IDs from the currently-linked list
+  showLoading('Fetching ' + (prod.clickupListName || prod.clickupListId) + ' tasks…');
+  var liveTasks;
+  try {
+    liveTasks = await fetchAllTasks(prod.clickupListId);
+  } catch (e) {
+    hideLoading();
+    toast('Failed to fetch ClickUp tasks: ' + (e && e.message ? e.message : String(e)), 'err', 6000);
+    return;
+  }
+  hideLoading();
+  if (!liveTasks) liveTasks = [];
+  var liveTaskIds = {};
+  liveTasks.forEach(function (t) { if (t && t.id) liveTaskIds[t.id] = true; });
+
+  // ── SAFETY GUARDS ─────────────────────────────────────────────
+  // The original cleanup had a silent bug: if fetchAllTasks returned an
+  // empty array (rate-limit, transient API error, list briefly empty), the
+  // "stale" set ended up being ALL imported ads. That destroyed 160 valid
+  // Couple Workbook ads on 2026-05-11. These guards prevent a repeat.
+
+  // Guard 1: ABORT if 0 tasks fetched. A genuinely-empty list shouldn't be
+  // cleaned up via this tool — user should delete the product or manually
+  // soft-delete.
+  if (liveTasks.length === 0) {
+    var emptyMsg = 'Cleanup aborted: ClickUp returned 0 tasks from "' +
+      (prod.clickupListName || prod.clickupListId) + '".\n\n' +
+      'This is usually a transient API error or rate limit — running cleanup ' +
+      'with 0 fetched tasks would delete ALL imported ads.\n\n' +
+      'Try again in 30 seconds, or click Sync Now first to verify the list is reachable.';
+    alert(emptyMsg);
+    return;
+  }
+
+  // Guard 2: warn if fetched count is suspiciously low vs. product's last
+  // recorded synced count. Could mean partial fetch (only first 100 returned).
+  if (prod.lastSyncedCount && liveTasks.length < prod.lastSyncedCount * 0.5) {
+    var lowFetchMsg = 'Warning: ClickUp returned ' + liveTasks.length +
+      ' tasks, but last successful sync had ' + prod.lastSyncedCount + ' tasks.\n\n' +
+      'This might be a partial fetch (rate limit or pagination cutoff). Running ' +
+      'cleanup with incomplete data could delete valid ads.\n\n' +
+      'Continue anyway? (Recommended: cancel and run Sync Now first.)';
+    if (!confirm(lowFetchMsg)) return;
+  }
+
+  // 2. Identify stale ads in current product
+  var stale = [];
+  var protectedCount = { variation: 0, newFind: 0, localOnly: 0, inList: 0 };
+  for (var ai = 0; ai < ADS.length; ai++) {
+    var ad = ADS[ai];
+    if (!ad) continue;
+    if (ad.deleted_at || ad.deletedAt) continue;
+    var cuid = ad._clickupId || ad.clickupTaskId || null;
+    var origin = ad.adOrigin || ad.ad_origin || '';
+    var hasParent = !!(ad.parentAdId || ad.parent_ad_id);
+
+    // Protect: local-only creations (Winner Variation, New Find, no CU link)
+    if (origin === 'Winner Variation' || hasParent) { protectedCount.variation++; continue; }
+    if (origin === 'New Find') { protectedCount.newFind++; continue; }
+    if (!cuid) { protectedCount.localOnly++; continue; }
+
+    // Protect: ad whose clickup task IS in current list
+    if (liveTaskIds[cuid]) { protectedCount.inList++; continue; }
+
+    // Stale — imported from a previous list link, no longer in current list
+    stale.push(ad);
+  }
+
+  if (!stale.length) {
+    toast('No stale ads found — your product is clean ✓', 'ok', 5000);
+    return;
+  }
+
+  // Guard 3: if stale percentage is suspiciously high (>80% of all imported
+  // ads being deleted), require a SECOND, harder confirmation. Catches the
+  // "fetch returned wrong list IDs" failure mode that destroyed Couple
+  // Workbook on 2026-05-11.
+  var totalImported = stale.length + protectedCount.inList;
+  if (totalImported > 0) {
+    var stalePct = stale.length / totalImported;
+    if (stalePct > 0.80) {
+      var dangerMsg = '⚠ DANGER: ' + Math.round(stalePct * 100) + '% of your imported ads (' +
+        stale.length + ' of ' + totalImported + ') would be deleted.\n\n' +
+        'This is unusual. It usually means:\n' +
+        '• ClickUp fetch returned partial / wrong list data\n' +
+        '• Your linked list ID is incorrect\n' +
+        '• The list was recently swapped\n\n' +
+        'Strongly recommended: cancel, click Sync Now, verify the task count, then try again.\n\n' +
+        'If you\'re SURE this is intentional, type "I AM SURE" exactly (case-sensitive) to continue:';
+      var confirmTyped = prompt(dangerMsg);
+      if (confirmTyped !== 'I AM SURE') {
+        toast('Cleanup aborted — safer path: re-sync and retry', 'warn', 5000);
+        return;
+      }
+    }
+  }
+
+  // 3. Show confirm with summary + sample names
+  var sample = stale.slice(0, 5).map(function (a) { return '• ' + (a.formatName || a.id); }).join('\n');
+  var more = stale.length > 5 ? '\n• …and ' + (stale.length - 5) + ' more' : '';
+  var msg = 'Remove ' + stale.length + ' stale ads from "' + (prod.name || '') + '"?\n\n' +
+            'These ads were imported from a previous ClickUp list link and are no longer in "' +
+            (prod.clickupListName || prod.clickupListId) + '".\n\n' +
+            'KEEPING (won\'t delete):\n' +
+            '• ' + protectedCount.variation + ' winner variations\n' +
+            '• ' + protectedCount.newFind + ' manual New Find ads\n' +
+            '• ' + protectedCount.localOnly + ' local-only ads (no ClickUp link)\n' +
+            '• ' + protectedCount.inList + ' ads currently in the list\n\n' +
+            'REMOVING (preview, first 5):\n' + sample + more + '\n\n' +
+            'This soft-deletes them locally. The ClickUp tasks themselves are NOT touched.';
+  if (!confirm(msg)) return;
+
+  // 4. Bulk soft-delete + tombstone
+  showLoading('Removing ' + stale.length + ' stale ads…');
+  var staleIds = stale.map(function (a) { return a.id; });
+  var nowIso = new Date().toISOString();
+  try {
+    var softResp = await SB.from('ads').update({ deleted_at: nowIso }).in('id', staleIds);
+    if (softResp && softResp.error) {
+      hideLoading();
+      toast('Cleanup failed: ' + softResp.error.message, 'err', 6000);
+      return;
+    }
+  } catch (e) {
+    hideLoading();
+    toast('Cleanup error: ' + (e && e.message ? e.message : String(e)), 'err', 6000);
+    return;
+  }
+
+  // Tombstone in deleted_ads (best-effort — soft-delete is authoritative).
+  // Reason='stale-list-cleanup' helps audit; deleted_by='cleanup-tool' tags
+  // the source so an admin can see at a glance what removed them.
+  try {
+    var tombRows = stale.map(function (a) {
+      return {
+        id: a.id,
+        product_id: productId,
+        clickup_task_id: a._clickupId || a.clickupTaskId || null,
+        format_name: a.formatName || null,
+        reason: 'stale list cleanup — not in current linked list',
+        deleted_by: 'cleanup-tool',
+      };
+    });
+    // Upsert in chunks of 200 to avoid huge payloads on big cleanups
+    var CHUNK = 200;
+    for (var ci = 0; ci < tombRows.length; ci += CHUNK) {
+      await SB.from('deleted_ads').upsert(tombRows.slice(ci, ci + CHUNK));
+    }
+  } catch (e) {
+    console.warn('[cleanStaleAds] tombstone upsert non-fatal error', e);
+  }
+
+  // Update in-memory tombstone cache so nextSerialId / flush filter pick up
+  // the new tombstones immediately (memory: AD delete invariant #6).
+  if (typeof _deletedAdIdsCache !== 'undefined') {
+    staleIds.forEach(function (id) { _deletedAdIdsCache.add(id); });
+  }
+
+  // 5. Remove from in-memory ADS and re-render
+  var staleSet = {};
+  staleIds.forEach(function (id) { staleSet[id] = true; });
+  ADS = ADS.filter(function (a) { return !staleSet[a.id]; });
+  // Prune CELL_CREATIVE_ASSIGNMENTS references
+  if (typeof CELL_CREATIVE_ASSIGNMENTS !== 'undefined') {
+    Object.keys(CELL_CREATIVE_ASSIGNMENTS).forEach(function (k) {
+      CELL_CREATIVE_ASSIGNMENTS[k] = (CELL_CREATIVE_ASSIGNMENTS[k] || []).filter(function (id) { return !staleSet[id]; });
+    });
+  }
+
+  hideLoading();
+  if (typeof P !== 'undefined') P = process(ADS);
+  if (typeof buildCreativeUsageIndex === 'function') buildCreativeUsageIndex();
+  if (typeof deriveWinners === 'function') deriveWinners();
+  if (typeof genActions === 'function') genActions();
+  if (typeof renderAll === 'function') renderAll();
+  renderProductProfile();
+  toast('Removed ' + stale.length + ' stale ads from ' + (prod.name || ''), 'ok', 5000);
+}
+
 // Wrap renderAll to auto-save after every render that involves data
 var _renderAllOrig = null; // set after renderAll is defined
 function renderAllAndSave() {
@@ -27108,6 +27617,7 @@ function renderProductProfile() {
       // Sync button + last synced info
       html += '<button class="btn-primary btn-xs pp-sync-btn" onclick="syncClickUp()" style="margin-left:8px">&#8635; Sync Now</button>';
       html += '<button class="btn-ghost btn-xs" onclick="setupClickUpFields()" style="margin-left:4px">&#9881; Setup Fields</button>';
+      html += '<button class="btn-ghost btn-xs" onclick="cleanStaleAds(\'' + escAttr(activeProd.id) + '\')" style="margin-left:4px" title="Remove imported ads that are no longer in the linked ClickUp list (keeps your manual creations + variations)">&#129529; Clean stale</button>';
       if (activeProd.lastSyncedAt) {
         html += '<span class="pp-sync-time">Last synced ' + timeAgo(activeProd.lastSyncedAt);
         if (activeProd.lastSyncedCount) html += ' &middot; ' + activeProd.lastSyncedCount + ' tasks';
@@ -27768,6 +28278,7 @@ function changeAdStatusFromMatrix(adId, angleName, personaName, newStatus) {
       'In Production':  'in production',
       'Ready to Launch':'ready to launch',
       'Testing':        'testing',
+      'Mild Winner':    'mild winner',
       'Winner':         'winner',
       'Loser':          'loser',
       'Scale':          'scale',
@@ -28130,7 +28641,7 @@ function renderMatrixCellV2(angleName, personaName) {
   }
 
   // ── Derive cell-level state ──
-  var hasWinner  = cellAds.some(function(a){ return a.status === 'Winner' || a.status === 'Scale'; });
+  var hasWinner  = cellAds.some(function(a){ return a.status === 'Winner' || a.status === 'Mild Winner' || a.status === 'Scale'; });
   var hasTesting = cellAds.some(function(a){ return a.status === 'Testing'; });
   var hasReady   = cellAds.some(function(a){ return a.status === 'Ready to Launch'; });
   var allLosers  = cellAds.length > 0 && cellAds.every(function(a){ return a.status === 'Loser'; });
@@ -28252,7 +28763,8 @@ function _mxv3ClassifyCell(angleName, personaName) {
   var types = {};
   ads.forEach(function (a) {
     var s = a.status;
-    if (s === 'Winner' || s === 'Scale' || s === 'Complete') counts.winner++;
+    // Mild Winner counts as a winner — see _mxv4AggregateAds note (2026-05-11).
+    if (s === 'Winner' || s === 'Mild Winner' || s === 'Scale' || s === 'Complete') counts.winner++;
     else if (s === 'Testing') counts.testing++;
     else if (s === 'Loser') counts.loser++;
     else if (s === 'In Production' || s === 'Approved' || s === 'Ready to Launch') counts.prelaunch++;
@@ -30481,7 +30993,9 @@ function _mxv4AggregateAds(ads) {
   var lastCreatedAt = 0;
   ads.forEach(function (a) {
     var s = a.status;
-    if (s === 'Winner' || s === 'Scale' || s === 'Complete') counts.winner++;
+    // Mild Winner counts as a winner for matrix decision tiles (Where's the
+    // money / Replicate next / Kill list / Test next). User decision 2026-05-11.
+    if (s === 'Winner' || s === 'Mild Winner' || s === 'Scale' || s === 'Complete') counts.winner++;
     else if (s === 'Testing') counts.testing++;
     else if (s === 'Loser') counts.loser++;
     else if (s === 'In Production' || s === 'Approved') counts.prelaunch++;
@@ -31290,7 +31804,7 @@ function _mxv4HoverCardHtml(angleName, personaName, state) {
 
   // ── Winners section (if any)
   var winners = state.ads.filter(function (a) {
-    return a.status === 'Winner' || a.status === 'Scale' || a.status === 'Complete';
+    return a.status === 'Winner' || a.status === 'Mild Winner' || a.status === 'Scale' || a.status === 'Complete';
   });
   if (winners.length > 0) {
     html += '<div class="mxv4-hc-section">';
@@ -32044,7 +32558,7 @@ function _mxv4ColumnRegistry() {
       var actionInfo = (typeof getActionForAd === 'function') ? getActionForAd(ad.id) : null;
       // Variation Lab affordances — visible inline so the user doesn't
       // need to drill into a detail view.
-      var isWin = (a.status === 'Winner' || a.status === 'Scale');
+      var isWin = (a.status === 'Winner' || a.status === 'Mild Winner' || a.status === 'Scale');
       var spawnBtn = '';
       if (isWin) {
         spawnBtn = '<button class="mxv4-detail-action replicate" style="padding:4px 10px;font-size:0.7rem;margin-right:4px" ' +
@@ -32887,7 +33401,7 @@ function _mxv4RenderDetail(angleName, personaName, sel) {
   html += '</select>';
 
   html += '<div class="mxv4-detail-actions">';
-  if (sel.status === 'Winner' || sel.status === 'Scale') {
+  if (sel.status === 'Winner' || sel.status === 'Mild Winner' || sel.status === 'Scale') {
     html += '<button class="mxv4-detail-action replicate" onclick="_varlabOpenSpawnModal(\'' + escAttr(ad.id) + '\',\'' + escJs(angleName) + '\',\'' + escJs(personaName) + '\')">🌱 Spawn variations</button>';
   }
   // Variation Lab chip — shown for any creative that has spawned variations,
@@ -32912,7 +33426,7 @@ function _mxv4RenderDetail(angleName, personaName, sel) {
   html += '</div>';
 
   // Replicate form (collapsible)
-  if (_mxv4.replicateOpen && (sel.status === 'Winner' || sel.status === 'Scale')) {
+  if (_mxv4.replicateOpen && (sel.status === 'Winner' || sel.status === 'Mild Winner' || sel.status === 'Scale')) {
     html += _mxv4RenderReplicateForm(ad, angleName, personaName);
   }
 
@@ -34376,7 +34890,7 @@ function _mxv4RenderInsightsTab(angleName, personaName, st) {
   html += '</div>';
 
   // Time-to-result avg (placeholder using createdAt vs updatedAt diff)
-  var resolved = st.ads.filter(function (a) { return a.status === 'Winner' || a.status === 'Loser' || a.status === 'Scale'; });
+  var resolved = st.ads.filter(function (a) { return a.status === 'Winner' || a.status === 'Mild Winner' || a.status === 'Loser' || a.status === 'Scale'; });
   var avgDays = '—';
   if (resolved.length > 0) {
     var sum = 0, n = 0;
@@ -36336,7 +36850,7 @@ function checkDuplicateCreative(ins) {
     return false;
   }
 
-  var hasWinner = allMatches.some(function(d){ return d.status === 'Winner' || d.status === 'Scale'; });
+  var hasWinner = allMatches.some(function(d){ return d.status === 'Winner' || d.status === 'Mild Winner' || d.status === 'Scale'; });
   var hasLoser  = allMatches.some(function(d){ return d.status === 'Loser'; });
   var dupeType  = hasWinner ? 'winner' : hasLoser ? 'loser' : 'tested';
   var dupeDetail;
@@ -37342,14 +37856,14 @@ async function refreshWinnersCache() {
     var pid = PRODUCTS[i].id;
     if (pid === activeProductId) continue;
     try {
-      var res = await SB.from('ads').select('*').eq('product_id', pid).in('status', ['Winner', 'Scale']).is('parent_ad_id', null).is('deleted_at', null);
+      var res = await SB.from('ads').select('*').eq('product_id', pid).in('status', ['Winner', 'Mild Winner', 'Scale']).is('parent_ad_id', null).is('deleted_at', null);
       _winnersByProductCache[pid] = (res.data || []).map(_rowToAd);
     } catch (e) { _winnersByProductCache[pid] = []; }
   }
 }
 function getProductWinningFormats(productId) {
   if (productId === activeProductId) {
-    return (ADS || []).filter(function (a) { return !a.parentAdId && (a.status === 'Winner' || a.status === 'Scale'); });
+    return (ADS || []).filter(function (a) { return !a.parentAdId && (a.status === 'Winner' || a.status === 'Mild Winner' || a.status === 'Scale'); });
   }
   return _winnersByProductCache[productId] || [];
 }
@@ -37728,7 +38242,7 @@ async function crossProductMarkAdImported(sourceProductId, sourceAdId, importing
 // ================================================
 function renderMatrixSummary() {
   var total = ADS.filter(function (a) { return !a.parentAdId; }).length;
-  var winners = ADS.filter(function (a) { return (a.status === 'Winner' || a.status === 'Scale') && !a.parentAdId; }).length;
+  var winners = ADS.filter(function (a) { return (a.status === 'Winner' || a.status === 'Mild Winner' || a.status === 'Scale') && !a.parentAdId; }).length;
   var testing = ADS.filter(function (a) { return a.status === 'Testing' && !a.parentAdId; }).length;
   var notStarted = ADS.filter(function (a) { return a.status === 'Untested' && !a.parentAdId; }).length;
   var variations = ADS.filter(function (a) { return !!a.parentAdId; }).length;

@@ -29,6 +29,7 @@ import time
 import traceback
 import urllib.parse
 import urllib.request
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -51,6 +52,13 @@ HEARTBEAT_INTERVAL_SECONDS = 30
 STALE_CLAIM_TIMEOUT_MINUTES = 10
 PREFERRED_WORKER_OFFLINE_GRACE_MINUTES = 2
 CLAUDE_CLI_TIMEOUT_SECONDS = 600  # 10 min hard ceiling per classification
+PRODUCER_CLI_TIMEOUT_SECONDS = 1800  # 30 min for Codex image gen jobs
+# Max producer jobs running in parallel on this machine. Each is a separate
+# codex exec subprocess. Override via PRODUCER_MAX_CONCURRENCY env var.
+# 2026-05-09: bumped from sequential (1) to 10 — user is on ChatGPT Max plan,
+# rate limits not a concern. Memory invariant #1 (sequential) is explicitly
+# overridden by user instruction.
+PRODUCER_MAX_CONCURRENCY = int(os.environ.get("PRODUCER_MAX_CONCURRENCY", "10"))
 MAX_ATTEMPTS_BEFORE_FAILED = 3
 AUTO_PAUSE_CHECK_INTERVAL_SECONDS = 60
 
@@ -215,6 +223,15 @@ class Worker:
         self.is_busy = False
         self.current_job_id = None
         self._caps = probe_capabilities()
+        # Producer parallel-execution pool. Producer jobs (image gen) run
+        # concurrently up to PRODUCER_MAX_CONCURRENCY per machine. Classify
+        # and strategist queues remain sequential within the main loop.
+        self._producer_pool = ThreadPoolExecutor(
+            max_workers=PRODUCER_MAX_CONCURRENCY,
+            thread_name_prefix="producer",
+        )
+        self._producer_futures = {}  # run_id -> Future
+        self._producer_lock = threading.Lock()
         # Wire signal handlers for graceful shutdown
         for sig in (signal.SIGINT, signal.SIGTERM):
             signal.signal(sig, self._on_signal)
@@ -261,7 +278,11 @@ class Worker:
         while not self.shutdown.is_set():
             try:
                 paused = self.auto_pause_when_claude_idle and not is_claude_code_running()
-                next_status = "paused" if paused else ("busy" if self.is_busy else "idle")
+                # Worker is busy if classify/strategist is running OR any
+                # producer jobs are in flight in the parallel pool.
+                _producer_active = self._active_producer_count() > 0
+                _is_busy = self.is_busy or _producer_active
+                next_status = "paused" if paused else ("busy" if _is_busy else "idle")
                 self.sb.update(
                     "worker_registry",
                     f"worker_id=eq.{urllib.parse.quote(self.worker_id)}",
@@ -361,6 +382,275 @@ class Worker:
         except Exception as e:
             log(f"claim failed for {cid}: {e}")
             return None
+
+    # ── Producer parallel-execution helpers ──
+
+    def _active_producer_count(self) -> int:
+        """Count of producer jobs currently running in the pool."""
+        with self._producer_lock:
+            return sum(1 for f in self._producer_futures.values() if not f.done())
+
+    def _reap_producer_futures(self) -> None:
+        """Remove completed futures from tracking. Call before submitting new ones."""
+        with self._producer_lock:
+            done_ids = [rid for rid, f in self._producer_futures.items() if f.done()]
+            for rid in done_ids:
+                f = self._producer_futures.pop(rid)
+                # Surface any uncaught exception from the worker thread.
+                try:
+                    exc = f.exception(timeout=0)
+                    if exc:
+                        log(f"[producer] run {rid} raised: {exc}")
+                except Exception:
+                    pass
+
+    def _producer_has_capacity(self) -> bool:
+        """True if pool has a free slot for a new producer job."""
+        return self._active_producer_count() < PRODUCER_MAX_CONCURRENCY
+
+    def _execute_producer_run(self, prod_run: dict) -> None:
+        """Run a single producer job end-to-end on a pool thread.
+
+        Thread-safe: each call uses its own subprocess + local state.
+        Handles success, FAIL, ambiguous, and timeout (with attachment recovery).
+        Always patches the producer_runs row to a terminal status.
+        """
+        from tools.producer.db import finish_run as _finish_producer_run
+        run_id = prod_run["id"]
+        log(f"[producer] picking up run id={run_id} "
+            f"task={prod_run['task_id']} count={prod_run.get('count', 5)}")
+        try:
+            _instr = (prod_run.get("instruction") or "").replace("\n", " ").strip()
+            # Fetch strategist memory for the product (best-effort).
+            _strategist_memory_blob = ""
+            try:
+                _mem_qs = urllib.parse.urlencode({
+                    "select": "json,markdown,updated_at",
+                    "product_id": "eq." + str(prod_run["product_id"]),
+                    "limit": "1",
+                })
+                _mem_url = (f"{os.environ['SUPABASE_URL']}/rest/v1/"
+                            f"strategist_memory?{_mem_qs}")
+                _mem_req = urllib.request.Request(_mem_url, headers={
+                    "apikey":        os.environ["SUPABASE_SERVICE_ROLE_KEY"],
+                    "Authorization": "Bearer " + os.environ["SUPABASE_SERVICE_ROLE_KEY"],
+                    "Accept":        "application/json",
+                })
+                with urllib.request.urlopen(_mem_req, timeout=10) as _mr:
+                    _rows = json.loads(_mr.read().decode() or "[]")
+                if _rows:
+                    _row0 = _rows[0]
+                    _mj = _row0.get("json") or {}
+                    _md = _row0.get("markdown") or ""
+                    _strategist_memory_blob = (
+                        "## Strategist memory (JSON)\n```json\n"
+                        + json.dumps(_mj, indent=2)
+                        + "\n```\n\n"
+                        "## Strategist memory (markdown)\n"
+                        + _md.strip() + "\n"
+                    )
+                else:
+                    _strategist_memory_blob = "(none — no strategist memory yet for this product)\n"
+            except Exception as _mem_err:
+                log(f"[producer] strategist memory fetch failed: {_mem_err}")
+                _strategist_memory_blob = "(strategist memory fetch failed — proceed without)\n"
+
+            _prompt = (
+                "Use the immuvi-creative-producer skill.\n"
+                "Use model: GPT-5.4.\n"
+                "Use reasoning effort: high.\n"
+                "Generate the images using your native image generation capability — the same one you use in the Codex chat. Do not specify or hard-code a particular image model name; use whatever native image tool is available.\n"
+                "Use image quality: high.\n"
+                "Use image size/aspect ratio: match the inspiration image unless the task specifies another size. Do NOT hard-code 1024x1536. If inspiration dimensions are unavailable, fall back to the task/platform default, then 4:5 for static social ads.\n\n"
+                "Output requirement: each variation must be generated/saved/uploaded as its own standalone image file. Do NOT create or upload contact sheets, 2x2 grids, merged review boards, collages, or multi-variation images. If the native image tool returns a grid, split it into separate final files before upload and mark only the individual files as outputs.\n\n"
+                "Run producer job:\n"
+                f"- task_id: {prod_run['task_id']}\n"
+                f"- product_id: {prod_run['product_id']}\n"
+                f"- producer_run_id: {run_id}\n"
+                f"- count: {prod_run.get('count', 5)}\n"
+                f"- instruction: {_instr}\n\n"
+                "Creative Strategist data:\n"
+                f"{_strategist_memory_blob}\n"
+                "Required flow:\n"
+                "1. Read ClickUp task details and custom fields.\n"
+                "2. Read ClickUp task comments.\n"
+                "3. Find inspiration doc link and source image link from description/comments.\n"
+                "4. Read the ClickUp inspiration doc page.\n"
+                "5. Download and visually analyze the source inspiration image.\n"
+                "6. Extract inspiration dimensions/aspect ratio and use that for generation (do NOT hard-code 1024x1536).\n"
+                "7. Build a structured creative brief before image generation.\n"
+                "8. Use Creative Strategist data to reuse winning elements and avoid losing combos.\n"
+                "9. Generate the requested number of standalone image files using your native image generation at high quality (same as Codex chat — do not hard-code a specific model name). Never count a merged grid/contact sheet as a final output.\n"
+                "10. Quality gate each image before upload — persona match, offer/benefit clarity, readable typography, mechanic match, brand fit, not generic.\n"
+                "11. Regenerate once if quality gate fails.\n"
+                "12. Upload final images to ClickUp.\n"
+                "13. Add ClickUp comment with summary and output links.\n"
+                "14. Set ClickUp task status to Ready to Launch only after upload succeeds.\n"
+                "15. PATCH producer_runs row "
+                f"{run_id} with status='done' and outputs as a JSON array of objects each "
+                "containing: variation_id, file_path, clickup_attachment_url, source_inspiration, "
+                "inspiration_dimensions, aspect_ratio, prompt, image_model, quality_gate. "
+                "On failure PATCH status='failed' with a useful error string.\n\n"
+                f"Print 'OK {run_id}' on success or 'FAIL {run_id}: <reason>' on failure "
+                "as the LAST line of stdout."
+            )
+            cmd = [
+                CODEX_BIN, "exec",
+                "--dangerously-bypass-approvals-and-sandbox",
+                "-c", "shell_environment_policy.inherit=all",
+                _prompt,
+            ]
+            try:
+                r = subprocess.run(cmd, capture_output=True,
+                                   text=True,
+                                   timeout=PRODUCER_CLI_TIMEOUT_SECONDS)
+                stdout = (r.stdout or "").strip()
+                stderr = (r.stderr or "").strip()
+                tail = (stdout[-300:] or stderr[-300:])
+                ok = f"OK {run_id}" in stdout
+                failed = f"FAIL {run_id}" in stdout
+                if r.returncode != 0 or failed:
+                    err = f"codex exit {r.returncode}: {tail}"
+                    try:
+                        _finish_producer_run(
+                            supabase_url=os.environ["SUPABASE_URL"],
+                            service_key=os.environ["SUPABASE_SERVICE_ROLE_KEY"],
+                            run_id=run_id, status="failed",
+                            outputs=None, error=err,
+                        )
+                    except Exception:
+                        pass
+                    log(f"[producer] run {run_id} FAILED: {tail[-200:]}")
+                elif ok:
+                    # Pillow / fallback rejection — verify Codex actually used a
+                    # real native image generator. If outputs were silently made
+                    # by Pillow / ASCII art / static graphic renderer, force-fail
+                    # the run so the buyer never ships fake images. Re-fetches
+                    # the row to read what the skill wrote back.
+                    _is_fake = False
+                    _fake_reason = ""
+                    try:
+                        _verify_qs = urllib.parse.urlencode({
+                            "id":     f"eq.{run_id}",
+                            "select": "outputs",
+                        })
+                        _verify_url = f"{os.environ['SUPABASE_URL']}/rest/v1/producer_runs?{_verify_qs}"
+                        _verify_req = urllib.request.Request(_verify_url, headers={
+                            "apikey":        os.environ["SUPABASE_SERVICE_ROLE_KEY"],
+                            "Authorization": "Bearer " + os.environ["SUPABASE_SERVICE_ROLE_KEY"],
+                        })
+                        with urllib.request.urlopen(_verify_req, timeout=10) as _vr:
+                            _vrows = json.loads(_vr.read().decode() or "[]")
+                        _outputs = (_vrows[0].get("outputs") if _vrows else None) or []
+                        # Markers that indicate a fake / fallback image gen.
+                        _bad_markers = (
+                            "pillow", "fallback", "programmatic", "static graphic",
+                            "ascii", "PIL ", "local high-resolution", "deterministic SVG",
+                            "PIL.Image", "drawn with",
+                        )
+                        for _o in _outputs:
+                            _model = str((_o or {}).get("image_model") or "").lower()
+                            if any(m in _model for m in _bad_markers):
+                                _is_fake = True
+                                _fake_reason = f"image_model='{_model[:120]}'"
+                                break
+                    except Exception as _ve:
+                        log(f"[producer] run {run_id} verify error (allowing through): {_ve}")
+                    if _is_fake:
+                        log(f"[producer] run {run_id} REJECTED — Pillow/fallback detected. {_fake_reason}")
+                        try:
+                            _finish_producer_run(
+                                supabase_url=os.environ["SUPABASE_URL"],
+                                service_key=os.environ["SUPABASE_SERVICE_ROLE_KEY"],
+                                run_id=run_id, status="failed",
+                                outputs=None,
+                                error=f"Worker rejected fake/Pillow output. {_fake_reason}. The skill must use Codex native image generation only.",
+                            )
+                        except Exception:
+                            pass
+                    else:
+                        log(f"[producer] run {run_id} DONE")
+                else:
+                    log(f"[producer] run {run_id} ambiguous, "
+                        f"trusting skill writeback. tail: {tail[-200:]}")
+            except subprocess.TimeoutExpired:
+                log(f"[producer] run {run_id} TIMEOUT after {PRODUCER_CLI_TIMEOUT_SECONDS}s — attempting attachment recovery")
+                _recovered = False
+                try:
+                    _cu_key = os.environ.get("CLICKUP_API_KEY", "")
+                    _task_url = f"https://api.clickup.com/api/v2/task/{prod_run['task_id']}"
+                    _req = urllib.request.Request(
+                        _task_url,
+                        headers={"Authorization": _cu_key}
+                    )
+                    with urllib.request.urlopen(_req, timeout=15) as _tr:
+                        _task_data = json.loads(_tr.read().decode())
+                    _attachments = _task_data.get("attachments") or []
+                    _tag = f"RUN{run_id}"
+                    _matched = [
+                        a for a in _attachments
+                        if _tag in (a.get("title") or a.get("url") or "")
+                    ]
+                    _expected = prod_run.get("count", 1)
+                    if len(_matched) >= _expected:
+                        _outputs = [
+                            {
+                                "variation_id": f"V{str(i+1).zfill(2)}",
+                                "file_path": None,
+                                "clickup_attachment_url": a.get("url"),
+                                "image_model": "native Codex/ChatGPT image generation; recovered from ClickUp attachments because worker timed out before metadata writeback",
+                                "source_inspiration": None,
+                                "aspect_ratio": None,
+                                "prompt": None,
+                                "quality_gate": {"status": "recovered"},
+                            }
+                            for i, a in enumerate(_matched[:_expected])
+                        ]
+                        try:
+                            _status_body = json.dumps({"status": "Ready to Launch"}).encode()
+                            _sr = urllib.request.Request(
+                                f"https://api.clickup.com/api/v2/task/{prod_run['task_id']}",
+                                data=_status_body, method="PUT",
+                                headers={"Authorization": _cu_key,
+                                         "Content-Type": "application/json"}
+                            )
+                            urllib.request.urlopen(_sr, timeout=10)
+                        except Exception:
+                            pass
+                        _finish_producer_run(
+                            supabase_url=os.environ["SUPABASE_URL"],
+                            service_key=os.environ["SUPABASE_SERVICE_ROLE_KEY"],
+                            run_id=run_id, status="done",
+                            outputs=_outputs, error=None,
+                        )
+                        log(f"[producer] run {run_id} RECOVERED — {len(_matched)} attachments found in ClickUp")
+                        _recovered = True
+                    else:
+                        log(f"[producer] run {run_id} timeout recovery: only {len(_matched)}/{_expected} attachments found — marking failed")
+                except Exception as _re:
+                    log(f"[producer] run {run_id} timeout recovery error: {_re}")
+                if not _recovered:
+                    try:
+                        _finish_producer_run(
+                            supabase_url=os.environ["SUPABASE_URL"],
+                            service_key=os.environ["SUPABASE_SERVICE_ROLE_KEY"],
+                            run_id=run_id, status="failed",
+                            outputs=None,
+                            error=f"timeout after {PRODUCER_CLI_TIMEOUT_SECONDS}s — no attachments found for recovery",
+                        )
+                    except Exception:
+                        pass
+        except Exception as _outer:
+            log(f"[producer] run {run_id} crashed: {_outer}\n{traceback.format_exc()}")
+            try:
+                _finish_producer_run(
+                    supabase_url=os.environ["SUPABASE_URL"],
+                    service_key=os.environ["SUPABASE_SERVICE_ROLE_KEY"],
+                    run_id=run_id, status="failed",
+                    outputs=None, error=f"worker thread crashed: {_outer}",
+                )
+            except Exception:
+                pass
 
     # ── Run the skill via Claude Code CLI ──
 
@@ -672,29 +962,33 @@ class Worker:
                                 continue
                         except Exception as e:
                             log(f"[strategist] poll/run failed: {e}")
-                        # ── Producer queue check (Agent 2) ──
-                        # Sequential with classify + strategist. Worker only invokes
-                        # codex exec with the produce-ad-image skill — the skill itself
-                        # claims the row, generates images, uploads, and PATCHes the
-                        # row to done/failed. Worker just shells out and waits.
+                        # ── Producer queue check (Agent 2) — PARALLEL DISPATCH ──
+                        # Runs up to PRODUCER_MAX_CONCURRENCY codex exec subprocesses
+                        # in parallel via self._producer_pool. Each pool thread runs
+                        # _execute_producer_run which is fully self-contained.
+                        # Classify/strategist still run sequentially in this main
+                        # loop — only producer is parallelized.
                         try:
                             from tools.producer.db import (
                                 pop_pending_run as _pop_producer_run,
                                 claim_run as _claim_producer_run,
-                                finish_run as _finish_producer_run,
                             )
-                            prod_run = _pop_producer_run(
-                                supabase_url=os.environ["SUPABASE_URL"],
-                                service_key=os.environ["SUPABASE_SERVICE_ROLE_KEY"],
-                                worker_id=self.worker_id,
-                            )
-                            if prod_run is not None:
+                            # Reap completed producer futures first (frees slots).
+                            self._reap_producer_futures()
+                            # Dispatch as many pending producer runs as we have
+                            # capacity for, in this single poll cycle.
+                            _dispatched = 0
+                            while self._producer_has_capacity():
+                                prod_run = _pop_producer_run(
+                                    supabase_url=os.environ["SUPABASE_URL"],
+                                    service_key=os.environ["SUPABASE_SERVICE_ROLE_KEY"],
+                                    worker_id=self.worker_id,
+                                )
+                                if prod_run is None:
+                                    break
                                 run_id = prod_run["id"]
-                                log(f"[producer] picking up run id={run_id} "
-                                    f"task={prod_run['task_id']} "
-                                    f"count={prod_run.get('count', 5)}")
-                                # Claim the row before invoking the skill so other
-                                # workers don't double-pick.
+                                # Claim atomically — second worker on same run will
+                                # raise RuntimeError and we skip to the next.
                                 try:
                                     _claim_producer_run(
                                         supabase_url=os.environ["SUPABASE_URL"],
@@ -704,141 +998,18 @@ class Worker:
                                     )
                                 except RuntimeError as e:
                                     log(f"[producer] claim race lost on run {run_id}: {e}")
-                                    return  # back to outer loop; another worker has it
-                                self.is_busy = True
-                                self.current_job_id = None  # producer run ids are integers, not uuids; send NULL to avoid 22P02
-                                try:
-                                    # Invoke the skill via Codex CLI (native image gen +
-                                    # bundled ClickUp / Drive plugins, no API keys needed).
-                                    # 10 min timeout to allow N parallel image gens.
-                                    # 2026-05-09 v2: identifier-only contract + explicit model
-                                    # config (GPT-5.5, image gpt-image-1.5 high quality,
-                                    # match_inspiration aspect ratio). Strategist memory is
-                                    # PASSED INLINE so the skill doesn't need an extra DB
-                                    # round-trip. Worker still stays "dumb": it just fetches
-                                    # the memory row and shells out. The OK/FAIL stdout
-                                    # contract is unchanged.
-                                    _instr = (prod_run.get("instruction") or "").replace("\n", " ").strip()
-
-                                    # Fetch strategist memory for the product (best-effort —
-                                    # missing memory is fine, the skill still works).
-                                    _strategist_memory_blob = ""
-                                    try:
-                                        _mem_qs = urllib.parse.urlencode({
-                                            "select": "json,markdown,updated_at",
-                                            "product_id": "eq." + str(prod_run["product_id"]),
-                                            "limit": "1",
-                                        })
-                                        _mem_url = (f"{os.environ['SUPABASE_URL']}/rest/v1/"
-                                                    f"strategist_memory?{_mem_qs}")
-                                        _mem_req = urllib.request.Request(_mem_url, headers={
-                                            "apikey":        os.environ["SUPABASE_SERVICE_ROLE_KEY"],
-                                            "Authorization": "Bearer " + os.environ["SUPABASE_SERVICE_ROLE_KEY"],
-                                            "Accept":        "application/json",
-                                        })
-                                        with urllib.request.urlopen(_mem_req, timeout=10) as _mr:
-                                            _rows = json.loads(_mr.read().decode() or "[]")
-                                        if _rows:
-                                            _row0 = _rows[0]
-                                            _mj = _row0.get("json") or {}
-                                            _md = _row0.get("markdown") or ""
-                                            _strategist_memory_blob = (
-                                                "## Strategist memory (JSON)\n```json\n"
-                                                + json.dumps(_mj, indent=2)
-                                                + "\n```\n\n"
-                                                "## Strategist memory (markdown)\n"
-                                                + _md.strip() + "\n"
-                                            )
-                                        else:
-                                            _strategist_memory_blob = "(none — no strategist memory yet for this product)\n"
-                                    except Exception as _mem_err:
-                                        log(f"[producer] strategist memory fetch failed: {_mem_err}")
-                                        _strategist_memory_blob = "(strategist memory fetch failed — proceed without)\n"
-
-                                    _prompt = (
-                                        "Use the immuvi-creative-producer skill.\n"
-                                        "Use model: GPT-5.5.\n"
-                                        "Use reasoning effort: high.\n"
-                                        "Use image model: gpt-image-1.5.\n"
-                                        "Use image quality: high.\n"
-                                        "Use image size/aspect ratio: match the inspiration image unless the task specifies another size. Do NOT hard-code 1024x1536. If inspiration dimensions are unavailable, fall back to the task/platform default, then 4:5 for static social ads.\n\n"
-                                        "Run producer job:\n"
-                                        f"- task_id: {prod_run['task_id']}\n"
-                                        f"- product_id: {prod_run['product_id']}\n"
-                                        f"- producer_run_id: {run_id}\n"
-                                        f"- count: {prod_run.get('count', 5)}\n"
-                                        f"- instruction: {_instr}\n\n"
-                                        "Creative Strategist data:\n"
-                                        f"{_strategist_memory_blob}\n"
-                                        "Required flow:\n"
-                                        "1. Read ClickUp task details and custom fields.\n"
-                                        "2. Read ClickUp task comments.\n"
-                                        "3. Find inspiration doc link and source image link from description/comments.\n"
-                                        "4. Read the ClickUp inspiration doc page.\n"
-                                        "5. Download and visually analyze the source inspiration image.\n"
-                                        "6. Extract inspiration dimensions/aspect ratio and use that for generation (do NOT hard-code 1024x1536).\n"
-                                        "7. Build a structured creative brief before image generation.\n"
-                                        "8. Use Creative Strategist data to reuse winning elements and avoid losing combos.\n"
-                                        "9. Generate the requested number of images using gpt-image-1.5 high quality.\n"
-                                        "10. Quality gate each image before upload — persona match, offer/benefit clarity, readable typography, mechanic match, brand fit, not generic.\n"
-                                        "11. Regenerate once if quality gate fails.\n"
-                                        "12. Upload final images to ClickUp.\n"
-                                        "13. Add ClickUp comment with summary and output links.\n"
-                                        "14. Set ClickUp task status to Ready to Launch only after upload succeeds.\n"
-                                        "15. PATCH producer_runs row "
-                                        f"{run_id} with status='done' and outputs as a JSON array of objects each "
-                                        "containing: variation_id, file_path, clickup_attachment_url, source_inspiration, "
-                                        "inspiration_dimensions, aspect_ratio, prompt, image_model, quality_gate. "
-                                        "On failure PATCH status='failed' with a useful error string.\n\n"
-                                        f"Print 'OK {run_id}' on success or 'FAIL {run_id}: <reason>' on failure "
-                                        "as the LAST line of stdout."
-                                    )
-                                    cmd = [
-                                        CODEX_BIN, "exec",
-                                        "--dangerously-bypass-approvals-and-sandbox",
-                                        _prompt,
-                                    ]
-                                    r = subprocess.run(cmd, capture_output=True,
-                                                       text=True, timeout=600)
-                                    stdout = (r.stdout or "").strip()
-                                    stderr = (r.stderr or "").strip()
-                                    tail = (stdout[-300:] or stderr[-300:])
-                                    ok = f"OK {run_id}" in stdout
-                                    failed = f"FAIL {run_id}" in stdout
-                                    if r.returncode != 0 or failed:
-                                        # Skill should have already PATCHed to failed,
-                                        # but belt-and-braces from worker side too.
-                                        err = f"codex exit {r.returncode}: {tail}"
-                                        try:
-                                            _finish_producer_run(
-                                                supabase_url=os.environ["SUPABASE_URL"],
-                                                service_key=os.environ["SUPABASE_SERVICE_ROLE_KEY"],
-                                                run_id=run_id, status="failed",
-                                                outputs=None, error=err,
-                                            )
-                                        except Exception:
-                                            pass
-                                        log(f"[producer] run {run_id} FAILED: {tail[-200:]}")
-                                    elif ok:
-                                        log(f"[producer] run {run_id} DONE")
-                                    else:
-                                        # Skill returned 0 but didn't print OK.
-                                        log(f"[producer] run {run_id} ambiguous, "
-                                            f"trusting skill writeback. tail: {tail[-200:]}")
-                                except subprocess.TimeoutExpired:
-                                    log(f"[producer] run {run_id} TIMEOUT after 600s")
-                                    try:
-                                        _finish_producer_run(
-                                            supabase_url=os.environ["SUPABASE_URL"],
-                                            service_key=os.environ["SUPABASE_SERVICE_ROLE_KEY"],
-                                            run_id=run_id, status="failed",
-                                            outputs=None, error="timeout after 600s",
-                                        )
-                                    except Exception:
-                                        pass
-                                finally:
-                                    self.is_busy = False
-                                    self.current_job_id = None
+                                    continue
+                                # Submit to pool — runs concurrently, doesn't block.
+                                fut = self._producer_pool.submit(
+                                    self._execute_producer_run, prod_run
+                                )
+                                with self._producer_lock:
+                                    self._producer_futures[run_id] = fut
+                                _dispatched += 1
+                            if _dispatched > 0:
+                                _active = self._active_producer_count()
+                                log(f"[producer] dispatched {_dispatched} new job(s); "
+                                    f"{_active}/{PRODUCER_MAX_CONCURRENCY} slot(s) in use")
                         except Exception as e:
                             log(f"[producer] poll/run failed: {e}")
                         self.shutdown.wait(self.poll_interval)
@@ -871,6 +1042,16 @@ class Worker:
                     self.is_busy = False
                     self.current_job_id = None
         finally:
+            # Drain in-flight producer jobs before shutting down. Each job has
+            # its own subprocess timeout; we just wait for the threads to
+            # exit cleanly so we don't drop a half-uploaded image.
+            try:
+                _active = self._active_producer_count()
+                if _active > 0:
+                    log(f"[producer] waiting for {_active} in-flight job(s) to finish before shutdown")
+                self._producer_pool.shutdown(wait=True)
+            except Exception as _se:
+                log(f"[producer] pool shutdown error: {_se}")
             self.deregister_offline()
             log("=== classify-worker stopped ===")
 

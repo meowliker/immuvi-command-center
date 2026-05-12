@@ -75,6 +75,72 @@ def decode_unicode(s: str) -> str:
     return result
 
 
+# ── Instagram: Open Graph fallback (no login, no cookies) ────────────────────
+def fetch_instagram_og(url: str) -> dict:
+    """
+    Fetch an Instagram post URL using a bot User-Agent and parse the Open Graph
+    tags. Works for public photo posts, reels, and IGTV without any login or
+    cookies — Instagram still serves the OG metadata to crawlers like
+    facebookexternalhit even though the regular HTML now redirects to a login
+    wall for unauthenticated browsers.
+
+    Returns a dict with: image_url, video_url, caption, page_name, likes_count,
+    comments_count, raw_description, raw_title. Missing fields are empty strings.
+    Raises urllib.error.URLError / HTTPError on network failure.
+    """
+    import html as _html
+    bot_ua = "facebookexternalhit/1.1"
+    req = urllib.request.Request(url, headers={"User-Agent": bot_ua})
+    with urllib.request.urlopen(req, timeout=30) as r:
+        page = r.read().decode("utf-8", "ignore")
+
+    def _og(prop: str) -> str:
+        m = re.search(
+            r'property=["\']og:' + re.escape(prop) + r'["\']\s+content=["\']([^"\']+)["\']',
+            page,
+        )
+        return _html.unescape(m.group(1)) if m else ""
+
+    image_url = _og("image")
+    video_url = _og("video") or _og("video:secure_url")
+    description = _og("description")
+    title = _og("title")
+
+    # Description format observed:
+    #   '847 likes, 6 comments - perfectmatchastro on April 14, 2026: "caption..."'
+    caption = ""
+    page_name = ""
+    likes_count = ""
+    comments_count = ""
+    m = re.match(
+        r'^([\d,]+)\s+likes?,\s+([\d,]+)\s+comments?\s+-\s+(\S+)\s+on\s+[^:]+:\s*"(.+)"[\s.]*$',
+        description, re.S,
+    )
+    if m:
+        likes_count = m.group(1).replace(",", "")
+        comments_count = m.group(2).replace(",", "")
+        page_name = m.group(3)
+        caption = m.group(4)
+    elif description:
+        m2 = re.match(r'^[^:]+:\s*"(.*)"\s*$', description, re.S)
+        caption = m2.group(1) if m2 else description
+        # Fallback username from title: 'username on Instagram: ...'
+        mt = re.match(r'^(\S+)\s+on Instagram', title)
+        if mt:
+            page_name = mt.group(1)
+
+    return {
+        "image_url": image_url,
+        "video_url": video_url,
+        "caption": caption,
+        "page_name": page_name,
+        "likes_count": likes_count,
+        "comments_count": comments_count,
+        "raw_description": description,
+        "raw_title": title,
+    }
+
+
 # ── Step 1: Fetch ad JSON from page ──────────────────────────────────────────
 async def fetch_ad_snapshot(ad_id: str) -> dict:
     """

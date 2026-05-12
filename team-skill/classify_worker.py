@@ -67,14 +67,39 @@ AUTO_PAUSE_CHECK_INTERVAL_SECONDS = 60
 CODEX_BIN = "/Applications/Codex.app/Contents/Resources/codex"
 
 # ── Worker self-update (2026-05-12) ─────────────────────────
-# Polls Vercel for a newer version of this file. On change: validate
-# syntax → atomic swap → drain producer pool → os.execv to reload.
-# Disable by setting WORKER_AUTO_UPDATE=0 in the environment (useful
-# for local dev where you're iterating without pushing).
+# Polls Vercel for newer versions of worker-related files. On change:
+# validate syntax → atomic swap → drain producer pool → os.execv reload.
+# Disable by setting WORKER_AUTO_UPDATE=0 in the environment.
 WORKER_AUTO_UPDATE_ENABLED = os.environ.get("WORKER_AUTO_UPDATE", "1") != "0"
-WORKER_UPDATE_URL = "https://immuvi-command-center.vercel.app/team-skill/classify_worker.py"
 WORKER_UPDATE_CHECK_EVERY_SECONDS = 60  # ETag check every Nth poll cycle
 WORKER_BACKUP_KEEP_COUNT = 3  # keep last N backups; older ones get pruned
+
+# Each entry is (Vercel URL path → local file path relative to project root).
+# The main worker file triggers a re-exec on swap; the strategist files
+# only need to be on disk (next strategist invocation imports the new code).
+WORKER_UPDATE_MANIFEST = [
+    {
+        "url": "https://immuvi-command-center.vercel.app/team-skill/classify_worker.py",
+        "rel_path": "tools/classify_worker.py",
+        "triggers_restart": True,
+    },
+    # Strategist modules: triggers_restart=True so Python's sys.modules cache
+    # gets refreshed via re-exec. Without this, a strategist file update on
+    # disk wouldn't take effect until the next manual worker restart.
+    {
+        "url": "https://immuvi-command-center.vercel.app/team-skill/strategist/synthesis.py",
+        "rel_path": "tools/strategist/synthesis.py",
+        "triggers_restart": True,
+    },
+    {
+        "url": "https://immuvi-command-center.vercel.app/team-skill/strategist/renderer.py",
+        "rel_path": "tools/strategist/renderer.py",
+        "triggers_restart": True,
+    },
+]
+# Backward-compat: kept as the primary URL for log lines + the single-file
+# check path used by older code that imported this name.
+WORKER_UPDATE_URL = WORKER_UPDATE_MANIFEST[0]["url"]
 
 # ── Helpers ─────────────────────────────────────────────────
 
@@ -133,6 +158,51 @@ def probe_capabilities() -> dict:
     }
 
 
+# ── Agent-CLI dispatcher (claude OR codex, whichever is installed) ─────
+# Worker tasks like classify-inspiration historically hard-coded `claude -p`.
+# On machines that only have Codex installed (e.g. the Mac Mini), that fails.
+# This dispatcher detects what's available and routes accordingly.
+#   - prefer='claude' → use claude if present, else fall back to codex exec
+#   - prefer='codex'  → use codex if present, else fall back to claude
+# Returns the list-of-strings to pass to subprocess.run().
+
+def _has_claude() -> bool:
+    return shutil.which("claude") is not None
+
+
+def _has_codex() -> bool:
+    return shutil.which(CODEX_BIN) is not None or os.path.exists(CODEX_BIN)
+
+
+def build_agent_cmd(prompt: str, prefer: str = "claude") -> list:
+    """Return the CLI command list for running a skill-style prompt on this
+    machine, using whichever agent CLI is actually installed.
+
+    Both Claude Code's `claude -p <prompt>` and Codex's `codex exec <prompt>`
+    accept the same prompt shape (free-form text mentioning skills the agent
+    has installed). Skills like classify-inspiration auto-fetch their own
+    files from Vercel via Step 0, so they work on either agent as long as
+    the skill is installed locally for that agent.
+    """
+    claude_ok = _has_claude()
+    codex_ok = _has_codex()
+    use_claude = (prefer == "claude" and claude_ok) or (prefer == "codex" and not codex_ok and claude_ok)
+    use_codex = (prefer == "codex" and codex_ok) or (prefer == "claude" and not claude_ok and codex_ok)
+    if use_claude:
+        return ["claude", "-p", prompt, "--permission-mode", "bypassPermissions"]
+    if use_codex:
+        return [
+            CODEX_BIN, "exec",
+            "--dangerously-bypass-approvals-and-sandbox",
+            "-c", "shell_environment_policy.inherit=all",
+            prompt,
+        ]
+    raise RuntimeError(
+        "No agent CLI installed on this machine. Install `claude` "
+        "(https://claude.ai/download) or Codex (/Applications/Codex.app)."
+    )
+
+
 def _safe_run(cmd: list, timeout: int = 5) -> str:
     try:
         out = subprocess.check_output(cmd, stderr=subprocess.STDOUT, timeout=timeout)
@@ -189,19 +259,25 @@ def _prune_worker_backups(keep: int = WORKER_BACKUP_KEEP_COUNT) -> None:
         pass
 
 
-def check_for_worker_update() -> bool:
-    """ETag-conditional GET against Vercel. Returns True if a newer version
-    was downloaded + validated + atomically swapped into place. Side-effects:
-      - Writes new content to disk (atomic rename, won't corrupt the running file)
-      - Saves a timestamped backup of the previous version
-      - Validates Python syntax BEFORE swapping (refuses broken updates)
-      - Updates the ETag cache so the next call returns 304 quickly
-    Never raises; returns False on any error.
-    """
-    if not WORKER_AUTO_UPDATE_ENABLED:
-        return False
-    self_path = _worker_self_path()
-    etag_path = _worker_etag_path()
+def _project_root() -> Path:
+    """Project root directory (two levels up from this file)."""
+    return _worker_self_path().parent.parent
+
+
+def _check_one_file_update(entry: dict) -> bool:
+    """Check + download ONE file from the manifest. Returns True if a new
+    version was just written to disk. Mirrors the original single-file logic
+    but parameterized over (url, rel_path)."""
+    url = entry["url"]
+    rel = entry["rel_path"]
+    file_path = _project_root() / rel
+    etag_path = file_path.with_name(file_path.name + ".etag")
+    # Skip if the target file doesn't exist yet (avoid creating phantom dirs).
+    if not file_path.exists():
+        try:
+            file_path.parent.mkdir(parents=True, exist_ok=True)
+        except Exception:
+            return False
     try:
         headers = {}
         if etag_path.exists():
@@ -211,7 +287,7 @@ def check_for_worker_update() -> bool:
                     headers["If-None-Match"] = stored_etag
             except Exception:
                 pass
-        req = urllib.request.Request(WORKER_UPDATE_URL, headers=headers)
+        req = urllib.request.Request(url, headers=headers)
         try:
             with urllib.request.urlopen(req, timeout=10) as resp:
                 status = resp.getcode()
@@ -219,18 +295,16 @@ def check_for_worker_update() -> bool:
                 body = resp.read()
         except urllib.error.HTTPError as e:
             if e.code == 304:
-                return False  # unchanged — the common case, ~90ms
-            log(f"[self-update] HTTP {e.code} fetching new worker — skipping")
+                return False
+            log(f"[self-update] HTTP {e.code} fetching {rel} — skipping")
             return False
         except Exception as e:
-            # Network errors are silent — keep running with current code
-            log(f"[self-update] fetch error (continuing on existing code): {e}")
+            log(f"[self-update] fetch error for {rel}: {e}")
             return False
         if status != 200 or not body:
             return False
-        # Same bytes? (rare: ETag rotated but content identical)
         try:
-            current = self_path.read_bytes()
+            current = file_path.read_bytes() if file_path.exists() else b""
             if body == current:
                 if new_etag:
                     try: etag_path.write_text(new_etag)
@@ -238,40 +312,58 @@ def check_for_worker_update() -> bool:
                 return False
         except Exception:
             current = b""
-        # Syntax-validate the downloaded code before touching disk
-        try:
-            ast.parse(body.decode("utf-8"))
-        except SyntaxError as e:
-            log(f"[self-update] downloaded worker has syntax error — refusing to swap: {e}")
-            return False
-        # Backup the current version with a timestamp
+        # Syntax-validate Python files before swapping
+        if rel.endswith(".py"):
+            try:
+                ast.parse(body.decode("utf-8"))
+            except SyntaxError as e:
+                log(f"[self-update] {rel} has syntax error — refusing to swap: {e}")
+                return False
+        # Backup the current version
         try:
             ts = datetime.now().strftime("%Y%m%d-%H%M%S")
-            backup = self_path.with_name(self_path.name + ".bak." + ts)
-            shutil.copy2(self_path, backup)
+            backup = file_path.with_name(file_path.name + ".bak." + ts)
+            if file_path.exists():
+                shutil.copy2(file_path, backup)
         except Exception as e:
-            log(f"[self-update] backup failed (continuing — atomic rename is the safety net): {e}")
-        # Write tmp + atomic rename. os.replace() is atomic on POSIX; the
-        # running interpreter's open file handle is unaffected because Python
-        # already mmap'd / fully-read the source file at startup.
-        tmp = self_path.with_name(self_path.name + ".tmp")
+            log(f"[self-update] backup failed for {rel}: {e}")
+        # Atomic rename
+        tmp = file_path.with_name(file_path.name + ".tmp")
         try:
             tmp.write_bytes(body)
-            os.replace(tmp, self_path)
+            os.replace(tmp, file_path)
         except Exception as e:
-            log(f"[self-update] write/swap failed: {e}")
+            log(f"[self-update] write/swap failed for {rel}: {e}")
             try: tmp.unlink()
             except Exception: pass
             return False
         if new_etag:
             try: etag_path.write_text(new_etag)
             except Exception: pass
-        _prune_worker_backups()
-        log(f"[self-update] downloaded new worker version, will restart after pool drain")
+        log(f"[self-update] downloaded new version of {rel}")
         return True
     except Exception as e:
-        log(f"[self-update] unexpected error (non-fatal): {e}")
+        log(f"[self-update] unexpected error for {rel}: {e}")
         return False
+
+
+def check_for_worker_update() -> bool:
+    """Iterate over WORKER_UPDATE_MANIFEST. Returns True if ANY entry with
+    triggers_restart=True was updated (meaning the worker should re-exec).
+    Non-restart entries (e.g. strategist modules) are updated silently —
+    the next import picks them up.
+    """
+    if not WORKER_AUTO_UPDATE_ENABLED:
+        return False
+    needs_restart = False
+    for entry in WORKER_UPDATE_MANIFEST:
+        updated = _check_one_file_update(entry)
+        if updated and entry.get("triggers_restart"):
+            needs_restart = True
+    if needs_restart:
+        _prune_worker_backups()
+        log("[self-update] worker file updated — will restart after pool drain")
+    return needs_restart
 
 
 # ── Supabase REST wrappers ──────────────────────────────────
@@ -876,11 +968,14 @@ class Worker:
             f"  If the verification SELECT shows the row missing or fields blank, that is a FAIL.\n"
         )
 
-        cmd = [
-            "claude", "-p", prompt,
-            "--permission-mode", "bypassPermissions",
-        ]
-        log(f"[{job.get('id')}] running skill on {ins_id} (timeout {CLAUDE_CLI_TIMEOUT_SECONDS}s)")
+        # Auto-route: prefer claude (the skill's native agent) but fall back
+        # to codex on machines that only have Codex installed. The
+        # classify-inspiration SKILL.md auto-updates via Step 0 from Vercel,
+        # so it works under either agent as long as the skill files exist
+        # locally for that agent.
+        cmd = build_agent_cmd(prompt, prefer="claude")
+        agent_label = cmd[0] if cmd[0] == "claude" else "codex"
+        log(f"[{job.get('id')}] running skill on {ins_id} via {agent_label} (timeout {CLAUDE_CLI_TIMEOUT_SECONDS}s)")
         try:
             r = subprocess.run(
                 cmd,

@@ -9683,9 +9683,53 @@ button.mx-dt-action-sent .open { color:#0a84ff; font-weight:700; margin-left:4px
   display: flex; flex-wrap: wrap; gap: 8px; padding: 8px 0;
 }
 
+
+/* ─── Instant boot loader (2026-05-12 perf) ────────────────────────
+   Renders within ~50ms of HTML hitting the browser, before any JS runs.
+   The body initially has class="booting" which shows this overlay; the
+   first successful render removes the class via JS. Keeps user from
+   staring at a blank white screen for the 1-2s boot. */
+body.booting > *:not(#__bootLoader) { visibility: hidden; }
+#__bootLoader {
+  position: fixed; inset: 0; z-index: 100000;
+  background: linear-gradient(135deg, #fafafa 0%, #f5f3ff 50%, #fef3c7 100%);
+  display: flex; align-items: center; justify-content: center;
+  flex-direction: column; gap: 16px;
+  animation: __bootFadeIn 200ms ease-out;
+}
+body:not(.booting) #__bootLoader {
+  opacity: 0; pointer-events: none;
+  transition: opacity 240ms cubic-bezier(0.22,1,0.36,1);
+}
+#__bootLoader .__bootLogo {
+  font: 600 22px/1 -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
+  background: linear-gradient(135deg, #6d28d9, #db2777, #f59e0b);
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+  letter-spacing: -0.01em;
+  animation: __bootGlow 2.4s ease-in-out infinite;
+}
+#__bootLoader .__bootRing {
+  width: 42px; height: 42px; border-radius: 50%;
+  border: 3px solid rgba(132,204,22,0.18);
+  border-top-color: #8b5cf6;
+  border-right-color: #db2777;
+  animation: __bootSpin 0.9s cubic-bezier(0.55,0.15,0.45,0.85) infinite;
+}
+@keyframes __bootFadeIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes __bootSpin   { to { transform: rotate(360deg); } }
+@keyframes __bootGlow {
+  0%, 100% { opacity: 0.85; }
+  50%      { opacity: 1; filter: brightness(1.15); }
+}
 </style>
 </head>
-<body>
+<body class="booting">
+
+  <!-- Instant boot loader — visible before any JS parses -->
+  <div id="__bootLoader">
+    <div class="__bootRing"></div>
+    <div class="__bootLogo">Immuvi Command Center</div>
+  </div>
 
   <!-- ===== AUTH OVERLAYS (login + force-pw-change) ===== -->
   <div class="auth-overlay on" id="loginOverlay">
@@ -10275,6 +10319,11 @@ function _showLogin(errMsg) {
   var ov = document.getElementById('loginOverlay'); if (!ov) return;
   ov.classList.add('on');
   document.getElementById('pwChangeOverlay').classList.remove('on');
+  // 2026-05-12 perf: remove the instant boot loader so the login form is
+  // actually visible. Without this, body.booting hides everything except
+  // the loader, and the user sees the spinner indefinitely on the login
+  // screen.
+  try { document.body.classList.remove('booting'); } catch(e) {}
   if (errMsg) {
     var el = document.getElementById('loginError');
     if (el) { el.textContent = errMsg; el.style.display = ''; }
@@ -10507,7 +10556,16 @@ async function _onSession(session) {
   // Wire realtime to the authed JWT so RLS-protected channels work.
   try { SB.realtime.setAuth(session.access_token); } catch(e) {}
 
-  var profRes = await SB.from('profiles').select('*').eq('id', session.user.id).single();
+  // 2026-05-12 perf: run profile + user_products lookups IN PARALLEL.
+  // For non-admin users this saves one full network roundtrip (~150ms)
+  // on every page load. We fetch both speculatively; for admins we just
+  // ignore the user_products result. The two queries are independent so
+  // no correctness risk.
+  var _profP = SB.from('profiles').select('*').eq('id', session.user.id).single();
+  var _upP   = SB.from('user_products').select('product_id').eq('user_id', session.user.id);
+  var _both  = await Promise.all([_profP, _upP]);
+  var profRes = _both[0];
+  var _upResEarly = _both[1];
   if (profRes.error || !profRes.data) {
     console.error('[auth] profile lookup failed', profRes.error);
     await SB.auth.signOut();
@@ -10532,8 +10590,7 @@ async function _onSession(session) {
   if (AUTH.profile.role === 'admin') {
     AUTH.productIds = null;
   } else {
-    var upRes = await SB.from('user_products').select('product_id').eq('user_id', AUTH.profile.id);
-    AUTH.productIds = (upRes.data || []).map(function(r){ return r.product_id; });
+    AUTH.productIds = (_upResEarly.data || []).map(function(r){ return r.product_id; });
   }
 
   // Force-pw-change gate.
@@ -27336,27 +27393,39 @@ async function loadState() {
     console.error('[SB] DB not ready — cannot load state');
     return false;
   }
-  // 1. Load products from Supabase
-  try {
-    PRODUCTS = await DB.listProducts();
-  } catch (e) {
-    console.error('[SB] listProducts failed', e);
-    PRODUCTS = [];
-  }
 
-  // 1a. Subscribe to products-table realtime so peer edits (rename, color,
-  // ClickUp list link, add/delete) propagate to this tab without refresh.
-  // 2026-05-11 — closes the last realtime gap; every other editable table
-  // already had a subscription (ads, manual_actions, angles, personas,
-  // matrix_cells, inspirations, strategist_*, producer_runs, worker_registry).
-  // Pairs with the active-product-only flush fix so writes can't blank peers'
-  // values either way.
+  // 2026-05-12 perf: run listProducts + loadProductData IN PARALLEL.
+  // We can speculatively fetch the active product's data using the saved
+  // localStorage activeProductId — if it's still valid, we save one full
+  // network roundtrip (~150-300ms). If the saved id is no longer valid
+  // (deleted, no permission), we discard the speculative result and fall
+  // through to the slower path.
+  var _savedActiveId = null;
+  try { _savedActiveId = localStorage.getItem('immuvi_active_product') || null; } catch(e){}
+
+  var _productsP = DB.listProducts();
+  var _stateP = _savedActiveId ? DB.loadProductData(_savedActiveId).catch(function(){ return null; })
+                               : Promise.resolve(null);
+  var _bootResults;
+  try {
+    _bootResults = await Promise.all([_productsP, _stateP]);
+  } catch (e) {
+    console.error('[SB] boot queries failed', e);
+    PRODUCTS = [];
+    return false;
+  }
+  PRODUCTS = _bootResults[0] || [];
+  var _speculativeState = _bootResults[1] || null;
+
+  // Subscribe to products-table realtime (no await — fire-and-forget).
   try { _initProductsRealtimeChannel(); } catch (e) { console.warn('[products-realtime] init failed', e); }
 
-  // 2. Resolve active product: last saved UI preference → first product → none
-  var savedActiveId = localStorage.getItem('immuvi_active_product');
-  if (savedActiveId && PRODUCTS.some(function (p) { return p.id === savedActiveId; })) {
-    activeProductId = savedActiveId;
+  // Resolve active product: last saved UI preference → first product → none.
+  // If the speculative load was against a stale id (product deleted / no
+  // permission), the saved id won't be in PRODUCTS — we'll do a second
+  // load against the fallback product below.
+  if (_savedActiveId && PRODUCTS.some(function (p) { return p.id === _savedActiveId; })) {
+    activeProductId = _savedActiveId;
   } else if (PRODUCTS.length > 0) {
     activeProductId = PRODUCTS[0].id;
     try { localStorage.setItem('immuvi_active_product', activeProductId); } catch(e) {}
@@ -27370,13 +27439,17 @@ async function loadState() {
   _producerLoadForProduct(activeProductId);
   if (typeof _producerStartLiveTick === 'function') _producerStartLiveTick();
 
-  // 3. Load the active product's data
-  var state = null;
-  try {
-    state = await DB.loadProductData(activeProductId);
-  } catch (e) {
-    console.error('[SB] loadProductData failed', e);
-    return false;
+  // Pick up speculative state if it matches the resolved active product;
+  // otherwise re-fetch (slower path, but rare — only on first visit or
+  // when active product changed externally).
+  var state = (_savedActiveId && _savedActiveId === activeProductId) ? _speculativeState : null;
+  if (!state) {
+    try {
+      state = await DB.loadProductData(activeProductId);
+    } catch (e) {
+      console.error('[SB] loadProductData failed', e);
+      return false;
+    }
   }
   if (!state) return false;
 
@@ -28496,6 +28569,11 @@ window.addEventListener('load', async function () {
 
   var loaded = false;
   try { loaded = await loadState(); } catch (e) { console.error('[SB] loadState threw', e); }
+  // 2026-05-12 perf: remove instant boot loader once Supabase data has
+  // landed and the UI is about to be rendered. Triggers the 240ms CSS
+  // fade-out defined in the <style> block. Done before loadInspirations
+  // so the user sees the dashboard while inspirations stream in.
+  try { document.body.classList.remove('booting'); } catch(e) {}
   await loadInspirations(); // now loads with correct productId from Supabase
 
   if (!loaded) {

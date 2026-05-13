@@ -9785,6 +9785,8 @@ body:not(.booting) #__bootLoader {
           <span class="live-dot" id="statusDot"></span>
           <span class="live-sync-lbl" id="statusLbl">Not synced</span>
           <button class="btn-sync-now" id="syncNowBtn" onclick="triggerManualSync()" title="Sync now">&#8635;</button>
+          <!-- Admin-only force-reload broadcast — pushes every team tab to refresh. Hidden by default; revealed by _maybeShowForceReloadBtn() if user is admin. -->
+          <button id="forceReloadAllBtn" class="btn-sync-now" onclick="broadcastForceReload()" title="Force everyone's tab to reload (use after deploying a critical fix)" style="display:none;color:#7C3AED;font-size:0.95rem">&#x1F504;</button>
         </div>
         <div id="userPill" class="user-pill" style="display:none"></div>
         <div id="presence-bar" style="position:relative;display:flex;align-items:center;gap:6px;font-size:12px;color:#94a3b8;cursor:pointer;" onclick="_togglePresencePanel(event)">
@@ -28686,6 +28688,175 @@ try {
   }
 } catch (_) {}
 
+// ════════════════════════════════════════════════════════════════════
+// VERSION WATCHER + ADMIN FORCE-RELOAD BROADCAST
+// ════════════════════════════════════════════════════════════════════
+// Problem: when we deploy, teammates with the dashboard already open keep
+// running stale code until they refresh. Stale code can revive old bugs
+// (the upsertProduct wipe, the MA orphan, etc.) by writing snapshots
+// derived from old in-memory state.
+//
+// Two layers of defense:
+//   Layer 1 — Each tab self-detects: every 5 min, HEAD-fetch the HTML and
+//             compare etag/last-modified to what we loaded at boot. If
+//             changed, show a non-blocking banner inviting the user to
+//             reload. Hard-reloads after 60 min if ignored.
+//   Layer 2 — Admin force-reload broadcast: one button in the header
+//             (admin-only) → broadcasts via a global Supabase realtime
+//             channel. Every listening tab reloads ~5s later.
+//
+// The broadcast channel is ephemeral (no postgres_changes), so it does
+// NOT affect the realtime-traffic budget for postgres_changes events.
+
+var _versionWatcher = {
+  bootEtag: null,
+  bootLastModified: null,
+  bannerShown: false,
+  channel: null,
+  pollIntervalMs:  5  * 60 * 1000,  // 5 min
+  laterDelayMs:    15 * 60 * 1000,  // snooze for 15 min on "Later"
+  hardTimeoutMs:   60 * 60 * 1000   // force-reload after 60 min if ignored
+};
+
+async function _captureBootVersion() {
+  try {
+    var r = await fetch(location.pathname, { method: 'HEAD', cache: 'no-store' });
+    _versionWatcher.bootEtag         = r.headers.get('etag')          || null;
+    _versionWatcher.bootLastModified = r.headers.get('last-modified') || null;
+    console.info('[version] boot etag=' + _versionWatcher.bootEtag +
+                 ' last-modified=' + _versionWatcher.bootLastModified);
+  } catch (e) {
+    console.warn('[version] boot capture failed (non-fatal)', e);
+  }
+}
+
+async function _checkVersionUpdate() {
+  try {
+    var r = await fetch(location.pathname, { method: 'HEAD', cache: 'no-store' });
+    var et = r.headers.get('etag')          || null;
+    var lm = r.headers.get('last-modified') || null;
+    var bv = _versionWatcher;
+    var changed = false;
+    if (et && bv.bootEtag && et !== bv.bootEtag)                   changed = true;
+    if (lm && bv.bootLastModified && lm !== bv.bootLastModified)   changed = true;
+    if (changed && !bv.bannerShown) {
+      console.info('[version] new version detected — showing banner');
+      _showVersionUpdateBanner();
+    }
+  } catch (e) { /* silent */ }
+}
+
+function _showVersionUpdateBanner(opts) {
+  opts = opts || {};
+  _versionWatcher.bannerShown = true;
+  var existing = document.getElementById('versionUpdateBanner');
+  if (existing) existing.remove();
+  var b = document.createElement('div');
+  b.id = 'versionUpdateBanner';
+  b.style.cssText =
+    'position:fixed;top:0;left:0;right:0;z-index:99999;' +
+    'background:linear-gradient(90deg,#7C3AED,#3B82F6);color:white;' +
+    'padding:10px 20px;font-size:0.9rem;font-weight:500;' +
+    'display:flex;align-items:center;justify-content:center;gap:14px;' +
+    'box-shadow:0 4px 16px rgba(0,0,0,0.18);font-family:inherit';
+  if (opts.forced) {
+    b.innerHTML =
+      '🔄 Team-wide reload requested' +
+      (opts.by ? ' by ' + esc(opts.by) : '') +
+      '. Refreshing in <span id="vbCountdown" style="font-weight:700">5</span>s…';
+    var sec = 5;
+    var iv = setInterval(function () {
+      sec--;
+      var el = document.getElementById('vbCountdown');
+      if (el) el.textContent = sec;
+      if (sec <= 0) { clearInterval(iv); try { location.reload(true); } catch(_) { location.reload(); } }
+    }, 1000);
+  } else {
+    b.innerHTML =
+      '📦 New version of Immuvi is available — your code is out of date.' +
+      ' <button style="margin-left:6px;padding:5px 14px;font-size:0.85rem;' +
+        'background:white;color:#3B82F6;border:none;border-radius:6px;' +
+        'cursor:pointer;font-weight:600" ' +
+        'onclick="try{location.reload(true)}catch(e){location.reload()}">Reload now</button>' +
+      ' <button style="padding:5px 12px;font-size:0.85rem;background:transparent;' +
+        'color:white;border:1px solid rgba(255,255,255,0.5);border-radius:6px;' +
+        'cursor:pointer" onclick="_versionSnoozeBanner()">Later</button>';
+    setTimeout(function () {
+      try { location.reload(true); } catch(_) { location.reload(); }
+    }, _versionWatcher.hardTimeoutMs);
+  }
+  document.body.appendChild(b);
+}
+
+function _versionSnoozeBanner() {
+  var b = document.getElementById('versionUpdateBanner');
+  if (b) b.remove();
+  _versionWatcher.bannerShown = false;
+  setTimeout(function () { _checkVersionUpdate(); }, _versionWatcher.laterDelayMs);
+}
+
+// Force-reload uses the proven postgres_changes pattern (same as the rest
+// of the app's realtime). Switched away from broadcast channels because
+// broadcast delivery was flaky between same-anon-key clients. The
+// force_reloads table is a tiny single-purpose marker — INSERTing a row
+// fires a realtime event to every tab listening. Auto-prunes after 50
+// rows so it doesn't bloat.
+//
+// Boot capture: remember the most recent triggered_at at load time so
+// we ignore historical rows (only react to NEW inserts after this tab loaded).
+async function _initVersionBroadcast() {
+  if (!SB) return;
+  if (_versionWatcher.channel) return;
+  try {
+    // Capture the most recent triggered_at so we only react to rows newer than now.
+    var bootRes = await SB.from('force_reloads').select('triggered_at').order('triggered_at',{ascending:false}).limit(1);
+    _versionWatcher.bootMaxForceReloadAt = (bootRes && bootRes.data && bootRes.data[0]) ?
+      bootRes.data[0].triggered_at : new Date(0).toISOString();
+
+    _versionWatcher.channel = SB.channel('immuvi-force-reloads');
+    _versionWatcher.channel.on('postgres_changes',
+      { event: 'INSERT', schema: 'public', table: 'force_reloads' },
+      function (payload) {
+        var row = payload && payload.new;
+        if (!row) return;
+        // Only react if this row is newer than what we saw at boot.
+        if (row.triggered_at <= _versionWatcher.bootMaxForceReloadAt) return;
+        console.info('[version] force-reload row received', row);
+        _showVersionUpdateBanner({ forced: true, by: row.triggered_by || null });
+      });
+    await _versionWatcher.channel.subscribe();
+    console.info('[version] force-reload channel subscribed (boot cutoff: '
+                 + _versionWatcher.bootMaxForceReloadAt + ')');
+  } catch (e) {
+    console.warn('[version] force-reload subscribe failed', e);
+  }
+}
+
+// Admin-only: insert a row into force_reloads → all tabs receive the
+// realtime INSERT event and show the forced-reload banner with countdown.
+async function broadcastForceReload() {
+  if (!confirm('Force ALL team tabs to reload now?\n\n' +
+               'Every open Immuvi tab across all teammates will reload ' +
+               'within ~5 seconds. Use this after deploying a critical fix.')) return;
+  if (!SB) { alert('No Supabase connection'); return; }
+  var by = (window.AUTH && AUTH.profile && (AUTH.profile.email || AUTH.profile.name)) || 'admin';
+  try {
+    var res = await SB.from('force_reloads').insert({ triggered_by: by, reason: 'manual admin push' });
+    if (res && res.error) {
+      console.error('[version] force-reload insert failed', res.error);
+      alert('Force-reload failed: ' + res.error.message);
+      return;
+    }
+    toast('🔄 Force-reload sent to team — your tab reloads in 2s', 'ok');
+    setTimeout(function () { try { location.reload(true); } catch(_) { location.reload(); } }, 2000);
+  } catch (e) {
+    console.error('[version] force-reload threw', e);
+    alert('Force-reload failed: ' + (e && e.message ? e.message : e));
+  }
+}
+
+// ════════════════════════════════════════════════════════════════════
+
 window.addEventListener('load', async function () {
   _syncHeaderHeightVar();
   initFieldOptions();
@@ -28800,6 +28971,20 @@ window.addEventListener('load', async function () {
     if (dot) dot.className = 'live-dot';
     if (lbl) lbl.textContent = 'Link a ClickUp list to sync';
   }
+
+  // ── Version watcher boot (Layer 1 + Layer 2) ──
+  // Capture our loaded HTML's etag/last-modified so we can detect deploys.
+  // Subscribe to the global force-reload broadcast channel so admin pushes
+  // can refresh every tab. Start the 5-min poller. Reveal the admin-only
+  // force-reload button if the user has admin role.
+  try { await _captureBootVersion(); } catch(_) {}
+  try { await _initVersionBroadcast(); } catch(_) {}
+  setInterval(_checkVersionUpdate, _versionWatcher.pollIntervalMs);
+  try {
+    var _frBtn = document.getElementById('forceReloadAllBtn');
+    var _isAdmin = !window.AUTH || !AUTH.profile || (typeof AUTH.isAdmin === 'function' && AUTH.isAdmin());
+    if (_frBtn && _isAdmin) _frBtn.style.display = '';
+  } catch(_) {}
 });
 
 

@@ -233,7 +233,7 @@ import asyncio, json, os, re, shutil, subprocess, sys, urllib.request
 
 _SKILL_DIR = os.path.expanduser('~/.claude/skills/classify-inspiration')
 if _SKILL_DIR not in sys.path: sys.path.insert(0, _SKILL_DIR)
-from fb_ad_classifier import fetch_ad_snapshot, fetch_instagram_og, download_video, extract_frames, extract_ad_id, decode_unicode, USER_AGENT, OUTPUT_BASE
+from fb_ad_classifier import fetch_ad_snapshot, fetch_instagram_og, download_instagram_media, download_video, extract_frames, extract_ad_id, decode_unicode, USER_AGENT, OUTPUT_BASE
 
 def detect_platform(url):
     u = url.lower()
@@ -307,43 +307,25 @@ try:
             frames = extract_frames(vp, work_dir)
             os.remove(vp)
     elif platform == "instagram":
-        # Instagram public posts now redirect anonymous browsers to a login wall,
-        # so yt-dlp typically fails ("There is no video in this post" for photos,
-        # 401 for reels without cookies). Use the Open Graph crawler path: a
-        # facebookexternalhit User-Agent still gets the OG meta tags, which
-        # carry the photo URL, an optional reel video URL, the username, and
-        # the caption. No login, no cookies, no third-party scraper site.
-        og = fetch_instagram_og(url)
-        snapshot = {
-            "page_name": og.get("page_name") or "",
-            "body_text": og.get("caption") or "",
-            "title": "",
-            "cta_text": "",
-            "link_url": url,
-        }
-        if og.get("video_url"):
-            vp = os.path.join(work_dir, "video.mp4")
-            req = urllib.request.Request(og["video_url"], headers={"User-Agent": "facebookexternalhit/1.1"})
-            with urllib.request.urlopen(req, timeout=60) as r, open(vp,"wb") as f: f.write(r.read())
-            duration = get_duration(vp)
-            frames = extract_frames(vp, work_dir)
-            os.remove(vp)
-        else:
-            # Try yt-dlp once in case it can pull a longer reel; fall back to
-            # og:image (single poster frame) for photo posts.
-            try:
-                vp = download_ytdlp(url, work_dir)
-                duration = get_duration(vp)
-                frames = extract_frames(vp, work_dir)
-                os.remove(vp)
-            except Exception:
-                if og.get("image_url"):
-                    ip = os.path.join(work_dir, "frame_001.jpg")
-                    req = urllib.request.Request(og["image_url"], headers={"User-Agent": "facebookexternalhit/1.1"})
-                    with urllib.request.urlopen(req, timeout=30) as r, open(ip,"wb") as f: f.write(r.read())
-                    frames = [ip]
-                else:
-                    raise RuntimeError("Instagram: og:image, og:video both empty and yt-dlp failed")
+        # Instagram public posts redirect anonymous browsers to a login wall,
+        # the og:image path only gives a 640×640 center crop (loses edge text/CTAs),
+        # and the unauthenticated GraphQL endpoint is 403. We use a 3-method
+        # fallback chain implemented in fb_ad_classifier.download_instagram_media:
+        #
+        #   1. gallery-dl --cookies-from-browser   → 1080p original if any browser
+        #                                            on this machine is logged into IG
+        #   2. snapinsta.to via headless Playwright → 1080p, no auth required
+        #   3. og:image via facebookexternalhit UA  → 640×640 crop, always works
+        #
+        # The chain auto-falls through on each failure. The first method that
+        # returns real bytes wins. OG metadata (caption, username) is always
+        # fetched alongside so snapshot.page_name + body_text are populated
+        # regardless of which method downloaded the pixels.
+        ig = download_instagram_media(url, work_dir)
+        snapshot = ig["metadata"]
+        frames = ig["frames"]
+        duration = ig["duration"]
+        print(f"[ig] downloaded via {ig['via']} ({'video' if ig['is_video'] else 'photo'}, {len(frames)} frame(s))", file=sys.stderr)
     else:
         vp = download_ytdlp(url, work_dir)
         duration = get_duration(vp)

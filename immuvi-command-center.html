@@ -14,10 +14,9 @@
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
   <style>
 @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap');
-@import url('https://api.fontsource.org/v1/fonts/satoshi/latin-400-normal.css');
-@import url('https://api.fontsource.org/v1/fonts/satoshi/latin-500-normal.css');
-@import url('https://api.fontsource.org/v1/fonts/satoshi/latin-600-normal.css');
-@import url('https://api.fontsource.org/v1/fonts/satoshi/latin-700-normal.css');
+/* Satoshi comes from fontshare (<link> at top of <head>) — the 4 fontsource
+ * @import lines that used to live here were timing out at 12+ seconds each
+ * and blocking initial render. Removed 2026-05-13. */
 
 :root {
   --bg: #F3F4F6;
@@ -12201,19 +12200,49 @@ const DB = {
 
   async upsertProduct(p) {
     if (!SB || !p || !p.id) return { ok: false, error: { message: 'no client or product' } };
-    const config = {
-      clickup_list_id: p.clickupListId || '',
-      clickup_list_name: p.clickupListName || '',
-      color: p.color || '',
-      ins_prefix: p.insPrefix || '',
-      created_at_ms: p.createdAt || null,
-      last_synced_at_ms: p.lastSyncedAt || null,
-      last_synced_count: p.lastSyncedCount || 0
+    // BUG FIX (2026-05-13): the old code built a fresh config object using
+    // `p.field || ''` for every key, then upserted it. ANY caller passing a
+    // partially-populated in-memory product (e.g. a stale tab, a realtime
+    // echo, a color-only edit before clickupListId was loaded) would WIPE
+    // products.config.clickup_list_id back to '' on every write.
+    //
+    // Symptoms in the wild: Art Therapy + Paramedic Notes kept losing their
+    // ClickUp list mapping "again and again" — the user had to re-link them
+    // manually each time something touched the product row.
+    //
+    // Fix: READ the existing config first, MERGE incoming non-empty fields
+    // over it, then write. Empty/null/undefined fields in the in-memory
+    // product no longer clobber what's already in the DB.
+    //
+    // To intentionally CLEAR a field (e.g. unlink from ClickUp), pass an
+    // explicit sentinel string '__clear__' which is treated as empty.
+    let existingConfig = {};
+    try {
+      const ex = await SB.from('products').select('config').eq('id', p.id).maybeSingle();
+      existingConfig = (ex && ex.data && ex.data.config) || {};
+    } catch (_) { /* fresh insert path is fine */ }
+
+    const incoming = {
+      clickup_list_id:    p.clickupListId,
+      clickup_list_name:  p.clickupListName,
+      color:              p.color,
+      ins_prefix:         p.insPrefix,
+      created_at_ms:      p.createdAt,
+      last_synced_at_ms:  p.lastSyncedAt,
+      last_synced_count:  p.lastSyncedCount
     };
-    // Bug 13: return a structured ok/error so callers (addProduct,
-    // saveProductClickUpLink) can surface failures via toast instead of
-    // silently logging to console — that's why "added product gone after
-    // refresh" was happening with no visible signal.
+    const config = Object.assign({}, existingConfig);
+    Object.keys(incoming).forEach(function (k) {
+      var v = incoming[k];
+      if (v === '__clear__') { config[k] = (k === 'last_synced_count') ? 0 : ''; return; }
+      // Only overwrite when the caller actually provided a non-empty value.
+      // undefined / null / '' / 0 (for the count) on a stale object are ignored.
+      if (v === undefined || v === null) return;
+      if (v === '' && existingConfig[k]) return;            // don't wipe non-empty
+      if (v === 0  && existingConfig[k] && k === 'last_synced_count') return;
+      config[k] = v;
+    });
+
     try {
       const { error } = await SB.from('products').upsert({ id: p.id, name: p.name, config: config });
       if (error) { console.error('[SB] upsertProduct', error); return { ok: false, error: error }; }
@@ -15628,6 +15657,10 @@ function showTab(id, btn) {
     btn.classList.add('on');
     btn.setAttribute('aria-selected', 'true');
   }
+  // 2026-05-13 perf: lazy-render this tab if boot deferred it
+  try {
+    if (typeof _renderTabIfNeeded === 'function') _renderTabIfNeeded(id);
+  } catch (e) {}
   if (id === 'inspiration') checkBridgeStatus();
   // Persist active tab so page refresh lands on the same tab
   try { localStorage.setItem('immuvi_active_tab', id); } catch(e) {}
@@ -16370,6 +16403,65 @@ function _renderAllInternal() {
   renderMatrix();
   renderInspirations();
   updateTabCounts();
+}
+
+// ── 2026-05-13 perf: lazy tab rendering ──────────────────────────
+// Boot used to render EVERY tab synchronously (~1-2s on big products).
+// Now we render only the visible tab on boot + defer the rest to idle
+// time. showTab() also re-checks and renders on-demand if the user
+// clicks a tab that hasn't been rendered yet.
+
+var _renderedTabs = {}; // id → true once rendered at least once
+
+// Map of tab id → renderer function name (looked up at call time so
+// hot-reload / late definitions still work).
+var _TAB_RENDERERS = {
+  'hq':          'renderHQ',
+  'angles':      'renderAngles',
+  'personas':    'renderPersonas',
+  'creatives':   'renderCreatives',  // Creative Tracker
+  'matrix':      'renderMatrix',
+  'actions':     'renderActionPlan',
+  'production':  'renderProduction',
+  'inspiration': 'renderInspirations',
+  'strategist':  null, // Strategist re-renders on tab show via its own hook
+  'admin':       null  // Admin renders via its own onclick path
+};
+
+function _renderTabIfNeeded(tabId) {
+  if (!tabId || _renderedTabs[tabId]) return;
+  var fnName = _TAB_RENDERERS[tabId];
+  if (fnName && typeof window[fnName] === 'function') {
+    try { window[fnName](); } catch (e) { console.warn('[lazy-render] ' + fnName + ' failed', e); }
+  }
+  _renderedTabs[tabId] = true;
+}
+
+// Replaces the boot-time _renderAllInternal with a lazy variant:
+//   - Always render chrome (product profile + winners derivation + tab counts)
+//   - Render ONLY the currently-visible tab
+//   - Schedule the rest via requestIdleCallback (or setTimeout fallback)
+function _renderBootTabOnly(activeTabId) {
+  // Cheap, always-on chrome — needed regardless of which tab is showing
+  try { renderProductProfile(); } catch (e) {}
+  try { renderWinners(); } catch (e) {}  // pure data derivation, ~ms
+  try { updateTabCounts(); } catch (e) {}
+  // Render just the visible tab
+  _renderTabIfNeeded(activeTabId || 'hq');
+  // Defer the rest to idle time so they're ready when user clicks
+  var pendingTabs = Object.keys(_TAB_RENDERERS).filter(function (id) {
+    return !_renderedTabs[id] && _TAB_RENDERERS[id];
+  });
+  var scheduleIdle = (typeof requestIdleCallback === 'function')
+    ? function (fn) { return requestIdleCallback(fn, { timeout: 2000 }); }
+    : function (fn) { return setTimeout(fn, 50); };
+  function renderNext() {
+    if (!pendingTabs.length) return;
+    var id = pendingTabs.shift();
+    _renderTabIfNeeded(id);
+    if (pendingTabs.length) scheduleIdle(renderNext);
+  }
+  scheduleIdle(renderNext);
 }
 
 function renderAll() {
@@ -27776,6 +27868,40 @@ async function saveProductClickUpLink(productId, listId, listName) {
   }
 }
 
+// Explicit unlink — goes through the unlink_product_clickup() RPC which
+// is the ONLY sanctioned way to clear a clickup_list_id. The Postgres
+// trigger products_preserve_clickup_link blocks all other (accidental)
+// wipes from stale-client code paths.
+async function unlinkProductClickUp(productId) {
+  var prod = null;
+  for (var i = 0; i < PRODUCTS.length; i++) {
+    if (PRODUCTS[i].id === productId) { prod = PRODUCTS[i]; break; }
+  }
+  if (!prod) { toast('Product not found', 'err'); return; }
+  var msg = 'Disconnect "' + (prod.name || productId) + '" from its ClickUp list ("' +
+            (prod.clickupListName || prod.clickupListId) + '")?\n\n' +
+            'You can re-link it any time. Existing imported tasks stay in the dashboard — only the sync link is removed.';
+  if (!confirm(msg)) return;
+
+  if (!SB) { toast('No Supabase connection', 'err'); return; }
+  try {
+    var res = await SB.rpc('unlink_product_clickup', { p_product_id: productId });
+    if (res && res.error) {
+      console.error('[SB] unlinkProductClickUp', res.error);
+      toast('Unlink failed: ' + (res.error.message || 'unknown'), 'err', 6000);
+      return;
+    }
+    // Mirror in local state
+    prod.clickupListId = '';
+    prod.clickupListName = '';
+    renderProductProfile();
+    toast('ClickUp list disconnected', 'ok');
+  } catch (e) {
+    console.error('[SB] unlinkProductClickUp threw', e);
+    toast('Unlink failed: ' + (e.message || e), 'err', 6000);
+  }
+}
+
 async function confirmDeleteProduct(productId) {
   if (!confirm('Delete this product and all its data from the cloud database? This cannot be undone.')) return;
   // Bug 13: hit the DB FIRST so we know it actually deleted before mutating
@@ -28331,6 +28457,10 @@ function renderProductProfile() {
     if (activeProd.clickupListId) {
       html += '<span class="pp-linked-badge">&#10003; ' + esc(activeProd.clickupListName || activeProd.clickupListId) + '</span>';
       html += '<button class="btn-ghost btn-xs" onclick="openLinkClickUpModal(\'' + escAttr(activeProd.id) + '\')" style="margin-left:4px">Change</button>';
+      // Explicit Unlink — calls the unlink_product_clickup RPC which bypasses
+      // the products_preserve_clickup_link trigger (the trigger blocks
+      // accidental wipes from stale-client code paths but respects this RPC).
+      html += '<button class="btn-ghost btn-xs" onclick="unlinkProductClickUp(\'' + escAttr(activeProd.id) + '\')" style="margin-left:4px;color:var(--lose)" title="Disconnect this product from its ClickUp list (you can re-link any time)">&#8854; Unlink</button>';
       // Sync button + last synced info
       html += '<button class="btn-primary btn-xs pp-sync-btn" onclick="syncClickUp()" style="margin-left:8px">&#8635; Sync Now</button>';
       html += '<button class="btn-ghost btn-xs" onclick="setupClickUpFields()" style="margin-left:4px">&#9881; Setup Fields</button>';
@@ -28608,8 +28738,12 @@ window.addEventListener('load', async function () {
   _loadTrackerFilters();
   populateFilterOptions();
   _syncTrackerFilterDom();
-  renderAll(); // includes renderInspirations()
-  renderProductProfile();
+  // 2026-05-13 perf: only render the currently-visible tab on boot.
+  // Other tabs render lazily — on first click OR in idle time after boot.
+  // Cuts boot from 11 synchronous render passes to 1 + chrome.
+  var _bootActiveTab = 'hq';
+  try { _bootActiveTab = localStorage.getItem('immuvi_active_tab') || 'hq'; } catch (e) {}
+  _renderBootTabOnly(_bootActiveTab);
   updateHeaderProductName();
   // Subscribe to realtime changes for the active product
   _resubscribeRealtime();

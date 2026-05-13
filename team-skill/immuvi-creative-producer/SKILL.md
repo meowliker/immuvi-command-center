@@ -122,8 +122,145 @@ If the worker can set runtime config directly, use this default configuration:
 2. Gather context.
    - Treat the ClickUp task as the primary brief. Fetch name, description, status, custom fields, comments, attachments, linked docs, assignees, due date, and all inspiration/reference links.
    - Download inspiration/reference files from ClickUp attachments, description links, comments, docs, Drive links, or creative URLs.
+   - **Instagram links require the special download path in Step 2.1 below** — `urllib.urlopen` / `curl` / plain `yt-dlp` all fail because Instagram redirects anonymous requests to a login wall, and bare `og:image` only returns a 640×640 center crop that loses post text/CTAs.
    - Read Immuvi Creative Strategist memory for the product through `strategist_memory` when available. It contains markdown plus JSON with strategy, creative direction, copy, winning/dying combinations, and evidence task ids.
    - If available, read the latest `producer_runs` row for the task to avoid duplicate generations and to understand previous outputs.
+
+### 2.1 Downloading Instagram links (`instagram.com/p/...`, `/reel/...`, `/tv/...`)
+
+Whenever an inspiration/reference URL points to Instagram, use this 3-method fallback chain. The first method that returns real bytes wins. Method 3 always succeeds, so the chain never returns nothing.
+
+| Method | Quality | Requires | Speed |
+|---|---|---|---|
+| 1. `gallery-dl --cookies-from-browser` | Full 1080×1920 original | An IG-logged-in browser on this machine | ~1s |
+| 2. `snapinsta.to` via headless Playwright | Full 1080×1920 original | `playwright` + chromium installed | ~10s |
+| 3. `og:image` via `facebookexternalhit/1.1` UA | 640×640 center crop | Nothing | ~1s |
+
+Write the script below to `/tmp/ig_dl.py` and run `python3 /tmp/ig_dl.py "<IG_URL>" "<DEST_DIR>"`. It prints a single line of JSON with `path`, `via`, `width`, `height`, `caption`, `page_name` on success. Read the printed JSON to know which method won and where the file is.
+
+```python
+# /tmp/ig_dl.py — Instagram media downloader with 3-method fallback chain
+import html as _html, json, os, re, shutil, subprocess, sys, urllib.request
+
+def og_meta(url):
+    req = urllib.request.Request(url, headers={"User-Agent": "facebookexternalhit/1.1"})
+    page = urllib.request.urlopen(req, timeout=30).read().decode("utf-8", "ignore")
+    def og(prop):
+        m = re.search(r'property=["\']og:' + re.escape(prop) + r'["\']\s+content=["\']([^"\']+)["\']', page)
+        return _html.unescape(m.group(1)) if m else ""
+    desc = og("description"); title = og("title")
+    caption, user = "", ""
+    m = re.match(r'^[\d,]+\s+likes?,\s+[\d,]+\s+comments?\s+-\s+(\S+)\s+on\s+[^:]+:\s*"(.+)"[\s.]*$', desc, re.S)
+    if m: user, caption = m.group(1), m.group(2)
+    elif desc:
+        m2 = re.match(r'^[^:]+:\s*"(.*)"\s*$', desc, re.S); caption = m2.group(1) if m2 else desc
+        mt = re.match(r'^(\S+)\s+on Instagram', title);     user = mt.group(1) if mt else ""
+    return {"image_url": og("image"), "video_url": og("video") or og("video:secure_url"),
+            "caption": caption, "page_name": user}
+
+def try_gallery_dl(url, work_dir):
+    if not shutil.which("gallery-dl"): raise RuntimeError("gallery-dl not installed")
+    tmp = os.path.join(work_dir, "_gd"); shutil.rmtree(tmp, ignore_errors=True); os.makedirs(tmp)
+    for br in ("chrome", "firefox", "brave", "edge", "safari"):
+        r = subprocess.run(["gallery-dl", "--cookies-from-browser", br, "-d", tmp, "--no-mtime", "-q", url],
+                           capture_output=True, text=True, timeout=90)
+        if r.returncode != 0: continue
+        for root, _, files in os.walk(tmp):
+            for f in sorted(files):
+                if f.startswith("."): continue
+                p = os.path.join(root, f)
+                if os.path.getsize(p) > 500:
+                    ext = f.lower().rsplit(".", 1)[-1]
+                    return p, ("video" if ext in ("mp4","mov","webm","m4v") else "image")
+    raise RuntimeError("gallery-dl: no browser logged into Instagram")
+
+def try_snapinsta(url, work_dir):
+    # NOTE: headless=False is REQUIRED here. Snapinsta uses Cloudflare Turnstile
+    # in invisible mode which refuses to issue a token under pure headless. The
+    # off-screen window position keeps the popup out of the user's way (~12s call).
+    from playwright.sync_api import sync_playwright
+    ua = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/124.0.0.0 Safari/537.36"
+    media_url = None
+    with sync_playwright() as p:
+        b = p.chromium.launch(headless=False, args=[
+            "--disable-blink-features=AutomationControlled",
+            "--window-position=-3000,-3000",
+            "--window-size=1366,768",
+        ])
+        try:
+            ctx = b.new_context(user_agent=ua, viewport={"width": 1366, "height": 768})
+            ctx.add_init_script("Object.defineProperty(navigator,'webdriver',{get:()=>undefined});")
+            page = ctx.new_page()
+            page.goto("https://snapinsta.to/en2", timeout=30000, wait_until="domcontentloaded")
+            page.wait_for_selector('input[placeholder*="URL"], input[name="url"], input[type="text"]', timeout=15000)
+            page.fill('input[placeholder*="URL"], input[name="url"], input[type="text"]', url)
+            page.click('button:has-text("Download")')
+            sel = 'a:has-text("Download Photo"), a:has-text("Download Video"), a[download]'
+            page.wait_for_selector(sel, timeout=30000, state="attached")
+            media_url = page.locator(sel).first.get_attribute("href")
+        finally: b.close()
+    if not media_url: raise RuntimeError("snapinsta: no media href")
+    is_video = media_url.lower().split("?",1)[0].endswith((".mp4",".mov",".webm")) or "video" in media_url.lower()
+    dest = os.path.join(work_dir, f"_snap.{'mp4' if is_video else 'jpg'}")
+    req = urllib.request.Request(media_url, headers={"User-Agent": ua, "Referer": "https://snapinsta.to/"})
+    open(dest, "wb").write(urllib.request.urlopen(req, timeout=120).read())
+    return dest, ("video" if is_video else "image")
+
+def try_og(url, work_dir, og):
+    if og.get("video_url"):
+        dest = os.path.join(work_dir, "_og.mp4")
+        req = urllib.request.Request(og["video_url"], headers={"User-Agent": "facebookexternalhit/1.1"})
+        open(dest, "wb").write(urllib.request.urlopen(req, timeout=60).read()); return dest, "video"
+    if og.get("image_url"):
+        dest = os.path.join(work_dir, "_og.jpg")
+        req = urllib.request.Request(og["image_url"], headers={"User-Agent": "facebookexternalhit/1.1"})
+        open(dest, "wb").write(urllib.request.urlopen(req, timeout=30).read()); return dest, "image"
+    raise RuntimeError("og: nothing")
+
+def main(url, work_dir):
+    os.makedirs(work_dir, exist_ok=True)
+    try: og = og_meta(url)
+    except Exception: og = {}
+    errs = []
+    for name, fn in (("gallery-dl", lambda: try_gallery_dl(url, work_dir)),
+                     ("snapinsta",  lambda: try_snapinsta(url, work_dir)),
+                     ("og",         lambda: try_og(url, work_dir, og))):
+        try:
+            p, kind = fn()
+            if p and os.path.getsize(p) > 500:
+                final = os.path.join(work_dir, f"inspiration.{'mp4' if kind == 'video' else 'jpg'}")
+                if os.path.abspath(p) != os.path.abspath(final): shutil.move(p, final)
+                shutil.rmtree(os.path.join(work_dir, "_gd"), ignore_errors=True)
+                w = h = 0
+                if kind == "image":
+                    try:
+                        r = subprocess.run(["sips","-g","pixelWidth","-g","pixelHeight",final], capture_output=True, text=True, timeout=10)
+                        for ln in r.stdout.splitlines():
+                            if "pixelWidth"  in ln: w = int(ln.split(":")[-1].strip())
+                            if "pixelHeight" in ln: h = int(ln.split(":")[-1].strip())
+                    except Exception: pass
+                print(json.dumps({"path": final, "via": name, "kind": kind, "width": w, "height": h,
+                                  "caption": og.get("caption",""), "page_name": og.get("page_name","")}))
+                return
+        except Exception as e:
+            errs.append(f"{name}: {e}")
+    print(json.dumps({"error": "all methods failed", "details": errs})); sys.exit(1)
+
+if __name__ == "__main__": main(sys.argv[1], sys.argv[2])
+```
+
+**How to invoke it from this skill:**
+
+```bash
+python3 /tmp/ig_dl.py "https://www.instagram.com/p/SHORTCODE/" "/tmp/immuvi_ref_<task_id>"
+```
+
+The JSON line tells you `path` (the saved file), `via` (which method won — useful for debugging), and post metadata (`caption`, `page_name`) you can feed into the strategist context. Read the file with the Read tool to visually inspect the inspiration before generating variations.
+
+**Prereqs check before running:**
+- `which gallery-dl` (preferred for method 1 — `pip3 install gallery-dl` if missing)
+- `python3 -c "import playwright"` (for method 2 — `pip3 install playwright && python3 -m playwright install chromium`)
+- Neither is strictly required — method 3 (og:image, 640×640 crop) works with pure stdlib if both 1 and 2 fail.
 
 3. Extract the creative brief.
    - Product: product name, offer, constraints, and source product id.

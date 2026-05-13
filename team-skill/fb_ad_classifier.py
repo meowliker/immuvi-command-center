@@ -26,6 +26,7 @@ import asyncio
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import urllib.request
@@ -138,6 +139,257 @@ def fetch_instagram_og(url: str) -> dict:
         "comments_count": comments_count,
         "raw_description": description,
         "raw_title": title,
+    }
+
+
+# ── Instagram: 3-method robust media download chain ──────────────────────────
+def _ig_get_duration(vp: str) -> float:
+    try:
+        r = subprocess.run(
+            ["ffprobe", "-v", "quiet", "-print_format", "json", "-show_streams", vp],
+            capture_output=True, text=True, timeout=15,
+        )
+        for s in json.loads(r.stdout).get("streams", []):
+            if "duration" in s:
+                return float(s["duration"])
+    except Exception:
+        pass
+    return 0.0
+
+
+def _ig_download_gallery_dl(url: str, work_dir: str) -> tuple:
+    """
+    Method 1: gallery-dl with --cookies-from-browser. Tries chrome, firefox,
+    brave, edge, safari in order — first one with a valid Instagram session
+    wins. Returns the highest-resolution original (1080×1920 for portrait posts).
+    Raises if no browser has usable cookies or gallery-dl isn't installed.
+    """
+    if not shutil.which("gallery-dl"):
+        raise RuntimeError("gallery-dl not installed")
+
+    tmp = os.path.join(work_dir, "_gd")
+    if os.path.isdir(tmp):
+        shutil.rmtree(tmp)
+    os.makedirs(tmp, exist_ok=True)
+
+    last_err = ""
+    for browser in ("chrome", "firefox", "brave", "edge", "safari"):
+        try:
+            r = subprocess.run(
+                ["gallery-dl", "--cookies-from-browser", browser,
+                 "-d", tmp, "--no-mtime", "-q", url],
+                capture_output=True, text=True, timeout=90,
+            )
+            if r.returncode != 0:
+                last_err = r.stderr.strip().splitlines()[-1] if r.stderr else "unknown"
+                continue
+            # Find the downloaded file (gallery-dl nests it under instagram/<user>/<id>.ext)
+            for root, _, files in os.walk(tmp):
+                for f in sorted(files):
+                    if f.startswith("."):
+                        continue
+                    p = os.path.join(root, f)
+                    if os.path.getsize(p) > 500:
+                        ext = f.lower().rsplit(".", 1)[-1]
+                        kind = "video" if ext in ("mp4", "mov", "webm", "m4v") else "image"
+                        return p, kind
+        except Exception as e:
+            last_err = str(e)
+            continue
+    raise RuntimeError(f"gallery-dl: no browser had usable Instagram cookies ({last_err})")
+
+
+def _ig_download_snapinsta(url: str, work_dir: str) -> tuple:
+    """
+    Method 2: Drive https://snapinsta.to/en2 in Playwright. Snapinsta is
+    protected by Cloudflare Turnstile in "invisible" mode — the widget loads
+    when the user clicks Download and silently fails in pure-headless mode
+    (Cloudflare's risk engine flags the headless fingerprint and never issues
+    a token, causing the form submit to hang). The only reliable fix is
+    `headless=False`, which launches a real Chromium window. We position it
+    off-screen so it doesn't visually interrupt the user's workflow on
+    macOS/Linux multi-monitor setups. The full call takes ~12s.
+
+    Returns 1080×1920 original. No Instagram login required.
+    """
+    try:
+        from playwright.sync_api import sync_playwright  # noqa: F401
+    except ImportError as e:
+        raise RuntimeError(f"playwright not installed: {e}")
+
+    from playwright.sync_api import sync_playwright
+    ua = ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+          "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
+
+    media_url = None
+    with sync_playwright() as p:
+        # headless=False is REQUIRED — Cloudflare Turnstile refuses to issue a
+        # token under pure headless. Off-screen positioning + small window
+        # keeps it invisible on most setups.
+        browser = p.chromium.launch(
+            headless=False,
+            args=[
+                "--disable-blink-features=AutomationControlled",
+                "--window-position=-3000,-3000",
+                "--window-size=1366,768",
+            ],
+        )
+        try:
+            ctx = browser.new_context(user_agent=ua, viewport={"width": 1366, "height": 768})
+            ctx.add_init_script(
+                "Object.defineProperty(navigator,'webdriver',{get:()=>undefined});"
+            )
+            page = ctx.new_page()
+            page.goto("https://snapinsta.to/en2", timeout=30000, wait_until="domcontentloaded")
+            input_sel = 'input[placeholder*="URL"], input[name="url"], input[type="text"]'
+            page.wait_for_selector(input_sel, timeout=15000)
+            page.fill(input_sel, url)
+            page.click('button:has-text("Download")')
+            sel = ('a:has-text("Download Photo"), a:has-text("Download Video"), '
+                   'a[download]:has(svg), a[href*="snapinsta.to"][download]')
+            page.wait_for_selector(sel, timeout=30000, state="attached")
+            media_url = page.locator(sel).first.get_attribute("href")
+        finally:
+            browser.close()
+
+    if not media_url:
+        raise RuntimeError("snapinsta: no media href found in result panel")
+
+    # Detect type from URL
+    lc = media_url.lower().split("?", 1)[0]
+    is_video = lc.endswith((".mp4", ".mov", ".webm")) or "video" in lc
+    ext = "mp4" if is_video else "jpg"
+    dest = os.path.join(work_dir, f"_snapinsta.{ext}")
+
+    req = urllib.request.Request(media_url, headers={
+        "User-Agent": ua,
+        "Referer": "https://snapinsta.to/",
+    })
+    with urllib.request.urlopen(req, timeout=120) as r, open(dest, "wb") as f:
+        f.write(r.read())
+
+    return dest, ("video" if is_video else "image")
+
+
+def _ig_download_og(url: str, work_dir: str, og=None) -> tuple:
+    """
+    Method 3: og:image / og:video via facebookexternalhit User-Agent. Always
+    works, no login, no cookies — but Instagram only serves the 640×640
+    center crop here. Use as the final fallback.
+    """
+    if og is None:
+        og = fetch_instagram_og(url)
+    img_url = og.get("image_url")
+    vid_url = og.get("video_url")
+    ua = "facebookexternalhit/1.1"
+
+    if vid_url:
+        dest = os.path.join(work_dir, "_og.mp4")
+        req = urllib.request.Request(vid_url, headers={"User-Agent": ua})
+        with urllib.request.urlopen(req, timeout=60) as r, open(dest, "wb") as f:
+            f.write(r.read())
+        return dest, "video"
+    if img_url:
+        dest = os.path.join(work_dir, "_og.jpg")
+        req = urllib.request.Request(img_url, headers={"User-Agent": ua})
+        with urllib.request.urlopen(req, timeout=30) as r, open(dest, "wb") as f:
+            f.write(r.read())
+        return dest, "image"
+    raise RuntimeError("og: no og:image or og:video on the post")
+
+
+def download_instagram_media(url: str, work_dir: str) -> dict:
+    """
+    Robust Instagram media downloader with 3-method fallback chain. Always
+    fetches OG metadata (caption, username) first since it's cheap and
+    populates the snapshot fields the classifier needs.
+
+    Chain order:
+      1. gallery-dl --cookies-from-browser   → 1080p, needs IG login somewhere
+      2. snapinsta.to via Playwright          → 1080p, no auth, but slower (~10s)
+      3. og:image via facebookexternalhit     → 640×640 crop, always works
+
+    Returns:
+      {
+        "frames":   [list of jpg paths in work_dir],
+        "duration": float seconds (0 for photos),
+        "metadata": {page_name, body_text, title, cta_text, link_url},
+        "via":      "gallery-dl" | "snapinsta" | "og",
+        "is_video": bool,
+      }
+
+    Raises RuntimeError only if all 3 methods fail (rare — method 3 is ~100%).
+    """
+    os.makedirs(work_dir, exist_ok=True)
+
+    # Always fetch OG metadata first — fast, gives caption + username regardless
+    # of which media-download method wins.
+    try:
+        og = fetch_instagram_og(url)
+    except Exception:
+        og = {}
+
+    raw_path = None
+    raw_kind = None
+    via = None
+    errors = []
+
+    for name, fn in (
+        ("gallery-dl", lambda: _ig_download_gallery_dl(url, work_dir)),
+        ("snapinsta",  lambda: _ig_download_snapinsta(url, work_dir)),
+        ("og",         lambda: _ig_download_og(url, work_dir, og)),
+    ):
+        try:
+            raw_path, raw_kind = fn()
+            if raw_path and os.path.exists(raw_path) and os.path.getsize(raw_path) > 500:
+                via = name
+                break
+            raw_path = None
+        except Exception as e:
+            errors.append(f"{name}: {e}")
+            raw_path = None
+            continue
+
+    if not raw_path:
+        raise RuntimeError("Instagram download failed: " + " | ".join(errors))
+
+    # Normalize to frame list
+    duration = 0.0
+    if raw_kind == "video":
+        duration = _ig_get_duration(raw_path)
+        # extract_frames lives later in this module; forward-reference is fine
+        # since this function is only called from outside after the module loads.
+        frames = extract_frames(raw_path, work_dir)
+        try:
+            os.remove(raw_path)
+        except OSError:
+            pass
+    else:
+        frame = os.path.join(work_dir, "frame_001.jpg")
+        if os.path.abspath(raw_path) != os.path.abspath(frame):
+            shutil.move(raw_path, frame)
+        frames = [frame]
+
+    # Clean up gallery-dl's nested temp dir if it was used
+    gd_tmp = os.path.join(work_dir, "_gd")
+    if os.path.isdir(gd_tmp):
+        try:
+            shutil.rmtree(gd_tmp)
+        except OSError:
+            pass
+
+    return {
+        "frames":   frames,
+        "duration": round(duration, 1),
+        "metadata": {
+            "page_name": og.get("page_name", "") or "",
+            "body_text": og.get("caption", "") or "",
+            "title":     "",
+            "cta_text":  "",
+            "link_url":  url,
+        },
+        "via":      via,
+        "is_video": raw_kind == "video",
     }
 
 

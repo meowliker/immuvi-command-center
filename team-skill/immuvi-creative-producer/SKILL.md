@@ -122,9 +122,43 @@ If the worker can set runtime config directly, use this default configuration:
 2. Gather context.
    - Treat the ClickUp task as the primary brief. Fetch name, description, status, custom fields, comments, attachments, linked docs, assignees, due date, and all inspiration/reference links.
    - Download inspiration/reference files from ClickUp attachments, description links, comments, docs, Drive links, or creative URLs.
-   - **Instagram links require the special download path in Step 2.1 below** — `urllib.urlopen` / `curl` / plain `yt-dlp` all fail because Instagram redirects anonymous requests to a login wall, and bare `og:image` only returns a 640×640 center crop that loses post text/CTAs.
+   - **Route the URL through `detect_platform()` (Step 2.0) before downloading.** Each platform has a different working path — anonymous `urllib.urlopen` / `curl` / plain `yt-dlp` fail on social platforms (Instagram login wall, TikTok signatures, Facebook auth). The router picks the right method:
+     - Instagram (`instagram.com/p|reel|tv/…`) → **Step 2.1** (3-method chain)
+     - TikTok (`tiktok.com/…`) → **Step 2.2** (yt-dlp)
+     - YouTube (`youtube.com|youtu.be/…`) → **Step 2.2** (yt-dlp)
+     - Facebook Ad Library (`facebook.com/ads/library`) → **Step 2.3** (Playwright scraper)
+     - Raw Facebook CDN (`fbcdn.net`, `scontent.*.fbcdn.net`, `video.xx.fbcdn.net`) → **Step 2.3** (direct + FB referer)
+     - Google Drive / ClickUp attachments / generic HTTP → handle inline with `gdown` / `curl` / `urllib`
    - Read Immuvi Creative Strategist memory for the product through `strategist_memory` when available. It contains markdown plus JSON with strategy, creative direction, copy, winning/dying combinations, and evidence task ids.
    - If available, read the latest `producer_runs` row for the task to avoid duplicate generations and to understand previous outputs.
+
+### 2.0 Platform routing — `detect_platform(url)`
+
+Use this tiny router to decide which downloader path to follow. It mirrors the same routing logic that `/classify-inspiration` uses on the Inspirations queue, so behavior stays consistent across the two skills.
+
+```python
+def detect_platform(url):
+    u = (url or "").lower()
+    if "facebook.com/ads/library" in u: return "facebook_adlib"
+    if "fbcdn.net" in u or "video.xx.fbcdn" in u or "scontent." in u: return "fbcdn_direct"
+    if "instagram.com" in u: return "instagram"
+    if "tiktok.com" in u:    return "tiktok"
+    if "youtube.com" in u or "youtu.be" in u: return "youtube"
+    if "drive.google.com" in u or "docs.google.com" in u: return "drive"
+    return "other"  # falls through to yt-dlp generic, then urllib
+```
+
+Behavior table:
+
+| Platform | Path |
+|---|---|
+| `instagram`     | Step 2.1 — gallery-dl → snapinsta → og chain |
+| `tiktok`        | Step 2.2 — yt-dlp |
+| `youtube`       | Step 2.2 — yt-dlp |
+| `facebook_adlib`| Step 2.3 — Playwright Ads Library scraper |
+| `fbcdn_direct`  | Step 2.3 — direct download with FB referer |
+| `drive`         | inline `gdown` / fallback yt-dlp |
+| `other`         | try yt-dlp; on fail, urllib with the file's UA |
 
 ### 2.1 Downloading Instagram links (`instagram.com/p/...`, `/reel/...`, `/tv/...`)
 
@@ -261,6 +295,184 @@ The JSON line tells you `path` (the saved file), `via` (which method won — use
 - `which gallery-dl` (preferred for method 1 — `pip3 install gallery-dl` if missing)
 - `python3 -c "import playwright"` (for method 2 — `pip3 install playwright && python3 -m playwright install chromium`)
 - Neither is strictly required — method 3 (og:image, 640×640 crop) works with pure stdlib if both 1 and 2 fail.
+
+### 2.2 Downloading TikTok / YouTube / generic public video URLs
+
+TikTok and YouTube both work via `yt-dlp`. TikTok URLs come in many shapes (`tiktok.com/@user/video/<id>`, short `vm.tiktok.com/<id>`, web embeds) — `yt-dlp` handles them all natively. **Plain `urllib` / `curl` will NOT work** for TikTok — the page is JS-rendered and the video URL is hashed with a per-session signature; `yt-dlp` is the only reliable public-anon path.
+
+Write the script below to `/tmp/ytdl_dl.py` and run `python3 /tmp/ytdl_dl.py "<URL>" "<DEST_DIR>"`. It prints a JSON line with `path`, `via`, `width`, `height`, `duration`, `title`, `uploader` so the strategist context has metadata too.
+
+```python
+# /tmp/ytdl_dl.py — TikTok / YouTube / generic video downloader via yt-dlp
+import json, os, shutil, subprocess, sys
+
+def main(url, work_dir):
+    os.makedirs(work_dir, exist_ok=True)
+    if not shutil.which("yt-dlp"):
+        print(json.dumps({"error": "yt-dlp not installed", "hint": "pip3 install --user yt-dlp OR brew install yt-dlp"})); sys.exit(1)
+    out_tpl = os.path.join(work_dir, "inspiration.%(ext)s")
+    # mp4/best[height<=1080] balances quality vs size; bumps to mp4 to keep the
+    # downstream image-edit pipeline happy (some tools choke on .webm).
+    cmd = ["yt-dlp", "-q", "--no-warnings",
+           "-f", "mp4/best[ext=mp4][height<=1080]/best[height<=1080]/best",
+           "-o", out_tpl, "--print-json", "--no-progress", url]
+    try:
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=180)
+    except subprocess.TimeoutExpired:
+        print(json.dumps({"error": "yt-dlp timeout (180s)"})); sys.exit(1)
+    if r.returncode != 0:
+        print(json.dumps({"error": "yt-dlp failed", "stderr": r.stderr[-500:]})); sys.exit(1)
+    meta = {}
+    # yt-dlp --print-json emits the metadata blob on stdout; tolerate junk lines.
+    for line in r.stdout.splitlines():
+        line = line.strip()
+        if line.startswith("{") and line.endswith("}"):
+            try: meta = json.loads(line); break
+            except Exception: pass
+    # Find what actually landed on disk (yt-dlp can sometimes write .mkv or .webm
+    # even with the format string above — be defensive)
+    final = None
+    for ext in ("mp4", "mov", "webm", "mkv"):
+        p = os.path.join(work_dir, f"inspiration.{ext}")
+        if os.path.exists(p) and os.path.getsize(p) > 1000:
+            final = p; break
+    if not final:
+        print(json.dumps({"error": "yt-dlp wrote nothing usable"})); sys.exit(1)
+    print(json.dumps({
+        "path": final, "via": "yt-dlp", "kind": "video",
+        "width":    meta.get("width") or 0,
+        "height":   meta.get("height") or 0,
+        "duration": meta.get("duration") or 0,
+        "title":    meta.get("title") or "",
+        "uploader": meta.get("uploader") or meta.get("channel") or "",
+        "platform": meta.get("extractor") or "",
+    }))
+
+if __name__ == "__main__": main(sys.argv[1], sys.argv[2])
+```
+
+**Invoke it:**
+
+```bash
+python3 /tmp/ytdl_dl.py "https://www.tiktok.com/@user/video/1234567890" "/tmp/immuvi_ref_<task_id>"
+```
+
+**Frame extraction from the video** (for visual reference before generating variations):
+
+```bash
+ffmpeg -i /tmp/immuvi_ref_<task_id>/inspiration.mp4 \
+  -vf "fps=1/5,scale=800:-1" -q:v 2 \
+  /tmp/immuvi_ref_<task_id>/frame_%03d.jpg
+```
+
+This pulls 1 frame every 5s, capped to a sensible size. Read the resulting `frame_001.jpg` (and a few mid/end frames) with the Read tool — that's what feeds the visual description into your strategist + image-gen prompt.
+
+**Prereqs:** `yt-dlp` (brew or pip) and `ffmpeg`. Both are already in the worker's setup script and the classify-inspiration Step 0b auto-install block, so they should already be on the machine.
+
+### 2.3 Downloading Facebook Ads Library / raw FB CDN URLs
+
+**Facebook Ad Library** (`facebook.com/ads/library/?id=<ad_id>`) pages are JS-rendered with the actual media URL behind a Playwright-scraped snapshot. The helper lives in `team-skill/fb_ad_classifier.py` (alongside the classify-inspiration skill). Both skills share it as a single source of truth.
+
+```python
+# At the top of your producer Python flow, after detect_platform() returns "facebook_adlib":
+import asyncio, os, sys, urllib.request
+
+# fb_ad_classifier ships next to this skill in the team-skill/ folder.
+_FB_HELPER_DIR = os.path.expanduser('~/.codex/skills/immuvi-creative-producer')
+if _FB_HELPER_DIR not in sys.path: sys.path.insert(0, _FB_HELPER_DIR)
+# Fall back to the team-skill clone path if not yet copied next to this skill.
+for cand in ('/Users/gauravpataila/Documents/Claude/Clickup /team-skill',
+             os.path.expanduser('~/Documents/Claude/Clickup /team-skill')):
+    if os.path.isdir(cand) and cand not in sys.path: sys.path.insert(0, cand)
+
+from fb_ad_classifier import fetch_ad_snapshot, download_video, extract_ad_id, USER_AGENT
+
+def download_facebook_adlib(url, work_dir):
+    os.makedirs(work_dir, exist_ok=True)
+    ad_id = extract_ad_id(url)
+    snapshot = asyncio.run(fetch_ad_snapshot(ad_id))
+    video_url = snapshot.get("video_hd_url") or snapshot.get("video_sd_url")
+    if video_url:
+        vp = os.path.join(work_dir, "inspiration.mp4")
+        download_video(video_url, vp)
+        return {"path": vp, "kind": "video", "via": "fb_ad_classifier",
+                "ad_id": ad_id, "page_name": snapshot.get("page_name",""),
+                "body_text": snapshot.get("body_text","")}
+    if snapshot.get("image_url"):
+        ip = os.path.join(work_dir, "inspiration.jpg")
+        req = urllib.request.Request(snapshot["image_url"], headers={"User-Agent": USER_AGENT})
+        with urllib.request.urlopen(req, timeout=30) as r, open(ip,"wb") as f: f.write(r.read())
+        return {"path": ip, "kind": "image", "via": "fb_ad_classifier",
+                "ad_id": ad_id, "page_name": snapshot.get("page_name","")}
+    raise RuntimeError(f"FB Ad Library {ad_id}: no media found in snapshot")
+```
+
+**Raw Facebook CDN URLs** (`fbcdn.net`, `scontent.*.fbcdn.net`, `video.xx.fbcdn.net`) are short-lived signed URLs that come from inspiration pasted by teammates. If still alive, download directly with the FB referer header — same path `/classify-inspiration` uses:
+
+```python
+def download_fbcdn_direct(url, work_dir):
+    os.makedirs(work_dir, exist_ok=True)
+    is_image = any(url.lower().split("?",1)[0].endswith(ext) for ext in (".jpg",".jpeg",".png",".webp"))
+    headers = {"User-Agent": USER_AGENT, "Referer": "https://www.facebook.com/"}
+    if is_image:
+        dest = os.path.join(work_dir, "inspiration.jpg")
+        req = urllib.request.Request(url, headers=headers)
+        with urllib.request.urlopen(req, timeout=30) as r, open(dest,"wb") as f: f.write(r.read())
+        return {"path": dest, "kind": "image", "via": "fbcdn_direct"}
+    dest = os.path.join(work_dir, "inspiration.mp4")
+    try:
+        download_video(url, dest)  # reuses the helper's video downloader (handles partial range responses)
+    except Exception:
+        req = urllib.request.Request(url, headers=headers)
+        with urllib.request.urlopen(req, timeout=60) as r, open(dest,"wb") as f: f.write(r.read())
+    return {"path": dest, "kind": "video", "via": "fbcdn_direct"}
+```
+
+**Prereqs:** `fb_ad_classifier.py` (already shipped in `team-skill/`), `playwright` + chromium, `python3` 3.9+.
+
+**Caveat — short-lived URLs:** `fbcdn.net` URLs typically expire within a few hours of being pasted. If the download fails with HTTP 410 / signature expired, ask the user to re-share the post URL (the original `facebook.com/<page>/posts/<id>` link) — that path can be fetched fresh via `fetch_ad_snapshot` or `og:` tags.
+
+---
+
+### 2.4 Putting it together — full router example
+
+Here's the canonical pattern your producer code should follow whenever it has a reference URL in hand. Drop this in a `/tmp/ref_dl.py` for any task that needs an external download:
+
+```python
+import json, os, sys, urllib.request
+
+def detect_platform(url):
+    u = (url or "").lower()
+    if "facebook.com/ads/library" in u: return "facebook_adlib"
+    if "fbcdn.net" in u or "video.xx.fbcdn" in u or "scontent." in u: return "fbcdn_direct"
+    if "instagram.com" in u: return "instagram"
+    if "tiktok.com" in u:    return "tiktok"
+    if "youtube.com" in u or "youtu.be" in u: return "youtube"
+    if "drive.google.com" in u or "docs.google.com" in u: return "drive"
+    return "other"
+
+def download(url, work_dir):
+    p = detect_platform(url)
+    if p == "instagram":
+        # delegates to Step 2.1 helper
+        os.system(f'python3 /tmp/ig_dl.py "{url}" "{work_dir}"')
+    elif p in ("tiktok", "youtube", "other"):
+        # delegates to Step 2.2 helper
+        os.system(f'python3 /tmp/ytdl_dl.py "{url}" "{work_dir}"')
+    elif p == "facebook_adlib":
+        # call download_facebook_adlib() from Step 2.3 inline
+        ...
+    elif p == "fbcdn_direct":
+        # call download_fbcdn_direct() from Step 2.3 inline
+        ...
+    elif p == "drive":
+        # handle via gdown / fallback as before
+        ...
+    else:
+        raise RuntimeError(f"unsupported platform for {url}")
+```
+
+The producer's existing inline `urllib`/`curl` paths stay only for fully generic non-platform URLs (e.g. ClickUp's `attachments.clickup.com` CDN, plain images on a marketing site). Anything that looks like a social platform must go through the router.
 
 3. Extract the creative brief.
    - Product: product name, offer, constraints, and source product id.

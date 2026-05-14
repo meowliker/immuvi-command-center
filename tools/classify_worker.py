@@ -52,7 +52,7 @@ POLL_INTERVAL_SECONDS = 60
 HEARTBEAT_INTERVAL_SECONDS = 30
 STALE_CLAIM_TIMEOUT_MINUTES = 10
 PREFERRED_WORKER_OFFLINE_GRACE_MINUTES = 2
-CLAUDE_CLI_TIMEOUT_SECONDS = 600  # 10 min hard ceiling per classification
+CLAUDE_CLI_TIMEOUT_SECONDS = 1200  # 20 min ceiling (bumped 2026-05-14 — 600s tripped on TikToks: yt-dlp + 30 frame extracts + claude classify reliably hits 10-12 min)
 PRODUCER_CLI_TIMEOUT_SECONDS = 1800  # 30 min for Codex image gen jobs
 # Max producer jobs running in parallel on this machine. Each is a separate
 # codex exec subprocess. Override via PRODUCER_MAX_CONCURRENCY env var.

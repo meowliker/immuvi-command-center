@@ -27795,9 +27795,20 @@ async function switchProduct(productId) {
   }
   if (!prod || productId === activeProductId) return;
 
-  // Flush pending saves for the current product before switching
-  if (_saveScheduled) { clearTimeout(_saveScheduled); _saveScheduled = null; }
-  await _flushStateToSupabase().catch(function(e){ console.error('[SB] flush on switch failed', e); });
+  // Flush only real pending saves before switching. The old path always ran a
+  // full snapshot write here, even for a read-only product switch, which made
+  // switching wait on ads/matrix/actions/angles/personas writes unnecessarily.
+  if (_saveScheduled) {
+    clearTimeout(_saveScheduled);
+    _saveScheduled = null;
+    var _switchFlushPid = _pendingFlushProductId || activeProductId;
+    _saveQueue = _saveQueue.then(function(){ return _flushStateToSupabase(_switchFlushPid); });
+    await _saveQueue.catch(function(e){ console.error('[SB] flush on switch failed', e); });
+  } else if (_saveInFlight) {
+    await _saveQueue.catch(function(e){ console.error('[SB] in-flight save on switch failed', e); });
+  } else if (DB && typeof DB._recordApiUsage === 'function') {
+    DB._recordApiUsage('switchProductFlush', 'skipped', 'no pending save');
+  }
   // Also flush any pending inspirations write to the CURRENT product so they
   // don't land on the destination product.
   if (_insSaveTimer) {

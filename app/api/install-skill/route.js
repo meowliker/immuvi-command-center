@@ -23,35 +23,47 @@
 //                     and would require a full PowerShell rewrite to run
 //                     natively on Windows — not worth it for ~5min of WSL.
 
-export default async function handler(req, res) {
-  // No caching — if creds rotate, the next curl must see fresh values.
-  res.setHeader('Cache-Control', 'no-store, max-age=0');
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
 
-  const provided = (req.query && req.query.t) || '';
+export async function GET(request) {
+  // No caching — if creds rotate, the next curl must see fresh values.
+  const headers = new Headers({
+    'Cache-Control': 'no-store, max-age=0'
+  });
+
+  const url = new URL(request.url);
+  const provided = url.searchParams.get('t') || '';
   const expected = process.env.INSTALL_SKILL_SECRET || '';
   if (!expected) {
-    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
-    res.status(500).send('Installer disabled: INSTALL_SKILL_SECRET not configured.\n');
-    return;
+    headers.set('Content-Type', 'text/plain; charset=utf-8');
+    return new Response('Installer disabled: INSTALL_SKILL_SECRET not configured.\n', {
+      status: 500,
+      headers
+    });
   }
   if (provided.length !== expected.length || !timingSafeEqual(provided, expected)) {
-    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
-    res.status(401).send('Unauthorized. Contact Gaurav for the correct install link.\n');
-    return;
+    headers.set('Content-Type', 'text/plain; charset=utf-8');
+    return new Response('Unauthorized. Contact Gaurav for the correct install link.\n', {
+      status: 401,
+      headers
+    });
   }
 
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   const dbPassword = process.env.SUPABASE_DB_PASSWORD;
   if (!serviceKey || !dbPassword) {
-    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
-    res.status(500).send('Installer misconfigured: SUPABASE_* env vars missing on the server.\n');
-    return;
+    headers.set('Content-Type', 'text/plain; charset=utf-8');
+    return new Response('Installer misconfigured: SUPABASE_* env vars missing on the server.\n', {
+      status: 500,
+      headers
+    });
   }
 
   // Normalize os param.
   // Accept mac/macos/darwin, wsl/linux/ubuntu/debian, or win/windows/ps/powershell.
   // Default: mac.
-  const osRaw = String((req.query && req.query.os) || 'mac').toLowerCase();
+  const osRaw = String(url.searchParams.get('os') || 'mac').toLowerCase();
   let os = 'mac';
   if (/^(wsl|linux|ubuntu|debian)/.test(osRaw))        os = 'wsl';
   else if (/^(win|windows|ps|powershell)/.test(osRaw)) os = 'win';
@@ -77,8 +89,15 @@ export default async function handler(req, res) {
     contentType = 'text/x-shellscript; charset=utf-8';
   }
 
-  res.setHeader('Content-Type', contentType);
-  res.status(200).send(script);
+  headers.set('Content-Type', contentType);
+  return new Response(script, {
+    status: 200,
+    headers
+  });
+}
+
+export function OPTIONS() {
+  return new Response(null, { status: 204 });
 }
 
 // ────────────────────────────────────────────────────────────────────────────

@@ -2,7 +2,7 @@
 
 Single-page dashboard for managing paid-ad creative pipelines — angles, personas, ad matrix, inspiration classification — all synced to ClickUp.
 
-**Status:** migrating from local-only to cloud (Supabase + Vercel). See [`MIGRATION_PLAN.md`](MIGRATION_PLAN.md).
+**Status:** migrating from local-only to cloud (Supabase + Vercel), with a Next.js test migration on the `anay` branch. See [`MIGRATION_PLAN.md`](MIGRATION_PLAN.md).
 
 ---
 
@@ -26,17 +26,38 @@ Deployed to Vercel from the `main` branch — auto-deploy on push.
 
 ## Local development
 
+### Next.js test app
+
+The `anay` branch runs the existing dashboard through a Next.js App Router shell so the UI and behavior can be tested without touching `main` production.
+Typed migration modules live under `lib/command-center`, `lib/supabase`, `hooks/command-center`, and `components/command-center`.
+
 ```bash
-# Serve the HTML locally
+npm install
+npm run dev
+# → open http://localhost:3000
+```
+
+Build check:
+
+```bash
+npm run build
+```
+
+### Legacy static preview
+
+The original static HTML files are still present for comparison:
+
+```bash
 python3 -m http.server 8098 --bind 127.0.0.1
 # → open http://localhost:8098/immuvi-command-center.html
 ```
 
 ### Environment
 
-Copy `.env.example` → `.env` and fill in:
+Copy `.env.example` → `.env.local` and fill in:
 - `SUPABASE_URL` — your Supabase project URL
 - `SUPABASE_SERVICE_ROLE_KEY` — only needed by the `classify-inspiration` skill on Gaurav's Mac
+- `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY` — used by the Next.js React app as screens migrate off the static HTML
 
 The anon key is embedded in the HTML (public by design, protected by RLS).
 
@@ -44,7 +65,7 @@ The anon key is embedded in the HTML (public by design, protected by RLS).
 
 ## Deploy
 
-Every push to `main` auto-deploys to Vercel. No build step — it's a static HTML file served directly.
+Every push to `main` auto-deploys the current production app to Vercel. Keep the Next.js migration on a non-main branch until it has been tested and approved.
 
 ```bash
 git add .

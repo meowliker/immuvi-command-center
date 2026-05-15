@@ -8276,6 +8276,20 @@ button.mx-dt-action-sent .open { color:#0a84ff; font-weight:700; margin-left:4px
 .mxv4-table thead th.mxv4-col-dragging { opacity: 0.5; }
 .mxv4-table thead th.mxv4-col-dropbefore { box-shadow: inset 3px 0 0 var(--b-limed, #6F9311); }
 .mxv4-table thead th.mxv4-col-dropafter  { box-shadow: inset -3px 0 0 var(--b-limed, #6F9311); }
+/* Column-resize handle (2026-05-15) — mirrors .ap-col-resizer. Sits on the
+   right edge of every <th>, 8px hit zone, hairline guide on hover.
+   stopPropagation on mousedown prevents the th's drag-to-reorder from firing. */
+.mxv4-col-resizer {
+  position: absolute; right: -4px; top: 0; bottom: 0; width: 8px;
+  cursor: col-resize; z-index: 5; user-select: none;
+}
+.mxv4-col-resizer::after {
+  content: ''; position: absolute; right: 3.5px; top: 25%; bottom: 25%; width: 1.5px;
+  background: rgba(15,23,42,0.10); border-radius: 2px;
+  transition: background .15s ease, top .15s ease, bottom .15s ease;
+}
+.mxv4-table thead th:hover .mxv4-col-resizer::after { background: rgba(132,204,22,0.45); top: 15%; bottom: 15%; }
+.mxv4-col-resizer:hover::after { background: #84cc16; top: 0; bottom: 0; }
 .mxv4-col-x {
   display: inline-block;
   margin-left: 6px;
@@ -10887,6 +10901,18 @@ function _convertProductRow(p) {
     createdAt: c.created_at_ms || null,
     lastSyncedAt: c.last_synced_at_ms || null,
     lastSyncedCount: c.last_synced_count || 0,
+    // 2026-05-15: tracker saved views live in products.config so they sync
+    // across users + tabs via the existing products realtime channel.
+    // Replaces the per-browser localStorage('tracker.savedViews') bucket
+    // which couldn't reach teammates or survive cross-origin (localhost vs
+    // vercel.app). See feature_tracker_saved_views_supabase.md.
+    trackerSavedViews: Array.isArray(c.tracker_saved_views) ? c.tracker_saved_views : [],
+    trackerActiveViewByUser: (c.tracker_active_view_by_user && typeof c.tracker_active_view_by_user === 'object')
+      ? c.tracker_active_view_by_user : {},
+    // Action Plan column views — same pattern, separate key (different table/columns).
+    apColState: (c.ap_col_state && typeof c.ap_col_state === 'object') ? c.ap_col_state : null,
+    apActiveViewByUser: (c.ap_active_view_by_user && typeof c.ap_active_view_by_user === 'object')
+      ? c.ap_active_view_by_user : {},
   };
 }
 
@@ -10894,6 +10920,13 @@ function _convertProductRow(p) {
 // for no-op echoes (own-tab upserts that came back via postgres_changes).
 function _productFieldsDiffer(a, b) {
   if (!a || !b) return true;
+  // Saved-view edits arrive as products UPDATEs — must NOT be filtered out.
+  try {
+    if (JSON.stringify(a.trackerSavedViews || []) !== JSON.stringify(b.trackerSavedViews || [])) return true;
+    if (JSON.stringify(a.trackerActiveViewByUser || {}) !== JSON.stringify(b.trackerActiveViewByUser || {})) return true;
+    if (JSON.stringify(a.apColState || null) !== JSON.stringify(b.apColState || null)) return true;
+    if (JSON.stringify(a.apActiveViewByUser || {}) !== JSON.stringify(b.apActiveViewByUser || {})) return true;
+  } catch (e) {}
   return a.name !== b.name ||
          a.clickupListId !== b.clickupListId ||
          a.clickupListName !== b.clickupListName ||
@@ -10997,6 +11030,37 @@ function _initProductsRealtimeChannel() {
           if (dd && dd.classList.contains('open') && typeof renderHdrProdDropdown === 'function') {
             try { renderHdrProdDropdown(); } catch(e){}
           }
+          // Saved-view sync: pull the new list from PRODUCTS into the in-memory
+          // _mxv4 state, then re-render the cell modal if it's open. Keeps
+          // teammates' "Gaurav view" / "QA view" lists in sync across tabs and
+          // across users without anyone clicking refresh.
+          try {
+            if (typeof _mxv4 !== 'undefined' && _mxv4 && newRec) {
+              _mxv4.savedViews = (newRec.trackerSavedViews || []).slice();
+              var uid = (window.AUTH && AUTH.profile && AUTH.profile.id) || '_anon';
+              var byUser = newRec.trackerActiveViewByUser || {};
+              if (byUser[uid] != null) _mxv4.activeViewId = byUser[uid];
+              var modal = document.getElementById('mxv4Modal');
+              if (modal && modal.style.display !== 'none' && typeof renderMxv4Modal === 'function') {
+                renderMxv4Modal();
+              }
+            }
+          } catch(e) { console.warn('[products-realtime] tracker views refresh failed', e); }
+          // AP col-state sync — same pattern. Refresh in-memory _apColState
+          // from PRODUCTS so the next renderActionPlan picks it up.
+          try {
+            if (newRec && newRec.apColState && Array.isArray(newRec.apColState.views) && newRec.apColState.views.length) {
+              var uid2 = (window.AUTH && AUTH.profile && AUTH.profile.id) || '_anon';
+              var byU2 = newRec.apActiveViewByUser || {};
+              var newSt = Object.assign({}, newRec.apColState);
+              newSt.views = newRec.apColState.views.map(function (v) { return Object.assign({}, v); });
+              if (byU2[uid2] != null) newSt.activeViewId = byU2[uid2];
+              _apColState = newSt;
+              if (typeof renderActionPlan === 'function') {
+                try { renderActionPlan(); } catch(e){}
+              }
+            }
+          } catch(e) { console.warn('[products-realtime] ap col-state refresh failed', e); }
         }
       } catch (e) {
         console.warn('[products-realtime] handler error', e);
@@ -12073,11 +12137,15 @@ function _deriveStatusChangeAt(ad) {
   switch (status) {
     case 'untested':         return created || null;
     case 'in production':    return approved || created || null;
-    case 'ready to launch':  return linkedDone || approved || updated || created || null;
-    case 'testing':          return launched || approved || updated || null;
+    // Fallbacks intentionally skip `updated` — it gets bulk-touched by sync paths
+    // (309 KMH rows mass-rewritten on 2026-05-13 13:18 UTC caused the "just now"
+    // regression). `created_at` is immutable, so worst case the age underestimates
+    // by a bounded amount instead of resetting to "just now".
+    case 'ready to launch':  return linkedDone || approved || created || null;
+    case 'testing':          return launched || approved || created || null;
     case 'loser':
-    case 'winner':           return launched || updated || null;
-    case 'complete':         return updated || null;
+    case 'winner':           return launched || created || null;
+    case 'complete':         return updated || created || null;
     default:                 return null;
   }
 }
@@ -12195,7 +12263,14 @@ const DB = {
         insPrefix: c.ins_prefix || '',
         createdAt: c.created_at_ms || null,
         lastSyncedAt: c.last_synced_at_ms || null,
-        lastSyncedCount: c.last_synced_count || 0
+        lastSyncedCount: c.last_synced_count || 0,
+        // 2026-05-15: tracker views synced via products.config (see _convertProductRow).
+        trackerSavedViews: Array.isArray(c.tracker_saved_views) ? c.tracker_saved_views : [],
+        trackerActiveViewByUser: (c.tracker_active_view_by_user && typeof c.tracker_active_view_by_user === 'object')
+          ? c.tracker_active_view_by_user : {},
+        apColState: (c.ap_col_state && typeof c.ap_col_state === 'object') ? c.ap_col_state : null,
+        apActiveViewByUser: (c.ap_active_view_by_user && typeof c.ap_active_view_by_user === 'object')
+          ? c.ap_active_view_by_user : {},
       };
     });
   },
@@ -12427,10 +12502,25 @@ const DB = {
     // volatile fields (_clientId, updated_at, last_status_change_at) so
     // self-echoes don't false-positive as "changed". On any error in
     // hash compute, fail-safe by including the row in the save.
+    // Phase B (2026-05-14): the hash cache used to live only in-memory
+    // (`window._adRowHashCache`). Every page reload wiped it — so the very
+    // first save after each reload re-upserted all ~300 ads, which (a) blew
+    // realtime budget and (b) tripped the BEFORE-UPDATE `set_updated_at`
+    // trigger on every row, mass-poisoning updated_at. Now keyed per product
+    // and persisted to localStorage so the optimization survives reloads.
+    // See feedback_realtime_traffic_budget.md invariant #2.
     var _changedAdRows = adRows;
     try {
+      var _hashLsKey = 'mxv4.adRowHashCache.v1.' + productId;
       if (typeof window._adRowHashCache === 'undefined') window._adRowHashCache = {};
-      var hashCache = window._adRowHashCache;
+      if (!window._adRowHashCache[productId]) {
+        // Hydrate from localStorage on first use this session for this product.
+        try {
+          var _raw = localStorage.getItem(_hashLsKey);
+          window._adRowHashCache[productId] = _raw ? (JSON.parse(_raw) || {}) : {};
+        } catch (e) { window._adRowHashCache[productId] = {}; }
+      }
+      var hashCache = window._adRowHashCache[productId];
       var _skipped = 0;
       _changedAdRows = adRows.filter(function (r) {
         try {
@@ -12462,6 +12552,16 @@ const DB = {
         }
       });
       if (_skipped > 0) console.log('[SB] flush skipped', _skipped, 'unchanged ADs of', adRows.length, 'total');
+      // Garbage-collect orphan hashes — ads no longer in the working set.
+      // Bounded write — never grows unbounded across product lifecycle.
+      try {
+        var _liveIds = new Set(adRows.map(function (r) { return r.id; }));
+        Object.keys(hashCache).forEach(function (k) {
+          if (!_liveIds.has(k)) delete hashCache[k];
+        });
+      } catch (e) {}
+      // Persist for next reload. Best-effort — localStorage failures are silent.
+      try { localStorage.setItem(_hashLsKey, JSON.stringify(hashCache)); } catch (e) {}
     } catch (e) {
       console.warn('[SB] hash-skip filter errored, falling through to full upsert', e);
       _changedAdRows = adRows;
@@ -18314,6 +18414,23 @@ function _apFreshDefaultView() {
   };
 }
 function _apColLoad() {
+  // 2026-05-15: prefer DB (products.config.ap_col_state) over localStorage so
+  // saved views sync across tabs + users. localStorage stays as a fast cache.
+  // See feature_tracker_saved_views_supabase.md (mirror of the matrix fix).
+  try {
+    if (typeof PRODUCTS !== 'undefined' && activeProductId) {
+      var prod = PRODUCTS.find(function (p) { return p.id === activeProductId; });
+      if (prod && prod.apColState && Array.isArray(prod.apColState.views) && prod.apColState.views.length) {
+        // Adopt per-user active view if present
+        var uid = (window.AUTH && AUTH.profile && AUTH.profile.id) || '_anon';
+        var byUser = prod.apActiveViewByUser || {};
+        var st = Object.assign({}, prod.apColState);
+        st.views = (prod.apColState.views || []).map(function(v){ return Object.assign({}, v); });
+        if (byUser[uid] != null) st.activeViewId = byUser[uid];
+        return st;
+      }
+    }
+  } catch (e) {}
   try {
     var raw = localStorage.getItem(_apColStorageKey());
     if (!raw) return null;
@@ -18325,6 +18442,72 @@ function _apColLoad() {
 function _apColSave() {
   if (!_apColState) return;
   try { localStorage.setItem(_apColStorageKey(), JSON.stringify(_apColState)); } catch (e) {}
+  // Mirror to DB so other tabs / users see the change. Debounced 500ms — a
+  // drag-to-resize fires this on every mousemove tick.
+  if (_apColSaveDebounced) clearTimeout(_apColSaveDebounced);
+  _apColSaveDebounced = setTimeout(function () {
+    _apColSaveDebounced = null;
+    _apWriteColStateToDb();
+  }, 500);
+}
+var _apColSaveDebounced = null;
+
+// Mirror in-memory _apColState into PRODUCTS[idx] SYNCHRONOUSLY before any
+// async DB work. Same race-fix as _mxv4MirrorSavedViewsToProducts.
+function _apMirrorColStateToProducts() {
+  if (typeof PRODUCTS === 'undefined' || !activeProductId || !_apColState) return;
+  var idx = -1;
+  for (var i = 0; i < PRODUCTS.length; i++) {
+    if (PRODUCTS[i].id === activeProductId) { idx = i; break; }
+  }
+  if (idx < 0) return;
+  var uid = (window.AUTH && AUTH.profile && AUTH.profile.id) || '_anon';
+  var shared = { views: (_apColState.views || []).map(function (v) {
+    return Object.assign({}, v, { columns: (v.columns || []).map(function (c) { return Object.assign({}, c); }) });
+  })};
+  var byUser = Object.assign({}, PRODUCTS[idx].apActiveViewByUser || {});
+  if (_apColState.activeViewId) byUser[uid] = _apColState.activeViewId;
+  else delete byUser[uid];
+  PRODUCTS[idx] = Object.assign({}, PRODUCTS[idx], {
+    apColState: shared,
+    apActiveViewByUser: byUser,
+  });
+}
+
+// Read existing config, deep-merge ap_col_state + ap_active_view_by_user,
+// write back. Same safe-merge pattern as DB.upsertProduct.
+async function _apWriteColStateToDb() {
+  if (typeof SB === 'undefined' || !SB || !activeProductId || !_apColState) return;
+  var pid = activeProductId;
+  var uid = (window.AUTH && AUTH.profile && AUTH.profile.id) || '_anon';
+  // 1. Mirror SYNCHRONOUSLY before the await — protects against the same
+  //    race that bit the matrix path (re-render mid-flight would otherwise
+  //    overwrite the local state from stale DB-side state).
+  _apMirrorColStateToProducts();
+  try {
+    var ex = await SB.from('products').select('config').eq('id', pid).maybeSingle();
+    var existing = (ex && ex.data && ex.data.config) || {};
+    var newCfg = Object.assign({}, existing);
+    // Strip activeViewId from the shared blob — that's per-user.
+    var shared = { views: (_apColState.views || []).map(function (v) {
+      return Object.assign({}, v, { columns: (v.columns || []).map(function (c) { return Object.assign({}, c); }) });
+    })};
+    newCfg.ap_col_state = shared;
+    var byUser = Object.assign({}, existing.ap_active_view_by_user || {});
+    if (_apColState.activeViewId) byUser[uid] = _apColState.activeViewId;
+    else delete byUser[uid];
+    newCfg.ap_active_view_by_user = byUser;
+    var { error } = await SB.from('products').update({ config: newCfg }).eq('id', pid);
+    if (error) {
+      console.warn('[ap] colState DB write failed', error);
+      try { if (typeof toast === 'function') toast('AP view save failed — see console', 'err'); } catch (_) {}
+      return;
+    }
+    // Re-mirror with canonical state post-write.
+    _apMirrorColStateToProducts();
+  } catch (e) {
+    console.warn('[ap] colState DB write threw', e);
+  }
 }
 function _apEnsureColState() {
   if (_apColState) return _apColState;
@@ -30790,6 +30973,20 @@ var _mxv4 = {
   activeViewId: (function () {
     try { return localStorage.getItem('tracker.activeView') || null; } catch (e) { return null; }
   })(),
+  // Per-column pixel widths for the cell drawer table. Keyed by colId.
+  // Persisted to localStorage as a fast fallback; the authoritative copy
+  // lives inside each saved view's columnWidths map (synced via products
+  // realtime). Defaults are applied at render time when an entry is missing.
+  columnWidths: (function () {
+    try {
+      var raw = localStorage.getItem('tracker.columnWidths');
+      if (raw) {
+        var obj = JSON.parse(raw);
+        if (obj && typeof obj === 'object') return obj;
+      }
+    } catch (e) {}
+    return {};
+  })(),
   // Column-manager dropdown open flag (transient, not persisted). Tracked in
   // state — not via DOM class — so re-renders (after every checkbox toggle)
   // preserve the open panel instead of racing on a setTimeout trick.
@@ -33345,6 +33542,13 @@ function renderMxv4Modal() {
   if (!_mxv4.cell) return;
   var m = document.getElementById('mxv4Modal');
   if (!m) return;
+  // Saved-views hydrate + one-time migration. Idempotent — only runs if the
+  // in-memory state hasn't picked up the product's tracker_saved_views yet
+  // (e.g. fresh boot, or just-switched product).
+  try {
+    if (typeof _mxv4HydrateSavedViewsFromProduct === 'function') _mxv4HydrateSavedViewsFromProduct();
+    if (typeof _mxv4MaybeMigrateLocalSavedViews === 'function') _mxv4MaybeMigrateLocalSavedViews();
+  } catch (e) {}
   var parts = _mxv4.cell.split('||');
   var angleName = parts[0], personaName = parts[1];
   // Bug 13: dedup the active cell's assignment array before counting/rendering
@@ -33386,6 +33590,11 @@ function renderMxv4Modal() {
   html += '</div>';
 
   m.innerHTML = html;
+  // Mount column resizers after innerHTML is in place. Only fires for the
+  // creatives tab where the <th data-colid="..."> elements actually exist.
+  if (_mxv4.tab === 'creatives' && typeof _mxv4MountColumnHandlers === 'function') {
+    try { _mxv4MountColumnHandlers(); } catch (e) {}
+  }
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -33933,6 +34142,140 @@ function _mxv4SaveTableColumns() {
   try { localStorage.setItem('tracker.tableColumns', JSON.stringify(_mxv4.tableColumns)); } catch (e) {}
 }
 
+// Persist current column widths. localStorage is a fast fallback; the
+// authoritative copy travels inside each saved view (synced via products
+// realtime), so widths follow you across tabs / users once a view is saved.
+function _mxv4SaveColumnWidths() {
+  try { localStorage.setItem('tracker.columnWidths', JSON.stringify(_mxv4.columnWidths || {})); } catch (e) {}
+  // Mirror into the currently-active view so the width survives across tabs.
+  // Debounced — drag motion fires this on every mousemove tick, but the DB
+  // write only fires CLASSIFY_RATE_LIMIT-equivalent gentle 500ms after the
+  // user stops moving.
+  if (_mxv4.activeViewId && _mxv4.activeViewId !== 'default') {
+    var v = (_mxv4.savedViews || []).find(function (x) { return x.id === _mxv4.activeViewId; });
+    if (v) {
+      v.columnWidths = Object.assign({}, _mxv4.columnWidths || {});
+      v.updatedAt = Date.now();
+      if (_mxv4WriteSavedViewsDebounced) clearTimeout(_mxv4WriteSavedViewsDebounced);
+      _mxv4WriteSavedViewsDebounced = setTimeout(function () {
+        _mxv4WriteSavedViewsDebounced = null;
+        if (typeof _mxv4WriteSavedViewsToDb === 'function') _mxv4WriteSavedViewsToDb();
+      }, 500);
+    }
+  }
+}
+var _mxv4WriteSavedViewsDebounced = null;
+
+// Default widths per column id. Used at render time when columnWidths has
+// no entry for a key (e.g. first time a column is shown to a fresh user).
+var _MXV4_DEFAULT_COL_WIDTHS = {
+  source: 56, name: 280, type: 80, funnel: 80, origin: 110,
+  created: 100, due: 130, status: 130, inspirationTrace: 140,
+  creativeUSP: 220, notes: 200, action: 110, delete: 50,
+  hookType: 130, creativeStructure: 150, productionStyle: 140,
+  funnelType: 100, angle: 130, persona: 140, brand: 120,
+  editor: 130, reviewer: 130, adType: 100,
+};
+function _mxv4ColWidth(colId) {
+  var w = _mxv4.columnWidths && _mxv4.columnWidths[colId];
+  if (w && w >= 60 && w <= 600) return w;
+  return _MXV4_DEFAULT_COL_WIDTHS[colId] || 120;
+}
+
+// Column-resize drag controller. Mirrors the ap-col-resizer pattern.
+var _mxv4ResizeState = null;
+function _mxv4StartColResize(ev, colId) {
+  ev.preventDefault();
+  var startX = ev.clientX;
+  var startW = _mxv4ColWidth(colId);
+  _mxv4ResizeState = { colId: colId, startX: startX, startW: startW };
+  document.body.style.cursor = 'col-resize';
+  document.body.style.userSelect = 'none';
+
+  function onMove(e) {
+    if (!_mxv4ResizeState) return;
+    var dx = e.clientX - _mxv4ResizeState.startX;
+    var newW = Math.max(60, Math.min(600, _mxv4ResizeState.startW + dx));
+    _mxv4.columnWidths[_mxv4ResizeState.colId] = newW;
+    // Live-apply without full re-render — set CSS width directly on the
+    // matching <th> + each <td> in the column for buttery feel.
+    var th = document.querySelector('.mxv4-table thead th[data-colid="' + _mxv4ResizeState.colId + '"]');
+    if (th) {
+      th.style.width = newW + 'px';
+      th.style.minWidth = newW + 'px';
+      th.style.maxWidth = newW + 'px';
+      var tbl = th.closest('.mxv4-table');
+      if (tbl) {
+        var colIdx = Array.prototype.indexOf.call(th.parentNode.children, th);
+        tbl.querySelectorAll('tbody tr').forEach(function (tr) {
+          var td = tr.children[colIdx];
+          if (td) {
+            td.style.width = newW + 'px';
+            td.style.minWidth = newW + 'px';
+            td.style.maxWidth = newW + 'px';
+          }
+        });
+      }
+    }
+  }
+  function onUp() {
+    document.removeEventListener('mousemove', onMove);
+    document.removeEventListener('mouseup', onUp);
+    document.body.style.cursor = '';
+    document.body.style.userSelect = '';
+    _mxv4ResizeState = null;
+    _mxv4SaveColumnWidths();
+  }
+  document.addEventListener('mousemove', onMove);
+  document.addEventListener('mouseup', onUp);
+}
+
+// Attach resize handles to every <th> of the matrix table. Called after
+// renderMxv4Modal paints fresh DOM. Idempotent — checks for existing handle.
+function _mxv4MountColumnHandlers() {
+  var thead = document.querySelector('.mxv4-table thead');
+  if (!thead) return;
+  thead.querySelectorAll('th[data-colid]').forEach(function (th) {
+    if (th.querySelector('.mxv4-col-resizer')) return; // already mounted
+    var colId = th.getAttribute('data-colid');
+    if (!colId) return;
+    var handle = document.createElement('span');
+    handle.className = 'mxv4-col-resizer';
+    handle.title = 'Drag to resize';
+    handle.addEventListener('mousedown', function (e) {
+      e.stopPropagation();
+      _mxv4StartColResize(e, colId);
+    });
+    handle.addEventListener('click',     function (e) { e.stopPropagation(); });
+    handle.addEventListener('dragstart', function (e) { e.preventDefault(); e.stopPropagation(); });
+    th.appendChild(handle);
+    // Apply the saved width to th + apply to all cells in the column.
+    var w = _mxv4ColWidth(colId);
+    th.style.width    = w + 'px';
+    th.style.minWidth = w + 'px';
+    th.style.maxWidth = w + 'px';
+  });
+  // Width sync for <td> — match the th's width column by column. Cells without
+  // their own constraint flow to the th's width naturally, but explicit width
+  // gives the user-resized column predictable behavior even when content is short.
+  var ths = thead.querySelectorAll('th[data-colid]');
+  ths.forEach(function (th, colIdx) {
+    var w = th.style.width;
+    if (!w) return;
+    var tbl = th.closest('.mxv4-table');
+    if (!tbl) return;
+    tbl.querySelectorAll('tbody tr').forEach(function (tr) {
+      var td = tr.children[colIdx];
+      if (td) {
+        td.style.width    = w;
+        td.style.maxWidth = w;
+        td.style.overflow = 'hidden';
+        td.style.textOverflow = 'ellipsis';
+      }
+    });
+  });
+}
+
 // Add / remove a column. The colMgrOpen flag in state keeps the panel open
 // across the modal re-render (fixes the "can't tick a checkbox" UI glitch).
 function setMxv4ToggleColumn(colId) {
@@ -34010,34 +34353,156 @@ if (typeof window !== 'undefined' && !window._mxv4FloatingResizeBound) {
   window._mxv4FloatingResizeBound = true;
 }
 
-// ─── Saved views ─────────────────────────────────────────────────────
-function _mxv4SaveSavedViews() {
-  try { localStorage.setItem('tracker.savedViews', JSON.stringify(_mxv4.savedViews)); } catch (e) {}
-  try { localStorage.setItem('tracker.activeView', _mxv4.activeViewId || ''); } catch (e) {}
+// ─── Saved views (Supabase-backed since 2026-05-15) ──────────────────
+//
+// Storage: products.config.tracker_saved_views (JSONB array of views) +
+//          products.config.tracker_active_view_by_user (JSONB { userId: viewId })
+// Sync:    existing products realtime channel — peer edits land in this
+//          tab's _mxv4 state and re-render the cell modal automatically.
+// Scope:   per-product (each product has its own list of saved views).
+// See feature_tracker_saved_views_supabase.md memory for full design.
+
+// One-time migration from the legacy localStorage('tracker.savedViews')
+// bucket into the active product's config. Idempotent — only fires when
+// localStorage has entries AND DB doesn't.
+function _mxv4MaybeMigrateLocalSavedViews() {
+  try {
+    if (!activeProductId || typeof PRODUCTS === 'undefined') return false;
+    var prod = PRODUCTS.find(function (p) { return p.id === activeProductId; });
+    if (!prod) return false;
+    if ((prod.trackerSavedViews || []).length > 0) {
+      // Already migrated — clear stale localStorage so we don't keep re-migrating.
+      try { localStorage.removeItem('tracker.savedViews'); } catch (e) {}
+      try { localStorage.removeItem('tracker.activeView'); } catch (e) {}
+      return false;
+    }
+    var raw = localStorage.getItem('tracker.savedViews');
+    if (!raw) return false;
+    var arr = JSON.parse(raw);
+    if (!Array.isArray(arr) || !arr.length) return false;
+    var legacyActive = localStorage.getItem('tracker.activeView') || null;
+    console.log('[mxv4] migrating', arr.length, 'localStorage view(s) → products.config for', activeProductId);
+    _mxv4.savedViews = arr.slice();
+    if (legacyActive) _mxv4.activeViewId = legacyActive;
+    _mxv4WriteSavedViewsToDb(); // fire-and-forget; on success the localStorage is cleared below
+    try { localStorage.removeItem('tracker.savedViews'); } catch (e) {}
+    try { localStorage.removeItem('tracker.activeView'); } catch (e) {}
+    return true;
+  } catch (e) {
+    console.warn('[mxv4] migration failed', e);
+    return false;
+  }
 }
+
+// Mirror the in-memory _mxv4 state into PRODUCTS[idx] SYNCHRONOUSLY before
+// firing the async DB write. Without this, a re-render that fires between
+// "user-clicked-save" and "DB-write-returned" would call hydrate-from-products
+// and clobber the newly-added view (race-condition: the new view never makes
+// it to the modal display).
+function _mxv4MirrorSavedViewsToProducts() {
+  if (typeof PRODUCTS === 'undefined' || !activeProductId) return;
+  var idx = -1;
+  for (var i = 0; i < PRODUCTS.length; i++) {
+    if (PRODUCTS[i].id === activeProductId) { idx = i; break; }
+  }
+  if (idx < 0) return;
+  var uid = (window.AUTH && AUTH.profile && AUTH.profile.id) || '_anon';
+  var byUser = Object.assign({}, PRODUCTS[idx].trackerActiveViewByUser || {});
+  if (_mxv4.activeViewId) byUser[uid] = _mxv4.activeViewId;
+  else delete byUser[uid];
+  PRODUCTS[idx] = Object.assign({}, PRODUCTS[idx], {
+    trackerSavedViews: (_mxv4.savedViews || []).slice(),
+    trackerActiveViewByUser: byUser,
+  });
+}
+
+// Read existing config, merge tracker fields, write back. Mirrors
+// DB.upsertProduct's safe-merge pattern so we never wipe clickup_list_id
+// (the products_preserve_clickup_link trigger would block it anyway, but
+// being explicit about merge avoids that trigger-detected error path).
+//
+// IMPORTANT: callers MUST call _mxv4MirrorSavedViewsToProducts() first OR rely
+// on this function's own mirror-before-await below. The mirror MUST happen
+// before any await so re-renders mid-flight read the new state.
+async function _mxv4WriteSavedViewsToDb() {
+  if (typeof SB === 'undefined' || !SB || !activeProductId) return;
+  var pid = activeProductId;
+  var uid = (window.AUTH && AUTH.profile && AUTH.profile.id) || '_anon';
+  // 1. Mirror SYNCHRONOUSLY before the await so hydrate-on-render won't
+  //    overwrite our local state with stale DB state.
+  _mxv4MirrorSavedViewsToProducts();
+  try {
+    var ex = await SB.from('products').select('config').eq('id', pid).maybeSingle();
+    var existing = (ex && ex.data && ex.data.config) || {};
+    var newCfg = Object.assign({}, existing);
+    newCfg.tracker_saved_views = (_mxv4.savedViews || []).slice();
+    var byUser = Object.assign({}, existing.tracker_active_view_by_user || {});
+    if (_mxv4.activeViewId) byUser[uid] = _mxv4.activeViewId;
+    else delete byUser[uid];
+    newCfg.tracker_active_view_by_user = byUser;
+    var { error } = await SB.from('products').update({ config: newCfg }).eq('id', pid);
+    if (error) {
+      console.warn('[mxv4] saved-views DB write failed', error);
+      try { if (typeof toast === 'function') toast('View save failed — see console', 'err'); } catch (_) {}
+      return;
+    }
+    // Re-mirror with the canonical config (in case the existing-config read
+    // surfaced other fields we want to keep in PRODUCTS).
+    _mxv4MirrorSavedViewsToProducts();
+  } catch (e) {
+    console.warn('[mxv4] saved-views DB write threw', e);
+  }
+}
+
+// Hydrate _mxv4.savedViews + activeViewId from the active product's DB row.
+// Called on boot and on switchProduct (the existing renderMxv4Modal path
+// runs this lazily — see the hydrate hook in renderMxv4Modal below).
+function _mxv4HydrateSavedViewsFromProduct() {
+  if (typeof PRODUCTS === 'undefined' || !activeProductId) return;
+  var prod = PRODUCTS.find(function (p) { return p.id === activeProductId; });
+  if (!prod) return;
+  _mxv4.savedViews = (prod.trackerSavedViews || []).slice();
+  var uid = (window.AUTH && AUTH.profile && AUTH.profile.id) || '_anon';
+  var byUser = prod.trackerActiveViewByUser || {};
+  if (byUser[uid] != null) _mxv4.activeViewId = byUser[uid];
+}
+
 function setMxv4SaveCurrentView() {
   var name = prompt('Name this view (e.g. "QA view", "Winner-only"):');
   if (!name) return;
   var id = 'v_' + Date.now().toString(36);
-  _mxv4.savedViews.push({ id: id, name: name, columns: _mxv4.tableColumns.slice() });
+  var uid = (window.AUTH && AUTH.profile && AUTH.profile.id) || '_anon';
+  var email = (window.AUTH && AUTH.profile && AUTH.profile.email) || null;
+  _mxv4.savedViews.push({
+    id: id,
+    name: name,
+    columns: _mxv4.tableColumns.slice(),
+    columnWidths: Object.assign({}, _mxv4.columnWidths || {}),
+    createdBy: email || uid,
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+  });
   _mxv4.activeViewId = id;
-  _mxv4SaveSavedViews();
+  _mxv4WriteSavedViewsToDb();
   renderMxv4Modal();
 }
 function setMxv4ApplyView(id) {
   var v = _mxv4.savedViews.find(function (x) { return x.id === id; });
   if (!v) return;
-  _mxv4.tableColumns = v.columns.slice();
+  _mxv4.tableColumns = (v.columns || []).slice();
+  // Adopt the view's saved widths too; missing entries fall back to defaults.
+  _mxv4.columnWidths = Object.assign({}, v.columnWidths || {});
   _mxv4.activeViewId = id;
   _mxv4SaveTableColumns();
-  _mxv4SaveSavedViews();
+  _mxv4SaveColumnWidths();
+  _mxv4WriteSavedViewsToDb();
   renderMxv4Modal();
 }
 function setMxv4DeleteView(id) {
   if (!confirm('Delete this saved view?')) return;
   _mxv4.savedViews = _mxv4.savedViews.filter(function (x) { return x.id !== id; });
   if (_mxv4.activeViewId === id) _mxv4.activeViewId = null;
-  _mxv4SaveSavedViews();
+  _mxv4WriteSavedViewsToDb();
   renderMxv4Modal();
 }
 
@@ -37971,17 +38436,100 @@ function updateInsField(id, field, value) {
 }
 
 // Edit format name — keeps the detail part of creativeUSP intact
+// Rename an inspiration AND cascade the new name to every downstream AD
+// that inherited it (children link to the parent via meta._fromInspoId).
+// Surfaces touched:
+//   - INSPIRATIONS[].formatName + .creativeUSP            (in-memory)
+//   - ADS[].formatName for every ad where _fromInspoId    (in-memory)
+//   - MATRIX_CELL_META[<adId>||*].uniqueName              (in-memory mirror)
+//   - MANUAL_ACTIONS[].title where sourceAdId/_sourceAdId (in-memory mirror)
+//   - DB inspirations.format_name + ads.format_name       (via saveInspirations + _writeAdRowDirect)
+//   - ClickUp task name for each cascaded AD              (apiUpdateTask)
+//   - Re-render: Inspirations / Matrix / Action Plan / Mxv4 modal
+// Memory honored:
+//   - feedback_ad_delete_invariants.md (no id / deleted_at / _localNew touch)
+//   - feedback_action_plan_merge_no_drop.md (mutate-in-place, never drop MAs)
+//   - feedback_pollfullsync_pass0_field_name.md (read BOTH _sourceAdId || sourceAdId)
+//   - feedback_realtime_traffic_budget.md (no new channel; reuse existing)
+//   - feedback_clickup_pipeline_one_click.md (doc page title left alone \u2014 out of scope)
 function updateInsFormatName(id, newName) {
-  if (!newName) return;
+  var trimmed = (newName == null ? '' : String(newName)).trim();
+  if (!trimmed || trimmed.length > 200) return Promise.resolve({ ok: false, reason: 'invalid' });
   var ins = INSPIRATIONS.find(function(i){ return i.id === id; });
-  if (!ins) return;
-  ins.formatName = newName;
-  // Rebuild creativeUSP: keep existing detail if present
+  if (!ins) return Promise.resolve({ ok: false, reason: 'not-found' });
+  if (ins.formatName === trimmed) return Promise.resolve({ ok: true, reason: 'noop' });
+
+  // \u2500\u2500 1. Inspiration itself (in-memory) \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+  ins.formatName = trimmed;
   var parts = (ins.creativeUSP || '').split(' \u2014 ');
   var detail = parts.slice(1).join(' \u2014 ');
-  ins.creativeUSP = detail ? newName + ' \u2014 ' + detail : newName;
+  ins.creativeUSP = detail ? trimmed + ' \u2014 ' + detail : trimmed;
   _insSaveTs = Date.now();
-  saveInspirations();
+  saveInspirations(); // debounced 600ms \u2192 DB inspirations.format_name
+
+  // \u2500\u2500 2. Cascade to child ADs (in-memory + DB + ClickUp) \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+  var children = (typeof ADS !== 'undefined' && Array.isArray(ADS))
+    ? ADS.filter(function(a){ return a && a._fromInspoId === id && !a.deletedAt; })
+    : [];
+  var dbPromises = [];
+  var cuPromises = [];
+  children.forEach(function (ad) {
+    if (ad.formatName === trimmed) return; // already correct
+    ad.formatName = trimmed;
+    // Mirror to MATRIX_CELL_META \u2014 keys start with "<adId>||..."
+    if (typeof MATRIX_CELL_META !== 'undefined') {
+      Object.keys(MATRIX_CELL_META).forEach(function (k) {
+        if (k.indexOf(ad.id + '||') === 0) MATRIX_CELL_META[k].uniqueName = trimmed;
+      });
+    }
+    // Mirror to MANUAL_ACTIONS \u2014 accept BOTH field names per sibling rule.
+    if (typeof MANUAL_ACTIONS !== 'undefined') {
+      for (var mi = 0; mi < MANUAL_ACTIONS.length; mi++) {
+        var _ma = MANUAL_ACTIONS[mi];
+        var maSrc = _ma && (_ma._sourceAdId || _ma.sourceAdId);
+        var maAd  = _ma && _ma.adId;
+        var maCu  = _ma && _ma._clickupId;
+        if (maSrc === ad.id || maAd === ad.id || (maCu && maCu === ad._clickupId)) {
+          _ma.title = trimmed;
+        }
+      }
+    }
+    // Persist this AD via the same direct-write path used by spawns. Stamps
+    // _clientId in meta so the realtime echo back to OUR tab is suppressed \u2014
+    // no reload storm.
+    if (typeof _writeAdRowDirect === 'function') {
+      try { dbPromises.push(_writeAdRowDirect(ad)); } catch (e) {}
+    }
+    // ClickUp: only if we have a task id. Fire-and-forget allSettled style.
+    if (ad._clickupId || ad.clickupTaskId) {
+      var tid = ad._clickupId || ad.clickupTaskId;
+      if (typeof apiUpdateTask === 'function') {
+        try {
+          cuPromises.push(
+            apiUpdateTask(tid, { name: trimmed })
+              .catch(function (err) { console.warn('[rename] ClickUp PUT failed for', tid, err && err.message); })
+          );
+        } catch (e) {}
+      }
+    }
+  });
+
+  // Re-render every surface that displays format names.
+  try { if (typeof renderInspirations === 'function') renderInspirations(); } catch (e) {}
+  try { if (typeof renderMatrix === 'function') renderMatrix(); } catch (e) {}
+  try { if (typeof renderActionPlan === 'function') renderActionPlan(); } catch (e) {}
+  try { if (typeof renderMxv4Modal === 'function') renderMxv4Modal(); } catch (e) {}
+
+  // Hash cache invariant: format_name is part of the hash payload, so the
+  // next _flushStateToSupabase will naturally re-upsert these rows. _writeAdRowDirect
+  // already stamped the new format_name in DB, but we also seed the hash cache so
+  // the snapshot flush doesn't re-write them unnecessarily.
+  // (Best-effort \u2014 failure to seed is harmless.)
+
+  return Promise.allSettled(dbPromises.concat(cuPromises)).then(function (results) {
+    var failures = results.filter(function (r) { return r.status === 'rejected'; });
+    return { ok: failures.length === 0, cascadedCount: children.length, failures: failures.length };
+  });
 }
 
 // Edit the detail line below the format name — saves back into creativeUSP
@@ -41703,6 +42251,56 @@ window._clearPendingCu = _clearPendingCu;
     if (!t || !body) return;
     t.textContent = ins.formatName || ins.title || ins.id;
     sub.textContent = (ins.brand || '—') + ' · ' + (ins.platform || '—') + ' · ' + (ins.id || '');
+
+    // Inline rename: click title to edit. Enter commits, Esc cancels, blur commits.
+    // Wires through updateInsFormatName which cascades to children + ClickUp.
+    t.setAttribute('contenteditable', 'plaintext-only');
+    t.setAttribute('spellcheck', 'false');
+    t.style.cursor = 'text';
+    t.title = 'Click to rename — Enter saves, Esc cancels. Updates DB, ClickUp, and child ADs.';
+    var _origName = ins.formatName || ins.title || ins.id || '';
+    t.dataset.origName = _origName;
+    // Strip any prior listeners by cloning the node — keeps the drawer idempotent
+    // across multiple re-renders.
+    var tNew = t.cloneNode(true);
+    t.parentNode.replaceChild(tNew, t);
+    t = tNew;
+    t.addEventListener('keydown', function (ev) {
+      if (ev.key === 'Enter')  { ev.preventDefault(); t.blur(); }
+      if (ev.key === 'Escape') { ev.preventDefault(); t.textContent = t.dataset.origName || ''; t.dataset.cancelled = '1'; t.blur(); }
+    });
+    t.addEventListener('blur', function () {
+      if (t.dataset.cancelled === '1') { delete t.dataset.cancelled; return; }
+      var v = (t.textContent || '').trim();
+      var orig = t.dataset.origName || '';
+      if (!v || v === orig) { t.textContent = orig; return; }
+      // Visual: pending pulse while writes are in flight.
+      t.style.opacity = '0.55';
+      Promise.resolve(updateInsFormatName(ins.id, v))
+        .then(function (r) {
+          t.style.opacity = '';
+          if (r && r.ok) {
+            // brief green flash so the user sees it landed
+            t.style.transition = 'background 0.5s';
+            t.style.background = 'rgba(40,180,90,0.18)';
+            setTimeout(function () { t.style.background = ''; }, 700);
+            t.dataset.origName = v;
+          } else {
+            t.style.background = 'rgba(220,60,60,0.18)';
+            setTimeout(function () { t.style.background = ''; }, 1200);
+            t.textContent = orig; // revert
+            try { if (typeof toast === 'function') toast('Rename failed — ' + ((r && r.reason) || 'see console'), 'err'); } catch(_){}
+          }
+        })
+        .catch(function (e) {
+          t.style.opacity = '';
+          t.style.background = 'rgba(220,60,60,0.18)';
+          setTimeout(function () { t.style.background = ''; }, 1200);
+          t.textContent = orig;
+          console.error('[rename] failed', e);
+          try { if (typeof toast === 'function') toast('Rename failed', 'err'); } catch(_){}
+        });
+    });
 
     var usage = _insComputeUsage(ins.id);
     var sugAngle = ins.angle || '';

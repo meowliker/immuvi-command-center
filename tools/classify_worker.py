@@ -60,6 +60,17 @@ PRODUCER_CLI_TIMEOUT_SECONDS = 1800  # 30 min for Codex image gen jobs
 # rate limits not a concern. Memory invariant #1 (sequential) is explicitly
 # overridden by user instruction.
 PRODUCER_MAX_CONCURRENCY = int(os.environ.get("PRODUCER_MAX_CONCURRENCY", "10"))
+# Max classify jobs running in parallel on this machine. Each is a separate
+# claude -p subprocess. Override via CLASSIFY_MAX_CONCURRENCY env var.
+# 2026-05-15: bumped from sequential (1) to 3 by explicit user instruction.
+# Producer-invariants #1 ("sequential claude -p across all 3 queues") is
+# overridden here for the same reason it was overridden for producer codex —
+# user is on a high-tier plan where rate limits are not the binding constraint.
+# Belt-and-braces: _execute_classify_job detects rate-limit signals in claude
+# stderr ("rate_limit", "429", "overloaded", "5-hour") and pauses the pool for
+# 5 min via _claude_cooldown_until. Set CLASSIFY_MAX_CONCURRENCY=1 to revert.
+CLASSIFY_MAX_CONCURRENCY = int(os.environ.get("CLASSIFY_MAX_CONCURRENCY", "3"))
+CLASSIFY_RATE_LIMIT_COOLDOWN_SECONDS = int(os.environ.get("CLASSIFY_RATE_LIMIT_COOLDOWN_SECONDS", "300"))
 MAX_ATTEMPTS_BEFORE_FAILED = 3
 AUTO_PAUSE_CHECK_INTERVAL_SECONDS = 60
 
@@ -441,14 +452,28 @@ class Worker:
         self.current_job_id = None
         self._caps = probe_capabilities()
         # Producer parallel-execution pool. Producer jobs (image gen) run
-        # concurrently up to PRODUCER_MAX_CONCURRENCY per machine. Classify
-        # and strategist queues remain sequential within the main loop.
+        # concurrently up to PRODUCER_MAX_CONCURRENCY per machine.
         self._producer_pool = ThreadPoolExecutor(
             max_workers=PRODUCER_MAX_CONCURRENCY,
             thread_name_prefix="producer",
         )
         self._producer_futures = {}  # run_id -> Future
         self._producer_lock = threading.Lock()
+        # Classify parallel-execution pool (NEW 2026-05-15). Each slot runs
+        # one `claude -p /classify-inspiration` subprocess to completion.
+        # Strategist still runs sequentially — only when ALL classify slots
+        # are idle — because strategist also uses `claude -p` and we don't
+        # want it competing for the same rate-limit window mid-classify.
+        self._classify_pool = ThreadPoolExecutor(
+            max_workers=CLASSIFY_MAX_CONCURRENCY,
+            thread_name_prefix="classify",
+        )
+        self._classify_futures = {}  # queue_id -> Future
+        self._classify_lock = threading.Lock()
+        # Rate-limit cooldown: time.time() epoch until which we pause all
+        # classify dispatch. Set when _execute_classify_job detects a
+        # rate-limit signal in claude stderr/stdout.
+        self._claude_cooldown_until = 0.0
         # Wire signal handlers for graceful shutdown
         for sig in (signal.SIGINT, signal.SIGTERM):
             signal.signal(sig, self._on_signal)
@@ -495,10 +520,11 @@ class Worker:
         while not self.shutdown.is_set():
             try:
                 paused = self.auto_pause_when_claude_idle and not is_claude_code_running()
-                # Worker is busy if classify/strategist is running OR any
-                # producer jobs are in flight in the parallel pool.
+                # Worker is busy if strategist is running OR any classify
+                # or producer jobs are in flight in their parallel pools.
                 _producer_active = self._active_producer_count() > 0
-                _is_busy = self.is_busy or _producer_active
+                _classify_active = self._active_classify_count() > 0
+                _is_busy = self.is_busy or _producer_active or _classify_active
                 next_status = "paused" if paused else ("busy" if _is_busy else "idle")
                 self.sb.update(
                     "worker_registry",
@@ -624,6 +650,80 @@ class Worker:
     def _producer_has_capacity(self) -> bool:
         """True if pool has a free slot for a new producer job."""
         return self._active_producer_count() < PRODUCER_MAX_CONCURRENCY
+
+    # ── Classify parallel-execution helpers (2026-05-15) ──
+
+    def _active_classify_count(self) -> int:
+        """Count of classify jobs currently running in the pool."""
+        with self._classify_lock:
+            return sum(1 for f in self._classify_futures.values() if not f.done())
+
+    def _reap_classify_futures(self) -> None:
+        """Remove completed classify futures from tracking."""
+        with self._classify_lock:
+            done_ids = [qid for qid, f in self._classify_futures.items() if f.done()]
+            for qid in done_ids:
+                f = self._classify_futures.pop(qid)
+                try:
+                    exc = f.exception(timeout=0)
+                    if exc:
+                        log(f"[classify] queue {qid} raised: {exc}")
+                except Exception:
+                    pass
+
+    def _classify_has_capacity(self) -> bool:
+        """True if pool has a free slot AND we're not in rate-limit cooldown."""
+        if time.time() < self._claude_cooldown_until:
+            return False
+        return self._active_classify_count() < CLASSIFY_MAX_CONCURRENCY
+
+    def _execute_classify_job(self, job: dict) -> None:
+        """Run a single classify job end-to-end on a pool thread.
+
+        Mirrors the old sequential block (mark_classifying → idempotency
+        shortcut → skill run → mark_classified/mark_failure) but runs on a
+        worker thread so multiple jobs can be in flight at once.
+
+        Rate-limit guard: if the skill's error string contains a known
+        rate-limit signal, set the global cooldown so further dispatch
+        pauses until the window passes. This protects the producer-
+        invariants #1 worst case (5-hour Anthropic cooldown) — when
+        Anthropic returns a 429/529, we back off rather than slamming
+        them with 3 more in-flight requests.
+        """
+        queue_id = job.get("id")
+        ins_id = job.get("ins_id")
+        product_id = job.get("product_id")
+        try:
+            self.mark_classifying(queue_id)
+            # Idempotency: skip the 10-min skill run if the inspirations row
+            # is already complete from a prior attempt.
+            pre_ok, pre_msg = self._verify_inspirations_row(ins_id, product_id)
+            if pre_ok:
+                log(f"[{queue_id}] inspirations row already complete — skipping skill run")
+                self.mark_classified(queue_id)
+                self.increment_completed()
+                return
+            outcome = self.run_skill_on_job(job)
+            err = (outcome.get("error") or "").lower()
+            rl_signals = ("rate_limit", "rate limit", "429", "529", "overloaded", "5-hour", "5 hour")
+            if any(t in err for t in rl_signals):
+                self._claude_cooldown_until = time.time() + CLASSIFY_RATE_LIMIT_COOLDOWN_SECONDS
+                log(f"[{queue_id}] RATE-LIMIT SIGNAL detected — pausing classify pool for "
+                    f"{CLASSIFY_RATE_LIMIT_COOLDOWN_SECONDS}s. Error: {err[:200]}")
+            if outcome.get("success"):
+                self.mark_classified(queue_id)
+                self.increment_completed()
+                log(f"[{queue_id}] ✓ classified")
+            else:
+                self.mark_failure(job, outcome.get("error", "unknown error"))
+                self.increment_failed()
+        except Exception as e:
+            log(f"[{queue_id}] classify pool exception: {e}\n{traceback.format_exc()}")
+            try:
+                self.mark_failure(job, f"worker exception: {e}")
+            except Exception:
+                pass
 
     def _execute_producer_run(self, prod_run: dict) -> None:
         """Run a single producer job end-to-end on a pool thread.
@@ -1162,12 +1262,17 @@ class Worker:
                             if check_for_worker_update():
                                 self._pending_self_restart = True
 
-                    # ── Restart if pending and pool has drained ──
+                    # ── Restart if pending and BOTH pools drained ──
                     if self._pending_self_restart:
-                        active = self._active_producer_count() if hasattr(self, "_active_producer_count") else 0
-                        if active == 0 and not self.is_busy:
-                            log("[self-update] producer pool drained · re-executing worker with new code")
-                            # Shut down the executor + heartbeat thread cleanly
+                        p_active = self._active_producer_count() if hasattr(self, "_active_producer_count") else 0
+                        c_active = self._active_classify_count() if hasattr(self, "_active_classify_count") else 0
+                        if p_active == 0 and c_active == 0 and not self.is_busy:
+                            log("[self-update] both pools drained · re-executing worker with new code")
+                            # Shut down both executors + heartbeat thread cleanly
+                            try:
+                                self._classify_pool.shutdown(wait=False)
+                            except Exception:
+                                pass
                             try:
                                 self._producer_pool.shutdown(wait=False)
                             except Exception:
@@ -1187,7 +1292,8 @@ class Worker:
                         else:
                             # Don't claim NEW work while waiting to restart;
                             # just let the existing jobs finish.
-                            log(f"[self-update] waiting for {active} in-flight job(s) before restart")
+                            log(f"[self-update] waiting for in-flight job(s) before restart "
+                                f"(classify={c_active}, producer={p_active})")
                             self.shutdown.wait(min(self.poll_interval, 10))
                             continue
 
@@ -1199,11 +1305,39 @@ class Worker:
                     # Cleanup any stale claims first
                     self.release_stale_claims()
 
-                    job = self.claim_next_job()
-                    if not job:
-                        # ── Strategist queue check ──
-                        # No classify job this iteration — try the strategist
-                        # queue. Sequential: never two claude -p in flight.
+                    # ── CLASSIFY PARALLEL DISPATCH (2026-05-15) ──
+                    # Reap completed classify futures (frees slots).
+                    self._reap_classify_futures()
+                    # Dispatch new classify jobs up to CLASSIFY_MAX_CONCURRENCY,
+                    # all in this single poll cycle. Each job runs on a pool
+                    # thread; the main loop is non-blocking.
+                    _classify_dispatched = 0
+                    while self._classify_has_capacity():
+                        job = self.claim_next_job()
+                        if not job:
+                            break
+                        # mark_classifying happens INSIDE _execute_classify_job
+                        # so all the side-effects stay in the worker thread.
+                        fut = self._classify_pool.submit(
+                            self._execute_classify_job, job
+                        )
+                        with self._classify_lock:
+                            self._classify_futures[job["id"]] = fut
+                        _classify_dispatched += 1
+                    if _classify_dispatched > 0:
+                        _active = self._active_classify_count()
+                        log(f"[classify] dispatched {_classify_dispatched} new job(s); "
+                            f"{_active}/{CLASSIFY_MAX_CONCURRENCY} slot(s) in use")
+                    # Heartbeat-relevant busy flag: True if ANY classify slot is occupied.
+                    self.is_busy = self._active_classify_count() > 0
+
+                    # ── Strategist queue check ──
+                    # Strategist uses `claude -p`, same rate-limit pool as
+                    # classify. Run it ONLY when classify pool is fully idle
+                    # to avoid two-or-more concurrent `claude -p` invocations.
+                    # This gate is what keeps us safe under producer-invariants #1
+                    # (sequential claude -p across the queues that share that pool).
+                    if self._active_classify_count() == 0:
                         try:
                             from tools.strategist.pipeline import run_strategist_for_product
                             from tools.strategist.db import pop_pending_run
@@ -1236,89 +1370,70 @@ class Worker:
                                 continue
                         except Exception as e:
                             log(f"[strategist] poll/run failed: {e}")
-                        # ── Producer queue check (Agent 2) — PARALLEL DISPATCH ──
-                        # Runs up to PRODUCER_MAX_CONCURRENCY codex exec subprocesses
-                        # in parallel via self._producer_pool. Each pool thread runs
-                        # _execute_producer_run which is fully self-contained.
-                        # Classify/strategist still run sequentially in this main
-                        # loop — only producer is parallelized.
-                        try:
-                            from tools.producer.db import (
-                                pop_pending_run as _pop_producer_run,
-                                claim_run as _claim_producer_run,
+
+                    # ── Producer queue check (Agent 2) — PARALLEL DISPATCH ──
+                    # Uses `codex exec` which is a SEPARATE rate-limit pool from
+                    # `claude -p`. Safe to run concurrently with classify slots —
+                    # the two pools don't compete for the same Anthropic budget.
+                    try:
+                        from tools.producer.db import (
+                            pop_pending_run as _pop_producer_run,
+                            claim_run as _claim_producer_run,
+                        )
+                        # Reap completed producer futures first (frees slots).
+                        self._reap_producer_futures()
+                        # Dispatch as many pending producer runs as we have
+                        # capacity for, in this single poll cycle.
+                        _dispatched = 0
+                        while self._producer_has_capacity():
+                            prod_run = _pop_producer_run(
+                                supabase_url=os.environ["SUPABASE_URL"],
+                                service_key=os.environ["SUPABASE_SERVICE_ROLE_KEY"],
+                                worker_id=self.worker_id,
                             )
-                            # Reap completed producer futures first (frees slots).
-                            self._reap_producer_futures()
-                            # Dispatch as many pending producer runs as we have
-                            # capacity for, in this single poll cycle.
-                            _dispatched = 0
-                            while self._producer_has_capacity():
-                                prod_run = _pop_producer_run(
+                            if prod_run is None:
+                                break
+                            run_id = prod_run["id"]
+                            # Claim atomically — second worker on same run will
+                            # raise RuntimeError and we skip to the next.
+                            try:
+                                _claim_producer_run(
                                     supabase_url=os.environ["SUPABASE_URL"],
                                     service_key=os.environ["SUPABASE_SERVICE_ROLE_KEY"],
+                                    run_id=run_id,
                                     worker_id=self.worker_id,
                                 )
-                                if prod_run is None:
-                                    break
-                                run_id = prod_run["id"]
-                                # Claim atomically — second worker on same run will
-                                # raise RuntimeError and we skip to the next.
-                                try:
-                                    _claim_producer_run(
-                                        supabase_url=os.environ["SUPABASE_URL"],
-                                        service_key=os.environ["SUPABASE_SERVICE_ROLE_KEY"],
-                                        run_id=run_id,
-                                        worker_id=self.worker_id,
-                                    )
-                                except RuntimeError as e:
-                                    log(f"[producer] claim race lost on run {run_id}: {e}")
-                                    continue
-                                # Submit to pool — runs concurrently, doesn't block.
-                                fut = self._producer_pool.submit(
-                                    self._execute_producer_run, prod_run
-                                )
-                                with self._producer_lock:
-                                    self._producer_futures[run_id] = fut
-                                _dispatched += 1
-                            if _dispatched > 0:
-                                _active = self._active_producer_count()
-                                log(f"[producer] dispatched {_dispatched} new job(s); "
-                                    f"{_active}/{PRODUCER_MAX_CONCURRENCY} slot(s) in use")
-                        except Exception as e:
-                            log(f"[producer] poll/run failed: {e}")
-                        self.shutdown.wait(self.poll_interval)
-                        continue
+                            except RuntimeError as e:
+                                log(f"[producer] claim race lost on run {run_id}: {e}")
+                                continue
+                            # Submit to pool — runs concurrently, doesn't block.
+                            fut = self._producer_pool.submit(
+                                self._execute_producer_run, prod_run
+                            )
+                            with self._producer_lock:
+                                self._producer_futures[run_id] = fut
+                            _dispatched += 1
+                        if _dispatched > 0:
+                            _active = self._active_producer_count()
+                            log(f"[producer] dispatched {_dispatched} new job(s); "
+                                f"{_active}/{PRODUCER_MAX_CONCURRENCY} slot(s) in use")
+                    except Exception as e:
+                        log(f"[producer] poll/run failed: {e}")
 
-                    self.is_busy = True
-                    self.current_job_id = job.get("id")
-                    self.mark_classifying(self.current_job_id)
-                    # Idempotency shortcut: if the inspirations row is already
-                    # complete (e.g. a previous run wrote it but verify
-                    # erroneously failed), skip the 7-min skill run and just
-                    # flip the queue row.
-                    pre_ok, pre_msg = self._verify_inspirations_row(
-                        job.get("ins_id"), job.get("product_id"))
-                    if pre_ok:
-                        log(f"[{self.current_job_id}] inspirations row already complete — skipping skill run")
-                        outcome = {"success": True, "shortcut": True}
-                    else:
-                        outcome = self.run_skill_on_job(job)
-                    if outcome.get("success"):
-                        self.mark_classified(self.current_job_id)
-                        self.increment_completed()
-                        log(f"[{self.current_job_id}] ✓ classified")
-                    else:
-                        self.mark_failure(job, outcome.get("error", "unknown error"))
-                        self.increment_failed()
+                    # ── End of poll cycle ──
+                    # Wait for the next poll tick before the next dispatch round.
+                    self.shutdown.wait(self.poll_interval)
                 except Exception as e:
                     log(f"main-loop error: {e}\n{traceback.format_exc()}")
-                finally:
-                    self.is_busy = False
-                    self.current_job_id = None
         finally:
-            # Drain in-flight producer jobs before shutting down. Each job has
-            # its own subprocess timeout; we just wait for the threads to
-            # exit cleanly so we don't drop a half-uploaded image.
+            # Drain in-flight classify + producer jobs before shutting down.
+            try:
+                _c_active = self._active_classify_count()
+                if _c_active > 0:
+                    log(f"[classify] waiting for {_c_active} in-flight job(s) to finish before shutdown")
+                self._classify_pool.shutdown(wait=True)
+            except Exception as _ce:
+                log(f"[classify] pool shutdown error: {_ce}")
             try:
                 _active = self._active_producer_count()
                 if _active > 0:

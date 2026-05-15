@@ -11787,6 +11787,12 @@ var _META_FIELDS = [
   // load without waiting for the next ClickUp sync. Round-trips through the
   // ads.meta jsonb column.
   '_customFields', '_customFieldsRaw',
+  // 2026-05-16 Phase 0: persist the ClickUp tags array so `ad._tags` survives
+  // page reload + roundtrips. Required for the auto-adopt heal pass (Bug 8
+  // protection's `app-created` marker check at lines ~25940/25970/26730 was
+  // a silent no-op before — _tags was never populated). After this lands,
+  // a fresh sync stamps tags onto every AD; subsequent flush persists them.
+  '_tags',
   // ClickUp NATIVE assignees array. We treat this as the source of truth for
   // the "Editor" field — task.assignees IS the editor in this workspace. Kept
   // alongside _customFieldsRaw['editor'] (which mirrors the same data through
@@ -12144,7 +12150,13 @@ function _deriveStatusChangeAt(ad) {
     case 'ready to launch':  return linkedDone || approved || created || null;
     case 'testing':          return launched || approved || created || null;
     case 'loser':
-    case 'winner':           return launched || created || null;
+    case 'winner':
+    case 'mild winner':      // ← added 2026-05-15 (was hitting default)
+    case 'mild loser':       // ← added 2026-05-15
+    case 'scale':            // ← added 2026-05-15
+    case 'killed':           // ← added 2026-05-15
+    case 'archived':         // ← added 2026-05-15
+      return launched || created || null;
     case 'complete':         return updated || created || null;
     default:                 return null;
   }
@@ -12176,14 +12188,36 @@ function _isLscPolluted(lsc) {
 }
 
 // Authoritative read for "when did this ad enter its current status".
-// Real stamps (post-fix-ship transitions via _stampAdStatusChange) win.
-// Polluted migration values get overridden by custom-field derivation.
+//
+// Strategy (2026-05-15 v2 — fixes KMH per-ad stale-lsc bug):
+//   - If lsc is polluted (5+ ads share it) → ignore lsc entirely, use derived.
+//   - Otherwise → return max(lsc, derived) capped at now().
+//     Rationale: lsc on this plan is unreliable per-row. _stampAdStatusChange
+//     only writes it on in-app transitions; ClickUp-side transitions never
+//     stamp it. CF values (Launch Date, Approved Date, linked-done) ARE the
+//     truth for those rows. The max() picks the latest trustworthy stamp:
+//       - Fresh in-app transition → lsc=now wins.
+//       - Stale-sync lsc + recent Launch Date → Launch Date wins.
+//       - Both old → either is fine (same age bucket).
+//     The cap at now() prevents a future-dated Launch Date from showing
+//     negative ages.
+//
+// This matches the cycle-clock contract declared at _testingCheckpointState
+// (line 12000-ish comment block: "Cycle clock = max(lastStatusChangeAt,
+// Launch Date) for Testing entry"). The earlier short-circuit
+// "lsc as-is unless polluted" was a per-row regression because it never
+// fell through to derive when lsc had a unique-but-stale value.
 function _bestStatusChangeAt(ad) {
   if (!ad) return null;
   var lsc = ad.lastStatusChangeAt || null;
-  if (lsc && !_isLscPolluted(lsc)) return lsc;
   var derived = _deriveStatusChangeAt(ad);
-  return derived || lsc || null;
+  // Polluted lsc → ignore entirely, use derived only.
+  if (lsc && _isLscPolluted(lsc)) return derived || null;
+  // Otherwise pick the latest of (lsc, derived). Cap at now() so a
+  // future-dated Launch Date can't show a negative age.
+  var t = Math.max(lsc || 0, derived || 0);
+  if (!t) return null;
+  return Math.min(t, Date.now());
 }
 
 // Lazy fetch: for RTL ads with no cached linkedDone, pull the linked
@@ -20259,7 +20293,12 @@ function renderApTableView(rows) {
     var _adIdForRow = (r.ad && r.ad.id) || act.sourceAdId || act.adId || '';
     var _rowCleared = (typeof _apIsDismissed === 'function') && _apIsDismissed(_adIdForRow);
     var rowCls = 'ap-row age-' + age.state + (sel ? ' selected' : '') + (act._highlightNew ? ' new-row' : '') + (_rowCleared ? ' is-cleared' : '');
-    var _isAdopted = (act._origin === 'adopted' || !!act._adoptedAt);
+    // 2026-05-15: use _apIsCurrentlyAdopted instead of raw _adoptedAt — only
+    // production-tag (Path 1) and currently-virtual (Path 2) carry the
+    // adopted row style. Lazy-promoted MAs (Path 3) are app-managed.
+    var _isAdopted = (typeof _apIsCurrentlyAdopted === 'function')
+                       ? _apIsCurrentlyAdopted(act)
+                       : (act._origin === 'adopted');
     html += '<tr class="' + rowCls + '" data-action-id="' + escAttr(act.id) + '"' + (_isAdopted ? ' data-adopted="1"' : '') + ' onclick="apOpenDrawer(\'' + escAttr(act.id) + '\')">';
     visCols.forEach(function (c) {
       var def = _AP_COL_REGISTRY[c.key]; if (!def || !def.renderCell) return;
@@ -20606,8 +20645,13 @@ function renderApDrawerHistory(card) {
   var act = card.act;
   var history = (act._history && Array.isArray(act._history)) ? act._history : [];
   // Always show creation + adoption + push events even if not yet in _history.
+  // 2026-05-15: synthetic "adopted" event only injected for path-1 origin
+  // (production-tag adoption). Lazy-promoted MAs also carry _adoptedAt for
+  // zombie/dedup protection but DIDN'T come from a production-tag, so
+  // emitting the "Auto-adopted from ClickUp production tag" event for them
+  // is misleading. Gate on _origin === 'adopted' (strict).
   var synthEvents = [];
-  if (act._adoptedAt) synthEvents.push({ ts: act._adoptedAt, type: 'adopted', detail: 'Auto-adopted from ClickUp production tag' });
+  if (act._adoptedAt && act._origin === 'adopted') synthEvents.push({ ts: act._adoptedAt, type: 'adopted', detail: 'Auto-adopted from ClickUp production tag' });
   if (act._pushedAt && !history.find(function (h) { return h.type === 'pushed_to_clickup'; })) synthEvents.push({ ts: act._pushedAt, type: 'pushed_to_clickup', detail: act._clickupId ? ('ClickUp task ' + act._clickupId) : '' });
   var all = history.concat(synthEvents).sort(function (a, b) { return (b.ts || 0) - (a.ts || 0); });
 
@@ -24598,7 +24642,8 @@ async function importTasksFromClickUp(tasks) {
     'angle', 'persona', 'parentAdId', 'variationNumber',
     'creativeStructure', 'hookType', 'productionStyle', 'creativeHypothesis',
     'creativeUSP', '_customFields', '_customFieldsRaw', 'dueDate', '_dueDateMs',  // F5 + F6 — sync USP + formatted/raw custom-field maps + due date onto existing ads
-    '_clickupUrl', '_clickupStatus'
+    '_clickupUrl', '_clickupStatus',
+    '_tags'  // 2026-05-16 Phase 0: copy CU tags onto local ad. Used by Bug 8 + auto-adopt heal.
   ];
   // Local provenance fields that must NEVER be overwritten by a ClickUp sync:
   var _PRESERVE_LOCAL = ['taskType', 'adOrigin', 'sourceFormatId', '_fromInspoId',
@@ -25172,6 +25217,13 @@ function parseClickUpTask(t) {
     _clickupId: t.id,
     _clickupUrl: t.url || '',
     formatName: t.name || '',
+    // 2026-05-16 Phase 0: persist ClickUp tag array. Used by Bug 8 protection
+    // (`app-created` marker check at lines ~25940, 25970, 26730) and by the
+    // auto-adopt heal pass (see feature_auto_adopt_heal_via_clickup_tag.md).
+    // Previously, parseClickUpTask read tags into a local var (line ~25041)
+    // but never returned them — so `ad._tags` was undefined everywhere and
+    // the marker check was a silent no-op. Returning here closes the wire.
+    _tags: tags,
     // Capture the raw task description so apResolveCard can parse the
     // embedded "📌 Inspiration Brief" / "🔗 Source Ad" lines for legacy
     // rows whose _fromInspoId / _sourceFormatId is stale. Without this,
@@ -25865,6 +25917,48 @@ function pollFullSync() {
         var fresh = taskMap[_cuid];
         if (!fresh) continue;
         var oldFormatNameForMeta = ad.formatName;  // capture for cell-meta sync below
+        // 2026-05-16 Phase 0: copy _tags from fresh CU sync onto the local ad.
+        // Not added to _SYNC_DIFF_FIELDS because that loop's `freshVal !== ad[field]`
+        // check always trips on array identity (false positive every sync, noisy
+        // changed=true). Copy unconditionally — tags change rarely; one assignment
+        // per sync is cheap. Required for `app-created` marker detection
+        // (lines 25940+/25970+/26730+) to actually work, and for the auto-adopt
+        // heal pass (feature_auto_adopt_heal_via_clickup_tag.md).
+        if (Array.isArray(fresh._tags)) {
+          var _freshTagsStr = JSON.stringify(fresh._tags);
+          var _adTagsStr = JSON.stringify(ad._tags || []);
+          if (_freshTagsStr !== _adTagsStr) {
+            ad._tags = fresh._tags.slice();
+            changed = true;
+          }
+          // 2026-05-16 Phase 2: ongoing sync guard. If the freshly-synced AD has
+          // the `app-created` marker AND its linked MA is still stamped with
+          // adopt markers from a past bug, heal in place. Catches anything that
+          // slipped through Phase 1's one-shot backfill. (See
+          // feature_auto_adopt_heal_via_clickup_tag.md.)
+          if (fresh._tags.indexOf('app-created') !== -1 && typeof MANUAL_ACTIONS !== 'undefined' && Array.isArray(MANUAL_ACTIONS)) {
+            for (var _mhi = 0; _mhi < MANUAL_ACTIONS.length; _mhi++) {
+              var _mh = MANUAL_ACTIONS[_mhi];
+              if (!_mh) continue;
+              var _mhSrc = _mh._sourceAdId || _mh.sourceAdId || _mh.adId;
+              var _mhCu = _mh._clickupId;
+              var _linksThis = (_mhSrc === ad.id) || (_mhCu && _mhCu === ad._clickupId);
+              if (!_linksThis) continue;
+              // _origin='adopted' (production-tag flow) stays — that's legitimate
+              if (_mh._origin === 'adopted') break;
+              var _needsHeal = (_mh._origin === 'auto-adopted') || !!_mh._adoptedAt;
+              if (!_needsHeal) break;
+              // Strip adopt markers + ensure _pushedAt is set
+              delete _mh._origin; delete _mh._adoptedAt;
+              if (!_mh._pushedAt) _mh._pushedAt = Date.now();
+              if (typeof _writeManualActionRowDirect === 'function') {
+                try { _writeManualActionRowDirect(_mh); } catch (e) {}
+              }
+              changed = true;
+              break;
+            }
+          }
+        }
         for (var f = 0; f < _SYNC_DIFF_FIELDS.length; f++) {
           var field = _SYNC_DIFF_FIELDS[f];
           var freshVal = fresh[field];
@@ -27115,6 +27209,29 @@ function apResolveCard(act) {
   return { act: act, ad: ad, display: display, source: source, age: age };
 }
 
+// 2026-05-15 — Render-side "is this card adopted RIGHT NOW (vs historically)?"
+// helper. `_adoptedAt` lives on three different MA shapes:
+//   1. `_origin='adopted'`     → real ClickUp production-tag adoption (keep badge)
+//   2. `_origin='auto-adopted'` + `_virtual=true` → render-only virtual synth (keep badge)
+//   3. `_origin='auto-adopted'` (no _virtual) → lazy-promoted MA (DO NOT show badge —
+//      it was virtual once, but once promoted to a real MA it's app-managed)
+//
+// The previous render checks read `_adoptedAt` directly, which fired on case 3
+// indefinitely (since `_lazyPromoteVirtual` stamps `_adoptedAt` for zombie/dedup
+// protection — we must preserve that field in the DATA layer). This helper
+// distinguishes correctly at the render layer only.
+//
+// Keep `_adoptedAt` reads in the dedup (line 26174) and zombie-drop (line 40139,
+// 40164, 40209, 40229) paths AS-IS — those rely on `_adoptedAt` to identify
+// not-user-pushed MAs for Bug 8 / orphan protection.
+function _apIsCurrentlyAdopted(act) {
+  if (!act) return false;
+  if (act._origin === 'adopted') return true;        // Path 1 — production-tag adoption
+  if (act._virtual === true) return true;            // Path 2 — currently virtual
+  if (typeof act.id === 'string' && act.id.indexOf('va:') === 0) return true;
+  return false;
+}
+
 // Detect notable anomalies on a card. Returns array of badge descriptors:
 //   [{ type, label, tone, tip }]
 // Used both for the row's inline badges AND the Anomalies filter shortcut.
@@ -27135,7 +27252,9 @@ function apComputeAnomalies(card) {
     }
   }
   // 3. Adopted (not pushed by app) — informational, not an alarm.
-  if (act._origin === 'adopted' || act._adoptedAt) {
+  // 2026-05-15: tightened via _apIsCurrentlyAdopted to avoid sticking on
+  // lazy-promoted MAs that have _adoptedAt set for zombie/dedup protection.
+  if (_apIsCurrentlyAdopted(act)) {
     out.push({ type:'adopted', label:'Adopted', tone:'gray', tip:'Auto-adopted from ClickUp · not pushed by app' });
   }
   // 4. Recently re-linked.
@@ -27271,9 +27390,179 @@ function apToggleIncludeAdopted(on) {
   if (typeof renderActionPlan === 'function') renderActionPlan();
 }
 
+// ─── Auto-adopt heal pass (2026-05-16) ─────────────────────────────
+// See `feature_auto_adopt_heal_via_clickup_tag.md` in memory.
+//
+// Phase 1: One-shot backfill — walk MANUAL_ACTIONS + orphan ADS, check
+// `ad._tags.includes('app-created')`. If the marker is there, heal:
+//   • MA with adopt markers → strip _origin/_adoptedAt, stamp _pushedAt
+//   • AD with no MA       → insert clean MA (mirroring the KM-309 heal)
+// Returns a summary object.
+//
+// SAFETY: This function ONLY heals when `_tags` is populated AND contains
+// `app-created`. Ads without tags loaded yet are skipped (run a full Sync
+// first to populate them). Tags ABSENT from app-created marker mean the
+// task was truly created in ClickUp directly — leave alone.
+async function _apHealAutoAdoptedFromClickUpTag(opts) {
+  opts = opts || {};
+  var dryRun = !!opts.dryRun;
+  var productId = opts.productId || activeProductId;
+  if (!productId) return { ok: false, error: 'no active product' };
+  if (typeof SB === 'undefined' || !SB) return { ok: false, error: 'no Supabase client' };
+  if (typeof ADS === 'undefined' || !Array.isArray(ADS)) return { ok: false, error: 'no ADS array' };
+
+  var adById = {};
+  var adByClickupId = {};
+  ADS.forEach(function (a) {
+    if (!a || a.deletedAt) return;
+    if (a.id) adById[a.id] = a;
+    if (a._clickupId) adByClickupId[a._clickupId] = a;
+    if (a.clickupTaskId) adByClickupId[a.clickupTaskId] = a;
+  });
+
+  function adHasAppMarker(ad) {
+    return ad && Array.isArray(ad._tags) && ad._tags.indexOf('app-created') !== -1;
+  }
+
+  var stats = {
+    ok: true, productId: productId, dryRun: dryRun,
+    scanned_MAs: 0,
+    healed_MAs: 0,           // had adopt markers + app-created tag → cleaned
+    skipped_no_link: 0,      // MA pointing at no AD we have
+    skipped_no_tags_yet: 0,  // MA's linked AD has no _tags populated (run a Sync first)
+    skipped_not_app_marker: 0, // linked AD's tags don't include 'app-created' → truly adopted from CU
+    scanned_orphan_ADs: 0,
+    inserted_clean_MAs: 0,
+    skipped_orphan_no_marker: 0,
+    skipped_orphan_no_tags_yet: 0,
+    samples_healed_MAs: [],
+    samples_inserted_MAs: [],
+    errors: []
+  };
+
+  // ── Part 1: heal existing MAs with adopt markers ──
+  var maList = Array.isArray(MANUAL_ACTIONS) ? MANUAL_ACTIONS : [];
+  for (var mi = 0; mi < maList.length; mi++) {
+    var ma = maList[mi];
+    if (!ma) continue;
+    var hasAdoptMarkers = (ma._origin === 'auto-adopted') || !!ma._adoptedAt;
+    if (!hasAdoptMarkers) continue;
+    // _origin='adopted' (real production-tag adoption from ClickUp) is LEGITIMATE
+    // — don't strip. We only heal `_origin='auto-adopted'` (lazy-promote leftover)
+    // and the `_adoptedAt` field set on lazy-promotion. (See feedback_ap_auto_adopt.md
+    // invariant #6.)
+    if (ma._origin === 'adopted') {
+      // Could still have stale `_adoptedAt` from before invariant #6 — leave alone,
+      // it's the legitimate production-tag adoption flow. The render-side fix
+      // already handles this case correctly (Path 1).
+      continue;
+    }
+    stats.scanned_MAs++;
+    var src = ma._sourceAdId || ma.sourceAdId || ma.adId;
+    var cu = ma._clickupId;
+    var linkedAd = (src && adById[src]) || (cu && adByClickupId[cu]) || null;
+    if (!linkedAd) { stats.skipped_no_link++; continue; }
+    if (!Array.isArray(linkedAd._tags) || linkedAd._tags.length === 0) {
+      stats.skipped_no_tags_yet++; continue;
+    }
+    if (!adHasAppMarker(linkedAd)) {
+      stats.skipped_not_app_marker++; continue;
+    }
+    // Heal: strip adopt markers, stamp _pushedAt
+    if (stats.samples_healed_MAs.length < 5) {
+      stats.samples_healed_MAs.push({
+        ma_id: ma.id, title: ma.title,
+        was_origin: ma._origin, was_adoptedAt: ma._adoptedAt
+      });
+    }
+    if (!dryRun) {
+      ma._origin = undefined; delete ma._origin;
+      ma._adoptedAt = undefined; delete ma._adoptedAt;
+      if (!ma._pushedAt) ma._pushedAt = Date.now();
+      // Direct DB write — short-circuits the debounced full-state flush so
+      // realtime echo reaches teammates immediately.
+      try {
+        if (ma._dbId && typeof SB !== 'undefined') {
+          await SB.from('manual_actions').update({
+            payload: ma,
+            updated_at: new Date().toISOString()
+          }).eq('id', ma._dbId);
+        }
+      } catch (e) { stats.errors.push('update ' + ma.id + ': ' + (e && e.message || e)); }
+    }
+    stats.healed_MAs++;
+  }
+
+  // ── Part 2: insert clean MA for orphan ADs that have app-created marker ──
+  for (var ai = 0; ai < ADS.length; ai++) {
+    var ad = ADS[ai];
+    if (!ad || ad.deletedAt) continue;
+    if (!ad.id) continue;
+    // Skip if AD already covered by an MA
+    var covered = false;
+    for (var mj = 0; mj < maList.length; mj++) {
+      var _ma2 = maList[mj];
+      if (!_ma2) continue;
+      var _src = _ma2._sourceAdId || _ma2.sourceAdId || _ma2.adId;
+      var _cu = _ma2._clickupId;
+      if (_src === ad.id || _ma2.adId === ad.id) { covered = true; break; }
+      if (_cu && ad._clickupId && _cu === ad._clickupId) { covered = true; break; }
+    }
+    if (covered) continue;
+    if (!Array.isArray(ad._tags) || ad._tags.length === 0) {
+      stats.skipped_orphan_no_tags_yet++; continue;
+    }
+    if (!adHasAppMarker(ad)) {
+      stats.skipped_orphan_no_marker++; continue;
+    }
+    stats.scanned_orphan_ADs++;
+    if (!dryRun) {
+      // Build a clean MA (mirrors the KM-309 SQL heal shape)
+      var newId = 'heal-' + ad.id + '-' + Date.now();
+      var newMA = {
+        id: newId,
+        sourceAdId: ad.id,
+        adId: ad.id,
+        _clickupId: ad._clickupId || ad.clickupTaskId || null,
+        title: ad.formatName || ad.id,
+        priority: 'medium',
+        liveStatus: ad.status || 'Untested',
+        angle: ad.angle || '',
+        persona: ad.persona || '',
+        sourceAngle: ad.angle || '',
+        sourcePersona: ad.persona || '',
+        funnelStage: ad.funnelStage || '',
+        format: ad.adType || '',
+        _pushedAt: Date.now()
+      };
+      try {
+        if (typeof SB !== 'undefined') {
+          var ins = await SB.from('manual_actions').insert({
+            product_id: productId,
+            payload: newMA
+          }).select('id');
+          if (ins && ins.data && ins.data[0] && ins.data[0].id) newMA._dbId = ins.data[0].id;
+        }
+        if (Array.isArray(MANUAL_ACTIONS)) MANUAL_ACTIONS.push(newMA);
+      } catch (e) { stats.errors.push('insert ' + ad.id + ': ' + (e && e.message || e)); }
+    }
+    if (stats.samples_inserted_MAs.length < 5) {
+      stats.samples_inserted_MAs.push({ ad_id: ad.id, title: ad.formatName });
+    }
+    stats.inserted_clean_MAs++;
+  }
+
+  // Trigger a re-render so user sees the cleanup live
+  try { if (typeof renderActionPlan === 'function') renderActionPlan(); } catch (e) {}
+  return stats;
+}
+
 // Lazy-promote: turn a virtual card's AD into a real MA on first action that
 // needs one (bulk delete, push-to-CU, MA-only field edits). Idempotent —
 // returns existing MA id if one already covers this AD.
+// 2026-05-16 Phase 2: before stamping `_origin='auto-adopted'`, check the
+// linked AD's `_tags`. If `app-created` is present, create the MA as CLEAN
+// (no adopt markers) so the rose badge never appears on app-pushed tasks.
 function _lazyPromoteVirtual(ad) {
   if (!ad || !ad.id) return null;
   if (typeof MANUAL_ACTIONS !== 'undefined' && Array.isArray(MANUAL_ACTIONS)) {
@@ -27286,8 +27575,15 @@ function _lazyPromoteVirtual(ad) {
   }
   // No MA — create one. Mirrors the "→ Plan" flow but minimal.
   var nowMs = Date.now();
+  // 2026-05-16 Phase 2: if the linked AD has `app-created` tag in ClickUp,
+  // the AD was app-pushed and just got orphaned along the way. Create the
+  // MA as CLEAN (no _origin / _adoptedAt) so the rose badge never appears.
+  // Falls back to the legacy 'auto-adopted' marker for truly-virtual cards
+  // (ad with no `app-created` tag — likely created in ClickUp directly OR
+  // ad whose tags haven't synced yet).
+  var isAppCreated = Array.isArray(ad._tags) && ad._tags.indexOf('app-created') !== -1;
   var newAct = {
-    id: 'auto-' + ad.id + '-' + nowMs,
+    id: (isAppCreated ? 'heal-' : 'auto-') + ad.id + '-' + nowMs,
     sourceAdId: ad.id,
     adId: ad.id,
     title: ad.formatName || ad.id,
@@ -27297,10 +27593,13 @@ function _lazyPromoteVirtual(ad) {
     format: ad.adType || '',
     liveStatus: ad.status || 'Untested',
     _clickupId: ad._clickupId || ad.clickupTaskId || null,
-    _origin: 'auto-adopted',
-    _adoptedAt: nowMs,
     _pushedAt: nowMs
   };
+  if (!isAppCreated) {
+    // Legacy path — keep adopt markers for genuinely-virtual (not-app-pushed) cards.
+    newAct._origin = 'auto-adopted';
+    newAct._adoptedAt = nowMs;
+  }
   if (typeof MANUAL_ACTIONS !== 'undefined' && Array.isArray(MANUAL_ACTIONS)) {
     MANUAL_ACTIONS.push(newAct);
   }

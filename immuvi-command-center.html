@@ -3862,6 +3862,22 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   box-shadow: 0 0 0 0.5px rgba(132,204,22,0.25);
 }
 
+/* 2026-05-16: column add/remove animation. When a column is freshly added
+   via the column manager, the header + all body cells in the column get
+   data-fresh="1" for ~220ms. This gives the user a clear visual cue that
+   their toggle worked — previously felt like nothing happened until refresh. */
+@keyframes ap-col-slide-in {
+  0%   { opacity: 0; transform: translateX(-8px); background: rgba(132,204,22,0.14); }
+  60%  { opacity: 1; transform: translateX(0);    background: rgba(132,204,22,0.06); }
+  100% { opacity: 1; transform: translateX(0);    background: transparent; }
+}
+.ap-table thead th[data-fresh="1"],
+.ap-table tbody td[data-fresh="1"],
+.mxv4-table thead th[data-fresh="1"],
+.mxv4-table tbody td[data-fresh="1"] {
+  animation: ap-col-slide-in 220ms ease-out;
+}
+
 /* Header drag-to-reorder — grab handle on every non-locked <th>. While a
    header is being dragged, sibling columns light up an insertion indicator
    on whichever side the cursor is on. Brand-lime vertical line. */
@@ -10596,6 +10612,19 @@ async function _onSession(session) {
   // Hydrate per-user "Clear from my AP" dismiss list from the profile row.
   if (typeof _apHydrateDismissedFromProfile === 'function') {
     try { _apHydrateDismissedFromProfile(); } catch (e) {}
+  }
+
+  // 2026-05-16: AP saved views moved to per-user-global storage on
+  // profiles.ap_col_state. Run migration from legacy products.config.ap_col_state
+  // (one-time, idempotent) + subscribe to the user's profile row for cross-tab sync.
+  // Migration is async fire-and-forget; the boot continues without waiting.
+  if (typeof _apMigrateLegacyViewsToProfile === 'function') {
+    setTimeout(function () {
+      try { _apMigrateLegacyViewsToProfile(); } catch (e) { console.warn('[ap] migration error', e); }
+    }, 1500); // wait for PRODUCTS to populate
+  }
+  if (typeof _initApProfileRealtimeChannel === 'function') {
+    try { _initApProfileRealtimeChannel(); } catch (e) { console.warn('[ap-profile-realtime] init failed', e); }
   }
 
   // Best-effort last_login_at update.
@@ -18110,6 +18139,13 @@ function _apEnsureCfColumns() {
     var displayName = CLICKUP_FIELD_REGISTRY[lcName] || lcName;
     _AP_COL_REGISTRY[key] = {
       label: displayName, isCustom: true, lcName: lcName,
+      // 2026-05-16: CF columns are sortable. sortKey 'cf:<lcName>' is handled
+      // by the renderApTableView comparator (line ~20222) which reads
+      // ad._customFields[lcName] case-insensitively. Empty values sink to
+      // the bottom regardless of sort direction so columns with sparse
+      // CF data don't bury rows that DO have it.
+      sortable: true,
+      sortKey: 'cf:' + lcName,
       renderCell: function (r) {
         var ad = r.ad;
         var meta = (typeof CLICKUP_FIELD_META !== 'undefined') ? CLICKUP_FIELD_META[lcName] : null;
@@ -18447,24 +18483,43 @@ function _apFreshDefaultView() {
     columns: _AP_DEFAULT_COLUMNS.map(function (c) { return { key:c.key, width:c.width, hidden:c.hidden }; })
   };
 }
+// 2026-05-16: AP saved views moved to per-user-global storage on profiles.ap_col_state.
+// User's choice (see feature_tracker_saved_views_supabase.md v2 section). Matrix
+// saved views remain per-product on products.config.tracker_saved_views.
+//
+// Load order: AUTH.profile.ap_col_state → legacy products.config.ap_col_state (one-time
+// migration on first read) → localStorage cache → null (caller seeds default view).
 function _apColLoad() {
-  // 2026-05-15: prefer DB (products.config.ap_col_state) over localStorage so
-  // saved views sync across tabs + users. localStorage stays as a fast cache.
-  // See feature_tracker_saved_views_supabase.md (mirror of the matrix fix).
+  // Phase 1: per-user global on profiles
+  try {
+    if (window.AUTH && AUTH.profile && AUTH.profile.ap_col_state &&
+        Array.isArray(AUTH.profile.ap_col_state.views) &&
+        AUTH.profile.ap_col_state.views.length) {
+      var pst = AUTH.profile.ap_col_state;
+      var st = { views: pst.views.map(function (v) { return Object.assign({}, v); }) };
+      if (pst.activeViewId) st.activeViewId = pst.activeViewId;
+      return st;
+    }
+  } catch (e) {}
+  // Phase 2: legacy products.config.ap_col_state — used to seed migration only.
+  // The migration runner (_apMigrateLegacyViewsToProfile) walks all PRODUCTS and
+  // copies any non-default views into profiles. We still let this branch hand
+  // back the active product's per-product views if migration hasn't run yet,
+  // so the UI looks normal during the brief boot window.
   try {
     if (typeof PRODUCTS !== 'undefined' && activeProductId) {
       var prod = PRODUCTS.find(function (p) { return p.id === activeProductId; });
       if (prod && prod.apColState && Array.isArray(prod.apColState.views) && prod.apColState.views.length) {
-        // Adopt per-user active view if present
         var uid = (window.AUTH && AUTH.profile && AUTH.profile.id) || '_anon';
         var byUser = prod.apActiveViewByUser || {};
-        var st = Object.assign({}, prod.apColState);
-        st.views = (prod.apColState.views || []).map(function(v){ return Object.assign({}, v); });
-        if (byUser[uid] != null) st.activeViewId = byUser[uid];
-        return st;
+        var legacySt = Object.assign({}, prod.apColState);
+        legacySt.views = (prod.apColState.views || []).map(function(v){ return Object.assign({}, v); });
+        if (byUser[uid] != null) legacySt.activeViewId = byUser[uid];
+        return legacySt;
       }
     }
   } catch (e) {}
+  // Phase 3: localStorage cache
   try {
     var raw = localStorage.getItem(_apColStorageKey());
     if (!raw) return null;
@@ -18476,72 +18531,149 @@ function _apColLoad() {
 function _apColSave() {
   if (!_apColState) return;
   try { localStorage.setItem(_apColStorageKey(), JSON.stringify(_apColState)); } catch (e) {}
-  // Mirror to DB so other tabs / users see the change. Debounced 500ms — a
-  // drag-to-resize fires this on every mousemove tick.
+  // Mirror to profile (DB) so other tabs of the SAME user sync. Debounced 500ms.
   if (_apColSaveDebounced) clearTimeout(_apColSaveDebounced);
   _apColSaveDebounced = setTimeout(function () {
     _apColSaveDebounced = null;
-    _apWriteColStateToDb();
+    _apWriteColStateToProfile();
   }, 500);
 }
 var _apColSaveDebounced = null;
 
-// Mirror in-memory _apColState into PRODUCTS[idx] SYNCHRONOUSLY before any
-// async DB work. Same race-fix as _mxv4MirrorSavedViewsToProducts.
-function _apMirrorColStateToProducts() {
-  if (typeof PRODUCTS === 'undefined' || !activeProductId || !_apColState) return;
-  var idx = -1;
-  for (var i = 0; i < PRODUCTS.length; i++) {
-    if (PRODUCTS[i].id === activeProductId) { idx = i; break; }
-  }
-  if (idx < 0) return;
-  var uid = (window.AUTH && AUTH.profile && AUTH.profile.id) || '_anon';
-  var shared = { views: (_apColState.views || []).map(function (v) {
-    return Object.assign({}, v, { columns: (v.columns || []).map(function (c) { return Object.assign({}, c); }) });
-  })};
-  var byUser = Object.assign({}, PRODUCTS[idx].apActiveViewByUser || {});
-  if (_apColState.activeViewId) byUser[uid] = _apColState.activeViewId;
-  else delete byUser[uid];
-  PRODUCTS[idx] = Object.assign({}, PRODUCTS[idx], {
-    apColState: shared,
-    apActiveViewByUser: byUser,
-  });
+// Mirror in-memory _apColState into AUTH.profile.ap_col_state SYNCHRONOUSLY before
+// any async DB work. Protects against the render-mid-await race we saw on the
+// per-product version.
+function _apMirrorColStateToProfile() {
+  if (!window.AUTH || !AUTH.profile || !_apColState) return;
+  AUTH.profile.ap_col_state = {
+    views: (_apColState.views || []).map(function (v) {
+      return Object.assign({}, v, {
+        columns: (v.columns || []).map(function (c) { return Object.assign({}, c); })
+      });
+    }),
+    activeViewId: _apColState.activeViewId || null,
+    _migratedFromProducts: !!(AUTH.profile.ap_col_state && AUTH.profile.ap_col_state._migratedFromProducts)
+  };
 }
 
-// Read existing config, deep-merge ap_col_state + ap_active_view_by_user,
-// write back. Same safe-merge pattern as DB.upsertProduct.
-async function _apWriteColStateToDb() {
-  if (typeof SB === 'undefined' || !SB || !activeProductId || !_apColState) return;
-  var pid = activeProductId;
-  var uid = (window.AUTH && AUTH.profile && AUTH.profile.id) || '_anon';
-  // 1. Mirror SYNCHRONOUSLY before the await — protects against the same
-  //    race that bit the matrix path (re-render mid-flight would otherwise
-  //    overwrite the local state from stale DB-side state).
-  _apMirrorColStateToProducts();
+// Write the current user's _apColState into profiles.ap_col_state.
+async function _apWriteColStateToProfile() {
+  if (typeof SB === 'undefined' || !SB || !_apColState) return;
+  if (!window.AUTH || !AUTH.profile || !AUTH.profile.id) {
+    // No profile = anon visitor. Fall back to localStorage only (already saved).
+    return;
+  }
+  var uid = AUTH.profile.id;
+  // 1. Mirror SYNCHRONOUSLY before the await
+  _apMirrorColStateToProfile();
   try {
-    var ex = await SB.from('products').select('config').eq('id', pid).maybeSingle();
-    var existing = (ex && ex.data && ex.data.config) || {};
-    var newCfg = Object.assign({}, existing);
-    // Strip activeViewId from the shared blob — that's per-user.
-    var shared = { views: (_apColState.views || []).map(function (v) {
-      return Object.assign({}, v, { columns: (v.columns || []).map(function (c) { return Object.assign({}, c); }) });
-    })};
-    newCfg.ap_col_state = shared;
-    var byUser = Object.assign({}, existing.ap_active_view_by_user || {});
-    if (_apColState.activeViewId) byUser[uid] = _apColState.activeViewId;
-    else delete byUser[uid];
-    newCfg.ap_active_view_by_user = byUser;
-    var { error } = await SB.from('products').update({ config: newCfg }).eq('id', pid);
+    var payload = {
+      views: (_apColState.views || []).map(function (v) {
+        return Object.assign({}, v, {
+          columns: (v.columns || []).map(function (c) { return Object.assign({}, c); })
+        });
+      }),
+      activeViewId: _apColState.activeViewId || null
+    };
+    // Preserve the migration marker if present.
+    if (AUTH.profile.ap_col_state && AUTH.profile.ap_col_state._migratedFromProducts) {
+      payload._migratedFromProducts = true;
+    }
+    var { error } = await SB.from('profiles').update({ ap_col_state: payload }).eq('id', uid);
     if (error) {
-      console.warn('[ap] colState DB write failed', error);
+      console.warn('[ap] colState profile write failed', error);
       try { if (typeof toast === 'function') toast('AP view save failed — see console', 'err'); } catch (_) {}
       return;
     }
-    // Re-mirror with canonical state post-write.
-    _apMirrorColStateToProducts();
+    // Re-mirror post-write so AUTH.profile is canonical.
+    _apMirrorColStateToProfile();
   } catch (e) {
-    console.warn('[ap] colState DB write threw', e);
+    console.warn('[ap] colState profile write threw', e);
   }
+}
+
+// Backwards-compat shim — anything that still calls the old name lands here.
+function _apMirrorColStateToProducts() { _apMirrorColStateToProfile(); }
+async function _apWriteColStateToDb() { return _apWriteColStateToProfile(); }
+
+// One-time migration: copy legacy per-product views into profiles.ap_col_state.
+// Idempotent — marks _migratedFromProducts=true so it never re-runs.
+// Dedupe by view name (case-insensitive trim).
+async function _apMigrateLegacyViewsToProfile() {
+  if (!window.AUTH || !AUTH.profile || !AUTH.profile.id) return;
+  if (typeof PRODUCTS === 'undefined' || !Array.isArray(PRODUCTS)) return;
+  // Already migrated?
+  if (AUTH.profile.ap_col_state && AUTH.profile.ap_col_state._migratedFromProducts) return;
+  var aggregated = [];
+  var seenNames = {};
+  PRODUCTS.forEach(function (p) {
+    if (!p || !p.apColState || !Array.isArray(p.apColState.views)) return;
+    p.apColState.views.forEach(function (v) {
+      if (!v || v.isSystem || v.id === 'default') return; // skip the system default
+      var nameKey = String(v.name || '').toLowerCase().trim();
+      if (!nameKey) return;
+      if (seenNames[nameKey]) return; // dedupe
+      seenNames[nameKey] = true;
+      aggregated.push(Object.assign({}, v, {
+        columns: (v.columns || []).map(function (c) { return Object.assign({}, c); }),
+        _migratedFrom: p.id
+      }));
+    });
+  });
+  var existing = (AUTH.profile.ap_col_state && AUTH.profile.ap_col_state.views) || [];
+  var existingIds = {};
+  existing.forEach(function (v) { if (v && v.id) existingIds[v.id] = true; });
+  var fresh = aggregated.filter(function (v) { return !existingIds[v.id]; });
+  var merged = existing.concat(fresh);
+  var payload = {
+    views: merged,
+    activeViewId: (AUTH.profile.ap_col_state && AUTH.profile.ap_col_state.activeViewId) || null,
+    _migratedFromProducts: true
+  };
+  try {
+    var { error } = await SB.from('profiles').update({ ap_col_state: payload }).eq('id', AUTH.profile.id);
+    if (error) { console.warn('[ap] migration failed', error); return; }
+    AUTH.profile.ap_col_state = payload;
+    console.log('[ap] migrated ' + fresh.length + ' legacy view(s) from products → profiles');
+    // Force a fresh load so the UI picks up the migrated views immediately.
+    _apColState = null;
+    _apEnsureColState();
+    if (typeof renderActionPlan === 'function') renderActionPlan();
+  } catch (e) { console.warn('[ap] migration threw', e); }
+}
+
+// Realtime channel — subscribe to changes on the current user's profile row.
+// Echoes changes from the same user's other tabs back into AUTH.profile + _apColState.
+var _apProfileChannel = null;
+function _initApProfileRealtimeChannel() {
+  if (typeof SB === 'undefined' || !SB) return;
+  if (!window.AUTH || !AUTH.profile || !AUTH.profile.id) return;
+  if (_apProfileChannel) { try { SB.removeChannel(_apProfileChannel); } catch (e) {} _apProfileChannel = null; }
+  var uid = AUTH.profile.id;
+  _apProfileChannel = SB.channel('cc-profile-' + uid);
+  _apProfileChannel.on('postgres_changes',
+    { event: 'UPDATE', schema: 'public', table: 'profiles', filter: 'id=eq.' + uid },
+    function (payload) {
+      try {
+        var newRow = payload && payload.new;
+        if (!newRow) return;
+        // Echo-skip: if the incoming ap_col_state matches what we already have, ignore.
+        var incoming = newRow.ap_col_state;
+        var current = AUTH.profile && AUTH.profile.ap_col_state;
+        if (incoming && current && JSON.stringify(incoming) === JSON.stringify(current)) return;
+        // Refresh AUTH.profile fields we care about
+        if (incoming) AUTH.profile.ap_col_state = incoming;
+        if (newRow.ap_dismissed_ad_ids) AUTH.profile.ap_dismissed_ad_ids = newRow.ap_dismissed_ad_ids;
+        // Force _apColState reload from the fresh profile data
+        _apColState = null;
+        _apEnsureColState();
+        if (typeof renderActionPlan === 'function') {
+          try { renderActionPlan(); } catch (e) {}
+        }
+      } catch (e) { console.warn('[ap-profile-realtime] handler error', e); }
+    }
+  );
+  _apProfileChannel.subscribe();
 }
 function _apEnsureColState() {
   if (_apColState) return _apColState;
@@ -18711,16 +18843,27 @@ function _apFilterColumnList(inputEl) {
 }
 
 function _apToggleColumnVisible(key, on) {
+  // Ensure CF columns are registered so a freshly-toggled custom field is
+  // recognized by the render path (otherwise the column shows but the cells
+  // render blank until next sync). 2026-05-16.
+  if (typeof _apEnsureCfColumns === 'function') _apEnsureCfColumns();
   var view = _apActiveView();
   var col = view.columns.find(function (c) { return c.key === key; });
   if (!col) return;
   col.hidden = !on;
   _apColSave();
+  // Mark this column as "freshly added" so render attaches data-fresh="1"
+  // for the slide-in animation. Cleared on next render after animation.
+  if (on) {
+    _apState._freshlyAddedCol = key;
+  }
   // Update the open picker IN PLACE — never close+reopen, that's what
   // caused the picker to jump when re-anchored against a freshly-rendered
   // toolbar button.
   _apRefreshColumnManagerInPlace();
   if (typeof renderActionPlan === 'function') renderActionPlan();
+  // Clear the fresh flag after animation completes
+  setTimeout(function () { if (_apState._freshlyAddedCol === key) _apState._freshlyAddedCol = null; }, 260);
 }
 
 function _apResetColumns() {
@@ -20220,6 +20363,23 @@ function renderApTableView(rows) {
   var sortCol = _apState.sort.col, sortDir = _apState.sort.dir;
   rows = rows.slice().sort(function (a, b) {
     var av, bv;
+    // 2026-05-16: custom-field sort. CF column sortKeys are 'cf:<lcName>'
+    // (set by _apEnsureCfColumns). Read from display._customFields. Empty
+    // values get pushed to the bottom regardless of direction.
+    if (typeof sortCol === 'string' && sortCol.indexOf('cf:') === 0) {
+      var _lc = sortCol.slice(3);
+      var _ar = a.display && a.display._customFields && a.display._customFields[_lc];
+      var _br = b.display && b.display._customFields && b.display._customFields[_lc];
+      var _as = (_ar == null || _ar === '') ? '' : String(_ar).toLowerCase().trim();
+      var _bs = (_br == null || _br === '') ? '' : String(_br).toLowerCase().trim();
+      // Empty values always at the bottom (asc OR desc).
+      if (_as === '' && _bs === '') return 0;
+      if (_as === '') return 1;
+      if (_bs === '') return -1;
+      if (_as < _bs) return -1 * sortDir;
+      if (_as > _bs) return 1 * sortDir;
+      return 0;
+    }
     switch (sortCol) {
       case 'title':   av = a.display.title; bv = b.display.title; break;
       case 'status':  av = a.display.status; bv = b.display.status; break;
@@ -20271,15 +20431,18 @@ function renderApTableView(rows) {
   html += '</colgroup>';
 
   html += '<thead><tr>';
+  // 2026-05-16: stamp data-fresh="1" on the just-added column for animation.
+  var _freshKey = (_apState && _apState._freshlyAddedCol) || null;
   visCols.forEach(function (c) {
     var def = _AP_COL_REGISTRY[c.key]; if (!def) return;
+    var freshAttr = (_freshKey && c.key === _freshKey) ? ' data-fresh="1"' : '';
     if (def.renderHead) {
       html += def.renderHead(headState);
     } else {
       var sortable = !!def.sortable;
       var isSorted = sortable && def.sortKey && def.sortKey === sortCol;
       var sortAttr = sortable ? ' class="sortable" onclick="apSort(\'' + def.sortKey + '\')"' : '';
-      html += '<th data-col="' + escAttr(c.key) + '"' + sortAttr + '>' + esc(def.label) + (isSorted ? arrow(def.sortKey) : '') + '</th>';
+      html += '<th data-col="' + escAttr(c.key) + '"' + freshAttr + sortAttr + '>' + esc(def.label) + (isSorted ? arrow(def.sortKey) : '') + '</th>';
     }
   });
   // Inject resize handles onto every <th> we just rendered. The handle is
@@ -34580,12 +34743,17 @@ function _mxv4MountColumnHandlers() {
 function setMxv4ToggleColumn(colId) {
   if (!Array.isArray(_mxv4.tableColumns)) _mxv4.tableColumns = [];
   var idx = _mxv4.tableColumns.indexOf(colId);
-  if (idx === -1) _mxv4.tableColumns.push(colId);
+  var wasAdded = (idx === -1);
+  if (wasAdded) _mxv4.tableColumns.push(colId);
   else _mxv4.tableColumns.splice(idx, 1);
   _mxv4SaveTableColumns();
   _mxv4.colMgrOpen = true;
+  // 2026-05-16: mark for slide-in animation; cleared after the render's
+  // animation window completes.
+  if (wasAdded) _mxv4._freshlyAddedCol = colId;
   renderMxv4Modal();
   setTimeout(_mxv4PositionFloatingPanels, 0);
+  setTimeout(function () { if (_mxv4._freshlyAddedCol === colId) _mxv4._freshlyAddedCol = null; }, 260);
 }
 
 // Reorder columns via drag-and-drop. Called from drop handler.
@@ -35480,18 +35648,50 @@ function _mxv4RenderActivityTimeline(ad) {
 }
 
 // ── Wide-table view ──
+// 2026-05-16: extended to handle angle, persona, brand, adType,
+// hookType, creativeStructure, productionStyle, funnelType,
+// inspirationTrace + all CF columns (key='cf:<lcName>'). Reads from the
+// AD's _customFields map. Empty values sink to the bottom regardless of dir.
 function _mxv4SortAds(ads, col, dir) {
+  // Helper: case-insensitive string compare with empty values pushed last
+  function _strCmp(av, bv) {
+    var as = (av == null || av === '') ? '' : String(av).toLowerCase().trim();
+    var bs = (bv == null || bv === '') ? '' : String(bv).toLowerCase().trim();
+    if (as === '' && bs === '') return 0;
+    if (as === '') return 1;   // empty → bottom
+    if (bs === '') return -1;
+    if (as < bs) return -1 * dir;
+    if (as > bs) return 1 * dir;
+    return 0;
+  }
   return ads.slice().sort(function (a, b) {
+    // Custom-field columns. AP uses 'cf:<lcName>'; matrix uses 'cu:<lcName>'.
+    // Both read from the AD's _customFields map by the lcName tail.
+    if (typeof col === 'string' && (col.indexOf('cf:') === 0 || col.indexOf('cu:') === 0)) {
+      var _lc = col.slice(3);
+      var _av = a.ad && a.ad._customFields && a.ad._customFields[_lc];
+      var _bv = b.ad && b.ad._customFields && b.ad._customFields[_lc];
+      return _strCmp(_av, _bv);
+    }
+    // String columns — sort case-insensitive, empty-at-bottom
+    if (col === 'name')                return _strCmp(a.ad.formatName, b.ad.formatName);
+    if (col === 'angle')               return _strCmp(a.ad.angle, b.ad.angle);
+    if (col === 'persona')             return _strCmp(a.ad.persona, b.ad.persona);
+    if (col === 'brand')               return _strCmp(a.ad.brand, b.ad.brand);
+    if (col === 'hookType')            return _strCmp(a.ad.hookType, b.ad.hookType);
+    if (col === 'creativeStructure')   return _strCmp(a.ad.creativeStructure, b.ad.creativeStructure);
+    if (col === 'productionStyle')     return _strCmp(a.ad.productionStyle, b.ad.productionStyle);
+    if (col === 'inspirationTrace')    return _strCmp(a.ad._fromInspoId, b.ad._fromInspoId);
+    if (col === 'type')                return _strCmp(a.adType || a.ad.adType, b.adType || b.ad.adType);
+    if (col === 'funnel')              return _strCmp(a.funnelStage, b.funnelStage);
+    if (col === 'funnelType')          return _strCmp(a.funnelStage, b.funnelStage);
+    if (col === 'status')              return _strCmp(a.status, b.status);
+    if (col === 'origin')              return _strCmp(a.ad.adOrigin, b.ad.adOrigin);
+    if (col === 'source')              return _strCmp(a.source, b.source);
+    if (col === 'due')                 return _strCmp(a.dueDate, b.dueDate);
     var av, bv;
-    if (col === 'name')      { av = (a.ad.formatName || '').toLowerCase(); bv = (b.ad.formatName || '').toLowerCase(); }
-    else if (col === 'type') { av = a.adType || ''; bv = b.adType || ''; }
-    else if (col === 'funnel') { av = a.funnelStage; bv = b.funnelStage; }
-    else if (col === 'status') { av = a.status; bv = b.status; }
-    else if (col === 'origin') { av = a.ad.adOrigin || ''; bv = b.ad.adOrigin || ''; }
-    else if (col === 'source') { av = a.source; bv = b.source; }
-    else if (col === 'due')    { av = a.dueDate || ''; bv = b.dueDate || ''; }
-    else if (col === 'updated'){ av = a.updatedAt || 0; bv = b.updatedAt || 0; }
-    else                       { av = a.createdAt || 0; bv = b.createdAt || 0; }
+    if (col === 'updated'){ av = a.updatedAt || 0; bv = b.updatedAt || 0; }
+    else                  { av = a.createdAt || 0; bv = b.createdAt || 0; }
     if (av < bv) return -1 * dir;
     if (av > bv) return 1 * dir;
     return 0;
@@ -35523,19 +35723,34 @@ function _mxv4RenderTable(angleName, personaName, st) {
     return true;
   });
 
-  var sortableCols = { source: 1, name: 1, type: 1, funnel: 1, origin: 1, created: 1, due: 1, status: 1 };
+  // 2026-05-16: expanded whitelist to cover all rich columns. CF columns
+  // (id starts with 'cf:') are sortable too — checked dynamically below.
+  var sortableCols = {
+    source: 1, name: 1, type: 1, funnel: 1, funnelType: 1, origin: 1,
+    created: 1, due: 1, status: 1, updated: 1,
+    angle: 1, persona: 1, brand: 1,
+    hookType: 1, creativeStructure: 1, productionStyle: 1,
+    inspirationTrace: 1
+  };
+  // 2026-05-16: stamp data-fresh="1" on the freshly-added column header for
+  // the slide-in animation (cleared by setMxv4ToggleColumn after 260ms).
+  var _mxv4FreshKey = (_mxv4 && _mxv4._freshlyAddedCol) || null;
   var hdr = function (colId, lbl) {
-    if (sortableCols[colId]) {
+    // Matrix uses 'cu:<lcName>' for ClickUp custom fields; AP uses 'cf:'.
+    // Both are sortable.
+    var isDynamicCol = typeof colId === 'string' && (colId.indexOf('cu:') === 0 || colId.indexOf('cf:') === 0);
+    var freshAttr = (_mxv4FreshKey && colId === _mxv4FreshKey) ? ' data-fresh="1"' : '';
+    if (sortableCols[colId] || isDynamicCol) {
       var cls = '';
       if (_mxv4.tableSort.col === colId) cls = _mxv4.tableSort.dir === 1 ? 'sort-asc' : 'sort-desc';
-      return '<th class="' + cls + '" data-colid="' + escAttr(colId) + '" draggable="true" ' +
+      return '<th class="' + cls + '" data-colid="' + escAttr(colId) + '"' + freshAttr + ' draggable="true" ' +
         'ondragstart="_mxv4ColDragStart(event)" ondragover="_mxv4ColDragOver(event)" ondrop="_mxv4ColDrop(event)" ondragend="_mxv4ColDragEnd(event)" ' +
-        'onclick="setMxv4Sort(\'' + colId + '\')">' +
+        'onclick="setMxv4Sort(\'' + escJs(colId) + '\')">' +
         lbl + '<span class="sort-arr">▾</span>' +
         '<span class="mxv4-col-x" title="Remove column" onclick="event.stopPropagation();setMxv4ToggleColumn(\'' + escJs(colId) + '\')">×</span>' +
         '</th>';
     }
-    return '<th data-colid="' + escAttr(colId) + '" draggable="true" ' +
+    return '<th data-colid="' + escAttr(colId) + '"' + freshAttr + ' draggable="true" ' +
       'ondragstart="_mxv4ColDragStart(event)" ondragover="_mxv4ColDragOver(event)" ondrop="_mxv4ColDrop(event)" ondragend="_mxv4ColDragEnd(event)">' +
       lbl +
       '<span class="mxv4-col-x" title="Remove column" onclick="event.stopPropagation();setMxv4ToggleColumn(\'' + escJs(colId) + '\')">×</span>' +
@@ -41743,6 +41958,37 @@ window._clearPendingCu = _clearPendingCu;
         s += 'view=' + (_apState.view||'') + '|sort=' + (_apState.sortCol||'') + ':' + (_apState.sortDir||'') + '|of=' + (_apState.openFilter||'') + '|ao=' + (_apState.anomaliesOnly?1:0);
         if (_apState.filters) s += '|f=' + JSON.stringify(_apState.filters || {});
       }
+    }
+    // 2026-05-16 fix: include _apColState so view-switches + column-toggles
+    // bust the fingerprint. Without this the no-op suppression wrapper
+    // skipped every UI change driven by saved-view state — user had to
+    // refresh the page to see the new view take effect. Reported 6× before
+    // root cause was traced to the fingerprint missing _apColState.
+    if (typeof _apColState !== 'undefined' && _apColState) {
+      try {
+        // Use a compact serialization: activeViewId + per-column hidden flag
+        // (full views[] JSON is too noisy; we only care about what affects render)
+        var cs = 'av=' + (_apColState.activeViewId || '');
+        if (Array.isArray(_apColState.views)) {
+          cs += '|vn=' + _apColState.views.length;
+          var av = _apColState.views.find(function(v){ return v && v.id === _apColState.activeViewId; });
+          if (av && Array.isArray(av.columns)) {
+            cs += '|cols=';
+            for (var ci = 0; ci < av.columns.length; ci++) {
+              var c = av.columns[ci]; if (!c) continue;
+              cs += (c.key||'') + (c.hidden?'-':'+') + ',';
+            }
+          }
+        }
+        s += '|cs=' + cs;
+      } catch (e) {
+        s += '|csav=' + (_apColState.activeViewId || '');
+      }
+    }
+    // Include CF column registry size so newly-registered cf:* columns
+    // (after _apEnsureCfColumns picks up a sync) trigger re-render.
+    if (typeof _AP_COL_REGISTRY !== 'undefined' && _AP_COL_REGISTRY) {
+      try { s += '|reg=' + Object.keys(_AP_COL_REGISTRY).length; } catch (e) {}
     }
     return s;
   }

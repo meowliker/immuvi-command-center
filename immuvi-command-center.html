@@ -12497,7 +12497,8 @@ const DB = {
       }
     }
     const angleRows = survivingLocalAngles.map(function (a) {
-      return { id: a.id, product_id: productId, name: a.name || '', status: a.status || 'Untested', source_link: a.sourceLink || null, notes: a.notes || null };
+      // 2026-05-17 — last-line defense: strip badge-like suffix at the DB-write boundary.
+      return { id: a.id, product_id: productId, name: _normalizeTaxonomyName(a.name || ''), status: a.status || 'Untested', source_link: a.sourceLink || null, notes: a.notes || null };
     });
     const angleIds = new Set(angleRows.map(function (r) { return r.id; }));
     const angleOrphans = (existingAngles.data || []).filter(function (r) { return !angleIds.has(r.id); }).map(function (r) { return r.id; });
@@ -12518,7 +12519,7 @@ const DB = {
       }
     }
     const personaRows = survivingLocalPersonas.map(function (p) {
-      return { id: p.id, product_id: productId, name: p.name || '', status: p.status || 'Untested', source_link: p.sourceLink || null, notes: p.notes || null };
+      return { id: p.id, product_id: productId, name: _normalizeTaxonomyName(p.name || ''), status: p.status || 'Untested', source_link: p.sourceLink || null, notes: p.notes || null };
     });
     const personaIds = new Set(personaRows.map(function (r) { return r.id; }));
     const personaOrphans = (existingPersonas.data || []).filter(function (r) { return !personaIds.has(r.id); }).map(function (r) { return r.id; });
@@ -13528,6 +13529,27 @@ function _isTaxonomyTombstoned(kind, productId, name) {
   if (!name) return false;
   var tomb = _readTaxonomyTombstone(kind, productId);
   return !!tomb[name.toLowerCase().trim()];
+}
+
+// 2026-05-17 — strip badge-like suffixes that a legacy write path baked into
+// taxonomy names ("Foo⭐ Winner", "Foo Winner", "Foo Scale", or the doubled
+// "Foo⭐ Winner⭐ Winner" we saw on Canva). Cause: an old write path appended
+// the status-badge text into the `name` string. After we deleted the ghosts,
+// this normalizer is the permanent guard so it can't recur. Called at every
+// taxonomy-write boundary: parseClickUpTask (CU→memory), autoDiscoverTaxonomy
+// (memory→arrays), and personas/angles upsert (memory→DB).
+function _normalizeTaxonomyName(name) {
+  if (!name || typeof name !== 'string') return name;
+  var s = name;
+  // Strip up to 3 trailing badge fragments — handles the doubled case.
+  // Match: optional space/star/emoji, followed by Winner|Scale|Loser|Killed|Mild Winner|Complete
+  var BADGE_RE = /\s*(?:[⭐★*]\s*)?(?:Mild\s+Winner|Winner|Loser|Scale|Killed|Complete)\s*$/i;
+  for (var i = 0; i < 3; i++) {
+    var stripped = s.replace(BADGE_RE, '');
+    if (stripped === s) break;
+    s = stripped;
+  }
+  return s.trim();
 }
 
 // BUG-005 — strip tombstoned angle/persona names from an ANGLE_PERSONAS
@@ -21643,10 +21665,22 @@ function addAngleRow() {
 
 function deleteAngle(idx) {
   var name = ANGLES[idx].name;
+  var aid  = ANGLES[idx].id;
   if (!confirm('Delete angle "' + name + '"? This will clear it from all creatives and inspirations.')) return;
   // BUG-004: tombstone this name so the next ClickUp poll can't resurrect it
   // via Pass 1 (overwriting cleared ad.angle) → autoDiscoverTaxonomy.
   _rememberTaxonomyDeletion('angle', activeProductId, name);
+  // 2026-05-17 — direct DB delete + DB-side tombstone insert (see deletePersona comment).
+  try {
+    if (typeof SB !== 'undefined' && SB && aid) {
+      SB.from('angles').delete().eq('id', aid).then(function (r) {
+        if (r && r.error) console.warn('[deleteAngle] DB delete failed:', r.error.message);
+      });
+      if (activeProductId) {
+        SB.from('deleted_angles').upsert({ id: aid, product_id: activeProductId, name: name || null });
+      }
+    }
+  } catch (e) { console.warn('[deleteAngle] direct delete skipped:', e); }
   ANGLES.splice(idx, 1);
   // Clear from ADS
   for (var i = 0; i < ADS.length; i++) {
@@ -21769,9 +21803,27 @@ function addPersonaRow() {
 
 function deletePersona(idx) {
   var name = PERSONAS[idx].name;
+  var pid  = PERSONAS[idx].id;
   if (!confirm('Delete persona "' + name + '"? This will clear it from all creatives and inspirations.')) return;
   // BUG-004: tombstone — same reasoning as deleteAngle.
   _rememberTaxonomyDeletion('persona', activeProductId, name);
+  // 2026-05-17 — direct DB delete + DB-side tombstone insert. Previously this
+  // function only mutated in-memory PERSONAS and relied on saveState's orphan
+  // diff to indirectly delete from DB. That created a multi-tab race where
+  // another tab's saveState could resurrect the row (it still had the persona
+  // in its local existingPersonaIdSet from a prior fetch). The DB-side
+  // deleted_personas tombstone (Phase 3) makes resurrection impossible — any
+  // upsert with that id is blocked by the trigger.
+  try {
+    if (typeof SB !== 'undefined' && SB && pid) {
+      SB.from('personas').delete().eq('id', pid).then(function (r) {
+        if (r && r.error) console.warn('[deletePersona] DB delete failed:', r.error.message);
+      });
+      if (activeProductId) {
+        SB.from('deleted_personas').upsert({ id: pid, product_id: activeProductId, name: name || null });
+      }
+    }
+  } catch (e) { console.warn('[deletePersona] direct delete skipped:', e); }
   PERSONAS.splice(idx, 1);
   // Clear from ADS
   for (var i = 0; i < ADS.length; i++) {
@@ -24724,7 +24776,10 @@ function autoDiscoverTaxonomy(sourceAds) {
     var ad = sourceAds[i];
     if (!ad) continue;
 
-    var ang = (ad.angle || '').trim();
+    // 2026-05-17 — defensive normalize. parseClickUpTask already sanitizes,
+    // but ads can also come from local edits / matrix-cell ingestion that
+    // bypass parseClickUpTask. Strip badge-like suffixes here too.
+    var ang = _normalizeTaxonomyName((ad.angle || '').trim());
     if (ang && !angleSeen[ang.toLowerCase()] && !existingAngleNamesLC[ang.toLowerCase()] && !_angTomb[ang.toLowerCase().trim()]) {
       angleSeen[ang.toLowerCase()] = true;
       ANGLES.push({
@@ -24741,7 +24796,7 @@ function autoDiscoverTaxonomy(sourceAds) {
       addedAngles.push(ang);
     }
 
-    var per = (ad.persona || '').trim();
+    var per = _normalizeTaxonomyName((ad.persona || '').trim());
     if (per && !personaSeen[per.toLowerCase()] && !existingPersonaNamesLC[per.toLowerCase()] && !_perTomb[per.toLowerCase().trim()]) {
       personaSeen[per.toLowerCase()] = true;
       PERSONAS.push({
@@ -25215,6 +25270,11 @@ function parseClickUpTask(t) {
   var personaTag = getFieldValue(['persona tag']);
   var angle   = angleTag   || getFieldValue(['angle', 'angles', 'ad angle']);
   var persona = personaTag || getFieldValue(['persona', 'personas', 'target persona', 'audience']);
+  // 2026-05-17 — sanitize at the CU→memory boundary so a polluted CU value
+  // ("Foo⭐ Winner") can never enter local state, get auto-discovered, or
+  // upserted back as a ghost taxonomy row.
+  angle   = _normalizeTaxonomyName(angle);
+  persona = _normalizeTaxonomyName(persona);
   var adLink   = getFieldValue(['inspiration link', 'inspo link', 'ad link', 'adlink', 'ad url', 'adurl', 'creative link', 'reference link']);
   var driveLink = getFieldValue(['drive link', 'google drive', 'gdrive', 'production link', 'google drive link', 'drive']);
   var adType = getFieldValue(['photo/video', 'ad type', 'adtype', 'format type', 'type']);

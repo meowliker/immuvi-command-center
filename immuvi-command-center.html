@@ -19470,9 +19470,21 @@ function apApplyFilters(resolved) {
     if (f.hygieneOnly && r.age.state !== 'red') return false;
     if (f.anomaliesOnly && apComputeAnomalies(r).length === 0) return false;
     if (range) {
-      // window mode = use lastStatusChangeAt (event-in-period)
-      // lifetime mode = use createdAt
-      var ts = (f.dateMode === 'lifetime') ? r.display.createdAt : r.display.lastStatusChangeAt;
+      // 2026-05-18 — 4-way date basis. Each mode picks a different timestamp
+      // from the row to compare against the range.
+      //   window   = status moved in period (existing default, status-change-at)
+      //   activity = any edit landed in period (updated-at, falls back to status-change-at)
+      //   created  = task born in period (created-at)
+      //   lifetime = any signal in period (broadest: max of created/updated/status)
+      var ts;
+      var d = r.display;
+      switch (f.dateMode) {
+        case 'created':  ts = d.createdAt; break;
+        case 'activity': ts = d.updatedAt || d.lastStatusChangeAt; break;
+        case 'lifetime': ts = Math.max(d.createdAt || 0, d.lastStatusChangeAt || 0, d.updatedAt || 0); break;
+        case 'window':
+        default:         ts = d.lastStatusChangeAt; break;
+      }
       if (!ts || ts < range.from || ts > range.to) return false;
     }
     return true;
@@ -19834,8 +19846,10 @@ function renderApFilterStrip(allResolved, filtered) {
   } catch (e) {}
   html += '<span class="ap-fb-sep"></span>';
   html += '<div class="ap-mode-seg" role="tablist">' +
-            '<button class="' + (f.dateMode === 'window'   ? 'on' : '') + '" onclick="setApDateMode(\'window\')">Window</button>' +
-            '<button class="' + (f.dateMode === 'lifetime' ? 'on' : '') + '" onclick="setApDateMode(\'lifetime\')">Lifetime</button>' +
+            '<button class="' + (f.dateMode === 'window'   ? 'on' : '') + '" onclick="setApDateMode(\'window\')" title="Status moved within the period">Window</button>' +
+            '<button class="' + (f.dateMode === 'lifetime' ? 'on' : '') + '" onclick="setApDateMode(\'lifetime\')" title="Any signal (created, edited, or status changed) within the period">Lifetime</button>' +
+            '<button class="' + (f.dateMode === 'activity' ? 'on' : '') + '" onclick="setApDateMode(\'activity\')" title="Any field edit within the period">Activity</button>' +
+            '<button class="' + (f.dateMode === 'created'  ? 'on' : '') + '" onclick="setApDateMode(\'created\')" title="Task created within the period">Created</button>' +
           '</div>';
   html += '<span class="ap-fb-grow"></span>';
   // Active-filter count for the Clear button badge. 'all' is the new
@@ -19928,13 +19942,15 @@ function renderApDateDropdown() {
     html += '<label>To <input type="date" value="' + (f.dateTo || '') + '" onchange="setApDateCustom(null, this.value)"></label>';
     html += '</div>';
   }
-  // Basis row — matrix has Created / Status changed / Last edit. We expose
-  // Activity (status changed) vs Created (lifetime) for plain-English.
+  // 2026-05-18 — Basis row: 4-way picker mirrors the main filter-strip toggle.
+  // Window (status moved) / Lifetime (any signal) / Activity (any edit) / Created (born).
   html += '<div class="ap-date-basis">';
   html += '<span class="lbl">Compare against</span>';
   html += '<div class="ap-date-basis-seg">';
-  html += '<button class="' + (f.dateMode === 'window' ? 'on' : '') + '" onclick="setApDateMode(\'window\')" title="Status moved within the period">Activity</button>';
-  html += '<button class="' + (f.dateMode === 'lifetime' ? 'on' : '') + '" onclick="setApDateMode(\'lifetime\')" title="Task was created within the period">Created</button>';
+  html += '<button class="' + (f.dateMode === 'window'   ? 'on' : '') + '" onclick="setApDateMode(\'window\')" title="Status moved within the period">Window</button>';
+  html += '<button class="' + (f.dateMode === 'lifetime' ? 'on' : '') + '" onclick="setApDateMode(\'lifetime\')" title="Any signal (created, edited, or status changed) within the period">Lifetime</button>';
+  html += '<button class="' + (f.dateMode === 'activity' ? 'on' : '') + '" onclick="setApDateMode(\'activity\')" title="Any field edit within the period">Activity</button>';
+  html += '<button class="' + (f.dateMode === 'created'  ? 'on' : '') + '" onclick="setApDateMode(\'created\')" title="Task created within the period">Created</button>';
   html += '</div>';
   html += '</div>';
   html += '</div>';

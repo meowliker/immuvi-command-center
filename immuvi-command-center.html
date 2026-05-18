@@ -20389,7 +20389,27 @@ function apBulkApplyStatus(newStatus) {
   ids.forEach(function (id, i) {
     setTimeout(function () {
       try {
-        updateManualActionStatus(id, newStatus);
+        // 2026-05-18 — virtual auto-adopted cards (id="va:<adId>") have no
+        // real MA in MANUAL_ACTIONS, so updateManualActionStatus would loop
+        // and silently exit. Mirror the inline single-row picker behavior:
+        // lazy-promote the virtual to a real MA first, then update by the
+        // new MA id. See feedback_ap_auto_adopt.md invariant #2 (lazy-promote
+        // is the ONLY path that creates an MA from a virtual).
+        var targetId = id;
+        if (typeof id === 'string' && id.indexOf('va:') === 0) {
+          var adId = id.slice(3); // strip "va:" prefix
+          var linkedAd = null;
+          if (typeof ADS !== 'undefined' && Array.isArray(ADS)) {
+            for (var k = 0; k < ADS.length; k++) {
+              if (ADS[k].id === adId) { linkedAd = ADS[k]; break; }
+            }
+          }
+          if (linkedAd && typeof _lazyPromoteVirtual === 'function') {
+            var newMaId = _lazyPromoteVirtual(linkedAd);
+            if (newMaId) targetId = newMaId;
+          }
+        }
+        updateManualActionStatus(targetId, newStatus);
         done++;
       } catch (e) {
         failed++;

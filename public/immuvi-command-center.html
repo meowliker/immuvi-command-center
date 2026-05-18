@@ -3862,22 +3862,6 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   box-shadow: 0 0 0 0.5px rgba(132,204,22,0.25);
 }
 
-/* 2026-05-16: column add/remove animation. When a column is freshly added
-   via the column manager, the header + all body cells in the column get
-   data-fresh="1" for ~220ms. This gives the user a clear visual cue that
-   their toggle worked — previously felt like nothing happened until refresh. */
-@keyframes ap-col-slide-in {
-  0%   { opacity: 0; transform: translateX(-8px); background: rgba(132,204,22,0.14); }
-  60%  { opacity: 1; transform: translateX(0);    background: rgba(132,204,22,0.06); }
-  100% { opacity: 1; transform: translateX(0);    background: transparent; }
-}
-.ap-table thead th[data-fresh="1"],
-.ap-table tbody td[data-fresh="1"],
-.mxv4-table thead th[data-fresh="1"],
-.mxv4-table tbody td[data-fresh="1"] {
-  animation: ap-col-slide-in 220ms ease-out;
-}
-
 /* Header drag-to-reorder — grab handle on every non-locked <th>. While a
    header is being dragged, sibling columns light up an insertion indicator
    on whichever side the cursor is on. Brand-lime vertical line. */
@@ -8292,20 +8276,6 @@ button.mx-dt-action-sent .open { color:#0a84ff; font-weight:700; margin-left:4px
 .mxv4-table thead th.mxv4-col-dragging { opacity: 0.5; }
 .mxv4-table thead th.mxv4-col-dropbefore { box-shadow: inset 3px 0 0 var(--b-limed, #6F9311); }
 .mxv4-table thead th.mxv4-col-dropafter  { box-shadow: inset -3px 0 0 var(--b-limed, #6F9311); }
-/* Column-resize handle (2026-05-15) — mirrors .ap-col-resizer. Sits on the
-   right edge of every <th>, 8px hit zone, hairline guide on hover.
-   stopPropagation on mousedown prevents the th's drag-to-reorder from firing. */
-.mxv4-col-resizer {
-  position: absolute; right: -4px; top: 0; bottom: 0; width: 8px;
-  cursor: col-resize; z-index: 5; user-select: none;
-}
-.mxv4-col-resizer::after {
-  content: ''; position: absolute; right: 3.5px; top: 25%; bottom: 25%; width: 1.5px;
-  background: rgba(15,23,42,0.10); border-radius: 2px;
-  transition: background .15s ease, top .15s ease, bottom .15s ease;
-}
-.mxv4-table thead th:hover .mxv4-col-resizer::after { background: rgba(132,204,22,0.45); top: 15%; bottom: 15%; }
-.mxv4-col-resizer:hover::after { background: #84cc16; top: 0; bottom: 0; }
 .mxv4-col-x {
   display: inline-block;
   margin-left: 6px;
@@ -10614,19 +10584,6 @@ async function _onSession(session) {
     try { _apHydrateDismissedFromProfile(); } catch (e) {}
   }
 
-  // 2026-05-16: AP saved views moved to per-user-global storage on
-  // profiles.ap_col_state. Run migration from legacy products.config.ap_col_state
-  // (one-time, idempotent) + subscribe to the user's profile row for cross-tab sync.
-  // Migration is async fire-and-forget; the boot continues without waiting.
-  if (typeof _apMigrateLegacyViewsToProfile === 'function') {
-    setTimeout(function () {
-      try { _apMigrateLegacyViewsToProfile(); } catch (e) { console.warn('[ap] migration error', e); }
-    }, 1500); // wait for PRODUCTS to populate
-  }
-  if (typeof _initApProfileRealtimeChannel === 'function') {
-    try { _initApProfileRealtimeChannel(); } catch (e) { console.warn('[ap-profile-realtime] init failed', e); }
-  }
-
   // Best-effort last_login_at update.
   SB.from('profiles').update({ last_login_at: new Date().toISOString() })
     .eq('id', AUTH.profile.id).then(function(){}).catch(function(){});
@@ -10930,18 +10887,6 @@ function _convertProductRow(p) {
     createdAt: c.created_at_ms || null,
     lastSyncedAt: c.last_synced_at_ms || null,
     lastSyncedCount: c.last_synced_count || 0,
-    // 2026-05-15: tracker saved views live in products.config so they sync
-    // across users + tabs via the existing products realtime channel.
-    // Replaces the per-browser localStorage('tracker.savedViews') bucket
-    // which couldn't reach teammates or survive cross-origin (localhost vs
-    // vercel.app). See feature_tracker_saved_views_supabase.md.
-    trackerSavedViews: Array.isArray(c.tracker_saved_views) ? c.tracker_saved_views : [],
-    trackerActiveViewByUser: (c.tracker_active_view_by_user && typeof c.tracker_active_view_by_user === 'object')
-      ? c.tracker_active_view_by_user : {},
-    // Action Plan column views — same pattern, separate key (different table/columns).
-    apColState: (c.ap_col_state && typeof c.ap_col_state === 'object') ? c.ap_col_state : null,
-    apActiveViewByUser: (c.ap_active_view_by_user && typeof c.ap_active_view_by_user === 'object')
-      ? c.ap_active_view_by_user : {},
   };
 }
 
@@ -10949,13 +10894,6 @@ function _convertProductRow(p) {
 // for no-op echoes (own-tab upserts that came back via postgres_changes).
 function _productFieldsDiffer(a, b) {
   if (!a || !b) return true;
-  // Saved-view edits arrive as products UPDATEs — must NOT be filtered out.
-  try {
-    if (JSON.stringify(a.trackerSavedViews || []) !== JSON.stringify(b.trackerSavedViews || [])) return true;
-    if (JSON.stringify(a.trackerActiveViewByUser || {}) !== JSON.stringify(b.trackerActiveViewByUser || {})) return true;
-    if (JSON.stringify(a.apColState || null) !== JSON.stringify(b.apColState || null)) return true;
-    if (JSON.stringify(a.apActiveViewByUser || {}) !== JSON.stringify(b.apActiveViewByUser || {})) return true;
-  } catch (e) {}
   return a.name !== b.name ||
          a.clickupListId !== b.clickupListId ||
          a.clickupListName !== b.clickupListName ||
@@ -11059,37 +10997,6 @@ function _initProductsRealtimeChannel() {
           if (dd && dd.classList.contains('open') && typeof renderHdrProdDropdown === 'function') {
             try { renderHdrProdDropdown(); } catch(e){}
           }
-          // Saved-view sync: pull the new list from PRODUCTS into the in-memory
-          // _mxv4 state, then re-render the cell modal if it's open. Keeps
-          // teammates' "Gaurav view" / "QA view" lists in sync across tabs and
-          // across users without anyone clicking refresh.
-          try {
-            if (typeof _mxv4 !== 'undefined' && _mxv4 && newRec) {
-              _mxv4.savedViews = (newRec.trackerSavedViews || []).slice();
-              var uid = (window.AUTH && AUTH.profile && AUTH.profile.id) || '_anon';
-              var byUser = newRec.trackerActiveViewByUser || {};
-              if (byUser[uid] != null) _mxv4.activeViewId = byUser[uid];
-              var modal = document.getElementById('mxv4Modal');
-              if (modal && modal.style.display !== 'none' && typeof renderMxv4Modal === 'function') {
-                renderMxv4Modal();
-              }
-            }
-          } catch(e) { console.warn('[products-realtime] tracker views refresh failed', e); }
-          // AP col-state sync — same pattern. Refresh in-memory _apColState
-          // from PRODUCTS so the next renderActionPlan picks it up.
-          try {
-            if (newRec && newRec.apColState && Array.isArray(newRec.apColState.views) && newRec.apColState.views.length) {
-              var uid2 = (window.AUTH && AUTH.profile && AUTH.profile.id) || '_anon';
-              var byU2 = newRec.apActiveViewByUser || {};
-              var newSt = Object.assign({}, newRec.apColState);
-              newSt.views = newRec.apColState.views.map(function (v) { return Object.assign({}, v); });
-              if (byU2[uid2] != null) newSt.activeViewId = byU2[uid2];
-              _apColState = newSt;
-              if (typeof renderActionPlan === 'function') {
-                try { renderActionPlan(); } catch(e){}
-              }
-            }
-          } catch(e) { console.warn('[products-realtime] ap col-state refresh failed', e); }
         }
       } catch (e) {
         console.warn('[products-realtime] handler error', e);
@@ -11816,12 +11723,6 @@ var _META_FIELDS = [
   // load without waiting for the next ClickUp sync. Round-trips through the
   // ads.meta jsonb column.
   '_customFields', '_customFieldsRaw',
-  // 2026-05-16 Phase 0: persist the ClickUp tags array so `ad._tags` survives
-  // page reload + roundtrips. Required for the auto-adopt heal pass (Bug 8
-  // protection's `app-created` marker check at lines ~25940/25970/26730 was
-  // a silent no-op before — _tags was never populated). After this lands,
-  // a fresh sync stamps tags onto every AD; subsequent flush persists them.
-  '_tags',
   // ClickUp NATIVE assignees array. We treat this as the source of truth for
   // the "Editor" field — task.assignees IS the editor in this workspace. Kept
   // alongside _customFieldsRaw['editor'] (which mirrors the same data through
@@ -12172,21 +12073,11 @@ function _deriveStatusChangeAt(ad) {
   switch (status) {
     case 'untested':         return created || null;
     case 'in production':    return approved || created || null;
-    // Fallbacks intentionally skip `updated` — it gets bulk-touched by sync paths
-    // (309 KMH rows mass-rewritten on 2026-05-13 13:18 UTC caused the "just now"
-    // regression). `created_at` is immutable, so worst case the age underestimates
-    // by a bounded amount instead of resetting to "just now".
-    case 'ready to launch':  return linkedDone || approved || created || null;
-    case 'testing':          return launched || approved || created || null;
+    case 'ready to launch':  return linkedDone || approved || updated || created || null;
+    case 'testing':          return launched || approved || updated || null;
     case 'loser':
-    case 'winner':
-    case 'mild winner':      // ← added 2026-05-15 (was hitting default)
-    case 'mild loser':       // ← added 2026-05-15
-    case 'scale':            // ← added 2026-05-15
-    case 'killed':           // ← added 2026-05-15
-    case 'archived':         // ← added 2026-05-15
-      return launched || created || null;
-    case 'complete':         return updated || created || null;
+    case 'winner':           return launched || updated || null;
+    case 'complete':         return updated || null;
     default:                 return null;
   }
 }
@@ -12217,36 +12108,14 @@ function _isLscPolluted(lsc) {
 }
 
 // Authoritative read for "when did this ad enter its current status".
-//
-// Strategy (2026-05-15 v2 — fixes KMH per-ad stale-lsc bug):
-//   - If lsc is polluted (5+ ads share it) → ignore lsc entirely, use derived.
-//   - Otherwise → return max(lsc, derived) capped at now().
-//     Rationale: lsc on this plan is unreliable per-row. _stampAdStatusChange
-//     only writes it on in-app transitions; ClickUp-side transitions never
-//     stamp it. CF values (Launch Date, Approved Date, linked-done) ARE the
-//     truth for those rows. The max() picks the latest trustworthy stamp:
-//       - Fresh in-app transition → lsc=now wins.
-//       - Stale-sync lsc + recent Launch Date → Launch Date wins.
-//       - Both old → either is fine (same age bucket).
-//     The cap at now() prevents a future-dated Launch Date from showing
-//     negative ages.
-//
-// This matches the cycle-clock contract declared at _testingCheckpointState
-// (line 12000-ish comment block: "Cycle clock = max(lastStatusChangeAt,
-// Launch Date) for Testing entry"). The earlier short-circuit
-// "lsc as-is unless polluted" was a per-row regression because it never
-// fell through to derive when lsc had a unique-but-stale value.
+// Real stamps (post-fix-ship transitions via _stampAdStatusChange) win.
+// Polluted migration values get overridden by custom-field derivation.
 function _bestStatusChangeAt(ad) {
   if (!ad) return null;
   var lsc = ad.lastStatusChangeAt || null;
+  if (lsc && !_isLscPolluted(lsc)) return lsc;
   var derived = _deriveStatusChangeAt(ad);
-  // Polluted lsc → ignore entirely, use derived only.
-  if (lsc && _isLscPolluted(lsc)) return derived || null;
-  // Otherwise pick the latest of (lsc, derived). Cap at now() so a
-  // future-dated Launch Date can't show a negative age.
-  var t = Math.max(lsc || 0, derived || 0);
-  if (!t) return null;
-  return Math.min(t, Date.now());
+  return derived || lsc || null;
 }
 
 // Lazy fetch: for RTL ads with no cached linkedDone, pull the linked
@@ -12336,14 +12205,7 @@ const DB = {
         insPrefix: c.ins_prefix || '',
         createdAt: c.created_at_ms || null,
         lastSyncedAt: c.last_synced_at_ms || null,
-        lastSyncedCount: c.last_synced_count || 0,
-        // 2026-05-15: tracker views synced via products.config (see _convertProductRow).
-        trackerSavedViews: Array.isArray(c.tracker_saved_views) ? c.tracker_saved_views : [],
-        trackerActiveViewByUser: (c.tracker_active_view_by_user && typeof c.tracker_active_view_by_user === 'object')
-          ? c.tracker_active_view_by_user : {},
-        apColState: (c.ap_col_state && typeof c.ap_col_state === 'object') ? c.ap_col_state : null,
-        apActiveViewByUser: (c.ap_active_view_by_user && typeof c.ap_active_view_by_user === 'object')
-          ? c.ap_active_view_by_user : {},
+        lastSyncedCount: c.last_synced_count || 0
       };
     });
   },
@@ -12529,8 +12391,7 @@ const DB = {
       }
     }
     const angleRows = survivingLocalAngles.map(function (a) {
-      // 2026-05-17 — last-line defense: strip badge-like suffix at the DB-write boundary.
-      return { id: a.id, product_id: productId, name: _normalizeTaxonomyName(a.name || ''), status: a.status || 'Untested', source_link: a.sourceLink || null, notes: a.notes || null };
+      return { id: a.id, product_id: productId, name: a.name || '', status: a.status || 'Untested', source_link: a.sourceLink || null, notes: a.notes || null };
     });
     const angleIds = new Set(angleRows.map(function (r) { return r.id; }));
     const angleOrphans = (existingAngles.data || []).filter(function (r) { return !angleIds.has(r.id); }).map(function (r) { return r.id; });
@@ -12551,7 +12412,7 @@ const DB = {
       }
     }
     const personaRows = survivingLocalPersonas.map(function (p) {
-      return { id: p.id, product_id: productId, name: _normalizeTaxonomyName(p.name || ''), status: p.status || 'Untested', source_link: p.sourceLink || null, notes: p.notes || null };
+      return { id: p.id, product_id: productId, name: p.name || '', status: p.status || 'Untested', source_link: p.sourceLink || null, notes: p.notes || null };
     });
     const personaIds = new Set(personaRows.map(function (r) { return r.id; }));
     const personaOrphans = (existingPersonas.data || []).filter(function (r) { return !personaIds.has(r.id); }).map(function (r) { return r.id; });
@@ -12598,25 +12459,10 @@ const DB = {
     // volatile fields (_clientId, updated_at, last_status_change_at) so
     // self-echoes don't false-positive as "changed". On any error in
     // hash compute, fail-safe by including the row in the save.
-    // Phase B (2026-05-14): the hash cache used to live only in-memory
-    // (`window._adRowHashCache`). Every page reload wiped it — so the very
-    // first save after each reload re-upserted all ~300 ads, which (a) blew
-    // realtime budget and (b) tripped the BEFORE-UPDATE `set_updated_at`
-    // trigger on every row, mass-poisoning updated_at. Now keyed per product
-    // and persisted to localStorage so the optimization survives reloads.
-    // See feedback_realtime_traffic_budget.md invariant #2.
     var _changedAdRows = adRows;
     try {
-      var _hashLsKey = 'mxv4.adRowHashCache.v1.' + productId;
       if (typeof window._adRowHashCache === 'undefined') window._adRowHashCache = {};
-      if (!window._adRowHashCache[productId]) {
-        // Hydrate from localStorage on first use this session for this product.
-        try {
-          var _raw = localStorage.getItem(_hashLsKey);
-          window._adRowHashCache[productId] = _raw ? (JSON.parse(_raw) || {}) : {};
-        } catch (e) { window._adRowHashCache[productId] = {}; }
-      }
-      var hashCache = window._adRowHashCache[productId];
+      var hashCache = window._adRowHashCache;
       var _skipped = 0;
       _changedAdRows = adRows.filter(function (r) {
         try {
@@ -12648,16 +12494,6 @@ const DB = {
         }
       });
       if (_skipped > 0) console.log('[SB] flush skipped', _skipped, 'unchanged ADs of', adRows.length, 'total');
-      // Garbage-collect orphan hashes — ads no longer in the working set.
-      // Bounded write — never grows unbounded across product lifecycle.
-      try {
-        var _liveIds = new Set(adRows.map(function (r) { return r.id; }));
-        Object.keys(hashCache).forEach(function (k) {
-          if (!_liveIds.has(k)) delete hashCache[k];
-        });
-      } catch (e) {}
-      // Persist for next reload. Best-effort — localStorage failures are silent.
-      try { localStorage.setItem(_hashLsKey, JSON.stringify(hashCache)); } catch (e) {}
     } catch (e) {
       console.warn('[SB] hash-skip filter errored, falling through to full upsert', e);
       _changedAdRows = adRows;
@@ -13581,27 +13417,6 @@ function _isTaxonomyTombstoned(kind, productId, name) {
   if (!name) return false;
   var tomb = _readTaxonomyTombstone(kind, productId);
   return !!tomb[name.toLowerCase().trim()];
-}
-
-// 2026-05-17 — strip badge-like suffixes that a legacy write path baked into
-// taxonomy names ("Foo⭐ Winner", "Foo Winner", "Foo Scale", or the doubled
-// "Foo⭐ Winner⭐ Winner" we saw on Canva). Cause: an old write path appended
-// the status-badge text into the `name` string. After we deleted the ghosts,
-// this normalizer is the permanent guard so it can't recur. Called at every
-// taxonomy-write boundary: parseClickUpTask (CU→memory), autoDiscoverTaxonomy
-// (memory→arrays), and personas/angles upsert (memory→DB).
-function _normalizeTaxonomyName(name) {
-  if (!name || typeof name !== 'string') return name;
-  var s = name;
-  // Strip up to 3 trailing badge fragments — handles the doubled case.
-  // Match: optional space/star/emoji, followed by Winner|Scale|Loser|Killed|Mild Winner|Complete
-  var BADGE_RE = /\s*(?:[⭐★*]\s*)?(?:Mild\s+Winner|Winner|Loser|Scale|Killed|Complete)\s*$/i;
-  for (var i = 0; i < 3; i++) {
-    var stripped = s.replace(BADGE_RE, '');
-    if (stripped === s) break;
-    s = stripped;
-  }
-  return s.trim();
 }
 
 // BUG-005 — strip tombstoned angle/persona names from an ANGLE_PERSONAS
@@ -18213,13 +18028,6 @@ function _apEnsureCfColumns() {
     var displayName = CLICKUP_FIELD_REGISTRY[lcName] || lcName;
     _AP_COL_REGISTRY[key] = {
       label: displayName, isCustom: true, lcName: lcName,
-      // 2026-05-16: CF columns are sortable. sortKey 'cf:<lcName>' is handled
-      // by the renderApTableView comparator (line ~20222) which reads
-      // ad._customFields[lcName] case-insensitively. Empty values sink to
-      // the bottom regardless of sort direction so columns with sparse
-      // CF data don't bury rows that DO have it.
-      sortable: true,
-      sortKey: 'cf:' + lcName,
       renderCell: function (r) {
         var ad = r.ad;
         var meta = (typeof CLICKUP_FIELD_META !== 'undefined') ? CLICKUP_FIELD_META[lcName] : null;
@@ -18557,43 +18365,7 @@ function _apFreshDefaultView() {
     columns: _AP_DEFAULT_COLUMNS.map(function (c) { return { key:c.key, width:c.width, hidden:c.hidden }; })
   };
 }
-// 2026-05-16: AP saved views moved to per-user-global storage on profiles.ap_col_state.
-// User's choice (see feature_tracker_saved_views_supabase.md v2 section). Matrix
-// saved views remain per-product on products.config.tracker_saved_views.
-//
-// Load order: AUTH.profile.ap_col_state → legacy products.config.ap_col_state (one-time
-// migration on first read) → localStorage cache → null (caller seeds default view).
 function _apColLoad() {
-  // Phase 1: per-user global on profiles
-  try {
-    if (window.AUTH && AUTH.profile && AUTH.profile.ap_col_state &&
-        Array.isArray(AUTH.profile.ap_col_state.views) &&
-        AUTH.profile.ap_col_state.views.length) {
-      var pst = AUTH.profile.ap_col_state;
-      var st = { views: pst.views.map(function (v) { return Object.assign({}, v); }) };
-      if (pst.activeViewId) st.activeViewId = pst.activeViewId;
-      return st;
-    }
-  } catch (e) {}
-  // Phase 2: legacy products.config.ap_col_state — used to seed migration only.
-  // The migration runner (_apMigrateLegacyViewsToProfile) walks all PRODUCTS and
-  // copies any non-default views into profiles. We still let this branch hand
-  // back the active product's per-product views if migration hasn't run yet,
-  // so the UI looks normal during the brief boot window.
-  try {
-    if (typeof PRODUCTS !== 'undefined' && activeProductId) {
-      var prod = PRODUCTS.find(function (p) { return p.id === activeProductId; });
-      if (prod && prod.apColState && Array.isArray(prod.apColState.views) && prod.apColState.views.length) {
-        var uid = (window.AUTH && AUTH.profile && AUTH.profile.id) || '_anon';
-        var byUser = prod.apActiveViewByUser || {};
-        var legacySt = Object.assign({}, prod.apColState);
-        legacySt.views = (prod.apColState.views || []).map(function(v){ return Object.assign({}, v); });
-        if (byUser[uid] != null) legacySt.activeViewId = byUser[uid];
-        return legacySt;
-      }
-    }
-  } catch (e) {}
-  // Phase 3: localStorage cache
   try {
     var raw = localStorage.getItem(_apColStorageKey());
     if (!raw) return null;
@@ -18605,149 +18377,6 @@ function _apColLoad() {
 function _apColSave() {
   if (!_apColState) return;
   try { localStorage.setItem(_apColStorageKey(), JSON.stringify(_apColState)); } catch (e) {}
-  // Mirror to profile (DB) so other tabs of the SAME user sync. Debounced 500ms.
-  if (_apColSaveDebounced) clearTimeout(_apColSaveDebounced);
-  _apColSaveDebounced = setTimeout(function () {
-    _apColSaveDebounced = null;
-    _apWriteColStateToProfile();
-  }, 500);
-}
-var _apColSaveDebounced = null;
-
-// Mirror in-memory _apColState into AUTH.profile.ap_col_state SYNCHRONOUSLY before
-// any async DB work. Protects against the render-mid-await race we saw on the
-// per-product version.
-function _apMirrorColStateToProfile() {
-  if (!window.AUTH || !AUTH.profile || !_apColState) return;
-  AUTH.profile.ap_col_state = {
-    views: (_apColState.views || []).map(function (v) {
-      return Object.assign({}, v, {
-        columns: (v.columns || []).map(function (c) { return Object.assign({}, c); })
-      });
-    }),
-    activeViewId: _apColState.activeViewId || null,
-    _migratedFromProducts: !!(AUTH.profile.ap_col_state && AUTH.profile.ap_col_state._migratedFromProducts)
-  };
-}
-
-// Write the current user's _apColState into profiles.ap_col_state.
-async function _apWriteColStateToProfile() {
-  if (typeof SB === 'undefined' || !SB || !_apColState) return;
-  if (!window.AUTH || !AUTH.profile || !AUTH.profile.id) {
-    // No profile = anon visitor. Fall back to localStorage only (already saved).
-    return;
-  }
-  var uid = AUTH.profile.id;
-  // 1. Mirror SYNCHRONOUSLY before the await
-  _apMirrorColStateToProfile();
-  try {
-    var payload = {
-      views: (_apColState.views || []).map(function (v) {
-        return Object.assign({}, v, {
-          columns: (v.columns || []).map(function (c) { return Object.assign({}, c); })
-        });
-      }),
-      activeViewId: _apColState.activeViewId || null
-    };
-    // Preserve the migration marker if present.
-    if (AUTH.profile.ap_col_state && AUTH.profile.ap_col_state._migratedFromProducts) {
-      payload._migratedFromProducts = true;
-    }
-    var { error } = await SB.from('profiles').update({ ap_col_state: payload }).eq('id', uid);
-    if (error) {
-      console.warn('[ap] colState profile write failed', error);
-      try { if (typeof toast === 'function') toast('AP view save failed — see console', 'err'); } catch (_) {}
-      return;
-    }
-    // Re-mirror post-write so AUTH.profile is canonical.
-    _apMirrorColStateToProfile();
-  } catch (e) {
-    console.warn('[ap] colState profile write threw', e);
-  }
-}
-
-// Backwards-compat shim — anything that still calls the old name lands here.
-function _apMirrorColStateToProducts() { _apMirrorColStateToProfile(); }
-async function _apWriteColStateToDb() { return _apWriteColStateToProfile(); }
-
-// One-time migration: copy legacy per-product views into profiles.ap_col_state.
-// Idempotent — marks _migratedFromProducts=true so it never re-runs.
-// Dedupe by view name (case-insensitive trim).
-async function _apMigrateLegacyViewsToProfile() {
-  if (!window.AUTH || !AUTH.profile || !AUTH.profile.id) return;
-  if (typeof PRODUCTS === 'undefined' || !Array.isArray(PRODUCTS)) return;
-  // Already migrated?
-  if (AUTH.profile.ap_col_state && AUTH.profile.ap_col_state._migratedFromProducts) return;
-  var aggregated = [];
-  var seenNames = {};
-  PRODUCTS.forEach(function (p) {
-    if (!p || !p.apColState || !Array.isArray(p.apColState.views)) return;
-    p.apColState.views.forEach(function (v) {
-      if (!v || v.isSystem || v.id === 'default') return; // skip the system default
-      var nameKey = String(v.name || '').toLowerCase().trim();
-      if (!nameKey) return;
-      if (seenNames[nameKey]) return; // dedupe
-      seenNames[nameKey] = true;
-      aggregated.push(Object.assign({}, v, {
-        columns: (v.columns || []).map(function (c) { return Object.assign({}, c); }),
-        _migratedFrom: p.id
-      }));
-    });
-  });
-  var existing = (AUTH.profile.ap_col_state && AUTH.profile.ap_col_state.views) || [];
-  var existingIds = {};
-  existing.forEach(function (v) { if (v && v.id) existingIds[v.id] = true; });
-  var fresh = aggregated.filter(function (v) { return !existingIds[v.id]; });
-  var merged = existing.concat(fresh);
-  var payload = {
-    views: merged,
-    activeViewId: (AUTH.profile.ap_col_state && AUTH.profile.ap_col_state.activeViewId) || null,
-    _migratedFromProducts: true
-  };
-  try {
-    var { error } = await SB.from('profiles').update({ ap_col_state: payload }).eq('id', AUTH.profile.id);
-    if (error) { console.warn('[ap] migration failed', error); return; }
-    AUTH.profile.ap_col_state = payload;
-    console.log('[ap] migrated ' + fresh.length + ' legacy view(s) from products → profiles');
-    // Force a fresh load so the UI picks up the migrated views immediately.
-    _apColState = null;
-    _apEnsureColState();
-    if (typeof renderActionPlan === 'function') renderActionPlan();
-  } catch (e) { console.warn('[ap] migration threw', e); }
-}
-
-// Realtime channel — subscribe to changes on the current user's profile row.
-// Echoes changes from the same user's other tabs back into AUTH.profile + _apColState.
-var _apProfileChannel = null;
-function _initApProfileRealtimeChannel() {
-  if (typeof SB === 'undefined' || !SB) return;
-  if (!window.AUTH || !AUTH.profile || !AUTH.profile.id) return;
-  if (_apProfileChannel) { try { SB.removeChannel(_apProfileChannel); } catch (e) {} _apProfileChannel = null; }
-  var uid = AUTH.profile.id;
-  _apProfileChannel = SB.channel('cc-profile-' + uid);
-  _apProfileChannel.on('postgres_changes',
-    { event: 'UPDATE', schema: 'public', table: 'profiles', filter: 'id=eq.' + uid },
-    function (payload) {
-      try {
-        var newRow = payload && payload.new;
-        if (!newRow) return;
-        // Echo-skip: if the incoming ap_col_state matches what we already have, ignore.
-        var incoming = newRow.ap_col_state;
-        var current = AUTH.profile && AUTH.profile.ap_col_state;
-        if (incoming && current && JSON.stringify(incoming) === JSON.stringify(current)) return;
-        // Refresh AUTH.profile fields we care about
-        if (incoming) AUTH.profile.ap_col_state = incoming;
-        if (newRow.ap_dismissed_ad_ids) AUTH.profile.ap_dismissed_ad_ids = newRow.ap_dismissed_ad_ids;
-        // Force _apColState reload from the fresh profile data
-        _apColState = null;
-        _apEnsureColState();
-        if (typeof renderActionPlan === 'function') {
-          try { renderActionPlan(); } catch (e) {}
-        }
-      } catch (e) { console.warn('[ap-profile-realtime] handler error', e); }
-    }
-  );
-  _apProfileChannel.subscribe();
 }
 function _apEnsureColState() {
   if (_apColState) return _apColState;
@@ -18917,27 +18546,16 @@ function _apFilterColumnList(inputEl) {
 }
 
 function _apToggleColumnVisible(key, on) {
-  // Ensure CF columns are registered so a freshly-toggled custom field is
-  // recognized by the render path (otherwise the column shows but the cells
-  // render blank until next sync). 2026-05-16.
-  if (typeof _apEnsureCfColumns === 'function') _apEnsureCfColumns();
   var view = _apActiveView();
   var col = view.columns.find(function (c) { return c.key === key; });
   if (!col) return;
   col.hidden = !on;
   _apColSave();
-  // Mark this column as "freshly added" so render attaches data-fresh="1"
-  // for the slide-in animation. Cleared on next render after animation.
-  if (on) {
-    _apState._freshlyAddedCol = key;
-  }
   // Update the open picker IN PLACE — never close+reopen, that's what
   // caused the picker to jump when re-anchored against a freshly-rendered
   // toolbar button.
   _apRefreshColumnManagerInPlace();
   if (typeof renderActionPlan === 'function') renderActionPlan();
-  // Clear the fresh flag after animation completes
-  setTimeout(function () { if (_apState._freshlyAddedCol === key) _apState._freshlyAddedCol = null; }, 260);
 }
 
 function _apResetColumns() {
@@ -20437,23 +20055,6 @@ function renderApTableView(rows) {
   var sortCol = _apState.sort.col, sortDir = _apState.sort.dir;
   rows = rows.slice().sort(function (a, b) {
     var av, bv;
-    // 2026-05-16: custom-field sort. CF column sortKeys are 'cf:<lcName>'
-    // (set by _apEnsureCfColumns). Read from display._customFields. Empty
-    // values get pushed to the bottom regardless of direction.
-    if (typeof sortCol === 'string' && sortCol.indexOf('cf:') === 0) {
-      var _lc = sortCol.slice(3);
-      var _ar = a.display && a.display._customFields && a.display._customFields[_lc];
-      var _br = b.display && b.display._customFields && b.display._customFields[_lc];
-      var _as = (_ar == null || _ar === '') ? '' : String(_ar).toLowerCase().trim();
-      var _bs = (_br == null || _br === '') ? '' : String(_br).toLowerCase().trim();
-      // Empty values always at the bottom (asc OR desc).
-      if (_as === '' && _bs === '') return 0;
-      if (_as === '') return 1;
-      if (_bs === '') return -1;
-      if (_as < _bs) return -1 * sortDir;
-      if (_as > _bs) return 1 * sortDir;
-      return 0;
-    }
     switch (sortCol) {
       case 'title':   av = a.display.title; bv = b.display.title; break;
       case 'status':  av = a.display.status; bv = b.display.status; break;
@@ -20505,18 +20106,15 @@ function renderApTableView(rows) {
   html += '</colgroup>';
 
   html += '<thead><tr>';
-  // 2026-05-16: stamp data-fresh="1" on the just-added column for animation.
-  var _freshKey = (_apState && _apState._freshlyAddedCol) || null;
   visCols.forEach(function (c) {
     var def = _AP_COL_REGISTRY[c.key]; if (!def) return;
-    var freshAttr = (_freshKey && c.key === _freshKey) ? ' data-fresh="1"' : '';
     if (def.renderHead) {
       html += def.renderHead(headState);
     } else {
       var sortable = !!def.sortable;
       var isSorted = sortable && def.sortKey && def.sortKey === sortCol;
       var sortAttr = sortable ? ' class="sortable" onclick="apSort(\'' + def.sortKey + '\')"' : '';
-      html += '<th data-col="' + escAttr(c.key) + '"' + freshAttr + sortAttr + '>' + esc(def.label) + (isSorted ? arrow(def.sortKey) : '') + '</th>';
+      html += '<th data-col="' + escAttr(c.key) + '"' + sortAttr + '>' + esc(def.label) + (isSorted ? arrow(def.sortKey) : '') + '</th>';
     }
   });
   // Inject resize handles onto every <th> we just rendered. The handle is
@@ -20530,12 +20128,7 @@ function renderApTableView(rows) {
     var _adIdForRow = (r.ad && r.ad.id) || act.sourceAdId || act.adId || '';
     var _rowCleared = (typeof _apIsDismissed === 'function') && _apIsDismissed(_adIdForRow);
     var rowCls = 'ap-row age-' + age.state + (sel ? ' selected' : '') + (act._highlightNew ? ' new-row' : '') + (_rowCleared ? ' is-cleared' : '');
-    // 2026-05-15: use _apIsCurrentlyAdopted instead of raw _adoptedAt — only
-    // production-tag (Path 1) and currently-virtual (Path 2) carry the
-    // adopted row style. Lazy-promoted MAs (Path 3) are app-managed.
-    var _isAdopted = (typeof _apIsCurrentlyAdopted === 'function')
-                       ? _apIsCurrentlyAdopted(act)
-                       : (act._origin === 'adopted');
+    var _isAdopted = (act._origin === 'adopted' || !!act._adoptedAt);
     html += '<tr class="' + rowCls + '" data-action-id="' + escAttr(act.id) + '"' + (_isAdopted ? ' data-adopted="1"' : '') + ' onclick="apOpenDrawer(\'' + escAttr(act.id) + '\')">';
     visCols.forEach(function (c) {
       var def = _AP_COL_REGISTRY[c.key]; if (!def || !def.renderCell) return;
@@ -20882,13 +20475,8 @@ function renderApDrawerHistory(card) {
   var act = card.act;
   var history = (act._history && Array.isArray(act._history)) ? act._history : [];
   // Always show creation + adoption + push events even if not yet in _history.
-  // 2026-05-15: synthetic "adopted" event only injected for path-1 origin
-  // (production-tag adoption). Lazy-promoted MAs also carry _adoptedAt for
-  // zombie/dedup protection but DIDN'T come from a production-tag, so
-  // emitting the "Auto-adopted from ClickUp production tag" event for them
-  // is misleading. Gate on _origin === 'adopted' (strict).
   var synthEvents = [];
-  if (act._adoptedAt && act._origin === 'adopted') synthEvents.push({ ts: act._adoptedAt, type: 'adopted', detail: 'Auto-adopted from ClickUp production tag' });
+  if (act._adoptedAt) synthEvents.push({ ts: act._adoptedAt, type: 'adopted', detail: 'Auto-adopted from ClickUp production tag' });
   if (act._pushedAt && !history.find(function (h) { return h.type === 'pushed_to_clickup'; })) synthEvents.push({ ts: act._pushedAt, type: 'pushed_to_clickup', detail: act._clickupId ? ('ClickUp task ' + act._clickupId) : '' });
   var all = history.concat(synthEvents).sort(function (a, b) { return (b.ts || 0) - (a.ts || 0); });
 
@@ -21796,22 +21384,10 @@ function addAngleRow() {
 
 function deleteAngle(idx) {
   var name = ANGLES[idx].name;
-  var aid  = ANGLES[idx].id;
   if (!confirm('Delete angle "' + name + '"? This will clear it from all creatives and inspirations.')) return;
   // BUG-004: tombstone this name so the next ClickUp poll can't resurrect it
   // via Pass 1 (overwriting cleared ad.angle) → autoDiscoverTaxonomy.
   _rememberTaxonomyDeletion('angle', activeProductId, name);
-  // 2026-05-17 — direct DB delete + DB-side tombstone insert (see deletePersona comment).
-  try {
-    if (typeof SB !== 'undefined' && SB && aid) {
-      SB.from('angles').delete().eq('id', aid).then(function (r) {
-        if (r && r.error) console.warn('[deleteAngle] DB delete failed:', r.error.message);
-      });
-      if (activeProductId) {
-        SB.from('deleted_angles').upsert({ id: aid, product_id: activeProductId, name: name || null });
-      }
-    }
-  } catch (e) { console.warn('[deleteAngle] direct delete skipped:', e); }
   ANGLES.splice(idx, 1);
   // Clear from ADS
   for (var i = 0; i < ADS.length; i++) {
@@ -21934,27 +21510,9 @@ function addPersonaRow() {
 
 function deletePersona(idx) {
   var name = PERSONAS[idx].name;
-  var pid  = PERSONAS[idx].id;
   if (!confirm('Delete persona "' + name + '"? This will clear it from all creatives and inspirations.')) return;
   // BUG-004: tombstone — same reasoning as deleteAngle.
   _rememberTaxonomyDeletion('persona', activeProductId, name);
-  // 2026-05-17 — direct DB delete + DB-side tombstone insert. Previously this
-  // function only mutated in-memory PERSONAS and relied on saveState's orphan
-  // diff to indirectly delete from DB. That created a multi-tab race where
-  // another tab's saveState could resurrect the row (it still had the persona
-  // in its local existingPersonaIdSet from a prior fetch). The DB-side
-  // deleted_personas tombstone (Phase 3) makes resurrection impossible — any
-  // upsert with that id is blocked by the trigger.
-  try {
-    if (typeof SB !== 'undefined' && SB && pid) {
-      SB.from('personas').delete().eq('id', pid).then(function (r) {
-        if (r && r.error) console.warn('[deletePersona] DB delete failed:', r.error.message);
-      });
-      if (activeProductId) {
-        SB.from('deleted_personas').upsert({ id: pid, product_id: activeProductId, name: name || null });
-      }
-    }
-  } catch (e) { console.warn('[deletePersona] direct delete skipped:', e); }
   PERSONAS.splice(idx, 1);
   // Clear from ADS
   for (var i = 0; i < ADS.length; i++) {
@@ -24948,10 +24506,7 @@ function autoDiscoverTaxonomy(sourceAds) {
     var ad = sourceAds[i];
     if (!ad) continue;
 
-    // 2026-05-17 — defensive normalize. parseClickUpTask already sanitizes,
-    // but ads can also come from local edits / matrix-cell ingestion that
-    // bypass parseClickUpTask. Strip badge-like suffixes here too.
-    var ang = _normalizeTaxonomyName((ad.angle || '').trim());
+    var ang = (ad.angle || '').trim();
     if (ang && !angleSeen[ang.toLowerCase()] && !existingAngleNamesLC[ang.toLowerCase()] && !_angTomb[ang.toLowerCase().trim()]) {
       angleSeen[ang.toLowerCase()] = true;
       ANGLES.push({
@@ -24968,7 +24523,7 @@ function autoDiscoverTaxonomy(sourceAds) {
       addedAngles.push(ang);
     }
 
-    var per = _normalizeTaxonomyName((ad.persona || '').trim());
+    var per = (ad.persona || '').trim();
     if (per && !personaSeen[per.toLowerCase()] && !existingPersonaNamesLC[per.toLowerCase()] && !_perTomb[per.toLowerCase().trim()]) {
       personaSeen[per.toLowerCase()] = true;
       PERSONAS.push({
@@ -25032,8 +24587,7 @@ async function importTasksFromClickUp(tasks) {
     'angle', 'persona', 'parentAdId', 'variationNumber',
     'creativeStructure', 'hookType', 'productionStyle', 'creativeHypothesis',
     'creativeUSP', '_customFields', '_customFieldsRaw', 'dueDate', '_dueDateMs',  // F5 + F6 — sync USP + formatted/raw custom-field maps + due date onto existing ads
-    '_clickupUrl', '_clickupStatus',
-    '_tags'  // 2026-05-16 Phase 0: copy CU tags onto local ad. Used by Bug 8 + auto-adopt heal.
+    '_clickupUrl', '_clickupStatus'
   ];
   // Local provenance fields that must NEVER be overwritten by a ClickUp sync:
   var _PRESERVE_LOCAL = ['taskType', 'adOrigin', 'sourceFormatId', '_fromInspoId',
@@ -25442,11 +24996,6 @@ function parseClickUpTask(t) {
   var personaTag = getFieldValue(['persona tag']);
   var angle   = angleTag   || getFieldValue(['angle', 'angles', 'ad angle']);
   var persona = personaTag || getFieldValue(['persona', 'personas', 'target persona', 'audience']);
-  // 2026-05-17 — sanitize at the CU→memory boundary so a polluted CU value
-  // ("Foo⭐ Winner") can never enter local state, get auto-discovered, or
-  // upserted back as a ghost taxonomy row.
-  angle   = _normalizeTaxonomyName(angle);
-  persona = _normalizeTaxonomyName(persona);
   var adLink   = getFieldValue(['inspiration link', 'inspo link', 'ad link', 'adlink', 'ad url', 'adurl', 'creative link', 'reference link']);
   var driveLink = getFieldValue(['drive link', 'google drive', 'gdrive', 'production link', 'google drive link', 'drive']);
   var adType = getFieldValue(['photo/video', 'ad type', 'adtype', 'format type', 'type']);
@@ -25612,13 +25161,6 @@ function parseClickUpTask(t) {
     _clickupId: t.id,
     _clickupUrl: t.url || '',
     formatName: t.name || '',
-    // 2026-05-16 Phase 0: persist ClickUp tag array. Used by Bug 8 protection
-    // (`app-created` marker check at lines ~25940, 25970, 26730) and by the
-    // auto-adopt heal pass (see feature_auto_adopt_heal_via_clickup_tag.md).
-    // Previously, parseClickUpTask read tags into a local var (line ~25041)
-    // but never returned them — so `ad._tags` was undefined everywhere and
-    // the marker check was a silent no-op. Returning here closes the wire.
-    _tags: tags,
     // Capture the raw task description so apResolveCard can parse the
     // embedded "📌 Inspiration Brief" / "🔗 Source Ad" lines for legacy
     // rows whose _fromInspoId / _sourceFormatId is stale. Without this,
@@ -26312,48 +25854,6 @@ function pollFullSync() {
         var fresh = taskMap[_cuid];
         if (!fresh) continue;
         var oldFormatNameForMeta = ad.formatName;  // capture for cell-meta sync below
-        // 2026-05-16 Phase 0: copy _tags from fresh CU sync onto the local ad.
-        // Not added to _SYNC_DIFF_FIELDS because that loop's `freshVal !== ad[field]`
-        // check always trips on array identity (false positive every sync, noisy
-        // changed=true). Copy unconditionally — tags change rarely; one assignment
-        // per sync is cheap. Required for `app-created` marker detection
-        // (lines 25940+/25970+/26730+) to actually work, and for the auto-adopt
-        // heal pass (feature_auto_adopt_heal_via_clickup_tag.md).
-        if (Array.isArray(fresh._tags)) {
-          var _freshTagsStr = JSON.stringify(fresh._tags);
-          var _adTagsStr = JSON.stringify(ad._tags || []);
-          if (_freshTagsStr !== _adTagsStr) {
-            ad._tags = fresh._tags.slice();
-            changed = true;
-          }
-          // 2026-05-16 Phase 2: ongoing sync guard. If the freshly-synced AD has
-          // the `app-created` marker AND its linked MA is still stamped with
-          // adopt markers from a past bug, heal in place. Catches anything that
-          // slipped through Phase 1's one-shot backfill. (See
-          // feature_auto_adopt_heal_via_clickup_tag.md.)
-          if (fresh._tags.indexOf('app-created') !== -1 && typeof MANUAL_ACTIONS !== 'undefined' && Array.isArray(MANUAL_ACTIONS)) {
-            for (var _mhi = 0; _mhi < MANUAL_ACTIONS.length; _mhi++) {
-              var _mh = MANUAL_ACTIONS[_mhi];
-              if (!_mh) continue;
-              var _mhSrc = _mh._sourceAdId || _mh.sourceAdId || _mh.adId;
-              var _mhCu = _mh._clickupId;
-              var _linksThis = (_mhSrc === ad.id) || (_mhCu && _mhCu === ad._clickupId);
-              if (!_linksThis) continue;
-              // _origin='adopted' (production-tag flow) stays — that's legitimate
-              if (_mh._origin === 'adopted') break;
-              var _needsHeal = (_mh._origin === 'auto-adopted') || !!_mh._adoptedAt;
-              if (!_needsHeal) break;
-              // Strip adopt markers + ensure _pushedAt is set
-              delete _mh._origin; delete _mh._adoptedAt;
-              if (!_mh._pushedAt) _mh._pushedAt = Date.now();
-              if (typeof _writeManualActionRowDirect === 'function') {
-                try { _writeManualActionRowDirect(_mh); } catch (e) {}
-              }
-              changed = true;
-              break;
-            }
-          }
-        }
         for (var f = 0; f < _SYNC_DIFF_FIELDS.length; f++) {
           var field = _SYNC_DIFF_FIELDS[f];
           var freshVal = fresh[field];
@@ -27604,29 +27104,6 @@ function apResolveCard(act) {
   return { act: act, ad: ad, display: display, source: source, age: age };
 }
 
-// 2026-05-15 — Render-side "is this card adopted RIGHT NOW (vs historically)?"
-// helper. `_adoptedAt` lives on three different MA shapes:
-//   1. `_origin='adopted'`     → real ClickUp production-tag adoption (keep badge)
-//   2. `_origin='auto-adopted'` + `_virtual=true` → render-only virtual synth (keep badge)
-//   3. `_origin='auto-adopted'` (no _virtual) → lazy-promoted MA (DO NOT show badge —
-//      it was virtual once, but once promoted to a real MA it's app-managed)
-//
-// The previous render checks read `_adoptedAt` directly, which fired on case 3
-// indefinitely (since `_lazyPromoteVirtual` stamps `_adoptedAt` for zombie/dedup
-// protection — we must preserve that field in the DATA layer). This helper
-// distinguishes correctly at the render layer only.
-//
-// Keep `_adoptedAt` reads in the dedup (line 26174) and zombie-drop (line 40139,
-// 40164, 40209, 40229) paths AS-IS — those rely on `_adoptedAt` to identify
-// not-user-pushed MAs for Bug 8 / orphan protection.
-function _apIsCurrentlyAdopted(act) {
-  if (!act) return false;
-  if (act._origin === 'adopted') return true;        // Path 1 — production-tag adoption
-  if (act._virtual === true) return true;            // Path 2 — currently virtual
-  if (typeof act.id === 'string' && act.id.indexOf('va:') === 0) return true;
-  return false;
-}
-
 // Detect notable anomalies on a card. Returns array of badge descriptors:
 //   [{ type, label, tone, tip }]
 // Used both for the row's inline badges AND the Anomalies filter shortcut.
@@ -27647,9 +27124,7 @@ function apComputeAnomalies(card) {
     }
   }
   // 3. Adopted (not pushed by app) — informational, not an alarm.
-  // 2026-05-15: tightened via _apIsCurrentlyAdopted to avoid sticking on
-  // lazy-promoted MAs that have _adoptedAt set for zombie/dedup protection.
-  if (_apIsCurrentlyAdopted(act)) {
+  if (act._origin === 'adopted' || act._adoptedAt) {
     out.push({ type:'adopted', label:'Adopted', tone:'gray', tip:'Auto-adopted from ClickUp · not pushed by app' });
   }
   // 4. Recently re-linked.
@@ -27785,179 +27260,9 @@ function apToggleIncludeAdopted(on) {
   if (typeof renderActionPlan === 'function') renderActionPlan();
 }
 
-// ─── Auto-adopt heal pass (2026-05-16) ─────────────────────────────
-// See `feature_auto_adopt_heal_via_clickup_tag.md` in memory.
-//
-// Phase 1: One-shot backfill — walk MANUAL_ACTIONS + orphan ADS, check
-// `ad._tags.includes('app-created')`. If the marker is there, heal:
-//   • MA with adopt markers → strip _origin/_adoptedAt, stamp _pushedAt
-//   • AD with no MA       → insert clean MA (mirroring the KM-309 heal)
-// Returns a summary object.
-//
-// SAFETY: This function ONLY heals when `_tags` is populated AND contains
-// `app-created`. Ads without tags loaded yet are skipped (run a full Sync
-// first to populate them). Tags ABSENT from app-created marker mean the
-// task was truly created in ClickUp directly — leave alone.
-async function _apHealAutoAdoptedFromClickUpTag(opts) {
-  opts = opts || {};
-  var dryRun = !!opts.dryRun;
-  var productId = opts.productId || activeProductId;
-  if (!productId) return { ok: false, error: 'no active product' };
-  if (typeof SB === 'undefined' || !SB) return { ok: false, error: 'no Supabase client' };
-  if (typeof ADS === 'undefined' || !Array.isArray(ADS)) return { ok: false, error: 'no ADS array' };
-
-  var adById = {};
-  var adByClickupId = {};
-  ADS.forEach(function (a) {
-    if (!a || a.deletedAt) return;
-    if (a.id) adById[a.id] = a;
-    if (a._clickupId) adByClickupId[a._clickupId] = a;
-    if (a.clickupTaskId) adByClickupId[a.clickupTaskId] = a;
-  });
-
-  function adHasAppMarker(ad) {
-    return ad && Array.isArray(ad._tags) && ad._tags.indexOf('app-created') !== -1;
-  }
-
-  var stats = {
-    ok: true, productId: productId, dryRun: dryRun,
-    scanned_MAs: 0,
-    healed_MAs: 0,           // had adopt markers + app-created tag → cleaned
-    skipped_no_link: 0,      // MA pointing at no AD we have
-    skipped_no_tags_yet: 0,  // MA's linked AD has no _tags populated (run a Sync first)
-    skipped_not_app_marker: 0, // linked AD's tags don't include 'app-created' → truly adopted from CU
-    scanned_orphan_ADs: 0,
-    inserted_clean_MAs: 0,
-    skipped_orphan_no_marker: 0,
-    skipped_orphan_no_tags_yet: 0,
-    samples_healed_MAs: [],
-    samples_inserted_MAs: [],
-    errors: []
-  };
-
-  // ── Part 1: heal existing MAs with adopt markers ──
-  var maList = Array.isArray(MANUAL_ACTIONS) ? MANUAL_ACTIONS : [];
-  for (var mi = 0; mi < maList.length; mi++) {
-    var ma = maList[mi];
-    if (!ma) continue;
-    var hasAdoptMarkers = (ma._origin === 'auto-adopted') || !!ma._adoptedAt;
-    if (!hasAdoptMarkers) continue;
-    // _origin='adopted' (real production-tag adoption from ClickUp) is LEGITIMATE
-    // — don't strip. We only heal `_origin='auto-adopted'` (lazy-promote leftover)
-    // and the `_adoptedAt` field set on lazy-promotion. (See feedback_ap_auto_adopt.md
-    // invariant #6.)
-    if (ma._origin === 'adopted') {
-      // Could still have stale `_adoptedAt` from before invariant #6 — leave alone,
-      // it's the legitimate production-tag adoption flow. The render-side fix
-      // already handles this case correctly (Path 1).
-      continue;
-    }
-    stats.scanned_MAs++;
-    var src = ma._sourceAdId || ma.sourceAdId || ma.adId;
-    var cu = ma._clickupId;
-    var linkedAd = (src && adById[src]) || (cu && adByClickupId[cu]) || null;
-    if (!linkedAd) { stats.skipped_no_link++; continue; }
-    if (!Array.isArray(linkedAd._tags) || linkedAd._tags.length === 0) {
-      stats.skipped_no_tags_yet++; continue;
-    }
-    if (!adHasAppMarker(linkedAd)) {
-      stats.skipped_not_app_marker++; continue;
-    }
-    // Heal: strip adopt markers, stamp _pushedAt
-    if (stats.samples_healed_MAs.length < 5) {
-      stats.samples_healed_MAs.push({
-        ma_id: ma.id, title: ma.title,
-        was_origin: ma._origin, was_adoptedAt: ma._adoptedAt
-      });
-    }
-    if (!dryRun) {
-      ma._origin = undefined; delete ma._origin;
-      ma._adoptedAt = undefined; delete ma._adoptedAt;
-      if (!ma._pushedAt) ma._pushedAt = Date.now();
-      // Direct DB write — short-circuits the debounced full-state flush so
-      // realtime echo reaches teammates immediately.
-      try {
-        if (ma._dbId && typeof SB !== 'undefined') {
-          await SB.from('manual_actions').update({
-            payload: ma,
-            updated_at: new Date().toISOString()
-          }).eq('id', ma._dbId);
-        }
-      } catch (e) { stats.errors.push('update ' + ma.id + ': ' + (e && e.message || e)); }
-    }
-    stats.healed_MAs++;
-  }
-
-  // ── Part 2: insert clean MA for orphan ADs that have app-created marker ──
-  for (var ai = 0; ai < ADS.length; ai++) {
-    var ad = ADS[ai];
-    if (!ad || ad.deletedAt) continue;
-    if (!ad.id) continue;
-    // Skip if AD already covered by an MA
-    var covered = false;
-    for (var mj = 0; mj < maList.length; mj++) {
-      var _ma2 = maList[mj];
-      if (!_ma2) continue;
-      var _src = _ma2._sourceAdId || _ma2.sourceAdId || _ma2.adId;
-      var _cu = _ma2._clickupId;
-      if (_src === ad.id || _ma2.adId === ad.id) { covered = true; break; }
-      if (_cu && ad._clickupId && _cu === ad._clickupId) { covered = true; break; }
-    }
-    if (covered) continue;
-    if (!Array.isArray(ad._tags) || ad._tags.length === 0) {
-      stats.skipped_orphan_no_tags_yet++; continue;
-    }
-    if (!adHasAppMarker(ad)) {
-      stats.skipped_orphan_no_marker++; continue;
-    }
-    stats.scanned_orphan_ADs++;
-    if (!dryRun) {
-      // Build a clean MA (mirrors the KM-309 SQL heal shape)
-      var newId = 'heal-' + ad.id + '-' + Date.now();
-      var newMA = {
-        id: newId,
-        sourceAdId: ad.id,
-        adId: ad.id,
-        _clickupId: ad._clickupId || ad.clickupTaskId || null,
-        title: ad.formatName || ad.id,
-        priority: 'medium',
-        liveStatus: ad.status || 'Untested',
-        angle: ad.angle || '',
-        persona: ad.persona || '',
-        sourceAngle: ad.angle || '',
-        sourcePersona: ad.persona || '',
-        funnelStage: ad.funnelStage || '',
-        format: ad.adType || '',
-        _pushedAt: Date.now()
-      };
-      try {
-        if (typeof SB !== 'undefined') {
-          var ins = await SB.from('manual_actions').insert({
-            product_id: productId,
-            payload: newMA
-          }).select('id');
-          if (ins && ins.data && ins.data[0] && ins.data[0].id) newMA._dbId = ins.data[0].id;
-        }
-        if (Array.isArray(MANUAL_ACTIONS)) MANUAL_ACTIONS.push(newMA);
-      } catch (e) { stats.errors.push('insert ' + ad.id + ': ' + (e && e.message || e)); }
-    }
-    if (stats.samples_inserted_MAs.length < 5) {
-      stats.samples_inserted_MAs.push({ ad_id: ad.id, title: ad.formatName });
-    }
-    stats.inserted_clean_MAs++;
-  }
-
-  // Trigger a re-render so user sees the cleanup live
-  try { if (typeof renderActionPlan === 'function') renderActionPlan(); } catch (e) {}
-  return stats;
-}
-
 // Lazy-promote: turn a virtual card's AD into a real MA on first action that
 // needs one (bulk delete, push-to-CU, MA-only field edits). Idempotent —
 // returns existing MA id if one already covers this AD.
-// 2026-05-16 Phase 2: before stamping `_origin='auto-adopted'`, check the
-// linked AD's `_tags`. If `app-created` is present, create the MA as CLEAN
-// (no adopt markers) so the rose badge never appears on app-pushed tasks.
 function _lazyPromoteVirtual(ad) {
   if (!ad || !ad.id) return null;
   if (typeof MANUAL_ACTIONS !== 'undefined' && Array.isArray(MANUAL_ACTIONS)) {
@@ -27970,15 +27275,8 @@ function _lazyPromoteVirtual(ad) {
   }
   // No MA — create one. Mirrors the "→ Plan" flow but minimal.
   var nowMs = Date.now();
-  // 2026-05-16 Phase 2: if the linked AD has `app-created` tag in ClickUp,
-  // the AD was app-pushed and just got orphaned along the way. Create the
-  // MA as CLEAN (no _origin / _adoptedAt) so the rose badge never appears.
-  // Falls back to the legacy 'auto-adopted' marker for truly-virtual cards
-  // (ad with no `app-created` tag — likely created in ClickUp directly OR
-  // ad whose tags haven't synced yet).
-  var isAppCreated = Array.isArray(ad._tags) && ad._tags.indexOf('app-created') !== -1;
   var newAct = {
-    id: (isAppCreated ? 'heal-' : 'auto-') + ad.id + '-' + nowMs,
+    id: 'auto-' + ad.id + '-' + nowMs,
     sourceAdId: ad.id,
     adId: ad.id,
     title: ad.formatName || ad.id,
@@ -27988,13 +27286,10 @@ function _lazyPromoteVirtual(ad) {
     format: ad.adType || '',
     liveStatus: ad.status || 'Untested',
     _clickupId: ad._clickupId || ad.clickupTaskId || null,
+    _origin: 'auto-adopted',
+    _adoptedAt: nowMs,
     _pushedAt: nowMs
   };
-  if (!isAppCreated) {
-    // Legacy path — keep adopt markers for genuinely-virtual (not-app-pushed) cards.
-    newAct._origin = 'auto-adopted';
-    newAct._adoptedAt = nowMs;
-  }
   if (typeof MANUAL_ACTIONS !== 'undefined' && Array.isArray(MANUAL_ACTIONS)) {
     MANUAL_ACTIONS.push(newAct);
   }
@@ -31678,20 +30973,6 @@ var _mxv4 = {
   activeViewId: (function () {
     try { return localStorage.getItem('tracker.activeView') || null; } catch (e) { return null; }
   })(),
-  // Per-column pixel widths for the cell drawer table. Keyed by colId.
-  // Persisted to localStorage as a fast fallback; the authoritative copy
-  // lives inside each saved view's columnWidths map (synced via products
-  // realtime). Defaults are applied at render time when an entry is missing.
-  columnWidths: (function () {
-    try {
-      var raw = localStorage.getItem('tracker.columnWidths');
-      if (raw) {
-        var obj = JSON.parse(raw);
-        if (obj && typeof obj === 'object') return obj;
-      }
-    } catch (e) {}
-    return {};
-  })(),
   // Column-manager dropdown open flag (transient, not persisted). Tracked in
   // state — not via DOM class — so re-renders (after every checkbox toggle)
   // preserve the open panel instead of racing on a setTimeout trick.
@@ -34247,13 +33528,6 @@ function renderMxv4Modal() {
   if (!_mxv4.cell) return;
   var m = document.getElementById('mxv4Modal');
   if (!m) return;
-  // Saved-views hydrate + one-time migration. Idempotent — only runs if the
-  // in-memory state hasn't picked up the product's tracker_saved_views yet
-  // (e.g. fresh boot, or just-switched product).
-  try {
-    if (typeof _mxv4HydrateSavedViewsFromProduct === 'function') _mxv4HydrateSavedViewsFromProduct();
-    if (typeof _mxv4MaybeMigrateLocalSavedViews === 'function') _mxv4MaybeMigrateLocalSavedViews();
-  } catch (e) {}
   var parts = _mxv4.cell.split('||');
   var angleName = parts[0], personaName = parts[1];
   // Bug 13: dedup the active cell's assignment array before counting/rendering
@@ -34295,11 +33569,6 @@ function renderMxv4Modal() {
   html += '</div>';
 
   m.innerHTML = html;
-  // Mount column resizers after innerHTML is in place. Only fires for the
-  // creatives tab where the <th data-colid="..."> elements actually exist.
-  if (_mxv4.tab === 'creatives' && typeof _mxv4MountColumnHandlers === 'function') {
-    try { _mxv4MountColumnHandlers(); } catch (e) {}
-  }
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -34847,156 +34116,17 @@ function _mxv4SaveTableColumns() {
   try { localStorage.setItem('tracker.tableColumns', JSON.stringify(_mxv4.tableColumns)); } catch (e) {}
 }
 
-// Persist current column widths. localStorage is a fast fallback; the
-// authoritative copy travels inside each saved view (synced via products
-// realtime), so widths follow you across tabs / users once a view is saved.
-function _mxv4SaveColumnWidths() {
-  try { localStorage.setItem('tracker.columnWidths', JSON.stringify(_mxv4.columnWidths || {})); } catch (e) {}
-  // Mirror into the currently-active view so the width survives across tabs.
-  // Debounced — drag motion fires this on every mousemove tick, but the DB
-  // write only fires CLASSIFY_RATE_LIMIT-equivalent gentle 500ms after the
-  // user stops moving.
-  if (_mxv4.activeViewId && _mxv4.activeViewId !== 'default') {
-    var v = (_mxv4.savedViews || []).find(function (x) { return x.id === _mxv4.activeViewId; });
-    if (v) {
-      v.columnWidths = Object.assign({}, _mxv4.columnWidths || {});
-      v.updatedAt = Date.now();
-      if (_mxv4WriteSavedViewsDebounced) clearTimeout(_mxv4WriteSavedViewsDebounced);
-      _mxv4WriteSavedViewsDebounced = setTimeout(function () {
-        _mxv4WriteSavedViewsDebounced = null;
-        if (typeof _mxv4WriteSavedViewsToDb === 'function') _mxv4WriteSavedViewsToDb();
-      }, 500);
-    }
-  }
-}
-var _mxv4WriteSavedViewsDebounced = null;
-
-// Default widths per column id. Used at render time when columnWidths has
-// no entry for a key (e.g. first time a column is shown to a fresh user).
-var _MXV4_DEFAULT_COL_WIDTHS = {
-  source: 56, name: 280, type: 80, funnel: 80, origin: 110,
-  created: 100, due: 130, status: 130, inspirationTrace: 140,
-  creativeUSP: 220, notes: 200, action: 110, delete: 50,
-  hookType: 130, creativeStructure: 150, productionStyle: 140,
-  funnelType: 100, angle: 130, persona: 140, brand: 120,
-  editor: 130, reviewer: 130, adType: 100,
-};
-function _mxv4ColWidth(colId) {
-  var w = _mxv4.columnWidths && _mxv4.columnWidths[colId];
-  if (w && w >= 60 && w <= 600) return w;
-  return _MXV4_DEFAULT_COL_WIDTHS[colId] || 120;
-}
-
-// Column-resize drag controller. Mirrors the ap-col-resizer pattern.
-var _mxv4ResizeState = null;
-function _mxv4StartColResize(ev, colId) {
-  ev.preventDefault();
-  var startX = ev.clientX;
-  var startW = _mxv4ColWidth(colId);
-  _mxv4ResizeState = { colId: colId, startX: startX, startW: startW };
-  document.body.style.cursor = 'col-resize';
-  document.body.style.userSelect = 'none';
-
-  function onMove(e) {
-    if (!_mxv4ResizeState) return;
-    var dx = e.clientX - _mxv4ResizeState.startX;
-    var newW = Math.max(60, Math.min(600, _mxv4ResizeState.startW + dx));
-    _mxv4.columnWidths[_mxv4ResizeState.colId] = newW;
-    // Live-apply without full re-render — set CSS width directly on the
-    // matching <th> + each <td> in the column for buttery feel.
-    var th = document.querySelector('.mxv4-table thead th[data-colid="' + _mxv4ResizeState.colId + '"]');
-    if (th) {
-      th.style.width = newW + 'px';
-      th.style.minWidth = newW + 'px';
-      th.style.maxWidth = newW + 'px';
-      var tbl = th.closest('.mxv4-table');
-      if (tbl) {
-        var colIdx = Array.prototype.indexOf.call(th.parentNode.children, th);
-        tbl.querySelectorAll('tbody tr').forEach(function (tr) {
-          var td = tr.children[colIdx];
-          if (td) {
-            td.style.width = newW + 'px';
-            td.style.minWidth = newW + 'px';
-            td.style.maxWidth = newW + 'px';
-          }
-        });
-      }
-    }
-  }
-  function onUp() {
-    document.removeEventListener('mousemove', onMove);
-    document.removeEventListener('mouseup', onUp);
-    document.body.style.cursor = '';
-    document.body.style.userSelect = '';
-    _mxv4ResizeState = null;
-    _mxv4SaveColumnWidths();
-  }
-  document.addEventListener('mousemove', onMove);
-  document.addEventListener('mouseup', onUp);
-}
-
-// Attach resize handles to every <th> of the matrix table. Called after
-// renderMxv4Modal paints fresh DOM. Idempotent — checks for existing handle.
-function _mxv4MountColumnHandlers() {
-  var thead = document.querySelector('.mxv4-table thead');
-  if (!thead) return;
-  thead.querySelectorAll('th[data-colid]').forEach(function (th) {
-    if (th.querySelector('.mxv4-col-resizer')) return; // already mounted
-    var colId = th.getAttribute('data-colid');
-    if (!colId) return;
-    var handle = document.createElement('span');
-    handle.className = 'mxv4-col-resizer';
-    handle.title = 'Drag to resize';
-    handle.addEventListener('mousedown', function (e) {
-      e.stopPropagation();
-      _mxv4StartColResize(e, colId);
-    });
-    handle.addEventListener('click',     function (e) { e.stopPropagation(); });
-    handle.addEventListener('dragstart', function (e) { e.preventDefault(); e.stopPropagation(); });
-    th.appendChild(handle);
-    // Apply the saved width to th + apply to all cells in the column.
-    var w = _mxv4ColWidth(colId);
-    th.style.width    = w + 'px';
-    th.style.minWidth = w + 'px';
-    th.style.maxWidth = w + 'px';
-  });
-  // Width sync for <td> — match the th's width column by column. Cells without
-  // their own constraint flow to the th's width naturally, but explicit width
-  // gives the user-resized column predictable behavior even when content is short.
-  var ths = thead.querySelectorAll('th[data-colid]');
-  ths.forEach(function (th, colIdx) {
-    var w = th.style.width;
-    if (!w) return;
-    var tbl = th.closest('.mxv4-table');
-    if (!tbl) return;
-    tbl.querySelectorAll('tbody tr').forEach(function (tr) {
-      var td = tr.children[colIdx];
-      if (td) {
-        td.style.width    = w;
-        td.style.maxWidth = w;
-        td.style.overflow = 'hidden';
-        td.style.textOverflow = 'ellipsis';
-      }
-    });
-  });
-}
-
 // Add / remove a column. The colMgrOpen flag in state keeps the panel open
 // across the modal re-render (fixes the "can't tick a checkbox" UI glitch).
 function setMxv4ToggleColumn(colId) {
   if (!Array.isArray(_mxv4.tableColumns)) _mxv4.tableColumns = [];
   var idx = _mxv4.tableColumns.indexOf(colId);
-  var wasAdded = (idx === -1);
-  if (wasAdded) _mxv4.tableColumns.push(colId);
+  if (idx === -1) _mxv4.tableColumns.push(colId);
   else _mxv4.tableColumns.splice(idx, 1);
   _mxv4SaveTableColumns();
   _mxv4.colMgrOpen = true;
-  // 2026-05-16: mark for slide-in animation; cleared after the render's
-  // animation window completes.
-  if (wasAdded) _mxv4._freshlyAddedCol = colId;
   renderMxv4Modal();
   setTimeout(_mxv4PositionFloatingPanels, 0);
-  setTimeout(function () { if (_mxv4._freshlyAddedCol === colId) _mxv4._freshlyAddedCol = null; }, 260);
 }
 
 // Reorder columns via drag-and-drop. Called from drop handler.
@@ -35063,156 +34193,34 @@ if (typeof window !== 'undefined' && !window._mxv4FloatingResizeBound) {
   window._mxv4FloatingResizeBound = true;
 }
 
-// ─── Saved views (Supabase-backed since 2026-05-15) ──────────────────
-//
-// Storage: products.config.tracker_saved_views (JSONB array of views) +
-//          products.config.tracker_active_view_by_user (JSONB { userId: viewId })
-// Sync:    existing products realtime channel — peer edits land in this
-//          tab's _mxv4 state and re-render the cell modal automatically.
-// Scope:   per-product (each product has its own list of saved views).
-// See feature_tracker_saved_views_supabase.md memory for full design.
-
-// One-time migration from the legacy localStorage('tracker.savedViews')
-// bucket into the active product's config. Idempotent — only fires when
-// localStorage has entries AND DB doesn't.
-function _mxv4MaybeMigrateLocalSavedViews() {
-  try {
-    if (!activeProductId || typeof PRODUCTS === 'undefined') return false;
-    var prod = PRODUCTS.find(function (p) { return p.id === activeProductId; });
-    if (!prod) return false;
-    if ((prod.trackerSavedViews || []).length > 0) {
-      // Already migrated — clear stale localStorage so we don't keep re-migrating.
-      try { localStorage.removeItem('tracker.savedViews'); } catch (e) {}
-      try { localStorage.removeItem('tracker.activeView'); } catch (e) {}
-      return false;
-    }
-    var raw = localStorage.getItem('tracker.savedViews');
-    if (!raw) return false;
-    var arr = JSON.parse(raw);
-    if (!Array.isArray(arr) || !arr.length) return false;
-    var legacyActive = localStorage.getItem('tracker.activeView') || null;
-    console.log('[mxv4] migrating', arr.length, 'localStorage view(s) → products.config for', activeProductId);
-    _mxv4.savedViews = arr.slice();
-    if (legacyActive) _mxv4.activeViewId = legacyActive;
-    _mxv4WriteSavedViewsToDb(); // fire-and-forget; on success the localStorage is cleared below
-    try { localStorage.removeItem('tracker.savedViews'); } catch (e) {}
-    try { localStorage.removeItem('tracker.activeView'); } catch (e) {}
-    return true;
-  } catch (e) {
-    console.warn('[mxv4] migration failed', e);
-    return false;
-  }
+// ─── Saved views ─────────────────────────────────────────────────────
+function _mxv4SaveSavedViews() {
+  try { localStorage.setItem('tracker.savedViews', JSON.stringify(_mxv4.savedViews)); } catch (e) {}
+  try { localStorage.setItem('tracker.activeView', _mxv4.activeViewId || ''); } catch (e) {}
 }
-
-// Mirror the in-memory _mxv4 state into PRODUCTS[idx] SYNCHRONOUSLY before
-// firing the async DB write. Without this, a re-render that fires between
-// "user-clicked-save" and "DB-write-returned" would call hydrate-from-products
-// and clobber the newly-added view (race-condition: the new view never makes
-// it to the modal display).
-function _mxv4MirrorSavedViewsToProducts() {
-  if (typeof PRODUCTS === 'undefined' || !activeProductId) return;
-  var idx = -1;
-  for (var i = 0; i < PRODUCTS.length; i++) {
-    if (PRODUCTS[i].id === activeProductId) { idx = i; break; }
-  }
-  if (idx < 0) return;
-  var uid = (window.AUTH && AUTH.profile && AUTH.profile.id) || '_anon';
-  var byUser = Object.assign({}, PRODUCTS[idx].trackerActiveViewByUser || {});
-  if (_mxv4.activeViewId) byUser[uid] = _mxv4.activeViewId;
-  else delete byUser[uid];
-  PRODUCTS[idx] = Object.assign({}, PRODUCTS[idx], {
-    trackerSavedViews: (_mxv4.savedViews || []).slice(),
-    trackerActiveViewByUser: byUser,
-  });
-}
-
-// Read existing config, merge tracker fields, write back. Mirrors
-// DB.upsertProduct's safe-merge pattern so we never wipe clickup_list_id
-// (the products_preserve_clickup_link trigger would block it anyway, but
-// being explicit about merge avoids that trigger-detected error path).
-//
-// IMPORTANT: callers MUST call _mxv4MirrorSavedViewsToProducts() first OR rely
-// on this function's own mirror-before-await below. The mirror MUST happen
-// before any await so re-renders mid-flight read the new state.
-async function _mxv4WriteSavedViewsToDb() {
-  if (typeof SB === 'undefined' || !SB || !activeProductId) return;
-  var pid = activeProductId;
-  var uid = (window.AUTH && AUTH.profile && AUTH.profile.id) || '_anon';
-  // 1. Mirror SYNCHRONOUSLY before the await so hydrate-on-render won't
-  //    overwrite our local state with stale DB state.
-  _mxv4MirrorSavedViewsToProducts();
-  try {
-    var ex = await SB.from('products').select('config').eq('id', pid).maybeSingle();
-    var existing = (ex && ex.data && ex.data.config) || {};
-    var newCfg = Object.assign({}, existing);
-    newCfg.tracker_saved_views = (_mxv4.savedViews || []).slice();
-    var byUser = Object.assign({}, existing.tracker_active_view_by_user || {});
-    if (_mxv4.activeViewId) byUser[uid] = _mxv4.activeViewId;
-    else delete byUser[uid];
-    newCfg.tracker_active_view_by_user = byUser;
-    var { error } = await SB.from('products').update({ config: newCfg }).eq('id', pid);
-    if (error) {
-      console.warn('[mxv4] saved-views DB write failed', error);
-      try { if (typeof toast === 'function') toast('View save failed — see console', 'err'); } catch (_) {}
-      return;
-    }
-    // Re-mirror with the canonical config (in case the existing-config read
-    // surfaced other fields we want to keep in PRODUCTS).
-    _mxv4MirrorSavedViewsToProducts();
-  } catch (e) {
-    console.warn('[mxv4] saved-views DB write threw', e);
-  }
-}
-
-// Hydrate _mxv4.savedViews + activeViewId from the active product's DB row.
-// Called on boot and on switchProduct (the existing renderMxv4Modal path
-// runs this lazily — see the hydrate hook in renderMxv4Modal below).
-function _mxv4HydrateSavedViewsFromProduct() {
-  if (typeof PRODUCTS === 'undefined' || !activeProductId) return;
-  var prod = PRODUCTS.find(function (p) { return p.id === activeProductId; });
-  if (!prod) return;
-  _mxv4.savedViews = (prod.trackerSavedViews || []).slice();
-  var uid = (window.AUTH && AUTH.profile && AUTH.profile.id) || '_anon';
-  var byUser = prod.trackerActiveViewByUser || {};
-  if (byUser[uid] != null) _mxv4.activeViewId = byUser[uid];
-}
-
 function setMxv4SaveCurrentView() {
   var name = prompt('Name this view (e.g. "QA view", "Winner-only"):');
   if (!name) return;
   var id = 'v_' + Date.now().toString(36);
-  var uid = (window.AUTH && AUTH.profile && AUTH.profile.id) || '_anon';
-  var email = (window.AUTH && AUTH.profile && AUTH.profile.email) || null;
-  _mxv4.savedViews.push({
-    id: id,
-    name: name,
-    columns: _mxv4.tableColumns.slice(),
-    columnWidths: Object.assign({}, _mxv4.columnWidths || {}),
-    createdBy: email || uid,
-    createdAt: Date.now(),
-    updatedAt: Date.now(),
-  });
+  _mxv4.savedViews.push({ id: id, name: name, columns: _mxv4.tableColumns.slice() });
   _mxv4.activeViewId = id;
-  _mxv4WriteSavedViewsToDb();
+  _mxv4SaveSavedViews();
   renderMxv4Modal();
 }
 function setMxv4ApplyView(id) {
   var v = _mxv4.savedViews.find(function (x) { return x.id === id; });
   if (!v) return;
-  _mxv4.tableColumns = (v.columns || []).slice();
-  // Adopt the view's saved widths too; missing entries fall back to defaults.
-  _mxv4.columnWidths = Object.assign({}, v.columnWidths || {});
+  _mxv4.tableColumns = v.columns.slice();
   _mxv4.activeViewId = id;
   _mxv4SaveTableColumns();
-  _mxv4SaveColumnWidths();
-  _mxv4WriteSavedViewsToDb();
+  _mxv4SaveSavedViews();
   renderMxv4Modal();
 }
 function setMxv4DeleteView(id) {
   if (!confirm('Delete this saved view?')) return;
   _mxv4.savedViews = _mxv4.savedViews.filter(function (x) { return x.id !== id; });
   if (_mxv4.activeViewId === id) _mxv4.activeViewId = null;
-  _mxv4WriteSavedViewsToDb();
+  _mxv4SaveSavedViews();
   renderMxv4Modal();
 }
 
@@ -35891,50 +34899,18 @@ function _mxv4RenderActivityTimeline(ad) {
 }
 
 // ── Wide-table view ──
-// 2026-05-16: extended to handle angle, persona, brand, adType,
-// hookType, creativeStructure, productionStyle, funnelType,
-// inspirationTrace + all CF columns (key='cf:<lcName>'). Reads from the
-// AD's _customFields map. Empty values sink to the bottom regardless of dir.
 function _mxv4SortAds(ads, col, dir) {
-  // Helper: case-insensitive string compare with empty values pushed last
-  function _strCmp(av, bv) {
-    var as = (av == null || av === '') ? '' : String(av).toLowerCase().trim();
-    var bs = (bv == null || bv === '') ? '' : String(bv).toLowerCase().trim();
-    if (as === '' && bs === '') return 0;
-    if (as === '') return 1;   // empty → bottom
-    if (bs === '') return -1;
-    if (as < bs) return -1 * dir;
-    if (as > bs) return 1 * dir;
-    return 0;
-  }
   return ads.slice().sort(function (a, b) {
-    // Custom-field columns. AP uses 'cf:<lcName>'; matrix uses 'cu:<lcName>'.
-    // Both read from the AD's _customFields map by the lcName tail.
-    if (typeof col === 'string' && (col.indexOf('cf:') === 0 || col.indexOf('cu:') === 0)) {
-      var _lc = col.slice(3);
-      var _av = a.ad && a.ad._customFields && a.ad._customFields[_lc];
-      var _bv = b.ad && b.ad._customFields && b.ad._customFields[_lc];
-      return _strCmp(_av, _bv);
-    }
-    // String columns — sort case-insensitive, empty-at-bottom
-    if (col === 'name')                return _strCmp(a.ad.formatName, b.ad.formatName);
-    if (col === 'angle')               return _strCmp(a.ad.angle, b.ad.angle);
-    if (col === 'persona')             return _strCmp(a.ad.persona, b.ad.persona);
-    if (col === 'brand')               return _strCmp(a.ad.brand, b.ad.brand);
-    if (col === 'hookType')            return _strCmp(a.ad.hookType, b.ad.hookType);
-    if (col === 'creativeStructure')   return _strCmp(a.ad.creativeStructure, b.ad.creativeStructure);
-    if (col === 'productionStyle')     return _strCmp(a.ad.productionStyle, b.ad.productionStyle);
-    if (col === 'inspirationTrace')    return _strCmp(a.ad._fromInspoId, b.ad._fromInspoId);
-    if (col === 'type')                return _strCmp(a.adType || a.ad.adType, b.adType || b.ad.adType);
-    if (col === 'funnel')              return _strCmp(a.funnelStage, b.funnelStage);
-    if (col === 'funnelType')          return _strCmp(a.funnelStage, b.funnelStage);
-    if (col === 'status')              return _strCmp(a.status, b.status);
-    if (col === 'origin')              return _strCmp(a.ad.adOrigin, b.ad.adOrigin);
-    if (col === 'source')              return _strCmp(a.source, b.source);
-    if (col === 'due')                 return _strCmp(a.dueDate, b.dueDate);
     var av, bv;
-    if (col === 'updated'){ av = a.updatedAt || 0; bv = b.updatedAt || 0; }
-    else                  { av = a.createdAt || 0; bv = b.createdAt || 0; }
+    if (col === 'name')      { av = (a.ad.formatName || '').toLowerCase(); bv = (b.ad.formatName || '').toLowerCase(); }
+    else if (col === 'type') { av = a.adType || ''; bv = b.adType || ''; }
+    else if (col === 'funnel') { av = a.funnelStage; bv = b.funnelStage; }
+    else if (col === 'status') { av = a.status; bv = b.status; }
+    else if (col === 'origin') { av = a.ad.adOrigin || ''; bv = b.ad.adOrigin || ''; }
+    else if (col === 'source') { av = a.source; bv = b.source; }
+    else if (col === 'due')    { av = a.dueDate || ''; bv = b.dueDate || ''; }
+    else if (col === 'updated'){ av = a.updatedAt || 0; bv = b.updatedAt || 0; }
+    else                       { av = a.createdAt || 0; bv = b.createdAt || 0; }
     if (av < bv) return -1 * dir;
     if (av > bv) return 1 * dir;
     return 0;
@@ -35966,34 +34942,19 @@ function _mxv4RenderTable(angleName, personaName, st) {
     return true;
   });
 
-  // 2026-05-16: expanded whitelist to cover all rich columns. CF columns
-  // (id starts with 'cf:') are sortable too — checked dynamically below.
-  var sortableCols = {
-    source: 1, name: 1, type: 1, funnel: 1, funnelType: 1, origin: 1,
-    created: 1, due: 1, status: 1, updated: 1,
-    angle: 1, persona: 1, brand: 1,
-    hookType: 1, creativeStructure: 1, productionStyle: 1,
-    inspirationTrace: 1
-  };
-  // 2026-05-16: stamp data-fresh="1" on the freshly-added column header for
-  // the slide-in animation (cleared by setMxv4ToggleColumn after 260ms).
-  var _mxv4FreshKey = (_mxv4 && _mxv4._freshlyAddedCol) || null;
+  var sortableCols = { source: 1, name: 1, type: 1, funnel: 1, origin: 1, created: 1, due: 1, status: 1 };
   var hdr = function (colId, lbl) {
-    // Matrix uses 'cu:<lcName>' for ClickUp custom fields; AP uses 'cf:'.
-    // Both are sortable.
-    var isDynamicCol = typeof colId === 'string' && (colId.indexOf('cu:') === 0 || colId.indexOf('cf:') === 0);
-    var freshAttr = (_mxv4FreshKey && colId === _mxv4FreshKey) ? ' data-fresh="1"' : '';
-    if (sortableCols[colId] || isDynamicCol) {
+    if (sortableCols[colId]) {
       var cls = '';
       if (_mxv4.tableSort.col === colId) cls = _mxv4.tableSort.dir === 1 ? 'sort-asc' : 'sort-desc';
-      return '<th class="' + cls + '" data-colid="' + escAttr(colId) + '"' + freshAttr + ' draggable="true" ' +
+      return '<th class="' + cls + '" data-colid="' + escAttr(colId) + '" draggable="true" ' +
         'ondragstart="_mxv4ColDragStart(event)" ondragover="_mxv4ColDragOver(event)" ondrop="_mxv4ColDrop(event)" ondragend="_mxv4ColDragEnd(event)" ' +
-        'onclick="setMxv4Sort(\'' + escJs(colId) + '\')">' +
+        'onclick="setMxv4Sort(\'' + colId + '\')">' +
         lbl + '<span class="sort-arr">▾</span>' +
         '<span class="mxv4-col-x" title="Remove column" onclick="event.stopPropagation();setMxv4ToggleColumn(\'' + escJs(colId) + '\')">×</span>' +
         '</th>';
     }
-    return '<th data-colid="' + escAttr(colId) + '"' + freshAttr + ' draggable="true" ' +
+    return '<th data-colid="' + escAttr(colId) + '" draggable="true" ' +
       'ondragstart="_mxv4ColDragStart(event)" ondragover="_mxv4ColDragOver(event)" ondrop="_mxv4ColDrop(event)" ondragend="_mxv4ColDragEnd(event)">' +
       lbl +
       '<span class="mxv4-col-x" title="Remove column" onclick="event.stopPropagation();setMxv4ToggleColumn(\'' + escJs(colId) + '\')">×</span>' +
@@ -39212,100 +38173,17 @@ function updateInsField(id, field, value) {
 }
 
 // Edit format name — keeps the detail part of creativeUSP intact
-// Rename an inspiration AND cascade the new name to every downstream AD
-// that inherited it (children link to the parent via meta._fromInspoId).
-// Surfaces touched:
-//   - INSPIRATIONS[].formatName + .creativeUSP            (in-memory)
-//   - ADS[].formatName for every ad where _fromInspoId    (in-memory)
-//   - MATRIX_CELL_META[<adId>||*].uniqueName              (in-memory mirror)
-//   - MANUAL_ACTIONS[].title where sourceAdId/_sourceAdId (in-memory mirror)
-//   - DB inspirations.format_name + ads.format_name       (via saveInspirations + _writeAdRowDirect)
-//   - ClickUp task name for each cascaded AD              (apiUpdateTask)
-//   - Re-render: Inspirations / Matrix / Action Plan / Mxv4 modal
-// Memory honored:
-//   - feedback_ad_delete_invariants.md (no id / deleted_at / _localNew touch)
-//   - feedback_action_plan_merge_no_drop.md (mutate-in-place, never drop MAs)
-//   - feedback_pollfullsync_pass0_field_name.md (read BOTH _sourceAdId || sourceAdId)
-//   - feedback_realtime_traffic_budget.md (no new channel; reuse existing)
-//   - feedback_clickup_pipeline_one_click.md (doc page title left alone \u2014 out of scope)
 function updateInsFormatName(id, newName) {
-  var trimmed = (newName == null ? '' : String(newName)).trim();
-  if (!trimmed || trimmed.length > 200) return Promise.resolve({ ok: false, reason: 'invalid' });
+  if (!newName) return;
   var ins = INSPIRATIONS.find(function(i){ return i.id === id; });
-  if (!ins) return Promise.resolve({ ok: false, reason: 'not-found' });
-  if (ins.formatName === trimmed) return Promise.resolve({ ok: true, reason: 'noop' });
-
-  // \u2500\u2500 1. Inspiration itself (in-memory) \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
-  ins.formatName = trimmed;
+  if (!ins) return;
+  ins.formatName = newName;
+  // Rebuild creativeUSP: keep existing detail if present
   var parts = (ins.creativeUSP || '').split(' \u2014 ');
   var detail = parts.slice(1).join(' \u2014 ');
-  ins.creativeUSP = detail ? trimmed + ' \u2014 ' + detail : trimmed;
+  ins.creativeUSP = detail ? newName + ' \u2014 ' + detail : newName;
   _insSaveTs = Date.now();
-  saveInspirations(); // debounced 600ms \u2192 DB inspirations.format_name
-
-  // \u2500\u2500 2. Cascade to child ADs (in-memory + DB + ClickUp) \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
-  var children = (typeof ADS !== 'undefined' && Array.isArray(ADS))
-    ? ADS.filter(function(a){ return a && a._fromInspoId === id && !a.deletedAt; })
-    : [];
-  var dbPromises = [];
-  var cuPromises = [];
-  children.forEach(function (ad) {
-    if (ad.formatName === trimmed) return; // already correct
-    ad.formatName = trimmed;
-    // Mirror to MATRIX_CELL_META \u2014 keys start with "<adId>||..."
-    if (typeof MATRIX_CELL_META !== 'undefined') {
-      Object.keys(MATRIX_CELL_META).forEach(function (k) {
-        if (k.indexOf(ad.id + '||') === 0) MATRIX_CELL_META[k].uniqueName = trimmed;
-      });
-    }
-    // Mirror to MANUAL_ACTIONS \u2014 accept BOTH field names per sibling rule.
-    if (typeof MANUAL_ACTIONS !== 'undefined') {
-      for (var mi = 0; mi < MANUAL_ACTIONS.length; mi++) {
-        var _ma = MANUAL_ACTIONS[mi];
-        var maSrc = _ma && (_ma._sourceAdId || _ma.sourceAdId);
-        var maAd  = _ma && _ma.adId;
-        var maCu  = _ma && _ma._clickupId;
-        if (maSrc === ad.id || maAd === ad.id || (maCu && maCu === ad._clickupId)) {
-          _ma.title = trimmed;
-        }
-      }
-    }
-    // Persist this AD via the same direct-write path used by spawns. Stamps
-    // _clientId in meta so the realtime echo back to OUR tab is suppressed \u2014
-    // no reload storm.
-    if (typeof _writeAdRowDirect === 'function') {
-      try { dbPromises.push(_writeAdRowDirect(ad)); } catch (e) {}
-    }
-    // ClickUp: only if we have a task id. Fire-and-forget allSettled style.
-    if (ad._clickupId || ad.clickupTaskId) {
-      var tid = ad._clickupId || ad.clickupTaskId;
-      if (typeof apiUpdateTask === 'function') {
-        try {
-          cuPromises.push(
-            apiUpdateTask(tid, { name: trimmed })
-              .catch(function (err) { console.warn('[rename] ClickUp PUT failed for', tid, err && err.message); })
-          );
-        } catch (e) {}
-      }
-    }
-  });
-
-  // Re-render every surface that displays format names.
-  try { if (typeof renderInspirations === 'function') renderInspirations(); } catch (e) {}
-  try { if (typeof renderMatrix === 'function') renderMatrix(); } catch (e) {}
-  try { if (typeof renderActionPlan === 'function') renderActionPlan(); } catch (e) {}
-  try { if (typeof renderMxv4Modal === 'function') renderMxv4Modal(); } catch (e) {}
-
-  // Hash cache invariant: format_name is part of the hash payload, so the
-  // next _flushStateToSupabase will naturally re-upsert these rows. _writeAdRowDirect
-  // already stamped the new format_name in DB, but we also seed the hash cache so
-  // the snapshot flush doesn't re-write them unnecessarily.
-  // (Best-effort \u2014 failure to seed is harmless.)
-
-  return Promise.allSettled(dbPromises.concat(cuPromises)).then(function (results) {
-    var failures = results.filter(function (r) { return r.status === 'rejected'; });
-    return { ok: failures.length === 0, cascadedCount: children.length, failures: failures.length };
-  });
+  saveInspirations();
 }
 
 // Edit the detail line below the format name — saves back into creativeUSP
@@ -42226,37 +41104,6 @@ window._clearPendingCu = _clearPendingCu;
         if (_apState.filters) s += '|f=' + JSON.stringify(_apState.filters || {});
       }
     }
-    // 2026-05-16 fix: include _apColState so view-switches + column-toggles
-    // bust the fingerprint. Without this the no-op suppression wrapper
-    // skipped every UI change driven by saved-view state — user had to
-    // refresh the page to see the new view take effect. Reported 6× before
-    // root cause was traced to the fingerprint missing _apColState.
-    if (typeof _apColState !== 'undefined' && _apColState) {
-      try {
-        // Use a compact serialization: activeViewId + per-column hidden flag
-        // (full views[] JSON is too noisy; we only care about what affects render)
-        var cs = 'av=' + (_apColState.activeViewId || '');
-        if (Array.isArray(_apColState.views)) {
-          cs += '|vn=' + _apColState.views.length;
-          var av = _apColState.views.find(function(v){ return v && v.id === _apColState.activeViewId; });
-          if (av && Array.isArray(av.columns)) {
-            cs += '|cols=';
-            for (var ci = 0; ci < av.columns.length; ci++) {
-              var c = av.columns[ci]; if (!c) continue;
-              cs += (c.key||'') + (c.hidden?'-':'+') + ',';
-            }
-          }
-        }
-        s += '|cs=' + cs;
-      } catch (e) {
-        s += '|csav=' + (_apColState.activeViewId || '');
-      }
-    }
-    // Include CF column registry size so newly-registered cf:* columns
-    // (after _apEnsureCfColumns picks up a sync) trigger re-render.
-    if (typeof _AP_COL_REGISTRY !== 'undefined' && _AP_COL_REGISTRY) {
-      try { s += '|reg=' + Object.keys(_AP_COL_REGISTRY).length; } catch (e) {}
-    }
     return s;
   }
   function _creativesFp() {
@@ -43063,56 +41910,6 @@ window._clearPendingCu = _clearPendingCu;
     if (!t || !body) return;
     t.textContent = ins.formatName || ins.title || ins.id;
     sub.textContent = (ins.brand || '—') + ' · ' + (ins.platform || '—') + ' · ' + (ins.id || '');
-
-    // Inline rename: click title to edit. Enter commits, Esc cancels, blur commits.
-    // Wires through updateInsFormatName which cascades to children + ClickUp.
-    t.setAttribute('contenteditable', 'plaintext-only');
-    t.setAttribute('spellcheck', 'false');
-    t.style.cursor = 'text';
-    t.title = 'Click to rename — Enter saves, Esc cancels. Updates DB, ClickUp, and child ADs.';
-    var _origName = ins.formatName || ins.title || ins.id || '';
-    t.dataset.origName = _origName;
-    // Strip any prior listeners by cloning the node — keeps the drawer idempotent
-    // across multiple re-renders.
-    var tNew = t.cloneNode(true);
-    t.parentNode.replaceChild(tNew, t);
-    t = tNew;
-    t.addEventListener('keydown', function (ev) {
-      if (ev.key === 'Enter')  { ev.preventDefault(); t.blur(); }
-      if (ev.key === 'Escape') { ev.preventDefault(); t.textContent = t.dataset.origName || ''; t.dataset.cancelled = '1'; t.blur(); }
-    });
-    t.addEventListener('blur', function () {
-      if (t.dataset.cancelled === '1') { delete t.dataset.cancelled; return; }
-      var v = (t.textContent || '').trim();
-      var orig = t.dataset.origName || '';
-      if (!v || v === orig) { t.textContent = orig; return; }
-      // Visual: pending pulse while writes are in flight.
-      t.style.opacity = '0.55';
-      Promise.resolve(updateInsFormatName(ins.id, v))
-        .then(function (r) {
-          t.style.opacity = '';
-          if (r && r.ok) {
-            // brief green flash so the user sees it landed
-            t.style.transition = 'background 0.5s';
-            t.style.background = 'rgba(40,180,90,0.18)';
-            setTimeout(function () { t.style.background = ''; }, 700);
-            t.dataset.origName = v;
-          } else {
-            t.style.background = 'rgba(220,60,60,0.18)';
-            setTimeout(function () { t.style.background = ''; }, 1200);
-            t.textContent = orig; // revert
-            try { if (typeof toast === 'function') toast('Rename failed — ' + ((r && r.reason) || 'see console'), 'err'); } catch(_){}
-          }
-        })
-        .catch(function (e) {
-          t.style.opacity = '';
-          t.style.background = 'rgba(220,60,60,0.18)';
-          setTimeout(function () { t.style.background = ''; }, 1200);
-          t.textContent = orig;
-          console.error('[rename] failed', e);
-          try { if (typeof toast === 'function') toast('Rename failed', 'err'); } catch(_){}
-        });
-    });
 
     var usage = _insComputeUsage(ins.id);
     var sugAngle = ins.angle || '';

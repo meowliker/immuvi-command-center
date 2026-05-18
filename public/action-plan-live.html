@@ -1,0 +1,5077 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Action Plan · Live</title>
+<link href="https://api.fontshare.com/v2/css?f[]=satoshi@400,500,600,700,800,900&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg: #F6F5F0;
+  --card: #FFFFFF;
+  --ink: #0E0E10;
+  --ink2: #54565B;
+  --ink3: #9A9CA3;
+  --rule: rgba(14,14,16,0.08);
+  --rule-strong: rgba(14,14,16,0.14);
+
+  --lime: #D6FF4B;
+  --limed: #A8D02A;
+  --peach: #FFB796;
+  --peachd: #D97948;
+  --rose: #FFB3C8;
+  --rosed: #C73B64;
+  --sky: #B5E2FF;
+  --skyd: #1C6FA8;
+  --violet: #C8B8FF;
+  --violetd: #5A3EC6;
+  --butter: #FFE066;
+  --butterd: #B88700;
+}
+
+body {
+  font-family: 'Satoshi', system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--ink);
+  min-height: 100vh;
+  padding: 20px 20px 60px;
+  -webkit-font-smoothing: antialiased;
+}
+.mono { font-family: 'JetBrains Mono', monospace; }
+.hide { display: none !important; }
+
+a { color: inherit; }
+
+/* ── TOP BAR ── */
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 20px;
+  background: var(--card);
+  border: 1px solid var(--rule);
+  border-radius: 16px;
+  margin-bottom: 14px;
+  flex-wrap: wrap;
+}
+.tb-title { font-size: 1.25rem; font-weight: 800; letter-spacing: -0.02em; }
+.tb-sub {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.62rem;
+  color: var(--ink3);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  margin-top: 2px;
+}
+.tb-spacer { flex: 1; }
+
+.product-sel {
+  padding: 7px 12px;
+  background: var(--bg);
+  border: 1px solid var(--rule);
+  border-radius: 10px;
+  font-family: inherit;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--ink);
+  cursor: pointer;
+  outline: none;
+}
+
+.mode-toggle {
+  display: flex;
+  background: var(--bg);
+  border: 1px solid var(--rule);
+  border-radius: 999px;
+  padding: 3px;
+}
+.mt-btn {
+  padding: 6px 14px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  border: none;
+  background: transparent;
+  color: var(--ink2);
+  cursor: pointer;
+  font-family: inherit;
+  transition: all .15s;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.mt-btn.on { background: var(--ink); color: var(--lime); }
+
+.range-chip {
+  display: flex;
+  background: var(--bg);
+  border: 1px solid var(--rule);
+  border-radius: 999px;
+  padding: 3px;
+}
+.rc-btn {
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  border: none;
+  background: transparent;
+  color: var(--ink2);
+  cursor: pointer;
+  font-family: inherit;
+}
+.rc-btn.on { background: var(--ink); color: var(--lime); }
+
+.custom-range {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  background: var(--bg);
+  border: 1px solid var(--rule);
+  border-radius: 999px;
+}
+.custom-range input[type="date"] {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.7rem;
+  border: none;
+  background: transparent;
+  color: var(--ink);
+  outline: none;
+}
+
+.live-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  background: rgba(0,209,143,0.1);
+  border: 1px solid rgba(0,209,143,0.3);
+  border-radius: 999px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.6rem;
+  font-weight: 700;
+  color: #047857;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.live-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: #10D98A;
+  box-shadow: 0 0 6px #10D98A;
+  animation: pulse 1.5s ease-in-out infinite;
+}
+@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+.loading-state {
+  text-align: center;
+  padding: 60px 20px;
+  color: var(--ink2);
+  font-size: 0.9rem;
+}
+.loading-state::before {
+  content: '';
+  display: inline-block;
+  width: 12px; height: 12px;
+  border: 2px solid var(--ink3);
+  border-top-color: var(--ink);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  margin-right: 8px;
+  vertical-align: middle;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── BENTO GRID ── */
+.bento {
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+  grid-auto-rows: minmax(82px, auto);
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.tile {
+  background: var(--card);
+  border: 1px solid var(--rule);
+  border-radius: 18px;
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.tile-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.th-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+.th-name {
+  font-size: 0.66rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+.th-count {
+  margin-left: auto;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.68rem;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 999px;
+}
+
+/* Tile positions */
+.tile--hot       { grid-column: span 7; grid-row: span 4; }
+.tile--velocity  { grid-column: span 5; grid-row: span 2; }
+.tile--today     { grid-column: span 5; grid-row: span 2; }
+
+.tile--prod      { grid-column: span 4; grid-row: span 3; }
+.tile--test      { grid-column: span 4; grid-row: span 3; }
+.tile--plan      { grid-column: span 4; grid-row: span 3; }
+
+.tile--overdue   { grid-column: span 12; grid-row: span 3; }
+
+.tile--pipeline  { grid-column: span 12; grid-row: span 2; }
+
+.tile--log       { grid-column: span 12; grid-row: span 3; }
+
+.tile--score     { grid-column: span 5; grid-row: span 3; }
+.tile--hitrate   { grid-column: span 3; grid-row: span 3; }
+.tile--patterns  { grid-column: span 4; grid-row: span 3; }
+
+/* ════════ DAILY LOG ════════ */
+.tile--log .th-dot { background: var(--ink); }
+.tile--log .th-name { color: var(--ink); }
+
+.dl-wrap {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 18px;
+}
+.dl-stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--rule);
+}
+.dl-kpi {
+  background: var(--bg);
+  border-radius: 14px;
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.dl-kpi.launch { background: var(--lime); }
+.dl-kpi.kill   { background: var(--rose); }
+.dl-kpi-n {
+  font-size: 2.4rem;
+  font-weight: 900;
+  line-height: 1;
+  letter-spacing: -0.03em;
+}
+.dl-kpi-n.plus { color: #047857; }
+.dl-kpi.launch .dl-kpi-n { color: var(--ink); }
+.dl-kpi.kill .dl-kpi-n { color: var(--rosed); }
+.dl-kpi-l {
+  font-size: 0.66rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink2);
+  margin-top: 4px;
+}
+.dl-kpi-sub {
+  font-size: 0.64rem;
+  font-weight: 600;
+  color: #047857;
+  margin-top: 1px;
+}
+
+.dl-tl {
+  position: relative;
+  padding-left: 22px;
+  max-height: 260px;
+  overflow-y: auto;
+}
+.dl-tl::before {
+  content: '';
+  position: absolute;
+  left: 6px; top: 10px; bottom: 10px;
+  width: 2px;
+  background: var(--rule);
+  border-radius: 1px;
+}
+.dl-e {
+  position: relative;
+  display: grid;
+  grid-template-columns: 80px 1fr;
+  gap: 14px;
+  padding: 7px 0;
+  align-items: baseline;
+  font-size: 0.82rem;
+}
+.dl-e::before {
+  content: '';
+  position: absolute;
+  left: -20px;
+  top: 14px;
+  width: 10px; height: 10px;
+  border-radius: 50%;
+  background: var(--ink3);
+  border: 2px solid var(--card);
+  box-shadow: 0 0 0 2px var(--rule);
+}
+.dl-e.launch::before { background: #047857; }
+.dl-e.kill::before   { background: var(--rosed); }
+.dl-e.scale::before  { background: var(--peachd); }
+.dl-e.delivered::before { background: transparent; border-color: var(--ink3); }
+
+.dl-t {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.72rem;
+  color: var(--ink3);
+  font-weight: 600;
+}
+.dl-x { color: var(--ink); font-size: 0.84rem; }
+.dl-x .v { font-weight: 700; }
+.dl-x .v.l { color: #047857; }
+.dl-x .v.k { color: var(--rosed); }
+.dl-x .v.s { color: var(--peachd); }
+.dl-empty {
+  padding: 24px 0;
+  text-align: center;
+  color: var(--ink3);
+  font-size: 0.85rem;
+}
+
+/* ════════ HOT QUEUE ════════ */
+.tile--hot {
+  background: var(--ink);
+  color: var(--card);
+  position: relative;
+  border: none;
+}
+.tile--hot::before {
+  content: '';
+  position: absolute;
+  top: -40px; right: -40px;
+  width: 220px; height: 220px;
+  background: radial-gradient(circle, var(--lime) 0%, transparent 65%);
+  opacity: 0.30;
+  pointer-events: none;
+}
+.tile--hot .th-dot    { background: var(--lime); box-shadow: 0 0 0 3px rgba(214,255,75,0.2); }
+.tile--hot .th-name   { color: var(--lime); }
+.tile--hot .th-count  { background: var(--lime); color: var(--ink); }
+
+.hot-hero {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+  margin-bottom: 12px;
+  position: relative;
+  z-index: 1;
+}
+.hh-num {
+  font-size: 4.5rem;
+  font-weight: 900;
+  line-height: 0.9;
+  letter-spacing: -0.04em;
+  color: var(--lime);
+}
+.hh-text {
+  font-size: 1.15rem;
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+}
+.hh-text span { color: var(--ink3); font-weight: 400; }
+
+.hot-items {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  position: relative;
+  z-index: 1;
+  max-height: 380px;
+  overflow-y: auto;
+}
+.hot-item {
+  display: grid;
+  grid-template-columns: 26px 1fr auto;
+  gap: 12px;
+  align-items: center;
+  padding: 9px 12px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 11px;
+  transition: background .12s;
+  cursor: pointer;
+}
+.hot-item:hover { background: rgba(214,255,75,0.07); }
+.hi-n {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: var(--lime);
+}
+.hi-body { min-width: 0; }
+.hi-title {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--card);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.hi-why { font-size: 0.7rem; color: rgba(255,255,255,0.55); margin-top: 2px; }
+.hi-actions { display: flex; gap: 5px; flex-shrink: 0; }
+.hi-btn {
+  padding: 5px 10px;
+  font-size: 0.66rem;
+  font-weight: 600;
+  border-radius: 6px;
+  border: 1px solid rgba(255,255,255,0.12);
+  background: transparent;
+  color: var(--card);
+  cursor: pointer;
+  font-family: inherit;
+  transition: all .12s;
+}
+.hi-btn:hover { background: rgba(255,255,255,0.08); }
+.hi-btn.prim { background: var(--lime); color: var(--ink); border-color: var(--lime); }
+.hi-btn.kill:hover { background: #FF3B5C; color: #fff; border-color: #FF3B5C; }
+
+.hot-empty { color: rgba(255,255,255,0.4); padding: 20px 0; font-size: 0.85rem; text-align: center; }
+
+/* ════════ VELOCITY ════════ */
+.tile--velocity {
+  background: var(--lime);
+  color: var(--ink);
+  border: none;
+}
+.tile--velocity .th-name { color: var(--ink); }
+
+.vel-hero { display: flex; align-items: baseline; gap: 10px; margin: 2px 0 8px; }
+.vel-n {
+  font-size: 4.2rem;
+  font-weight: 900;
+  line-height: 0.9;
+  letter-spacing: -0.04em;
+}
+.vel-u { font-size: 0.95rem; font-weight: 600; color: var(--ink2); letter-spacing: -0.01em; }
+
+.vel-delta {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.74rem;
+  font-weight: 700;
+  padding: 4px 10px;
+  background: var(--ink);
+  color: var(--lime);
+  border-radius: 999px;
+  width: fit-content;
+}
+.vel-spark { margin-top: auto; height: 44px; }
+
+/* ════════ TODAY + BOTTLENECK ════════ */
+.tile--today {
+  background: var(--sky);
+  color: var(--ink);
+  border: none;
+  justify-content: flex-start;
+}
+.tile--today .th-name { color: var(--skyd); }
+
+.today-big-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+.today-num {
+  font-size: 3rem;
+  font-weight: 900;
+  line-height: 1;
+  letter-spacing: -0.04em;
+}
+.today-txt { display: flex; flex-direction: column; gap: 2px; }
+.today-lbl { font-size: 0.82rem; font-weight: 700; }
+.today-sub { font-size: 0.7rem; color: var(--skyd); }
+
+.bottleneck-line {
+  padding-top: 10px;
+  border-top: 1px solid rgba(28,111,168,0.2);
+  font-size: 0.72rem;
+  color: var(--ink);
+  line-height: 1.4;
+}
+.bottleneck-line strong { color: var(--rosed); font-weight: 700; }
+.bottleneck-line.ok strong { color: #047857; }
+
+/* ════════ PULSE COLUMNS ════════ */
+.tile--prod .th-dot   { background: #D97706; }
+.tile--prod .th-name  { color: #92400E; }
+.tile--prod .th-count { background: rgba(217,119,6,0.12); color: #92400E; }
+
+.tile--test .th-dot   { background: var(--rosed); }
+.tile--test .th-name  { color: var(--rosed); }
+.tile--test .th-count { background: var(--rose); color: var(--rosed); }
+
+.tile--plan .th-dot   { background: var(--violetd); }
+.tile--plan .th-name  { color: var(--violetd); }
+.tile--plan .th-count { background: var(--violet); color: var(--violetd); }
+
+.pcard {
+  padding: 10px 12px;
+  background: var(--bg);
+  border-radius: 10px;
+  margin-bottom: 7px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  cursor: pointer;
+  transition: transform .12s;
+}
+.pcard:hover { transform: translateX(2px); }
+.pc-meta { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+.pc-day {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.66rem;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 4px;
+}
+.tile--prod .pc-day { background: rgba(217,119,6,0.12); color: #92400E; }
+.tile--test .pc-day { background: var(--rose); color: var(--rosed); }
+.tile--plan .pc-day { background: var(--violet); color: var(--violetd); }
+
+.pc-flag {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.58rem;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 3px;
+  background: #FFE066;
+  color: #92400E;
+}
+.pc-flag.hot {
+  background: #FF3B5C; color: #fff;
+}
+
+.pc-title {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--ink);
+  line-height: 1.3;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pc-tags { display: flex; gap: 4px; flex-wrap: wrap; }
+.pc-t {
+  font-size: 0.58rem;
+  color: var(--ink2);
+  padding: 1px 6px;
+  background: var(--card);
+  border-radius: 3px;
+  border: 1px solid var(--rule);
+}
+.pulse-empty {
+  color: var(--ink3);
+  font-size: 0.75rem;
+  padding: 14px 0;
+  text-align: center;
+}
+.pulse-scroll {
+  max-height: 260px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ════════ PIPELINE ════════ */
+.tile--pipeline .th-dot   { background: var(--violetd); }
+.tile--pipeline .th-name  { color: var(--violetd); }
+.tile--pipeline .th-count { background: var(--violet); color: var(--violetd); }
+
+.pipe-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 8px;
+  flex: 1;
+}
+.pday {
+  background: var(--bg);
+  border-radius: 12px;
+  padding: 12px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  cursor: pointer;
+  transition: transform .12s;
+  min-height: 110px;
+}
+.pday:hover { transform: translateY(-2px); }
+.pday.today { background: var(--violet); color: var(--ink); }
+.pday.today .pd-wk { color: var(--violetd); }
+.pd-top { display: flex; align-items: baseline; justify-content: space-between; }
+.pd-wk {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.58rem;
+  font-weight: 700;
+  color: var(--ink3);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.pd-dt {
+  font-size: 1.25rem;
+  font-weight: 900;
+  line-height: 1;
+  letter-spacing: -0.03em;
+}
+.pd-ct { font-size: 0.66rem; color: var(--ink2); font-weight: 500; }
+.pday.today .pd-ct { color: var(--violetd); font-weight: 700; }
+.pd-list { display: flex; flex-direction: column; gap: 3px; margin-top: 2px; overflow: hidden; }
+.pd-item {
+  font-size: 0.6rem;
+  color: var(--ink2);
+  padding: 2px 6px;
+  background: var(--card);
+  border-radius: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pday.today .pd-item { background: rgba(255,255,255,0.7); }
+
+/* ════════ SCORECARD ════════ */
+.tile--score .th-dot   { background: var(--ink); }
+.tile--score .th-name  { color: var(--ink); }
+
+.score-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0; }
+.score-cell {
+  padding: 8px 0;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: baseline;
+  gap: 8px;
+  border-bottom: 1px solid var(--rule);
+}
+.score-cell.winner {
+  grid-column: 1 / -1;
+  background: linear-gradient(135deg, #FFF9D1 0%, #FFE066 100%);
+  margin: 8px -20px 0;
+  padding: 12px 20px;
+  border-bottom: none;
+  border-radius: 0 0 18px 18px;
+  align-items: center;
+}
+.score-cell:nth-last-child(2):not(.winner),
+.score-cell:last-child:not(.winner) { border-bottom: none; }
+.score-lbl {
+  font-size: 0.72rem;
+  color: var(--ink2);
+  font-weight: 500;
+}
+.score-val {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--ink);
+}
+.score-val .delta {
+  font-size: 0.62rem;
+  font-weight: 600;
+  margin-left: 4px;
+  color: var(--limed);
+}
+.score-val .delta.down { color: var(--rosed); }
+
+.score-cell.winner .score-lbl {
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--butterd);
+}
+.score-cell.winner .score-val {
+  font-size: 2.2rem;
+  color: var(--ink);
+  line-height: 1;
+}
+
+/* ════════ HIT RATE ════════ */
+.tile--hitrate .th-dot   { background: var(--limed); }
+.tile--hitrate .th-name  { color: var(--limed); }
+
+.hit-hero {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin: 4px 0;
+}
+.hit-n {
+  font-size: 3.2rem;
+  font-weight: 900;
+  line-height: 1;
+  letter-spacing: -0.04em;
+  color: var(--ink);
+}
+.hit-pct { font-size: 1rem; font-weight: 700; color: var(--ink2); }
+.hit-sub { font-size: 0.72rem; color: var(--ink2); margin-bottom: 10px; }
+.hit-verdict {
+  padding: 8px 10px;
+  border-radius: 8px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  line-height: 1.4;
+}
+.hit-verdict.good { background: rgba(5,150,105,0.08); color: #047857; }
+.hit-verdict.warn { background: rgba(255,176,32,0.12); color: var(--butterd); }
+.hit-verdict.bad  { background: rgba(199,59,100,0.1); color: var(--rosed); }
+
+.hit-bars { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
+.hit-bar-row { display: flex; align-items: center; gap: 8px; font-size: 0.68rem; }
+.hit-bar-lbl { width: 52px; color: var(--ink2); font-weight: 500; }
+.hit-bar-track { flex: 1; height: 6px; background: var(--rule); border-radius: 3px; overflow: hidden; }
+.hit-bar-fill { height: 100%; border-radius: 3px; }
+.hit-bar-n { font-family: 'JetBrains Mono', monospace; font-weight: 700; width: 22px; text-align: right; }
+
+/* ════════ PATTERNS ════════ */
+.tile--patterns {
+  background: var(--butter);
+  border: none;
+  color: var(--ink);
+}
+.tile--patterns .th-name { color: var(--butterd); }
+
+.pat-note { font-size: 0.68rem; color: var(--ink2); margin-bottom: 10px; font-weight: 500; }
+.mx { width: 100%; border-collapse: separate; border-spacing: 2px; }
+.mx th {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.55rem;
+  font-weight: 600;
+  color: var(--ink2);
+  padding: 4px 4px;
+  text-transform: uppercase;
+  text-align: center;
+  letter-spacing: 0.06em;
+}
+.mx th.l { text-align: left; }
+.mx td {
+  padding: 6px 4px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.66rem;
+  font-weight: 700;
+  text-align: center;
+  border-radius: 4px;
+}
+.mx td.l {
+  text-align: left;
+  font-family: 'Satoshi', sans-serif;
+  font-size: 0.68rem;
+  color: var(--ink);
+  padding-left: 0;
+  font-weight: 600;
+  white-space: nowrap;
+  max-width: 80px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.h0 { background: rgba(0,0,0,0.04); color: var(--ink3); }
+.h1 { background: #FFF1AC; color: var(--butterd); }
+.h2 { background: #FFE066; color: var(--ink); }
+.h3 { background: var(--peach); color: var(--peachd); }
+.h4 { background: var(--ink); color: var(--lime); }
+
+/* ════════ TABLE VIEW ════════ */
+.table-section {
+  background: var(--card);
+  border: 1px solid var(--rule);
+  border-radius: 18px;
+  padding: 18px 20px;
+}
+
+.ts-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+  flex-wrap: wrap;
+}
+.ts-title { font-size: 0.72rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.1em; }
+.ts-count {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: var(--bg);
+  color: var(--ink2);
+}
+
+.saved-views {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+.sv-btn {
+  padding: 5px 11px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  border-radius: 999px;
+  border: 1px solid var(--rule);
+  background: transparent;
+  color: var(--ink2);
+  cursor: pointer;
+  font-family: inherit;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  transition: all .12s;
+}
+.sv-btn:hover { border-color: var(--ink); color: var(--ink); }
+.sv-btn.on { background: var(--ink); color: var(--lime); border-color: var(--ink); }
+
+.ts-controls { margin-left: auto; display: flex; gap: 6px; }
+.ts-ctrl-btn {
+  padding: 5px 10px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  border-radius: 7px;
+  border: 1px solid var(--rule);
+  background: transparent;
+  color: var(--ink2);
+  cursor: pointer;
+  font-family: inherit;
+}
+.ts-ctrl-btn:hover { border-color: var(--ink); color: var(--ink); }
+
+/* column toggle panel */
+.col-panel {
+  position: absolute;
+  top: 100%; right: 0;
+  margin-top: 4px;
+  background: var(--card);
+  border: 1px solid var(--rule-strong);
+  border-radius: 10px;
+  padding: 8px;
+  box-shadow: 0 8px 20px rgba(0,0,0,0.12);
+  z-index: 20;
+  min-width: 180px;
+}
+.col-panel label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  font-size: 0.72rem;
+  border-radius: 5px;
+  cursor: pointer;
+}
+.col-panel label:hover { background: var(--bg); }
+.col-panel input { margin: 0; }
+.ts-ctrl-wrap { position: relative; }
+
+/* table */
+.ap-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.78rem;
+}
+.ap-table thead {
+  border-bottom: 2px solid var(--rule-strong);
+}
+.ap-table th {
+  font-size: 0.62rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink2);
+  padding: 9px 8px;
+  text-align: left;
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+.ap-table th:hover { color: var(--ink); }
+.ap-table th.sort::after { content: ' ↕'; opacity: 0.3; font-size: 0.7em; }
+.ap-table th.sort.asc::after { content: ' ↑'; opacity: 1; }
+.ap-table th.sort.desc::after { content: ' ↓'; opacity: 1; }
+
+.ap-table td {
+  padding: 10px 8px;
+  border-bottom: 1px solid var(--rule);
+  vertical-align: middle;
+  font-size: 0.76rem;
+}
+.ap-table tbody tr { cursor: pointer; transition: background .1s; }
+.ap-table tbody tr:hover { background: var(--bg); }
+.ap-table tbody tr.expanded { background: var(--bg); }
+
+.tbl-status {
+  display: inline-block;
+  font-size: 0.62rem;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+.s-untested   { background: rgba(139,92,246,0.12); color: #6D28D9; }
+.s-approved   { background: rgba(96,165,250,0.14); color: #1E40AF; }
+.s-inprod     { background: rgba(217,119,6,0.14); color: #92400E; }
+.s-ready      { background: rgba(16,217,138,0.14); color: #047857; }
+.s-testing    { background: rgba(168,208,42,0.25); color: #4C5E0A; }
+.s-winner     { background: var(--lime); color: var(--ink); }
+.s-scale      { background: #00D18F; color: #fff; }
+.s-loser      { background: #FFE2E8; color: var(--rosed); }
+.s-complete   { background: rgba(15,23,42,0.08); color: var(--ink2); }
+
+.tbl-tag {
+  font-size: 0.65rem;
+  padding: 1px 6px;
+  background: var(--bg);
+  color: var(--ink2);
+  border-radius: 3px;
+  font-weight: 500;
+}
+.tbl-age-cell {
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 700;
+  font-size: 0.76rem;
+}
+.tbl-age-cell.aging   { color: var(--rosed); }
+.tbl-age-cell.learn   { color: var(--butterd); }
+.tbl-age-cell.fresh   { color: #047857; }
+
+.tbl-link-btn {
+  padding: 3px 8px;
+  font-size: 0.64rem;
+  font-weight: 600;
+  border-radius: 5px;
+  border: 1px solid var(--rule);
+  background: transparent;
+  color: var(--ink2);
+  cursor: pointer;
+  font-family: inherit;
+  text-decoration: none;
+  display: inline-block;
+}
+.tbl-link-btn:hover { border-color: var(--ink); color: var(--ink); background: var(--card); }
+
+/* row expansion */
+.expand-row td {
+  background: var(--bg);
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--rule-strong);
+}
+.expand-grid {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 20px;
+}
+.expand-section h4 {
+  font-size: 0.64rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink3);
+  margin-bottom: 8px;
+}
+.expand-desc { font-size: 0.82rem; color: var(--ink); line-height: 1.5; margin-bottom: 12px; }
+.expand-links { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
+
+/* expand mini-timeline */
+.mini-tl { display: flex; flex-direction: column; gap: 8px; }
+.mini-tl-row {
+  display: grid;
+  grid-template-columns: 90px 16px 1fr;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.72rem;
+}
+.mini-tl-row .dot {
+  width: 9px; height: 9px; border-radius: 50%;
+  background: var(--ink3); border: 2px solid var(--card);
+  box-shadow: 0 0 0 1px var(--rule);
+}
+.mini-tl-row.done .dot { background: #047857; }
+.mini-tl-row.current .dot {
+  background: var(--ink); box-shadow: 0 0 0 1px var(--rule), 0 0 0 4px var(--butter);
+}
+.mini-tl-row .lbl { font-weight: 500; color: var(--ink); }
+.mini-tl-row.pending .lbl { color: var(--ink3); }
+.mini-tl-row .when { font-family: 'JetBrains Mono', monospace; color: var(--ink3); font-size: 0.65rem; }
+
+.empty-state {
+  text-align: center;
+  padding: 40px 20px;
+  color: var(--ink3);
+  font-size: 0.85rem;
+}
+
+/* ClickUp Window mode */
+.cu-window {
+  background: var(--card);
+  border: 1px solid var(--rule);
+  border-radius: 18px;
+  padding: 30px;
+  text-align: center;
+}
+.cuw-title {
+  font-size: 1.3rem;
+  font-weight: 800;
+  margin-bottom: 10px;
+  letter-spacing: -0.02em;
+}
+.cuw-desc {
+  font-size: 0.88rem;
+  color: var(--ink2);
+  margin-bottom: 20px;
+  line-height: 1.5;
+}
+.cuw-list {
+  margin-top: 20px;
+  text-align: left;
+  max-width: 700px;
+  margin-left: auto;
+  margin-right: auto;
+}
+.cuw-section { margin-bottom: 24px; }
+.cuw-section-title {
+  font-size: 0.72rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--rule);
+  margin-bottom: 10px;
+}
+
+/* ═════════ INLINE EDIT ═════════ */
+.ied {
+  border: 1px solid transparent;
+  background: transparent;
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit;
+  padding: 2px 6px;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: background .1s, border-color .1s;
+  max-width: 100%;
+}
+.ied:hover { background: var(--bg); border-color: var(--rule); }
+select.ied { appearance: none; padding-right: 18px; background-image: url("data:image/svg+xml,%3Csvg width='8' height='6' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 0l4 6 4-6z' fill='%239A9CA3'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 6px center; }
+input.ied[type="date"] { font-family: 'JetBrains Mono', monospace; font-size: 0.72rem; }
+input.ied[type="text"]:focus, textarea.ied:focus, select.ied:focus {
+  outline: none;
+  border-color: var(--ink);
+  background: var(--card);
+}
+.ied-saving { color: var(--ink3); font-size: 0.62rem; margin-left: 6px; }
+
+/* Funnel pills */
+.funnel-tof { background: rgba(37,99,235,0.12); color: #1E40AF; font-weight: 700; padding: 2px 7px; border-radius: 4px; font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.04em; }
+.funnel-mof { background: rgba(139,92,246,0.14); color: #5B21B6; font-weight: 700; padding: 2px 7px; border-radius: 4px; font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.04em; }
+.funnel-bof { background: rgba(190,24,93,0.12); color: #BE123C; font-weight: 700; padding: 2px 7px; border-radius: 4px; font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.04em; }
+
+/* ═════════ CONTEXT INFO BLOCK (row expansion) ═════════ */
+.ctx-block {
+  background: var(--card);
+  border: 1px solid var(--rule);
+  border-radius: 10px;
+  padding: 12px 14px;
+  margin-bottom: 12px;
+  font-size: 0.76rem;
+  line-height: 1.6;
+}
+.ctx-label {
+  font-size: 0.62rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink3);
+  margin-bottom: 6px;
+}
+.ctx-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 4px;
+}
+.ctx-link {
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 3px 9px;
+  border-radius: 6px;
+  border: 1px solid var(--rule);
+  background: var(--bg);
+  color: var(--ink);
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.ctx-link:hover { background: var(--ink); color: var(--card); border-color: var(--ink); }
+
+/* ═════════ EXPANSION EDITOR ═════════ */
+.exp-editor { display: grid; grid-template-columns: 1fr; gap: 10px; }
+.exp-field { display: flex; flex-direction: column; gap: 4px; }
+.exp-field label {
+  font-size: 0.6rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink3);
+}
+.exp-input {
+  padding: 8px 10px;
+  border: 1px solid var(--rule);
+  border-radius: 7px;
+  background: var(--card);
+  font-family: inherit;
+  font-size: 0.82rem;
+  color: var(--ink);
+  outline: none;
+  transition: border-color .1s;
+}
+.exp-input:focus { border-color: var(--ink); }
+textarea.exp-input { min-height: 70px; resize: vertical; }
+
+.exp-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--rule); }
+.exp-btn {
+  padding: 7px 12px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  border: 1px solid var(--rule);
+  background: var(--card);
+  color: var(--ink);
+  border-radius: 7px;
+  cursor: pointer;
+  font-family: inherit;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.exp-btn:hover { background: var(--ink); color: var(--card); border-color: var(--ink); }
+.exp-btn.prim { background: var(--lime); color: var(--ink); border-color: var(--lime); }
+.exp-btn.prim:hover { background: var(--ink); color: var(--lime); }
+.exp-btn.danger { color: #BE123C; border-color: rgba(190,24,93,0.2); }
+.exp-btn.danger:hover { background: #BE123C; color: var(--card); border-color: #BE123C; }
+
+/* ═════════ RETRY BANNER ═════════ */
+.retry-banner {
+  background: #FEF3C7;
+  border: 1px solid #F59E0B;
+  color: #92400E;
+  padding: 10px 16px;
+  border-radius: 10px;
+  margin-bottom: 14px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 0.82rem;
+}
+.retry-banner button {
+  margin-left: auto;
+  padding: 5px 10px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  border-radius: 6px;
+  background: #92400E;
+  color: #FEF3C7;
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
+}
+.retry-banner button:hover { background: #78350F; }
+
+/* ═════════ ACTIVITY LOG · KPI blocks (the big "basic cells") ═════════ */
+.dl-kpi-blocks {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.dl-kpi-block {
+  background: var(--bg);
+  border: 1px solid var(--rule);
+  border-radius: 12px;
+  padding: 14px 12px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  text-align: left;
+  font-family: inherit;
+}
+.dl-kpi-block:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(14,14,16,0.06); border-color: var(--ink2); }
+.dl-kpi-block.on { background: var(--ink); color: var(--card); border-color: var(--ink); }
+.dl-kpi-block.on .dl-kpi-num { color: var(--lime); }
+.dl-kpi-block.on .dl-kpi-lbl { color: rgba(255,255,255,0.7); }
+.dl-kpi-block.worked.on  { background: var(--ink); }
+.dl-kpi-block.launch.on  { background: #059669; border-color: #059669; }
+.dl-kpi-block.launch.on .dl-kpi-num { color: #fff; }
+.dl-kpi-block.launch.on .dl-kpi-lbl { color: rgba(255,255,255,0.8); }
+.dl-kpi-block.create.on  { background: #1C6FA8; border-color: #1C6FA8; }
+.dl-kpi-block.create.on .dl-kpi-num, .dl-kpi-block.create.on .dl-kpi-lbl { color: #fff; }
+.dl-kpi-block.edit.on    { background: #B88700; border-color: #B88700; }
+.dl-kpi-block.edit.on .dl-kpi-num, .dl-kpi-block.edit.on .dl-kpi-lbl { color: #fff; }
+.dl-kpi-block.kill.on    { background: var(--rosed); border-color: var(--rosed); }
+.dl-kpi-block.kill.on .dl-kpi-num, .dl-kpi-block.kill.on .dl-kpi-lbl { color: #fff; }
+.dl-kpi-num {
+  font-size: 2rem;
+  font-weight: 900;
+  line-height: 1;
+  letter-spacing: -0.03em;
+  color: var(--ink);
+  font-family: inherit;
+  font-variant-numeric: tabular-nums;
+}
+.dl-kpi-lbl {
+  font-size: 0.6rem;
+  font-weight: 700;
+  color: var(--ink2);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-top: 6px;
+}
+
+/* ═════════ ACTIVITY LOG · modern timeline ═════════ */
+.dl-stats {
+  display: flex !important;
+  grid-template-columns: none !important;
+  flex-wrap: wrap;
+  gap: 6px !important;
+  align-items: center;
+  padding-bottom: 16px !important;
+  margin-bottom: 4px !important;
+  border-bottom: 1px solid var(--rule);
+}
+.kpi-chip {
+  padding: 5px 12px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  border-radius: 999px;
+  border: 1px solid var(--rule);
+  background: transparent;
+  color: var(--ink2);
+  cursor: pointer;
+  font-family: inherit;
+  transition: all .15s ease;
+}
+.kpi-chip:hover { border-color: var(--ink); color: var(--ink); }
+.kpi-chip.on {
+  background: var(--ink);
+  color: var(--card);
+  border-color: var(--ink);
+}
+
+/* Timeline container with vertical line */
+.dl-tl {
+  position: relative;
+  padding: 6px 0 4px;
+  max-height: 300px;
+  overflow-y: auto;
+}
+.dl-tl::before {
+  content: '';
+  position: absolute;
+  left: 103px;           /* aligns to dot center */
+  top: 16px;
+  bottom: 16px;
+  width: 1px;
+  background: var(--rule);
+  pointer-events: none;
+}
+
+/* Day headers */
+.dl-group-hdr {
+  font-size: 0.58rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink3);
+  padding: 14px 0 8px 128px;
+}
+.dl-group-hdr:first-child { padding-top: 2px; }
+
+/* Each event row */
+.dl-row {
+  position: relative;
+  display: grid;
+  grid-template-columns: 82px 22px 1fr auto;
+  column-gap: 14px;
+  align-items: baseline;
+  padding: 9px 14px 9px 14px;
+  cursor: pointer;
+  border-radius: 8px;
+  transition: background 0.15s ease;
+  animation: dlFadeIn 0.28s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+@keyframes dlFadeIn {
+  from { opacity: 0; transform: translateY(-3px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.dl-row:hover { background: var(--bg); }
+.dl-row:hover .dl-dot { transform: scale(1.4); }
+.dl-row:hover .dl-cu-link { opacity: 1; }
+
+.dl-time {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.7rem;
+  color: var(--ink3);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  font-weight: 500;
+  line-height: 1.5;
+}
+
+/* The dot sits on the vertical line — box-shadow in card color creates the illusion of the line breaking at the dot */
+.dl-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--ink3);
+  justify-self: center;
+  align-self: center;
+  margin-top: 5px;
+  transition: transform 0.22s cubic-bezier(0.16, 1, 0.3, 1), background 0.15s;
+  box-shadow: 0 0 0 3px var(--card);
+  position: relative;
+  z-index: 1;
+}
+.dl-dot.launch  { background: #059669; }
+.dl-dot.kill    { background: #BE123C; }
+.dl-dot.winner  { background: var(--lime); box-shadow: 0 0 0 3px var(--card), 0 0 0 5px var(--ink); }
+.dl-dot.scale   { background: #D97948; }
+.dl-dot.deliver { background: #D97706; }
+.dl-dot.create  { background: #1C6FA8; }
+.dl-dot.edit    { background: transparent; border: 1.5px solid var(--ink3); width: 8px; height: 8px; }
+.dl-dot.sync    { background: transparent; border: 1.5px solid var(--ink3); width: 8px; height: 8px; }
+.dl-dot.inspo   { background: #7C3AED; }
+.dl-dot.delete  { background: #BE123C; border: 1.5px solid #BE123C; background: transparent; width: 8px; height: 8px; }
+
+.dl-content { min-width: 0; }
+
+.dl-primary {
+  font-size: 0.85rem;
+  line-height: 1.45;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.dl-primary .who  { font-weight: 700; color: var(--ink); }
+.dl-primary .verb { color: var(--ink2); font-weight: 400; margin: 0 2px; }
+.dl-primary .subj { font-weight: 600; color: var(--ink); }
+.dl-primary .tags {
+  font-size: 0.72rem;
+  color: var(--ink3);
+  margin-left: 6px;
+  font-weight: 400;
+}
+.dl-secondary {
+  font-size: 0.74rem;
+  color: var(--ink2);
+  margin-top: 2px;
+  font-family: 'JetBrains Mono', monospace;
+  letter-spacing: -0.005em;
+}
+.dl-secondary .arrow { color: var(--ink3); margin: 0 4px; }
+.dl-secondary strong { color: var(--ink); font-weight: 600; }
+
+.dl-cu-link {
+  font-size: 0.66rem;
+  color: var(--ink3);
+  text-decoration: none;
+  letter-spacing: 0.03em;
+  opacity: 0;
+  transition: opacity 0.18s ease, color 0.18s;
+  white-space: nowrap;
+  align-self: center;
+}
+.dl-cu-link:hover { color: var(--ink); text-decoration: underline; }
+
+/* ═════════ OVERDUE TILE ═════════ */
+.tile--overdue .th-dot { background: var(--rosed); box-shadow: 0 0 0 3px rgba(199,59,100,0.15); }
+.tile--overdue .th-name { color: var(--rosed); }
+.tile--overdue .th-count { background: var(--rosed); color: var(--card); }
+
+.ov-wrap { display: flex; flex-direction: column; gap: 14px; }
+.ov-group {
+  border: 1px solid var(--rule);
+  border-radius: 12px;
+  padding: 12px 14px;
+  background: var(--card);
+  transition: border-color 0.15s ease;
+}
+.ov-group.critical { border-color: rgba(199,59,100,0.3); background: linear-gradient(180deg, rgba(199,59,100,0.03), transparent); }
+.ov-group.hot      { border-color: rgba(217,121,72,0.3); background: linear-gradient(180deg, rgba(217,121,72,0.04), transparent); }
+.ov-group.warning  { border-color: rgba(184,135,0,0.25); background: linear-gradient(180deg, rgba(255,224,102,0.06), transparent); }
+
+.ov-group-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px dashed var(--rule);
+}
+.ov-sev-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+.ov-sev-dot.critical { background: var(--rosed); box-shadow: 0 0 0 3px rgba(199,59,100,0.2); }
+.ov-sev-dot.hot      { background: #D97948; box-shadow: 0 0 0 3px rgba(217,121,72,0.2); }
+.ov-sev-dot.warning  { background: #B88700; box-shadow: 0 0 0 3px rgba(255,224,102,0.3); }
+.ov-group-label { font-size: 0.78rem; font-weight: 700; color: var(--ink); }
+.ov-group-count { margin-left: auto; font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; font-weight: 700; color: var(--ink2); }
+
+.ov-item {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 0;
+  border-bottom: 1px solid rgba(14,14,16,0.04);
+}
+.ov-item:last-child { border-bottom: none; }
+.ov-item:hover { background: rgba(14,14,16,0.02); }
+.ov-item:hover .ov-actions { opacity: 1; }
+
+.ov-title { min-width: 0; overflow: hidden; }
+.ov-title-text {
+  font-size: 0.84rem;
+  font-weight: 600;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ov-meta {
+  font-size: 0.7rem;
+  color: var(--ink3);
+  margin-top: 2px;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.ov-days {
+  font-family: 'JetBrains Mono', monospace;
+  color: var(--rosed);
+  font-weight: 700;
+}
+.ov-days.hot     { color: #D97948; }
+.ov-days.warning { color: #B88700; }
+
+.ov-actions {
+  display: flex;
+  gap: 4px;
+  opacity: 0.4;
+  transition: opacity 0.15s ease;
+}
+.ov-btn {
+  padding: 4px 10px;
+  font-size: 0.68rem;
+  font-weight: 600;
+  border-radius: 6px;
+  border: 1px solid var(--rule);
+  background: transparent;
+  color: var(--ink);
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+.ov-btn:hover { background: var(--ink); color: var(--card); border-color: var(--ink); }
+.ov-btn.prim { background: var(--ink); color: var(--lime); border-color: var(--ink); }
+.ov-btn.prim:hover { background: var(--lime); color: var(--ink); border-color: var(--lime); }
+.ov-btn.kill { color: var(--rosed); border-color: rgba(199,59,100,0.25); }
+.ov-btn.kill:hover { background: var(--rosed); color: var(--card); border-color: var(--rosed); }
+
+.ov-empty {
+  text-align: center;
+  padding: 30px 0;
+  color: var(--ink3);
+  font-size: 0.85rem;
+}
+.ov-empty strong { color: #047857; font-weight: 700; font-size: 1.1rem; display: block; margin-bottom: 4px; }
+
+/* ═════════ VIEW TOGGLE ═════════ */
+.dl-view-toggle {
+  display: inline-flex;
+  padding: 2px;
+  margin-left: auto;
+  background: var(--bg);
+  border: 1px solid var(--rule);
+  border-radius: 999px;
+}
+.dvt-btn {
+  padding: 4px 12px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  border: none;
+  background: transparent;
+  color: var(--ink2);
+  cursor: pointer;
+  border-radius: 999px;
+  font-family: inherit;
+  transition: all 0.15s ease;
+}
+.dvt-btn.on { background: var(--ink); color: var(--card); }
+
+/* ═════════ TASK GROUP CARD (By Task view) ═════════ */
+.tg-card {
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: var(--card);
+  border: 1px solid var(--rule);
+  cursor: pointer;
+  margin-bottom: 8px;
+  transition: all 0.18s ease;
+  animation: dlFadeIn 0.28s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.tg-card:hover {
+  border-color: var(--ink);
+  box-shadow: 0 4px 14px rgba(14,14,16,0.06);
+  transform: translateY(-1px);
+}
+.tg-card:last-child { margin-bottom: 0; }
+
+.tg-head {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  column-gap: 12px;
+  align-items: baseline;
+  margin-bottom: 10px;
+}
+.tg-title {
+  font-size: 0.92rem;
+  font-weight: 700;
+  color: var(--ink);
+  line-height: 1.3;
+  grid-column: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tg-tags {
+  grid-column: 1;
+  font-size: 0.72rem;
+  color: var(--ink3);
+  font-weight: 500;
+  margin-top: 2px;
+}
+.tg-cu {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  align-self: center;
+  font-size: 0.7rem;
+  color: var(--ink3);
+  text-decoration: none;
+  padding: 4px 10px;
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+.tg-cu:hover { background: var(--ink); color: var(--card); border-color: var(--ink); }
+
+.tg-status-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 10px;
+  padding: 8px 0;
+  border-top: 1px dashed var(--rule);
+  border-bottom: 1px dashed var(--rule);
+  font-size: 0.78rem;
+}
+.tg-status {
+  padding: 3px 9px;
+  border-radius: 5px;
+  background: var(--bg);
+  color: var(--ink2);
+  font-weight: 600;
+  font-size: 0.72rem;
+}
+.tg-status.current {
+  background: var(--ink);
+  color: var(--lime);
+}
+.tg-arrow {
+  color: var(--ink3);
+  font-weight: 400;
+  margin: 0 2px;
+}
+
+.tg-edit-row {
+  padding: 8px 0;
+  border-top: 1px dashed var(--rule);
+  border-bottom: 1px dashed var(--rule);
+  margin-bottom: 10px;
+  font-size: 0.78rem;
+  color: var(--ink2);
+  font-weight: 500;
+}
+
+.tg-foot {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-size: 0.72rem;
+  color: var(--ink2);
+}
+.tg-actor { font-weight: 700; color: var(--ink); }
+.tg-summary { color: var(--ink2); }
+.tg-sep { color: var(--ink3); }
+.tg-time { font-family: 'JetBrains Mono', monospace; color: var(--ink3); font-size: 0.68rem; }
+
+/* Simple (orphan) card for non-task events */
+.tg-card-simple { padding: 10px 14px; }
+.tg-simple-row {
+  display: grid;
+  grid-template-columns: 14px 1fr auto;
+  gap: 10px;
+  align-items: center;
+}
+.tg-simple-text {
+  font-size: 0.82rem;
+  color: var(--ink);
+}
+.tg-simple-text strong { font-weight: 700; }
+
+/* ═════════ SIDE PANEL ═════════ */
+.side-panel-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(14,14,16,0.35);
+  z-index: 900;
+  animation: fade 0.18s ease-out;
+}
+@keyframes fade { from { opacity: 0; } to { opacity: 1; } }
+.side-panel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 440px;
+  max-width: 95vw;
+  background: var(--card);
+  border-left: 1px solid var(--rule);
+  box-shadow: -12px 0 40px rgba(14,14,16,0.15);
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  animation: slide 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+}
+@keyframes slide { from { transform: translateX(30px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+.sp-head {
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--rule);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.sp-title {
+  font-size: 0.85rem;
+  font-weight: 700;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sp-close {
+  width: 28px; height: 28px;
+  border-radius: 7px;
+  border: 1px solid var(--rule);
+  background: transparent;
+  color: var(--ink2);
+  cursor: pointer;
+  font-size: 1rem;
+  font-family: inherit;
+}
+.sp-close:hover { background: var(--ink); color: var(--card); border-color: var(--ink); }
+.sp-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 18px;
+}
+.sp-chip-row { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 14px; }
+.sp-chip {
+  font-size: 0.65rem;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--ink2);
+}
+.sp-section { margin-bottom: 16px; }
+.sp-section h4 {
+  font-size: 0.6rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--ink3);
+  margin-bottom: 6px;
+}
+.sp-field {
+  display: flex;
+  justify-content: space-between;
+  padding: 5px 0;
+  border-bottom: 1px dashed var(--rule);
+  font-size: 0.8rem;
+}
+.sp-field:last-child { border-bottom: none; }
+.sp-field label { color: var(--ink2); }
+.sp-field .v { color: var(--ink); font-weight: 600; }
+
+.sp-foot {
+  padding: 14px 18px;
+  border-top: 1px solid var(--rule);
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+/* toast */
+.toast-host {
+  position: fixed;
+  bottom: 20px; right: 20px;
+  z-index: 999;
+}
+.toast {
+  background: var(--ink);
+  color: var(--card);
+  padding: 10px 16px;
+  border-radius: 10px;
+  font-size: 0.78rem;
+  margin-top: 8px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.2);
+  animation: tslide 0.25s ease-out;
+}
+.toast.ok { background: #047857; }
+.toast.err { background: #BE123C; }
+@keyframes tslide {
+  from { transform: translateX(20px); opacity: 0; }
+  to   { transform: translateX(0); opacity: 1; }
+}
+</style>
+</head>
+<body>
+
+<!-- ═══════════ TOP BAR ═══════════ -->
+<header class="topbar">
+  <div>
+    <div class="tb-title">Action Plan · Live</div>
+    <div class="tb-sub mono" id="dateSub">THU · APR 24 · LOADING</div>
+  </div>
+
+  <select id="productSel" class="product-sel"></select>
+
+  <div class="mode-toggle" id="modeToggle">
+    <button class="mt-btn on" data-mode="action-plan">📋 Action Plan</button>
+    <button class="mt-btn" data-mode="clickup-window">🗂 ClickUp Window</button>
+  </div>
+
+  <div class="range-chip" id="rangeChip">
+    <button class="rc-btn" data-range="today">Today</button>
+    <button class="rc-btn on" data-range="week">Week</button>
+    <button class="rc-btn" data-range="month">Month</button>
+    <button class="rc-btn" data-range="all">All</button>
+    <button class="rc-btn" data-range="custom">Custom</button>
+  </div>
+
+  <div class="custom-range hide" id="customRange">
+    <input type="date" id="customFrom">
+    <span>→</span>
+    <input type="date" id="customTo">
+  </div>
+
+  <div class="tb-spacer"></div>
+
+  <button id="manualSyncBtn" class="ts-ctrl-btn" onclick="manualSync()" title="Pull fresh data from ClickUp now. Auto-polls every 30s.">🔄 Sync now</button>
+  <span id="pollStatus" style="font-family:'JetBrains Mono',monospace;font-size:0.62rem;color:var(--ink3);">idle</span>
+
+  <button id="backfillBtn" class="ts-ctrl-btn" onclick="backfillFromClickUp()" title="Read Approved Date + Launch Date + Created Date from ClickUp and populate missing stamps">📅 Backfill dates</button>
+
+  <span class="live-pill"><span class="live-dot"></span> Live</span>
+</header>
+
+<!-- DEBUG STRIP — shows data status -->
+<div id="debugStrip" style="padding:8px 16px;background:#FFF7D6;border:1px solid #F3D77A;border-radius:10px;margin-bottom:14px;font-family:'JetBrains Mono',monospace;font-size:0.72rem;color:#6B4E00;display:flex;gap:14px;flex-wrap:wrap;">
+  <span id="dbgProduct">Product: —</span>
+  <span id="dbgActions">Actions: —</span>
+  <span id="dbgStamps">With launched_at: —</span>
+  <span id="dbgKey">ClickUp key: —</span>
+  <span id="dbgList">List ID: —</span>
+  <span id="dbgRange">Range: —</span>
+</div>
+
+<!-- ═══════════ LOADING STATE ═══════════ -->
+<div id="loadingState" class="loading-state">Loading your Action Plan…</div>
+
+<!-- Retry banner (hidden unless pending writes) -->
+<div id="retryBanner" class="retry-banner hide">
+  <span>⚠ <strong id="retryCount">0</strong> ClickUp write<span id="retryS">s</span> pending sync</span>
+  <button onclick="retryPendingWrites()">Retry now</button>
+  <button onclick="clearPendingWrites()">Dismiss</button>
+</div>
+
+<!-- ═══════════ ACTION PLAN VIEW ═══════════ -->
+<div id="apView" class="hide">
+
+  <!-- Bento -->
+  <div class="bento">
+
+    <!-- HOT QUEUE -->
+    <div class="tile tile--hot">
+      <div class="tile-head">
+        <span class="th-dot"></span>
+        <span class="th-name">Hot Queue · Decisions Owed</span>
+        <span class="th-count" id="hqCount">0</span>
+      </div>
+      <div class="hot-hero">
+        <div class="hh-num" id="hqNum">0</div>
+        <div class="hh-text">decisions<br><span>need your call</span></div>
+      </div>
+      <div class="hot-items" id="hqList"></div>
+    </div>
+
+    <!-- VELOCITY -->
+    <div class="tile tile--velocity">
+      <div class="tile-head">
+        <span class="th-name">Velocity · This Week</span>
+      </div>
+      <div class="vel-hero">
+        <span class="vel-n" id="velN">0</span>
+        <span class="vel-u">creatives shipped</span>
+      </div>
+      <span class="vel-delta" id="velDelta">vs last week</span>
+      <svg class="vel-spark" id="velSpark" viewBox="0 0 300 44" preserveAspectRatio="none"></svg>
+    </div>
+
+    <!-- TODAY + BOTTLENECK -->
+    <div class="tile tile--today">
+      <div class="tile-head">
+        <span class="th-name">Today</span>
+      </div>
+      <div class="today-big-row">
+        <span class="today-num" id="todayNum">0</span>
+        <div class="today-txt">
+          <span class="today-lbl">delivering / launching today</span>
+          <span class="today-sub" id="todaySub">—</span>
+        </div>
+      </div>
+      <div class="bottleneck-line" id="bottleneckLine">—</div>
+    </div>
+
+    <!-- PROD -->
+    <div class="tile tile--prod">
+      <div class="tile-head">
+        <span class="th-dot"></span>
+        <span class="th-name">Production · editor</span>
+        <span class="th-count" id="prodCount">0</span>
+      </div>
+      <div class="pulse-scroll" id="prodList"></div>
+    </div>
+
+    <!-- TESTING -->
+    <div class="tile tile--test">
+      <div class="tile-head">
+        <span class="th-dot"></span>
+        <span class="th-name">Testing · ads live</span>
+        <span class="th-count" id="testCount">0</span>
+      </div>
+      <div class="pulse-scroll" id="testList"></div>
+    </div>
+
+    <!-- PLANNING -->
+    <div class="tile tile--plan">
+      <div class="tile-head">
+        <span class="th-dot"></span>
+        <span class="th-name">Planning · briefs</span>
+        <span class="th-count" id="planCount">0</span>
+      </div>
+      <div class="pulse-scroll" id="planList"></div>
+    </div>
+
+    <!-- PIPELINE -->
+    <div class="tile tile--pipeline">
+      <div class="tile-head">
+        <span class="th-dot"></span>
+        <span class="th-name">Pipeline · Next 7 days · by due date</span>
+        <span class="th-count" id="pipeTotal">0</span>
+      </div>
+      <div class="pipe-grid" id="pipeGrid"></div>
+    </div>
+
+    <!-- OVERDUE TILE (grouped by reason) -->
+    <div class="tile tile--overdue">
+      <div class="tile-head">
+        <span class="th-dot"></span>
+        <span class="th-name">Overdue · Needs your call</span>
+        <span class="th-count" id="ovCount">0</span>
+      </div>
+      <div class="ov-wrap" id="ovList"></div>
+    </div>
+
+    <!-- DAILY LOG -->
+    <div class="tile tile--log">
+      <div class="tile-head">
+        <span class="th-dot"></span>
+        <span class="th-name">Daily Log · today</span>
+        <span class="th-count" id="dlCount">0</span>
+      </div>
+      <div class="dl-wrap">
+        <div class="dl-kpi-blocks" id="dlKpiBlocks"></div>
+        <div class="dl-stats" id="dlStats"></div>
+        <div class="dl-tl" id="dlTimeline"></div>
+      </div>
+    </div>
+
+    <!-- SCORECARD -->
+    <div class="tile tile--score">
+      <div class="tile-head">
+        <span class="th-dot"></span>
+        <span class="th-name">This Week I… · Scorecard</span>
+      </div>
+      <div class="score-grid" id="scoreGrid"></div>
+    </div>
+
+    <!-- HIT RATE -->
+    <div class="tile tile--hitrate">
+      <div class="tile-head">
+        <span class="th-dot"></span>
+        <span class="th-name">Hit Rate · 30d</span>
+      </div>
+      <div class="hit-hero">
+        <span class="hit-n" id="hitN">—</span>
+        <span class="hit-pct">%</span>
+      </div>
+      <div class="hit-sub" id="hitSub">—</div>
+      <div class="hit-verdict warn" id="hitVerdict">—</div>
+      <div class="hit-bars" id="hitBars"></div>
+    </div>
+
+    <!-- PATTERNS -->
+    <div class="tile tile--patterns">
+      <div class="tile-head">
+        <span class="th-name">Patterns · Angle × Persona</span>
+      </div>
+      <div class="pat-note">Coverage heatmap. Light cells = unexplored.</div>
+      <div style="overflow-x:auto">
+        <table class="mx" id="patMx"></table>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ═══════════ TABLE VIEW ═══════════ -->
+  <div class="table-section">
+    <div class="ts-header">
+      <span class="ts-title">All Tasks</span>
+      <span class="ts-count" id="tblCount">0</span>
+
+      <div class="saved-views" id="savedViews">
+        <button class="sv-btn on" data-view="all">All</button>
+        <button class="sv-btn" data-view="overdue">🔥 My overdue</button>
+        <button class="sv-btn" data-view="testing-hot">🧪 Testing &gt; 7d</button>
+        <button class="sv-btn" data-view="prod-stuck">🏭 Production bottleneck</button>
+        <button class="sv-btn" data-view="video">📹 Video only</button>
+        <button class="sv-btn" data-view="photo">📷 Photo only</button>
+        <button class="sv-btn" data-view="this-week">🆕 Briefed this week</button>
+      </div>
+
+      <div class="ts-controls">
+        <div class="ts-ctrl-wrap">
+          <button class="ts-ctrl-btn" id="colsBtn">Columns</button>
+          <div class="col-panel hide" id="colsPanel"></div>
+        </div>
+      </div>
+    </div>
+
+    <div style="overflow-x:auto">
+      <table class="ap-table" id="apTable"></table>
+    </div>
+    <div id="tblEmpty" class="empty-state hide">No tasks match the current filters.</div>
+  </div>
+
+</div>
+
+<!-- ═══════════ CLICKUP WINDOW VIEW ═══════════ -->
+<div id="cuView" class="hide">
+  <div class="cu-window">
+    <h2 class="cuw-title">🗂 ClickUp Window</h2>
+    <p class="cuw-desc">
+      All tasks in ClickUp, including legacy ones created before this app. Find blind spots — creatives ready to launch that never made it into your Action Plan.
+    </p>
+
+    <div id="cuStatus" style="margin-bottom:14px; font-size:0.82rem; color:var(--ink2);">Checking ClickUp credentials…</div>
+    <div style="display:flex;gap:8px;justify-content:center;margin-bottom:20px;">
+      <button class="ts-ctrl-btn" id="cuSyncBtn">🔄 Sync from ClickUp</button>
+      <button class="ts-ctrl-btn" id="cuSetKeyBtn">🔑 Set API Key</button>
+    </div>
+
+    <div class="cuw-list" id="cuList"></div>
+  </div>
+</div>
+
+<!-- Side panel for click-through from Activity Log -->
+<div id="sidePanelBackdrop" class="side-panel-backdrop hide" onclick="closeSidePanel()"></div>
+<aside id="sidePanel" class="side-panel hide"></aside>
+
+<div class="toast-host" id="toastHost"></div>
+
+<script>
+// ═════════════════════════════════════════════════════════════
+//  SUPABASE INIT (same creds as main dashboard)
+// ═════════════════════════════════════════════════════════════
+const SB_URL  = 'https://hdniumnkprkadlrrataz.supabase.co';
+const SB_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imhkbml1bW5rcHJrYWRscnJhdGF6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY1MTQ4NzUsImV4cCI6MjA5MjA5MDg3NX0.xnkNthP1SnnvaColrhukZqV1e5WrZz_VncCpyznlcWE';
+const SB = window.supabase.createClient(SB_URL, SB_ANON, {
+  realtime: { params: { eventsPerSecond: 10 } }
+});
+
+// ═════════════════════════════════════════════════════════════
+//  STATE
+// ═════════════════════════════════════════════════════════════
+// Read main app's cached user name (set by immuvi-command-center.html
+// via _fetchClickUpUser → localStorage immuvi_cu_user_<last8>)
+function getUserLabel() {
+  const key = localStorage.getItem('immuvi_api_key') || '';
+  if (key) {
+    try {
+      const c = JSON.parse(localStorage.getItem('immuvi_cu_user_' + key.slice(-8)) || 'null');
+      if (c && c.name) return c.name;
+    } catch (e) {}
+  }
+  return 'Me';
+}
+
+const STATE = {
+  products: [],
+  activeProductId: null,
+  mode: 'action-plan',           // or 'clickup-window'
+  range: { preset: 'week', from: null, to: null },
+  // raw data (per product)
+  actions: [],                   // manual_actions rows, flattened
+  ads: [],                       // ads rows, flattened
+  angles: [],
+  personas: [],
+  inspirations: [],
+  inspirationResults: [],
+  // table state
+  tableSort: { col: 'age', dir: 'desc' },
+  tableView: 'all',
+  tableCols: {
+    task: true, angle: true, persona: true,
+    adType: true, funnel: true, status: true,
+    age: true, phaseDays: true, due: true, brief: false, clickup: true
+  },
+  cuFieldMap: {},          // cached ClickUp custom field IDs by list
+  pendingWrites: [],       // retry queue for ClickUp writes
+  events: [],              // activity_events for current product × range
+  eventFilter: 'all',      // active KPI chip filter
+  eventSourceFilter: 'all',// all | mine | clickup-poll | remote-user
+  eventView: 'task',       // 'task' | 'timeline'
+  sidePanelDbId: null,     // task shown in side panel (null = closed)
+  expandedRows: new Set(),
+  channels: []
+};
+
+// ═════════════════════════════════════════════════════════════
+//  UTILITIES
+// ═════════════════════════════════════════════════════════════
+function $(id) { return document.getElementById(id); }
+function esc(s) { if (s == null) return ''; return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function escAttr(s) { return esc(s); }
+
+function todayStart() { const d = new Date(); d.setHours(0,0,0,0); return d; }
+function endOfDay(d) { const x = new Date(d); x.setHours(23,59,59,999); return x; }
+function daysBetween(a, b) {
+  const ma = new Date(a); ma.setHours(0,0,0,0);
+  const mb = new Date(b); mb.setHours(0,0,0,0);
+  return Math.floor((mb - ma) / 86400000);
+}
+function fmtDate(d) {
+  if (!d) return '';
+  const x = new Date(d);
+  return x.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+function isoDate(d) { return new Date(d).toISOString().split('T')[0]; }
+function isSameDay(a, b) {
+  if (!a || !b) return false;
+  const x = new Date(a), y = new Date(b);
+  return x.getFullYear()===y.getFullYear() && x.getMonth()===y.getMonth() && x.getDate()===y.getDate();
+}
+function startOfWeek(d) {
+  const x = new Date(d); x.setHours(0,0,0,0);
+  const day = x.getDay(); x.setDate(x.getDate() - day); // Sun = 0
+  return x;
+}
+function startOfMonth(d) {
+  const x = new Date(d); x.setHours(0,0,0,0); x.setDate(1);
+  return x;
+}
+function toast(msg, cls) {
+  const el = document.createElement('div');
+  el.className = 'toast' + (cls ? ' ' + cls : '');
+  el.textContent = msg;
+  $('toastHost').appendChild(el);
+  setTimeout(() => el.remove(), 3000);
+}
+
+// normalize an action row from DB
+function flattenAction(row) {
+  const payload = row.payload || {};
+  return Object.assign({}, payload, {
+    _dbId: row.id,
+    _liveStatus: row.live_status || payload.liveStatus || 'Untested',
+    _createdAt: row.created_at,
+    _updatedAt: row.updated_at,
+    _approvedAt:  row.approved_at  || payload.approved_at  || null,
+    _deliveredAt: row.delivered_at || payload.delivered_at || null,
+    _launchedAt:  row.launched_at  || payload.launched_at  || null,
+    _killedAt:    row.killed_at    || payload.killed_at    || null,
+    _scaledAt:    row.scaled_at    || payload.scaled_at    || null,
+  });
+}
+
+function flattenAd(row) {
+  return Object.assign({}, row.config || {}, {
+    _dbId: row.id,
+    id: row.id,
+    _clickupId: row.clickup_task_id,
+    formatName: row.format_name,
+    adLink: row.ad_link,
+    driveLink: row.drive_link,
+    adType: row.ad_type,
+    funnelStage: row.funnel_stage,
+    status: row.status,
+    angle: row.angle,
+    persona: row.persona,
+    parentAdId: row.parent_ad_id,
+    variationNumber: row.variation_number,
+    adOrigin: row.ad_origin,
+    taskType: (row.config && row.config.taskType) || null,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  });
+}
+
+// ═════════════════════════════════════════════════════════════
+//  DATE RANGE
+// ═════════════════════════════════════════════════════════════
+function getRange() {
+  const now = new Date();
+  const r = STATE.range;
+  if (r.preset === 'today') return { from: todayStart(), to: endOfDay(now) };
+  if (r.preset === 'week')  return { from: startOfWeek(now), to: endOfDay(now) };
+  if (r.preset === 'month') return { from: startOfMonth(now), to: endOfDay(now) };
+  if (r.preset === 'all')   return { from: new Date('2000-01-01'), to: endOfDay(now) };
+  if (r.preset === 'custom' && r.from && r.to) {
+    return { from: new Date(r.from), to: endOfDay(new Date(r.to)) };
+  }
+  return { from: startOfWeek(now), to: endOfDay(now) };
+}
+
+function getLastWeekRange() {
+  const now = new Date();
+  const sow = startOfWeek(now);
+  const lastStart = new Date(sow); lastStart.setDate(lastStart.getDate() - 7);
+  const lastEnd = new Date(sow); lastEnd.setMilliseconds(lastEnd.getMilliseconds() - 1);
+  return { from: lastStart, to: lastEnd };
+}
+
+// Previous period equal in length to the currently-selected range.
+// Used for "vs previous" deltas in Velocity / Scorecard.
+function getPreviousRange() {
+  const r = getRange();
+  const len = r.to - r.from;
+  const prevTo = new Date(r.from.getTime() - 1);
+  const prevFrom = new Date(prevTo.getTime() - len);
+  return { from: prevFrom, to: prevTo };
+}
+
+// Human label for the currently-selected range (used in tile titles)
+function getRangeLabel() {
+  const p = STATE.range.preset;
+  if (p === 'today') return 'today';
+  if (p === 'week')  return 'this week';
+  if (p === 'month') return 'this month';
+  if (p === 'all')   return 'all time';
+  if (p === 'custom') return 'custom range';
+  return '';
+}
+
+function getPrevLabel() {
+  const p = STATE.range.preset;
+  if (p === 'today') return 'yesterday';
+  if (p === 'week')  return 'last week';
+  if (p === 'month') return 'last month';
+  return 'previous';
+}
+
+// Did timestamp `d` fall inside the given {from, to} range?
+function inRange(d, r) {
+  if (!d) return false;
+  const x = new Date(d);
+  return x >= r.from && x <= r.to;
+}
+
+// ═════════════════════════════════════════════════════════════
+//  PRODUCTS
+// ═════════════════════════════════════════════════════════════
+async function loadProducts() {
+  const { data, error } = await SB.from('products').select('*').order('id');
+  if (error) { toast('Products load failed: ' + error.message, 'err'); return; }
+  STATE.products = data || [];
+  // pick up active product from localStorage if possible
+  const savedPid = localStorage.getItem('immuvi_active_product');
+  STATE.activeProductId = (savedPid && STATE.products.find(p => p.id === savedPid))
+    ? savedPid
+    : (STATE.products[0] && STATE.products[0].id);
+
+  const sel = $('productSel');
+  sel.innerHTML = STATE.products.map(p =>
+    `<option value="${escAttr(p.id)}" ${p.id === STATE.activeProductId ? 'selected' : ''}>${esc(p.name)}</option>`
+  ).join('');
+  sel.onchange = () => {
+    STATE.activeProductId = sel.value;
+    localStorage.setItem('immuvi_active_product', sel.value);
+    reload();
+  };
+}
+
+// ═════════════════════════════════════════════════════════════
+//  DATA LOAD
+// ═════════════════════════════════════════════════════════════
+async function loadAll() {
+  const pid = STATE.activeProductId;
+  if (!pid) return;
+
+  // 30-day retention cleanup — delete events older than 30 days on every load
+  const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+  SB.from('activity_events').delete().lt('created_at', cutoff).then(({ error }) => {
+    if (error) console.warn('[retention] cleanup failed', error.message);
+  });
+
+  const [actions, ads, angles, personas, inspirations, insResults, events] = await Promise.all([
+    SB.from('manual_actions').select('*').eq('product_id', pid),
+    SB.from('ads').select('*').eq('product_id', pid).is('deleted_at', null),
+    SB.from('angles').select('*').eq('product_id', pid),
+    SB.from('personas').select('*').eq('product_id', pid),
+    SB.from('inspirations').select('*').eq('product_id', pid),
+    SB.from('inspiration_results').select('*').eq('product_id', pid),
+    SB.from('activity_events').select('*').eq('product_id', pid).order('created_at', { ascending: false }).limit(500)
+  ]);
+
+  if (actions.error)       console.error(actions.error);
+  if (ads.error)           console.error(ads.error);
+  if (angles.error)        console.error(angles.error);
+  if (personas.error)      console.error(personas.error);
+  if (inspirations.error)  console.error(inspirations.error);
+  if (insResults.error)    console.error(insResults.error);
+
+  STATE.actions            = (actions.data            || []).map(flattenAction);
+  STATE.ads                = (ads.data                || []).map(flattenAd);
+  STATE.angles             = angles.data              || [];
+  STATE.personas           = personas.data            || [];
+  STATE.inspirations       = inspirations.data        || [];
+  STATE.inspirationResults = insResults.data          || [];
+  STATE.events             = events.data              || [];
+
+  // ── Age backfill ──
+  // The action's Supabase created_at is "when added to Action Plan",
+  // which can be today even for ancient creatives. Use the LINKED ad's
+  // created_at (or ClickUp push ts) as the "true creative age" when older.
+  const adById = {};
+  const adByClickup = {};
+  STATE.ads.forEach(ad => {
+    if (ad.id) adById[ad.id] = ad;
+    if (ad._clickupId) adByClickup[ad._clickupId] = ad;
+  });
+
+  STATE.actions.forEach(a => {
+    let bestCreated = a._createdAt ? new Date(a._createdAt) : null;
+    // match by sourceAdId → ads.id
+    const matchedAd = (a.sourceAdId && adById[a.sourceAdId])
+                   || (a.adId && adById[a.adId])
+                   || (a._clickupId && adByClickup[a._clickupId]);
+    if (matchedAd && matchedAd.createdAt) {
+      const adTs = new Date(matchedAd.createdAt);
+      if (!bestCreated || adTs < bestCreated) bestCreated = adTs;
+    }
+    // payload-stored ClickUp ms timestamp wins if present
+    if (a.created_at_ms && (!bestCreated || new Date(a.created_at_ms) < bestCreated)) {
+      bestCreated = new Date(a.created_at_ms);
+    }
+    a._ageFrom = bestCreated ? bestCreated.toISOString() : a._createdAt;
+  });
+}
+
+// ═════════════════════════════════════════════════════════════
+//  COMPUTED METRICS
+// ═════════════════════════════════════════════════════════════
+function ageInDays(d) {
+  if (!d) return null;
+  return daysBetween(d, new Date());
+}
+
+// The DEFINITIVE phase classification for an action
+function classify(a) {
+  const s = a._liveStatus || a.liveStatus;
+  const now = new Date();
+
+  const ageStart = a._ageFrom || a._createdAt;
+
+  if (s === 'Untested' || s === 'Approved') {
+    return { phase: 'plan', phaseDays: ageStart ? daysBetween(ageStart, now) : null };
+  }
+  if (s === 'In Production') {
+    const start = a._approvedAt || ageStart;
+    return { phase: 'prod', phaseDays: start ? daysBetween(start, now) : null };
+  }
+  if (s === 'Ready to Launch') {
+    const start = a._deliveredAt || a._approvedAt || ageStart;
+    return { phase: 'ready', phaseDays: start ? daysBetween(start, now) : null };
+  }
+  if (s === 'Testing') {
+    const start = a._launchedAt || ageStart;
+    return { phase: 'test', phaseDays: start ? daysBetween(start, now) : null };
+  }
+  if (s === 'Winner' || s === 'Scale') {
+    return { phase: 'won', phaseDays: a._scaledAt ? daysBetween(a._scaledAt, now) : null };
+  }
+  if (s === 'Loser') {
+    return { phase: 'lost', phaseDays: a._killedAt ? daysBetween(a._killedAt, now) : null };
+  }
+  if (s === 'Complete') {
+    return { phase: 'done', phaseDays: null };
+  }
+  return { phase: 'plan', phaseDays: null };
+}
+
+// ═════════════════════════════════════════════════════════════
+//  SMART OVERDUE — phase-aware SLA engine
+//  Used by: Hot Queue, Overdue tile, table filter, row indicators
+// ═════════════════════════════════════════════════════════════
+const SLA_DAYS = {
+  'Untested':         2,
+  'Approved':         2,
+  'In Production':    2,
+  'Ready to Launch':  1,
+  'Testing':          7
+};
+
+// Phase-specific config: group, label, verb, actions, base severity
+const OVERDUE_CONFIG = {
+  'Untested': {
+    group: 'brief-idle',    groupLabel: 'Brief idle · needs editor',
+    reason: 'Brief sitting — assign editor',
+    severity: 'warning', actions: ['assign','kill']
+  },
+  'Approved': {
+    group: 'brief-idle',    groupLabel: 'Brief idle · needs editor',
+    reason: 'Editor hasn\'t started',
+    severity: 'warning', actions: ['ping']
+  },
+  'In Production': {
+    group: 'editor-slow',   groupLabel: 'Editor slow · over 2d SLA',
+    reason: 'Editor over SLA — ask for update',
+    severity: 'warning', actions: ['ping','deliver']
+  },
+  'Ready to Launch': {
+    group: 'push-live',     groupLabel: 'Ready to push · delivered by editor',
+    reason: 'Delivered — push to ads',
+    severity: 'hot',        actions: ['launch']
+  },
+  'Testing': {
+    group: 'decision-owed', groupLabel: 'Decision owed · over 7d testing',
+    reason: 'Kill loser or scale winner?',
+    severity: 'critical',   actions: ['kill','scale','review']
+  }
+};
+
+function overdueInfo(a) {
+  const s = a._liveStatus;
+  const today = new Date();
+  const todayStartDate = todayStart();
+
+  // Terminal statuses — never overdue
+  if (['Winner','Scale','Loser','Complete'].includes(s)) return null;
+
+  // Extract due date
+  const dueDateStr = a.dueDate;
+  const dueDate = dueDateStr ? new Date(dueDateStr) : null;
+
+  // Rule A: future due date wins — suppresses SLA
+  if (dueDate && dueDate >= todayStartDate) return null;
+
+  // Rule B: past due date in active phase = overdue (regardless of SLA)
+  if (dueDate && dueDate < todayStartDate) {
+    const daysPast = daysBetween(dueDate, today);
+    const phaseConf = OVERDUE_CONFIG[s] || { group:'past-due', groupLabel:'Past due date', reason:'Past due', severity:'warning', actions:['review'] };
+    return {
+      isOverdue: true,
+      severity: daysPast > 3 ? 'critical' : 'hot',
+      group: 'past-due',
+      groupLabel: `Past due date · ${phaseConf.reason.toLowerCase()}`,
+      reason: `Past due ${daysPast}d · ${phaseConf.reason}`,
+      daysOver: daysPast,
+      actions: phaseConf.actions
+    };
+  }
+
+  // SLA check (no due date path)
+  const sla = SLA_DAYS[s];
+  if (!sla) return null;
+  const cls = classify(a);
+  const phaseDays = cls.phaseDays || 0;
+  const daysOver = phaseDays - sla;
+  if (daysOver <= 0) return null;
+
+  const conf = OVERDUE_CONFIG[s];
+  if (!conf) return null;
+
+  // Escalate severity if far over SLA
+  let sev = conf.severity;
+  if (s === 'Testing' && phaseDays > 14) sev = 'critical';
+  if (s === 'In Production' && phaseDays > 5) sev = 'hot';
+
+  return {
+    isOverdue: true,
+    severity: sev,
+    group: conf.group,
+    groupLabel: conf.groupLabel,
+    reason: conf.reason,
+    daysOver,
+    phaseDays,
+    actions: conf.actions
+  };
+}
+
+function severityRank(s) { return s === 'critical' ? 3 : s === 'hot' ? 2 : 1; }
+
+// Old Hot Queue helper kept for compatibility — now delegates to overdueInfo
+function hotQueueReason(a) {
+  const info = overdueInfo(a);
+  if (info) {
+    // Icon and label for Hot Queue compact row
+    const iconMap = { 'brief-idle':'📝', 'editor-slow':'⏱', 'push-live':'📦', 'decision-owed':'🧪', 'past-due':'⚠' };
+    return {
+      icon: iconMap[info.group] || '⚠',
+      reason: info.reason,
+      label: info.group === 'decision-owed' ? `Day ${info.phaseDays} testing`
+           : info.group === 'editor-slow' ? `Day ${info.phaseDays} producing`
+           : info.group === 'push-live' ? 'Ready to launch'
+           : info.group === 'brief-idle' ? `${info.phaseDays||info.daysOver}d idle`
+           : info.group === 'past-due' ? 'Overdue'
+           : 'Needs attention',
+      sev: severityRank(info.severity)
+    };
+  }
+  // Unassigned/Delivered cases — keep simpler legacy logic for edge cases
+  const cls = classify(a);
+  if (cls.phase === 'ready' && !a._clickupId) {
+    return { icon: '📦', reason: 'Editor delivered — push live', label: 'Ready to launch', sev: 1 };
+  }
+  return null;
+}
+
+// ═════════════════════════════════════════════════════════════
+//  RENDER — HOT QUEUE
+// ═════════════════════════════════════════════════════════════
+function renderHotQueue() {
+  const hot = STATE.actions
+    .map(a => ({ a, q: hotQueueReason(a) }))
+    .filter(x => x.q)
+    .sort((x, y) => y.q.sev - x.q.sev);
+
+  $('hqNum').textContent = hot.length;
+  $('hqCount').textContent = hot.length;
+
+  if (!hot.length) {
+    $('hqList').innerHTML = '<div class="hot-empty">Nothing urgent. You\'re caught up.</div>';
+    return;
+  }
+
+  $('hqList').innerHTML = hot.slice(0, 8).map((x, i) => {
+    const a = x.a, q = x.q;
+    const title = esc(a.title || a.sourceAdId || a.id);
+    const meta = [a.angle, a.persona].filter(Boolean).map(esc).join(' · ');
+    const cuBtn = a._clickupId
+      ? `<a class="hi-btn" href="https://app.clickup.com/t/${escAttr(a._clickupId)}" target="_blank" onclick="event.stopPropagation()">↗</a>`
+      : '';
+    const killBtn = (q.label.includes('testing') || q.label.includes('producing'))
+      ? `<button class="hi-btn kill" onclick="event.stopPropagation();quickKill('${escAttr(a._dbId)}')">Kill</button>` : '';
+    const primBtn = q.icon === '📦'
+      ? `<button class="hi-btn prim" onclick="event.stopPropagation();quickLaunch('${escAttr(a._dbId)}')">Launch</button>`
+      : `<button class="hi-btn prim" onclick="event.stopPropagation();reviewAction('${escAttr(a._dbId)}')">Review</button>`;
+    return `
+      <div class="hot-item" onclick="expandActionRow('${escAttr(a._dbId)}')">
+        <span class="hi-n">${String(i+1).padStart(2,'0')}</span>
+        <div class="hi-body">
+          <div class="hi-title">${q.icon} ${title} · <span style="color:rgba(214,255,75,0.85)">${esc(q.label)}</span></div>
+          <div class="hi-why">${esc(q.reason)}${meta ? ' — ' + meta : ''}</div>
+        </div>
+        <div class="hi-actions">${killBtn}${cuBtn}${primBtn}</div>
+      </div>`;
+  }).join('');
+}
+
+// ═════════════════════════════════════════════════════════════
+//  RENDER — OVERDUE (grouped by reason)
+// ═════════════════════════════════════════════════════════════
+function renderOverdue() {
+  const withInfo = STATE.actions
+    .map(a => ({ a, info: overdueInfo(a) }))
+    .filter(x => x.info);
+
+  $('ovCount').textContent = withInfo.length;
+
+  if (!withInfo.length) {
+    $('ovList').innerHTML = `<div class="ov-empty">
+      <strong>✓ All clear</strong>
+      No overdue tasks right now.
+    </div>`;
+    return;
+  }
+
+  // Group by reason group
+  const groups = {};
+  withInfo.forEach(x => {
+    const key = x.info.group;
+    if (!groups[key]) groups[key] = { label: x.info.groupLabel, severity: x.info.severity, items: [] };
+    groups[key].items.push(x);
+    // bump group severity to max of its items
+    if (severityRank(x.info.severity) > severityRank(groups[key].severity)) groups[key].severity = x.info.severity;
+  });
+
+  // Sort groups by severity (critical → warning)
+  const groupOrder = Object.entries(groups).sort((a, b) => severityRank(b[1].severity) - severityRank(a[1].severity));
+
+  $('ovList').innerHTML = groupOrder.map(([gKey, g]) => {
+    // Sort items within group by daysOver descending
+    g.items.sort((a, b) => b.info.daysOver - a.info.daysOver);
+
+    const rows = g.items.slice(0, 8).map(x => {
+      const a = x.a, info = x.info;
+      const title = esc(a.title || a.sourceAdId || a._dbId.slice(0, 8));
+      const tags = [a.angle, a.persona].filter(Boolean).map(esc).join(' · ');
+      const daysLabel = info.phaseDays != null
+        ? `D${info.phaseDays}`
+        : `${info.daysOver}d past due`;
+
+      // Action buttons per phase
+      const btns = [];
+      info.actions.forEach(act => {
+        if (act === 'kill')     btns.push(`<button class="ov-btn kill" onclick="event.stopPropagation();editStatus('${a._dbId}','Loser')">Kill</button>`);
+        if (act === 'scale')    btns.push(`<button class="ov-btn" onclick="event.stopPropagation();editStatus('${a._dbId}','Scale')">Scale</button>`);
+        if (act === 'launch')   btns.push(`<button class="ov-btn prim" onclick="event.stopPropagation();editStatus('${a._dbId}','Testing')">Launch</button>`);
+        if (act === 'review')   btns.push(`<button class="ov-btn" onclick="event.stopPropagation();openSidePanel('${a._dbId}')">Review</button>`);
+        if (act === 'assign')   btns.push(`<button class="ov-btn prim" onclick="event.stopPropagation();openSidePanel('${a._dbId}')">Assign</button>`);
+        if (act === 'ping')     btns.push(`<button class="ov-btn" onclick="event.stopPropagation();openSidePanel('${a._dbId}')">Open</button>`);
+        if (act === 'deliver')  btns.push(`<button class="ov-btn" onclick="event.stopPropagation();editStatus('${a._dbId}','Ready to Launch')">Mark delivered</button>`);
+      });
+
+      return `<div class="ov-item" onclick="openSidePanel('${a._dbId}')">
+        <div class="ov-title">
+          <div class="ov-title-text">${title}</div>
+          <div class="ov-meta">
+            <span class="ov-days ${info.severity}">${esc(daysLabel)}</span>
+            ${tags ? `<span>${tags}</span>` : ''}
+            <span style="color:var(--ink2)">· ${esc(info.reason)}</span>
+          </div>
+        </div>
+        <div class="ov-actions">${btns.join('')}</div>
+      </div>`;
+    }).join('');
+
+    const moreCount = g.items.length > 8 ? g.items.length - 8 : 0;
+
+    return `<div class="ov-group ${g.severity}">
+      <div class="ov-group-head">
+        <span class="ov-sev-dot ${g.severity}"></span>
+        <span class="ov-group-label">${esc(g.label)}</span>
+        <span class="ov-group-count">${g.items.length} task${g.items.length>1?'s':''}</span>
+      </div>
+      ${rows}
+      ${moreCount ? `<div style="text-align:center;font-size:0.7rem;color:var(--ink3);padding-top:6px">+${moreCount} more</div>` : ''}
+    </div>`;
+  }).join('');
+}
+
+// ═════════════════════════════════════════════════════════════
+//  RENDER — VELOCITY
+// ═════════════════════════════════════════════════════════════
+function renderVelocity() {
+  const r = getRange();
+  const prev = getPreviousRange();
+
+  const curCount  = STATE.actions.filter(a => inRange(a._launchedAt, r)).length;
+  const prevCount = STATE.actions.filter(a => inRange(a._launchedAt, prev)).length;
+
+  $('velN').textContent = curCount;
+  const velTitle = document.querySelector('.tile--velocity .th-name');
+  if (velTitle) velTitle.textContent = 'Velocity · ' + getRangeLabel();
+
+  let deltaText = '';
+  if (prevCount === 0 && curCount > 0) {
+    deltaText = `↗ +${curCount} vs ${getPrevLabel()} (0)`;
+  } else if (prevCount > 0) {
+    const pct = Math.round(((curCount - prevCount) / prevCount) * 100);
+    deltaText = `${pct >= 0 ? '↗ +' : '↘ '}${pct}% vs ${getPrevLabel()}`;
+  } else {
+    deltaText = `No launches ${getRangeLabel()}`;
+  }
+  $('velDelta').textContent = deltaText;
+
+  // Sparkline — last 8 buckets ending at range.to
+  const now = r.to;
+  const sow = startOfWeek(now);
+  const points = [];
+  for (let i = 7; i >= 0; i--) {
+    const weekStart = new Date(sow); weekStart.setDate(weekStart.getDate() - i * 7);
+    const weekEnd = new Date(weekStart); weekEnd.setDate(weekEnd.getDate() + 7);
+    const c = STATE.actions.filter(a => {
+      if (!a._launchedAt) return false;
+      const d = new Date(a._launchedAt);
+      return d >= weekStart && d < weekEnd;
+    }).length;
+    points.push(c);
+  }
+  const max = Math.max(1, ...points);
+  const coords = points.map((v, i) => {
+    const x = (i / (points.length - 1)) * 300;
+    const y = 44 - (v / max) * 36 - 4;
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  }).join(' L ');
+  $('velSpark').innerHTML = `
+    <path d="M ${coords}" fill="none" stroke="#0E0E10" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+    <circle cx="300" cy="${(44 - (points[points.length-1] / max) * 36 - 4).toFixed(1)}" r="4" fill="#0E0E10"/>`;
+}
+
+// ═════════════════════════════════════════════════════════════
+//  RENDER — TODAY + BOTTLENECK
+// ═════════════════════════════════════════════════════════════
+function renderToday() {
+  const today = todayStart();
+
+  // Delivering today = dueDate today OR delivered_at today OR launched_at today
+  const deliveringToday = STATE.actions.filter(a => {
+    if (a.dueDate && isSameDay(a.dueDate, today)) return true;
+    if (a._deliveredAt && isSameDay(a._deliveredAt, today)) return true;
+    if (a._launchedAt && isSameDay(a._launchedAt, today)) return true;
+    return false;
+  });
+
+  $('todayNum').textContent = deliveringToday.length;
+  $('todaySub').textContent = deliveringToday.length
+    ? deliveringToday.slice(0, 3).map(a => esc(a.title || a.sourceAdId)).join(' · ') + (deliveringToday.length > 3 ? ` +${deliveringToday.length - 3}` : '')
+    : 'No deliveries scheduled';
+
+  // Bottleneck signal — production avg + overdue count
+  const prodActions = STATE.actions.filter(a => classify(a).phase === 'prod');
+  const prodOverdue = prodActions.filter(a => (classify(a).phaseDays || 0) > 2).length;
+  const testActions = STATE.actions.filter(a => classify(a).phase === 'test');
+  const testOverdue = testActions.filter(a => (classify(a).phaseDays || 0) > 7).length;
+
+  let msg, ok = true;
+  if (prodOverdue > 0) {
+    msg = `⚠ Editor behind: <strong>${prodOverdue} task${prodOverdue>1?'s':''} in production > 2d</strong>`;
+    ok = false;
+  } else if (testOverdue > 0) {
+    msg = `⚠ <strong>${testOverdue} test${testOverdue>1?'s':''} past 7-day decision window</strong>`;
+    ok = false;
+  } else if (prodActions.length === 0 && testActions.length === 0) {
+    msg = '<strong>Quiet pipeline</strong> — nothing in production or testing';
+  } else {
+    msg = '<strong>Pipeline flowing</strong> — no overdue tasks';
+  }
+  $('bottleneckLine').innerHTML = msg;
+  $('bottleneckLine').className = 'bottleneck-line' + (ok ? ' ok' : '');
+}
+
+// ═════════════════════════════════════════════════════════════
+//  RENDER — PULSE COLUMNS
+// ═════════════════════════════════════════════════════════════
+function renderPulseCol(elId, countId, phaseName, slaDays) {
+  const items = STATE.actions
+    .filter(a => classify(a).phase === phaseName)
+    .sort((a, b) => (classify(b).phaseDays || 0) - (classify(a).phaseDays || 0));
+
+  $(countId).textContent = items.length;
+
+  if (!items.length) {
+    $(elId).innerHTML = '<div class="pulse-empty">Nothing in this phase.</div>';
+    return;
+  }
+
+  $(elId).innerHTML = items.slice(0, 8).map(a => {
+    const cls = classify(a);
+    const d = cls.phaseDays;
+    const title = esc(a.title || a.sourceAdId || a.id);
+    const tags = [a.angle, a.persona].filter(Boolean)
+      .map(t => `<span class="pc-t">${esc(t)}</span>`).join('');
+    let flag = '';
+    if (d !== null && slaDays && d > slaDays) {
+      flag = `<span class="pc-flag ${d > slaDays * 2 ? 'hot' : ''}">${d > slaDays * 2 ? '🔥' : '⚠'} OVER SLA</span>`;
+    }
+    const dayTxt = d === null ? '—' : `D${d}`;
+    return `
+      <div class="pcard" onclick="expandActionRow('${escAttr(a._dbId)}')">
+        <div class="pc-meta">
+          <span class="pc-day">${dayTxt}</span>
+          ${flag}
+        </div>
+        <div class="pc-title">${title}</div>
+        <div class="pc-tags">${tags}</div>
+      </div>`;
+  }).join('');
+}
+
+function renderPulse() {
+  renderPulseCol('prodList', 'prodCount', 'prod', 2);  // SLA: 2 days producing
+  renderPulseCol('testList', 'testCount', 'test', 7);  // SLA: 7 days testing
+  renderPulseCol('planList', 'planCount', 'plan', 7);  // SLA: 7 days as brief
+}
+
+// ═════════════════════════════════════════════════════════════
+//  RENDER — PIPELINE
+// ═════════════════════════════════════════════════════════════
+function renderPipeline() {
+  const now = todayStart();
+  const days = [];
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(now); d.setDate(d.getDate() + i);
+    days.push(d);
+  }
+
+  let total = 0;
+  const html = days.map((d, idx) => {
+    const matches = STATE.actions.filter(a => a.dueDate && isSameDay(a.dueDate, d) && a._liveStatus !== 'Complete');
+    total += matches.length;
+    const wk = d.toLocaleDateString('en-US', { weekday: 'short' }).toUpperCase();
+    const dt = d.getDate();
+    const items = matches.slice(0, 2).map(a =>
+      `<span class="pd-item" title="${escAttr(a.title || '')}">${esc(a.title || a.sourceAdId || a.id)}</span>`
+    ).join('');
+    const more = matches.length > 2 ? `<span class="pd-item">+${matches.length - 2}</span>` : '';
+    const countTxt = matches.length ? `${matches.length} delivering` : '—';
+    return `
+      <div class="pday ${idx === 0 ? 'today' : ''}">
+        <div class="pd-top"><span class="pd-wk">${wk}</span><span class="pd-dt">${dt}</span></div>
+        <span class="pd-ct">${countTxt}</span>
+        <div class="pd-list">${items}${more}</div>
+      </div>`;
+  }).join('');
+  $('pipeGrid').innerHTML = html;
+  $('pipeTotal').textContent = total;
+}
+
+// ═════════════════════════════════════════════════════════════
+//  RENDER — SCORECARD
+// ═════════════════════════════════════════════════════════════
+function renderScorecard() {
+  const r = getRange();
+  const prev = getPreviousRange();
+
+  const scoreTitle = document.querySelector('.tile--score .th-name');
+  if (scoreTitle) scoreTitle.textContent = 'Scorecard · ' + getRangeLabel();
+
+  // Angles + personas discovered in range
+  const anglesThisWk = STATE.angles.filter(a => inRange(a.created_at, r)).length;
+  const anglesLastWk = STATE.angles.filter(a => inRange(a.created_at, prev)).length;
+
+  const personasThisWk = STATE.personas.filter(p => inRange(p.created_at, r)).length;
+  const personasLastWk = STATE.personas.filter(p => inRange(p.created_at, prev)).length;
+
+  // Briefs written = actions created in range (any status)
+  const briefsThisWk = STATE.actions.filter(a => inRange(a._createdAt, r)).length;
+  const briefsLastWk = STATE.actions.filter(a => inRange(a._createdAt, prev)).length;
+
+  // Video vs Photo tested (launched) in range
+  const isVideo = a => /video|ugc|vsl|reel|story/i.test((a.format || '') + ' ' + (a.adType || ''));
+  const isPhoto = a => /static|image|photo|carousel|poster/i.test((a.format || '') + ' ' + (a.adType || ''));
+
+  const videoThisWk = STATE.actions.filter(a => inRange(a._launchedAt, r) && isVideo(a)).length;
+  const photoThisWk = STATE.actions.filter(a => inRange(a._launchedAt, r) && isPhoto(a)).length;
+
+  // Inspirations saved + tested in range
+  const inspoSaved  = STATE.inspirations.filter(i => inRange(i.created_at, r)).length;
+  const inspoTested = STATE.inspirationResults.filter(x => inRange(x.classified_at, r)).length;
+
+  // Decisions in range
+  const killThisWk   = STATE.actions.filter(a => inRange(a._killedAt, r)).length;
+  const scaleThisWk  = STATE.actions.filter(a => inRange(a._scaledAt, r)).length;
+  const winnerThisWk = STATE.actions.filter(a => a._liveStatus === 'Winner' && inRange(a._updatedAt, r)).length;
+
+  const decisionsThisWk = killThisWk + scaleThisWk + winnerThisWk;
+  const newWinners = scaleThisWk + winnerThisWk;
+
+  const delta = (now, last) => {
+    if (last === 0 && now === 0) return '';
+    if (last === 0) return ` <span class="delta">+${now}</span>`;
+    const diff = now - last;
+    return ` <span class="delta${diff < 0 ? ' down' : ''}">${diff >= 0 ? '+' : ''}${diff}</span>`;
+  };
+
+  $('scoreGrid').innerHTML = `
+    <div class="score-cell"><span class="score-lbl">Angles found</span><span class="score-val">${anglesThisWk}${delta(anglesThisWk, anglesLastWk)}</span></div>
+    <div class="score-cell"><span class="score-lbl">Personas added</span><span class="score-val">${personasThisWk}${delta(personasThisWk, personasLastWk)}</span></div>
+    <div class="score-cell"><span class="score-lbl">Briefs written</span><span class="score-val">${briefsThisWk}${delta(briefsThisWk, briefsLastWk)}</span></div>
+    <div class="score-cell"><span class="score-lbl">📹 Video tested</span><span class="score-val">${videoThisWk}</span></div>
+    <div class="score-cell"><span class="score-lbl">📷 Photo tested</span><span class="score-val">${photoThisWk}</span></div>
+    <div class="score-cell"><span class="score-lbl">Inspo saved</span><span class="score-val">${inspoSaved}</span></div>
+    <div class="score-cell"><span class="score-lbl">Inspo tested</span><span class="score-val">${inspoTested}</span></div>
+    <div class="score-cell"><span class="score-lbl">Decisions</span><span class="score-val">${decisionsThisWk} <span class="delta" style="color:var(--rosed)">k:${killThisWk}</span> <span class="delta">s:${scaleThisWk}</span></span></div>
+    <div class="score-cell winner">
+      <span class="score-lbl">🏆 New Winners this week</span>
+      <span class="score-val">${newWinners}</span>
+    </div>
+  `;
+}
+
+// ═════════════════════════════════════════════════════════════
+//  RENDER — HIT RATE
+// ═════════════════════════════════════════════════════════════
+function renderHitRate() {
+  const now = new Date();
+  const som = startOfMonth(now);
+
+  const finishedThisMonth = STATE.actions.filter(a => {
+    const s = a._liveStatus;
+    if (s !== 'Winner' && s !== 'Scale' && s !== 'Loser' && s !== 'Complete') return false;
+    const endDate = a._scaledAt || a._killedAt || a._updatedAt;
+    return endDate && new Date(endDate) >= som;
+  });
+
+  const winners = finishedThisMonth.filter(a => a._liveStatus === 'Winner' || a._liveStatus === 'Scale').length;
+  const losers = finishedThisMonth.filter(a => a._liveStatus === 'Loser').length;
+  const total = finishedThisMonth.length;
+  const rate = total > 0 ? Math.round((winners / total) * 100) : null;
+
+  $('hitN').textContent = rate == null ? '—' : rate;
+  $('hitSub').textContent = total === 0
+    ? 'No tests finished this month'
+    : `${winners} wins / ${total} finished tests`;
+
+  let verdict = '', vCls = 'warn';
+  if (rate == null) { verdict = 'Not enough data yet. Ship more tests.'; vCls = 'warn'; }
+  else if (rate < 5)   { verdict = 'Low hit rate — creative instincts need sharpening.'; vCls = 'bad'; }
+  else if (rate <= 10) { verdict = 'Healthy zone. You\'re pushing into calculated risk.'; vCls = 'good'; }
+  else { verdict = 'Playing too safe — try bolder angles.'; vCls = 'warn'; }
+  $('hitVerdict').textContent = verdict;
+  $('hitVerdict').className = 'hit-verdict ' + vCls;
+
+  $('hitBars').innerHTML = `
+    <div class="hit-bar-row">
+      <span class="hit-bar-lbl">Winners</span>
+      <div class="hit-bar-track"><div class="hit-bar-fill" style="width:${total?winners/total*100:0}%;background:var(--limed)"></div></div>
+      <span class="hit-bar-n">${winners}</span>
+    </div>
+    <div class="hit-bar-row">
+      <span class="hit-bar-lbl">Losers</span>
+      <div class="hit-bar-track"><div class="hit-bar-fill" style="width:${total?losers/total*100:0}%;background:var(--rosed)"></div></div>
+      <span class="hit-bar-n">${losers}</span>
+    </div>`;
+}
+
+// ═════════════════════════════════════════════════════════════
+//  RENDER — DAILY LOG
+// ═════════════════════════════════════════════════════════════
+// ═════════════════════════════════════════════════════════════
+//  ACTIVITY LOG — from activity_events table
+// ═════════════════════════════════════════════════════════════
+const EVENT_META = {
+  created:              { dot: 'create',  verb: 'created' },
+  renamed:              { dot: 'edit',    verb: 'renamed' },
+  desc_edited:          { dot: 'edit',    verb: 'edited description' },
+  due_changed:          { dot: 'edit',    verb: 'changed due date' },
+  angle_changed:        { dot: 'edit',    verb: 'set angle' },
+  persona_changed:      { dot: 'edit',    verb: 'set persona' },
+  type_changed:         { dot: 'edit',    verb: 'set type' },
+  funnel_changed:       { dot: 'edit',    verb: 'set funnel' },
+  priority_changed:     { dot: 'edit',    verb: 'set priority' },
+  status_changed:       { dot: 'edit',    verb: 'changed status' },
+  launched:             { dot: 'launch',  verb: 'launched' },
+  killed:               { dot: 'kill',    verb: 'killed' },
+  scaled:               { dot: 'scale',   verb: 'scaled' },
+  winner:               { dot: 'winner',  verb: 'marked as winner' },
+  delivered:            { dot: 'deliver', verb: 'delivered' },
+  approved:             { dot: 'edit',    verb: 'approved' },
+  deleted:              { dot: 'delete',  verb: 'deleted' },
+  clickup_task_created: { dot: 'create',  verb: 'pushed to ClickUp' },
+  angle_added:          { dot: 'create',  verb: 'added angle' },
+  persona_added:        { dot: 'create',  verb: 'added persona' },
+  inspiration_saved:    { dot: 'inspo',   verb: 'saved inspiration' },
+  inspiration_classified:{ dot: 'inspo',  verb: 'classified inspiration' }
+};
+
+// The KPI chips shown at top of Activity Log
+const KPI_CHIPS = [
+  { key: 'launched',  label: 'Launched',  types: ['launched'],          cls: 'kpi-launch' },
+  { key: 'created',   label: 'Created',   types: ['created','clickup_task_created'], cls: 'kpi-created' },
+  { key: 'edited',    label: 'Edited',    types: ['renamed','desc_edited','due_changed','angle_changed','persona_changed','type_changed','funnel_changed','priority_changed'], cls: 'kpi-edit' },
+  { key: 'killed',    label: 'Killed',    types: ['killed'],            cls: 'kpi-kill' },
+  { key: 'delivered', label: 'Delivered', types: ['delivered'],         cls: 'kpi-deliv' },
+  { key: 'status',    label: 'Moved',     types: ['status_changed'],    cls: 'kpi-sync' },
+  { key: 'inspo',     label: 'Inspo',     types: ['inspiration_saved','inspiration_classified'], cls: 'kpi-inspo' }
+];
+
+function getFilteredEvents() {
+  const r = getRange();
+  let list = STATE.events.filter(ev => inRange(ev.created_at, r));
+  if (STATE.eventFilter !== 'all') {
+    const chip = KPI_CHIPS.find(c => c.key === STATE.eventFilter);
+    if (chip) list = list.filter(ev => chip.types.includes(ev.event_type));
+  }
+  if (STATE.eventSourceFilter !== 'all') {
+    if (STATE.eventSourceFilter === 'mine') {
+      const me = getUserLabel();
+      list = list.filter(ev => ev.actor === me);
+    } else {
+      list = list.filter(ev => ev.source === STATE.eventSourceFilter);
+    }
+  }
+  return list.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+}
+
+function actorInitials(actor) {
+  if (!actor || actor === 'ClickUp') return 'CU';
+  const parts = actor.trim().split(/\s+/);
+  return parts.length >= 2 ? (parts[0][0] + parts[1][0]).toUpperCase() : parts[0].slice(0, 2).toUpperCase();
+}
+
+function groupEventsByDay(events) {
+  const today = todayStart();
+  const yest = new Date(today); yest.setDate(yest.getDate() - 1);
+  const groups = { Today: [], Yesterday: [], 'Earlier this week': [], 'Earlier': [] };
+  const sow = startOfWeek(new Date());
+  events.forEach(ev => {
+    const d = new Date(ev.created_at);
+    if (isSameDay(d, today)) groups.Today.push(ev);
+    else if (isSameDay(d, yest)) groups.Yesterday.push(ev);
+    else if (d >= sow) groups['Earlier this week'].push(ev);
+    else groups.Earlier.push(ev);
+  });
+  return groups;
+}
+
+// Count UNIQUE tasks matching a set of event types
+function countUniqueTasks(events, types) {
+  const ids = new Set();
+  events.forEach(ev => {
+    if (types.includes(ev.event_type) && ev.action_id) ids.add(ev.action_id);
+  });
+  return ids.size;
+}
+
+function renderDailyLog() {
+  const r = getRange();
+  const logTitle = document.querySelector('.tile--log .th-name');
+  if (logTitle) logTitle.textContent = 'Activity Log · ' + getRangeLabel();
+
+  const inRangeEvents = STATE.events.filter(ev => inRange(ev.created_at, r));
+
+  // KPI chips — now count UNIQUE TASKS per category
+  const allWorkedOn = new Set(inRangeEvents.filter(ev => ev.action_id).map(ev => ev.action_id)).size;
+
+  // Big KPI blocks at top (the "basic cells" the user wanted back)
+  const blockSpec = [
+    { key: 'all',      cls: 'worked', label: 'Worked on',  count: allWorkedOn },
+    { key: 'launched', cls: 'launch', label: 'Launched',   count: countUniqueTasks(inRangeEvents, ['launched']) },
+    { key: 'created',  cls: 'create', label: 'Created',    count: countUniqueTasks(inRangeEvents, ['created','clickup_task_created']) },
+    { key: 'edited',   cls: 'edit',   label: 'Edited',     count: countUniqueTasks(inRangeEvents, ['renamed','desc_edited','due_changed','angle_changed','persona_changed','type_changed','funnel_changed','priority_changed']) },
+    { key: 'killed',   cls: 'kill',   label: 'Killed',     count: countUniqueTasks(inRangeEvents, ['killed']) },
+    { key: 'delivered',cls: 'deliv',  label: 'Delivered',  count: countUniqueTasks(inRangeEvents, ['delivered']) }
+  ];
+  $('dlKpiBlocks').innerHTML = blockSpec.map(b =>
+    `<button class="dl-kpi-block ${b.cls} ${STATE.eventFilter === b.key ? 'on' : ''}" onclick="setEventFilter('${b.key}')">
+      <div class="dl-kpi-num">${b.count}</div>
+      <div class="dl-kpi-lbl">${b.label}</div>
+    </button>`
+  ).join('');
+  const chipHtml =
+    `<button class="kpi-chip ${STATE.eventFilter === 'all' ? 'on' : ''}" onclick="setEventFilter('all')">Worked on · ${allWorkedOn}</button>` +
+    KPI_CHIPS.map(c => {
+      const count = c.key === 'inspo'
+        ? inRangeEvents.filter(ev => c.types.includes(ev.event_type)).length
+        : countUniqueTasks(inRangeEvents, c.types);
+      if (count === 0 && STATE.eventFilter !== c.key) return '';
+      const suffix = c.key === 'inspo' ? '' : ' task' + (count === 1 ? '' : 's');
+      return `<button class="kpi-chip ${c.cls} ${STATE.eventFilter === c.key ? 'on' : ''}" onclick="setEventFilter('${c.key}')">${c.label} · ${count}${suffix}</button>`;
+    }).join('');
+
+  // Source + view toggle
+  const srcOptions = [
+    { key: 'all', label: 'Everyone' },
+    { key: 'mine', label: 'Only mine' },
+    { key: 'clickup-poll', label: 'From ClickUp' }
+  ];
+  const viewToggle = `
+    <div class="dl-view-toggle">
+      <button class="dvt-btn ${STATE.eventView === 'task' ? 'on' : ''}" onclick="setEventView('task')">By Task</button>
+      <button class="dvt-btn ${STATE.eventView === 'timeline' ? 'on' : ''}" onclick="setEventView('timeline')">Timeline</button>
+    </div>
+    <select class="ied" onchange="setEventSourceFilter(this.value)" style="font-size:0.7rem">
+      ${srcOptions.map(o => `<option value="${o.key}" ${STATE.eventSourceFilter === o.key ? 'selected' : ''}>${o.label}</option>`).join('')}
+    </select>`;
+
+  $('dlStats').innerHTML = chipHtml + viewToggle;
+
+  // Feed
+  const filtered = getFilteredEvents();
+  $('dlCount').textContent = filtered.length;
+
+  if (!filtered.length) {
+    $('dlTimeline').innerHTML = `<div class="dl-empty">No activity logged ${getRangeLabel()}. Edits + status changes will appear here live.</div>`;
+    return;
+  }
+
+  if (STATE.eventView === 'task') {
+    renderByTask(filtered);
+  } else {
+    renderByTimeline(filtered);
+  }
+}
+
+function renderByTimeline(filtered) {
+  const groups = groupEventsByDay(filtered);
+  let html = '';
+  for (const [groupName, evs] of Object.entries(groups)) {
+    if (!evs.length) continue;
+    html += `<div class="dl-group-hdr">${groupName}</div>`;
+    html += evs.map(ev => renderEventRow(ev)).join('');
+  }
+  $('dlTimeline').innerHTML = html;
+}
+
+// ──────────────────────────────────────────
+// BY-TASK VIEW — the media buyer's view.
+// Group events by task+day, one card per group.
+// ──────────────────────────────────────────
+function renderByTask(filtered) {
+  // Bucket: day + action_id
+  const today = todayStart();
+  const yest = new Date(today); yest.setDate(yest.getDate() - 1);
+  const sow = startOfWeek(new Date());
+
+  const buckets = {};   // key = day|action_id  → { day, actionId, events: [] }
+  filtered.forEach(ev => {
+    if (!ev.action_id) return;  // skip orphan events (inspo/angle adds)
+    const d = new Date(ev.created_at);
+    let dayLabel;
+    if (isSameDay(d, today)) dayLabel = 'Today';
+    else if (isSameDay(d, yest)) dayLabel = 'Yesterday';
+    else if (d >= sow) dayLabel = 'Earlier this week';
+    else dayLabel = 'Earlier';
+
+    const key = dayLabel + '|' + ev.action_id;
+    if (!buckets[key]) buckets[key] = { dayLabel, actionId: ev.action_id, events: [] };
+    buckets[key].events.push(ev);
+  });
+
+  // Orphan events (no action_id — angle/persona/inspo adds) rendered as simple rows
+  const orphans = filtered.filter(ev => !ev.action_id);
+
+  // Group by day
+  const dayOrder = ['Today', 'Yesterday', 'Earlier this week', 'Earlier'];
+  const byDay = {};
+  Object.values(buckets).forEach(b => {
+    (byDay[b.dayLabel] = byDay[b.dayLabel] || []).push(b);
+  });
+  // Orphans into today bucket
+  orphans.forEach(ev => {
+    const d = new Date(ev.created_at);
+    let dayLabel;
+    if (isSameDay(d, today)) dayLabel = 'Today';
+    else if (isSameDay(d, yest)) dayLabel = 'Yesterday';
+    else if (d >= sow) dayLabel = 'Earlier this week';
+    else dayLabel = 'Earlier';
+    (byDay[dayLabel] = byDay[dayLabel] || []).push({ orphan: true, event: ev });
+  });
+
+  // Sort each day by most recent event
+  Object.values(byDay).forEach(groups => {
+    groups.sort((a, b) => {
+      const aT = a.orphan ? new Date(a.event.created_at) : Math.max(...a.events.map(e => new Date(e.created_at)));
+      const bT = b.orphan ? new Date(b.event.created_at) : Math.max(...b.events.map(e => new Date(e.created_at)));
+      return bT - aT;
+    });
+  });
+
+  let html = '';
+  for (const dayLabel of dayOrder) {
+    const groups = byDay[dayLabel];
+    if (!groups || !groups.length) continue;
+    html += `<div class="dl-group-hdr">${dayLabel}</div>`;
+    html += groups.map(g => g.orphan ? renderOrphanEvent(g.event) : renderTaskGroup(g)).join('');
+  }
+  $('dlTimeline').innerHTML = html;
+}
+
+function renderTaskGroup(g) {
+  const action = STATE.actions.find(a => a._dbId === g.actionId);
+  const events = g.events.slice().sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+  const firstT = new Date(events[0].created_at);
+  const lastT = new Date(events[events.length - 1].created_at);
+
+  const title = (events[events.length - 1].metadata && events[events.length - 1].metadata.title)
+                || (action && action.title)
+                || 'Untitled task';
+  const angle = action && action.angle;
+  const persona = action && action.persona;
+  const tagsStr = [angle, persona].filter(Boolean).map(esc).join(' · ');
+
+  // Collect status transitions
+  const statusEvents = events.filter(e =>
+    ['status_changed','launched','killed','scaled','winner','delivered','approved','clickup_synced_in'].includes(e.event_type)
+    && e.new_value
+  );
+  let statusChain = '';
+  if (statusEvents.length) {
+    const statuses = [];
+    if (statusEvents[0].old_value) statuses.push(statusEvents[0].old_value);
+    statusEvents.forEach(e => { if (e.new_value) statuses.push(e.new_value); });
+    // Dedup consecutive
+    const dedup = statuses.filter((s, i) => s !== statuses[i - 1]);
+    statusChain = dedup.map((s, i) => {
+      const isLast = i === dedup.length - 1;
+      return `<span class="tg-status ${isLast ? 'current' : ''}">${esc(s)}</span>`;
+    }).join('<span class="tg-arrow">→</span>');
+  }
+
+  // Edits summary
+  const editEvents = events.filter(e =>
+    ['renamed','desc_edited','due_changed','angle_changed','persona_changed','type_changed','funnel_changed','priority_changed'].includes(e.event_type)
+  );
+  const editLabels = editEvents.map(e => {
+    if (e.event_type === 'renamed') return 'renamed';
+    if (e.event_type === 'desc_edited') return 'description edited';
+    if (e.event_type === 'due_changed') return 'due date moved';
+    return e.event_type.replace('_changed', '').replace('_', ' ') + ' changed';
+  });
+  const uniqueEdits = [...new Set(editLabels)];
+
+  // Creation
+  const wasCreated = events.some(e => e.event_type === 'created' || e.event_type === 'clickup_task_created');
+  const wasDeleted = events.some(e => e.event_type === 'deleted');
+
+  // Actors
+  const actors = [...new Set(events.map(e => (e.source === 'clickup-poll' ? 'ClickUp' : e.actor) || '—'))];
+  const actorStr = actors.join(' · ');
+
+  // Time range
+  const timeStr = isSameDay(firstT, lastT)
+    ? (firstT.getTime() === lastT.getTime()
+        ? fmtTime(firstT)
+        : fmtTime(firstT) + '–' + fmtTime(lastT))
+    : fmtDate(firstT) + ' → ' + fmtDate(lastT);
+
+  const n = events.length;
+  const summary = [];
+  if (wasCreated) summary.push('created');
+  if (statusEvents.length) summary.push(`${statusEvents.length} status change${statusEvents.length>1?'s':''}`);
+  if (uniqueEdits.length) summary.push(`${uniqueEdits.length} edit${uniqueEdits.length>1?'s':''}`);
+  if (wasDeleted) summary.push('deleted');
+
+  const hasCu = action && action._clickupId;
+  const click = g.actionId ? `onclick="openSidePanel('${g.actionId}')"` : '';
+
+  return `<article class="tg-card" ${click}>
+    <header class="tg-head">
+      <div class="tg-title">${esc(title)}</div>
+      ${tagsStr ? `<div class="tg-tags">${tagsStr}</div>` : ''}
+      ${hasCu ? `<a class="tg-cu" href="https://app.clickup.com/t/${escAttr(action._clickupId)}" target="_blank" onclick="event.stopPropagation()">Open ↗</a>` : '<span></span>'}
+    </header>
+
+    ${statusChain ? `<div class="tg-status-row">${statusChain}</div>` : ''}
+
+    ${uniqueEdits.length && !statusChain ? `<div class="tg-edit-row">${esc(uniqueEdits.join(' · '))}</div>` : ''}
+
+    <footer class="tg-foot">
+      <span class="tg-actor">${esc(actorStr)}</span>
+      <span class="tg-sep">·</span>
+      <span class="tg-summary">${esc(summary.join(' · ') || (n + ' update' + (n>1?'s':'')))}</span>
+      <span class="tg-sep">·</span>
+      <span class="tg-time">${esc(timeStr)}</span>
+    </footer>
+  </article>`;
+}
+
+function renderOrphanEvent(ev) {
+  const meta = EVENT_META[ev.event_type] || { dot: 'edit', verb: ev.event_type };
+  const d = new Date(ev.created_at);
+  const tStr = isSameDay(d, todayStart()) ? fmtTime(d) : fmtDate(d) + ' ' + fmtTime(d);
+  const who = (ev.source === 'clickup-poll') ? 'ClickUp' : (ev.actor || '—');
+  const title = (ev.metadata && ev.metadata.title) || (ev.metadata && ev.metadata.name) || '';
+
+  return `<article class="tg-card tg-card-simple">
+    <div class="tg-simple-row">
+      <span class="dl-dot ${meta.dot}" style="box-shadow:none;margin:0"></span>
+      <span class="tg-simple-text"><strong>${esc(who)}</strong> ${esc(meta.verb)}${title ? ' · ' + esc(title) : ''}</span>
+      <span class="tg-time">${esc(tStr)}</span>
+    </div>
+  </article>`;
+}
+
+function fmtTime(d) {
+  return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }).replace(' ', '\u00A0');
+}
+
+function setEventView(view) {
+  STATE.eventView = view;
+  renderDailyLog();
+}
+window.setEventView = setEventView;
+
+function renderEventRow(ev) {
+  const meta = EVENT_META[ev.event_type] || { dot: 'edit', verb: ev.event_type };
+  const d = new Date(ev.created_at);
+  const today = todayStart();
+  const tStr = isSameDay(d, today)
+    ? d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }).replace(' ', '\u00A0')
+    : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+
+  const isCu = ev.source === 'clickup-poll';
+  const who  = isCu ? 'ClickUp' : (ev.actor || '—');
+  const title = (ev.metadata && ev.metadata.title) || '';
+  const tags = [ev.metadata && ev.metadata.angle, ev.metadata && ev.metadata.persona].filter(Boolean).map(esc).join(' · ');
+
+  // Secondary line — only meaningful changes
+  let detail = '';
+  if (ev.event_type === 'renamed' && ev.old_value && ev.new_value) {
+    detail = `<span>${esc(ev.old_value)}</span><span class="arrow">→</span><strong>${esc(ev.new_value)}</strong>`;
+  } else if (ev.event_type === 'due_changed' && (ev.old_value || ev.new_value)) {
+    detail = `<span>${esc(ev.old_value || '—')}</span><span class="arrow">→</span><strong>${esc(ev.new_value || '—')}</strong>`;
+  } else if ((ev.event_type === 'status_changed' || ev.event_type === 'clickup_synced_in') && ev.old_value && ev.new_value) {
+    detail = `<span>${esc(ev.old_value)}</span><span class="arrow">→</span><strong>${esc(ev.new_value)}</strong>`;
+  } else if (ev.event_type.endsWith('_changed') && ev.new_value) {
+    detail = `<strong>${esc(ev.new_value)}</strong>`;
+  }
+
+  const click = ev.action_id ? `onclick="openSidePanel('${ev.action_id}')"` : '';
+  return `<div class="dl-row" ${click}>
+    <span class="dl-time">${esc(tStr)}</span>
+    <span class="dl-dot ${meta.dot}"></span>
+    <div class="dl-content">
+      <div class="dl-primary">
+        <span class="who">${esc(who)}</span><span class="verb">${esc(meta.verb)}</span>${title ? `<span class="subj">${esc(title)}</span>` : ''}${tags ? `<span class="tags">· ${tags}</span>` : ''}
+      </div>
+      ${detail ? `<div class="dl-secondary">${detail}</div>` : ''}
+    </div>
+    ${ev.clickup_task_id ? `<a class="dl-cu-link" href="https://app.clickup.com/t/${escAttr(ev.clickup_task_id)}" target="_blank" onclick="event.stopPropagation()">Open ↗</a>` : '<span></span>'}
+  </div>`;
+}
+
+function setEventFilter(key) {
+  STATE.eventFilter = key;
+  renderDailyLog();
+}
+function setEventSourceFilter(key) {
+  STATE.eventSourceFilter = key;
+  renderDailyLog();
+}
+window.setEventFilter = setEventFilter;
+window.setEventSourceFilter = setEventSourceFilter;
+
+// ═════════════════════════════════════════════════════════════
+//  SIDE PANEL — click-through destination from Activity Log
+// ═════════════════════════════════════════════════════════════
+function openSidePanel(dbId) {
+  const a = STATE.actions.find(x => x._dbId === dbId);
+  if (!a) {
+    toast('Task not found (may have been deleted)', 'err');
+    return;
+  }
+  STATE.sidePanelDbId = dbId;
+  renderSidePanel();
+  $('sidePanelBackdrop').classList.remove('hide');
+  $('sidePanel').classList.remove('hide');
+}
+
+function closeSidePanel() {
+  STATE.sidePanelDbId = null;
+  $('sidePanelBackdrop').classList.add('hide');
+  $('sidePanel').classList.add('hide');
+}
+
+function renderSidePanel() {
+  const dbId = STATE.sidePanelDbId;
+  if (!dbId) return;
+  const a = STATE.actions.find(x => x._dbId === dbId);
+  if (!a) { closeSidePanel(); return; }
+
+  const cls = classify(a);
+  const statusSel = `<select class="exp-input" onchange="editStatus('${dbId}', this.value); renderSidePanel()">
+    ${['Untested','Approved','In Production','Ready to Launch','Testing','Winner','Loser','Scale','Complete']
+      .map(s => `<option value="${s}" ${a._liveStatus === s ? 'selected' : ''}>${s}</option>`).join('')}
+  </select>`;
+
+  const tl = buildMiniTimeline(a);
+  const ctx = renderContextBlock(a);
+  const taskEvents = STATE.events.filter(ev => ev.action_id === dbId).slice(0, 10);
+
+  const html = `
+    <div class="sp-head">
+      <div class="sp-title">${esc(a.title || a.sourceAdId || dbId.slice(0,8))}</div>
+      <button class="sp-close" onclick="closeSidePanel()">✕</button>
+    </div>
+    <div class="sp-body">
+      <div class="sp-chip-row">
+        ${a.angle ? `<span class="sp-chip">${esc(a.angle)}</span>` : ''}
+        ${a.persona ? `<span class="sp-chip">${esc(a.persona)}</span>` : ''}
+        ${a.funnelStage ? `<span class="sp-chip">${esc(a.funnelStage)}</span>` : ''}
+        ${inferAdType(a) !== '—' ? `<span class="sp-chip">${inferAdType(a) === 'Video' ? '📹' : '📷'} ${esc(inferAdType(a))}</span>` : ''}
+      </div>
+
+      ${ctx}
+
+      <div class="sp-section">
+        <h4>Current</h4>
+        <div class="sp-field"><label>Status</label><div>${statusSel}</div></div>
+        <div class="sp-field"><label>Phase</label><span class="v">${esc(cls.phase)}${cls.phaseDays != null ? ' · ' + cls.phaseDays + 'd' : ''}</span></div>
+        <div class="sp-field"><label>Due</label><span class="v">${a.dueDate ? esc(fmtDate(a.dueDate)) : '—'}</span></div>
+        <div class="sp-field"><label>Priority</label><span class="v">${esc(a.priority || 'normal')}</span></div>
+      </div>
+
+      <div class="sp-section">
+        <h4>Description</h4>
+        <div style="font-size:0.8rem;color:var(--ink);line-height:1.5">${esc(a.description || '—')}</div>
+      </div>
+
+      <div class="sp-section">
+        <h4>Timeline</h4>
+        <div class="mini-tl">${tl}</div>
+      </div>
+
+      ${taskEvents.length ? `
+      <div class="sp-section">
+        <h4>Recent activity on this task</h4>
+        <div style="font-size:0.74rem">
+          ${taskEvents.map(ev => {
+            const m = EVENT_META[ev.event_type] || { dot: 'edit', verb: ev.event_type };
+            const t = new Date(ev.created_at).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit',hour12:true});
+            const who = ev.source === 'clickup-poll' ? 'ClickUp' : (ev.actor || '—');
+            return `<div style="display:grid;grid-template-columns:10px 1fr auto;gap:10px;padding:6px 0;color:var(--ink2);align-items:center">
+              <span class="dl-dot ${m.dot}" style="box-shadow:none;margin:0;width:8px;height:8px"></span>
+              <span><strong>${esc(who)}</strong> ${esc(m.verb)}${ev.old_value && ev.new_value ? ` · ${esc(ev.old_value)} → <strong>${esc(ev.new_value)}</strong>` : ''}</span>
+              <span style="font-family:'JetBrains Mono',monospace;font-size:0.64rem;color:var(--ink3)">${t}</span>
+            </div>`;
+          }).join('')}
+        </div>
+      </div>` : ''}
+    </div>
+    <div class="sp-foot">
+      ${a._clickupId
+        ? `<a class="exp-btn" href="https://app.clickup.com/t/${escAttr(a._clickupId)}" target="_blank">↗ Open in ClickUp</a>`
+        : `<button class="exp-btn prim" onclick="createClickUpTask('${dbId}'); closeSidePanel();">+ Create ClickUp</button>`}
+      <button class="exp-btn" onclick="scrollToTableRow('${dbId}'); closeSidePanel();">📋 View in table</button>
+      <button class="exp-btn danger" onclick="deleteTaskEverywhere('${dbId}'); closeSidePanel();">🗑 Delete</button>
+    </div>
+  `;
+  $('sidePanel').innerHTML = html;
+}
+
+function scrollToTableRow(dbId) {
+  STATE.expandedRows.add(dbId);
+  renderTable();
+  setTimeout(() => {
+    const rows = document.querySelectorAll('#apTable tbody tr.expanded');
+    if (rows.length) rows[0].scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, 60);
+}
+
+window.openSidePanel = openSidePanel;
+window.closeSidePanel = closeSidePanel;
+window.scrollToTableRow = scrollToTableRow;
+
+// ESC closes the side panel
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && STATE.sidePanelDbId) closeSidePanel();
+});
+
+// ═════════════════════════════════════════════════════════════
+//  REALTIME INSERT DETECTION
+//  Whenever ANY app (main app or this one) creates a new row,
+//  we log a corresponding event — so the Activity Log captures
+//  creates from every source, not just edits made here.
+// ═════════════════════════════════════════════════════════════
+async function eventExists(actionId, eventType) {
+  if (!actionId) return false;
+  const { data } = await SB.from('activity_events')
+    .select('id').eq('action_id', actionId).eq('event_type', eventType).limit(1);
+  return !!(data && data.length);
+}
+
+async function detectAndLogFromRealtime(payload) {
+  if (!payload || !payload.new) return;
+  if (payload.eventType !== 'INSERT') return;
+  const table = payload.table;
+  const row = payload.new;
+
+  // Only care about rows in the active product
+  if (row.product_id && row.product_id !== STATE.activeProductId) return;
+
+  if (table === 'manual_actions') {
+    if (await eventExists(row.id, 'created')) return;
+    const p = row.payload || {};
+    logEvent('created', {
+      action_id: row.id,
+      clickup_task_id: p._clickupId || null,
+      metadata: { title: p.title, angle: p.angle, persona: p.persona, status: row.live_status }
+    });
+    return;
+  }
+
+  if (table === 'ads') {
+    // Main app creates an 'ad' row when a task is pushed. We only log once per ad.
+    // Check by a synthetic action_id = ad id (not a manual_action ref, but unique enough).
+    const already = await SB.from('activity_events')
+      .select('id').eq('product_id', row.product_id).eq('event_type', 'created').eq('clickup_task_id', row.clickup_task_id || '__none__').limit(1);
+    if (already.data && already.data.length) return;
+    // We skip logging 'created' for ads here — manual_actions INSERT already covers it
+    // to avoid noisy double-logs. Only log if this is a standalone ad with no manual_action.
+    // (No-op for now — future hook point.)
+    return;
+  }
+
+  if (table === 'inspirations') {
+    logEvent('inspiration_saved', {
+      metadata: { title: row.title || row.url, url: row.url, platform: row.platform }
+    });
+    return;
+  }
+
+  if (table === 'inspiration_results') {
+    logEvent('inspiration_classified', {
+      metadata: { ins_id: row.ins_id, doc_url: row.clickup_doc_page_url }
+    });
+    return;
+  }
+
+  if (table === 'angles') {
+    logEvent('angle_added', {
+      metadata: { name: row.name, id: row.id }
+    });
+    return;
+  }
+
+  if (table === 'personas') {
+    logEvent('persona_added', {
+      metadata: { name: row.name, id: row.id }
+    });
+    return;
+  }
+}
+
+// ═════════════════════════════════════════════════════════════
+//  RENDER — PATTERNS (coverage heatmap)
+// ═════════════════════════════════════════════════════════════
+function renderPatterns() {
+  const angles = STATE.angles.slice(0, 6);
+  const personas = STATE.personas.slice(0, 6);
+
+  if (!angles.length || !personas.length) {
+    $('patMx').innerHTML = '<tr><td style="padding:12px;color:var(--ink2);font-size:0.75rem">Add angles & personas to see the coverage heatmap.</td></tr>';
+    return;
+  }
+
+  // count tests per (angle × persona) — across both actions and ads
+  const matrix = {};
+  STATE.actions.forEach(a => {
+    if (!a.angle || !a.persona) return;
+    const k = a.angle + '||' + a.persona;
+    matrix[k] = (matrix[k] || 0) + 1;
+  });
+
+  const maxVal = Math.max(1, ...Object.values(matrix));
+
+  const head = '<tr><th class="l"></th>' + personas.map(p =>
+    `<th>${esc(p.name.slice(0, 8))}</th>`).join('') + '</tr>';
+
+  const rows = angles.map(a => {
+    const cells = personas.map(p => {
+      const v = matrix[a.name + '||' + p.name] || 0;
+      let hc = 'h0';
+      if (v > 0) hc = 'h1';
+      if (v > maxVal * 0.25) hc = 'h2';
+      if (v > maxVal * 0.5) hc = 'h3';
+      if (v > maxVal * 0.75) hc = 'h4';
+      return `<td class="${hc}">${v || '—'}</td>`;
+    }).join('');
+    return `<tr><td class="l" title="${escAttr(a.name)}">${esc(a.name)}</td>${cells}</tr>`;
+  }).join('');
+
+  $('patMx').innerHTML = head + rows;
+}
+
+// ═════════════════════════════════════════════════════════════
+//  TABLE VIEW
+// ═════════════════════════════════════════════════════════════
+const TABLE_COLS = [
+  { key: 'task',     label: 'Task' },
+  { key: 'angle',    label: 'Angle' },
+  { key: 'persona',  label: 'Persona' },
+  { key: 'adType',   label: 'Type' },
+  { key: 'funnel',   label: 'Funnel' },
+  { key: 'status',   label: 'Status' },
+  { key: 'age',      label: 'Age' },
+  { key: 'phaseDays',label: 'In Phase' },
+  { key: 'due',      label: 'Due' },
+  { key: 'brief',    label: 'Brief' },
+  { key: 'clickup',  label: 'ClickUp' }
+];
+
+function filterByView(actions) {
+  const v = STATE.tableView;
+  const now = new Date();
+  const sow = startOfWeek(now);
+
+  if (v === 'overdue')      return actions.filter(a => !!overdueInfo(a));
+  if (v === 'testing-hot')  return actions.filter(a => classify(a).phase === 'test' && (classify(a).phaseDays || 0) > 7);
+  if (v === 'prod-stuck')   return actions.filter(a => classify(a).phase === 'prod' && (classify(a).phaseDays || 0) > 2);
+  if (v === 'video')        return actions.filter(a => /video|ugc|vsl|reel|story/i.test((a.format||'')+' '+(a.adType||'')));
+  if (v === 'photo')        return actions.filter(a => /static|image|photo|carousel|poster/i.test((a.format||'')+' '+(a.adType||'')));
+  if (v === 'this-week')    return actions.filter(a => a._createdAt && new Date(a._createdAt) >= sow);
+  return actions;
+}
+
+function getRangeFilter(actions) {
+  const r = getRange();
+  if (STATE.range.preset === 'all') return actions;
+  return actions.filter(a => {
+    const d = a._createdAt ? new Date(a._createdAt) : null;
+    return d && d >= r.from && d <= r.to;
+  });
+}
+
+function sortActions(list) {
+  const { col, dir } = STATE.tableSort;
+  const mul = dir === 'asc' ? 1 : -1;
+  return list.slice().sort((a, b) => {
+    let av, bv;
+    switch (col) {
+      case 'id':        av = a.sourceAdId || a.id || ''; bv = b.sourceAdId || b.id || ''; break;
+      case 'task':      av = a.title || ''; bv = b.title || ''; break;
+      case 'angle':     av = a.angle || ''; bv = b.angle || ''; break;
+      case 'persona':   av = a.persona || ''; bv = b.persona || ''; break;
+      case 'format':    av = a.format || ''; bv = b.format || ''; break;
+      case 'adType':    av = a.adType || ''; bv = b.adType || ''; break;
+      case 'status':    av = a._liveStatus || ''; bv = b._liveStatus || ''; break;
+      case 'age':       av = a._createdAt ? new Date(a._createdAt).getTime() : 0; bv = b._createdAt ? new Date(b._createdAt).getTime() : 0; return mul * (bv - av); // newer first by default
+      case 'phaseDays': av = classify(a).phaseDays || 0; bv = classify(b).phaseDays || 0; return mul * (bv - av);
+      case 'due':       av = a.dueDate ? new Date(a.dueDate).getTime() : 0; bv = b.dueDate ? new Date(b.dueDate).getTime() : 0; return mul * (av - bv);
+      default:          av = a[col] || ''; bv = b[col] || '';
+    }
+    return mul * String(av).localeCompare(String(bv));
+  });
+}
+
+function statusClass(s) {
+  if (!s) return 's-untested';
+  const map = {
+    'Untested': 's-untested', 'Approved': 's-approved',
+    'In Production': 's-inprod', 'Ready to Launch': 's-ready',
+    'Testing': 's-testing', 'Winner': 's-winner', 'Scale': 's-scale',
+    'Loser': 's-loser', 'Complete': 's-complete'
+  };
+  return map[s] || 's-untested';
+}
+
+function ageClass(days) {
+  if (days == null) return '';
+  if (days >= 7) return 'aging';
+  if (days >= 3) return 'learn';
+  return 'fresh';
+}
+
+function inferAdType(a) {
+  if (a.adType) return a.adType;
+  if (/video|ugc|vsl|reel/i.test((a.format || ''))) return 'Video';
+  if (/static|image|photo|carousel|poster/i.test((a.format || ''))) return 'Photo';
+  return '—';
+}
+
+function renderTable() {
+  let list = STATE.actions.slice();
+  list = getRangeFilter(list);
+  list = filterByView(list);
+  list = sortActions(list);
+
+  $('tblCount').textContent = list.length;
+
+  if (!list.length) {
+    $('apTable').innerHTML = '';
+    $('tblEmpty').classList.remove('hide');
+    return;
+  }
+  $('tblEmpty').classList.add('hide');
+
+  const visible = TABLE_COLS.filter(c => STATE.tableCols[c.key]);
+
+  // Header
+  const { col: sCol, dir: sDir } = STATE.tableSort;
+  let head = '<tr>';
+  head += '<th style="width:24px"></th>';
+  visible.forEach(c => {
+    const cls = 'sort' + (sCol === c.key ? ' ' + sDir : '');
+    head += `<th class="${cls}" onclick="setSort('${c.key}')">${esc(c.label)}</th>`;
+  });
+  head += '</tr>';
+
+  // Rows
+  const STATUSES = ['Untested','Approved','In Production','Ready to Launch','Testing','Winner','Loser','Scale','Complete'];
+  const FUNNELS  = ['TOF','MOF','BOF'];
+  const TYPES    = ['Photo','Video'];
+
+  const rows = list.map(a => {
+    const expanded = STATE.expandedRows.has(a._dbId);
+    const cls = classify(a);
+    const id = a._dbId;
+    const stop = 'onclick="event.stopPropagation()"';
+
+    const cellMap = {
+      task:      () => `<strong>${esc(a.title || '(untitled)')}</strong>`,
+      angle:     () => a.angle ? `<span class="tbl-tag">${esc(a.angle)}</span>` : '—',
+      persona:   () => a.persona ? `<span class="tbl-tag">${esc(a.persona)}</span>` : '—',
+      adType:    () => {
+        const cur = inferAdType(a);
+        const icon = cur === 'Video' ? '📹' : cur === 'Photo' ? '📷' : '';
+        return `<select class="ied" ${stop} onchange="editField('${id}','adType',this.value)">
+          <option value="">${cur === '—' ? '—' : ''}</option>
+          ${TYPES.map(t => `<option value="${t}" ${cur===t?'selected':''}>${t==='Video'?'📹':'📷'} ${t}</option>`).join('')}
+        </select>`;
+      },
+      funnel:    () => {
+        const cur = a.funnelStage || 'TOF';
+        return `<select class="ied" ${stop} onchange="editField('${id}','funnelStage',this.value)">
+          ${FUNNELS.map(f => `<option value="${f}" ${cur===f?'selected':''}>${f}</option>`).join('')}
+        </select>`;
+      },
+      status:    () => {
+        const cur = a._liveStatus || 'Untested';
+        return `<select class="ied tbl-status ${statusClass(cur)}" style="font-size:0.62rem;padding:2px 18px 2px 7px" ${stop} onchange="editStatus('${id}',this.value)">
+          ${STATUSES.map(s => `<option value="${s}" ${cur===s?'selected':''}>${s}</option>`).join('')}
+        </select>`;
+      },
+      age:       () => {
+        const src = a._ageFrom || a._createdAt;
+        const d = src ? daysBetween(src, new Date()) : null;
+        return d == null ? '—' : `<span class="tbl-age-cell ${ageClass(d)}">${d}d</span>`;
+      },
+      phaseDays: () => {
+        const d = cls.phaseDays;
+        return d == null ? '—' : `<span class="tbl-age-cell ${ageClass(d)}">${d}d in ${cls.phase}</span>`;
+      },
+      due:       () => `<input type="date" class="ied" ${stop} value="${escAttr(a.dueDate || '')}" onchange="editField('${id}','dueDate',this.value)">`,
+      brief:     () => {
+        const url = resolveBriefUrl(a);
+        return url ? `<a href="${escAttr(url)}" target="_blank" class="tbl-link-btn" ${stop}>📄</a>` : '—';
+      },
+      clickup:   () => a._clickupId ? `<a href="https://app.clickup.com/t/${escAttr(a._clickupId)}" target="_blank" class="tbl-link-btn" ${stop}>↗</a>` : '—'
+    };
+
+    const cells = visible.map(c => `<td>${cellMap[c.key]()}</td>`).join('');
+    let html = `<tr class="${expanded ? 'expanded' : ''}" onclick="toggleExpand('${escAttr(id)}')"><td>${expanded ? '▼' : '▶'}</td>${cells}</tr>`;
+
+    if (expanded) {
+      const tl = buildMiniTimeline(a);
+      const ctx = renderContextBlock(a);
+      const hasCu = !!a._clickupId;
+      html += `
+        <tr class="expand-row"><td colspan="${visible.length + 1}">
+          ${ctx}
+          <div class="expand-grid">
+            <div class="expand-section">
+              <h4>Edit</h4>
+              <div class="exp-editor">
+                <div class="exp-field">
+                  <label>Task name</label>
+                  <input type="text" class="exp-input" value="${escAttr(a.title || '')}" onchange="editField('${id}','title',this.value)" onclick="event.stopPropagation()">
+                </div>
+                <div class="exp-field">
+                  <label>Description / notes</label>
+                  <textarea class="exp-input" onchange="editField('${id}','description',this.value)" onclick="event.stopPropagation()">${esc(a.description || '')}</textarea>
+                </div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+                  <div class="exp-field">
+                    <label>Angle</label>
+                    <select class="exp-input" onchange="editField('${id}','angle',this.value)" onclick="event.stopPropagation()">
+                      <option value="">—</option>
+                      ${STATE.angles.map(x => `<option value="${escAttr(x.name)}" ${a.angle===x.name?'selected':''}>${esc(x.name)}</option>`).join('')}
+                    </select>
+                  </div>
+                  <div class="exp-field">
+                    <label>Persona</label>
+                    <select class="exp-input" onchange="editField('${id}','persona',this.value)" onclick="event.stopPropagation()">
+                      <option value="">—</option>
+                      ${STATE.personas.map(x => `<option value="${escAttr(x.name)}" ${a.persona===x.name?'selected':''}>${esc(x.name)}</option>`).join('')}
+                    </select>
+                  </div>
+                </div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+                  <div class="exp-field">
+                    <label>Priority</label>
+                    <select class="exp-input" onchange="editField('${id}','priority',this.value)" onclick="event.stopPropagation()">
+                      ${['urgent','high','normal','low'].map(p => `<option value="${p}" ${(a.priority||'normal')===p?'selected':''}>${p}</option>`).join('')}
+                    </select>
+                  </div>
+                  <div class="exp-field">
+                    <label>Ad link</label>
+                    <input type="text" class="exp-input" value="${escAttr(a.adLink || '')}" onchange="editField('${id}','adLink',this.value)" onclick="event.stopPropagation()">
+                  </div>
+                </div>
+              </div>
+
+              <div class="exp-actions" onclick="event.stopPropagation()">
+                ${hasCu
+                  ? `<a class="exp-btn" href="https://app.clickup.com/t/${escAttr(a._clickupId)}" target="_blank">↗ Open in ClickUp</a>`
+                  : `<button class="exp-btn prim" onclick="createClickUpTask('${id}')">+ Create ClickUp task</button>`}
+                <button class="exp-btn" onclick="editStatus('${id}','Winner')">🏆 Mark Winner</button>
+                <button class="exp-btn" onclick="editStatus('${id}','Loser')">✕ Mark Loser</button>
+                <button class="exp-btn danger" onclick="deleteTaskEverywhere('${id}')">🗑 Delete everywhere</button>
+              </div>
+            </div>
+
+            <div class="expand-section">
+              <h4>Timeline</h4>
+              <div class="mini-tl">${tl}</div>
+            </div>
+          </div>
+        </td></tr>`;
+    }
+    return html;
+  }).join('');
+
+  $('apTable').innerHTML = head + rows;
+}
+
+function buildMiniTimeline(a) {
+  const s = a._liveStatus;
+  const stages = [
+    { key: 'created',   label: 'Brief created',    at: a._createdAt,   reached: !!a._createdAt },
+    { key: 'approved',  label: 'Into production',  at: a._approvedAt,  reached: !!a._approvedAt || ['In Production','Ready to Launch','Testing','Winner','Scale','Loser','Complete'].includes(s) },
+    { key: 'delivered', label: 'Editor delivered', at: a._deliveredAt, reached: !!a._deliveredAt || ['Ready to Launch','Testing','Winner','Scale','Loser','Complete'].includes(s) },
+    { key: 'launched',  label: 'Testing live',     at: a._launchedAt,  reached: !!a._launchedAt || ['Testing','Winner','Scale','Loser','Complete'].includes(s) },
+    { key: 'decided',   label: s === 'Winner' || s === 'Scale' ? '🏆 Winner decided' : (s === 'Loser' ? '✕ Killed' : 'Decision'),
+      at: a._scaledAt || a._killedAt, reached: ['Winner','Scale','Loser','Complete'].includes(s) }
+  ];
+  const currentIdx = stages.filter(x => x.reached).length - 1;
+  return stages.map((st, i) => {
+    const cls = st.reached ? (i === currentIdx ? 'current' : 'done') : 'pending';
+    const when = st.at ? new Date(st.at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
+    return `<div class="mini-tl-row ${cls}">
+      <span class="when">${esc(when)}</span>
+      <span class="dot"></span>
+      <span class="lbl">${esc(st.label)}</span>
+    </div>`;
+  }).join('');
+}
+
+function setSort(col) {
+  if (STATE.tableSort.col === col) {
+    STATE.tableSort.dir = STATE.tableSort.dir === 'asc' ? 'desc' : 'asc';
+  } else {
+    STATE.tableSort.col = col;
+    STATE.tableSort.dir = 'asc';
+  }
+  renderTable();
+}
+
+function toggleExpand(id) {
+  if (STATE.expandedRows.has(id)) STATE.expandedRows.delete(id);
+  else STATE.expandedRows.add(id);
+  renderTable();
+}
+
+// ═════════════════════════════════════════════════════════════
+//  QUICK ACTIONS (with event stamping)
+// ═════════════════════════════════════════════════════════════
+async function updateStatus(dbId, newStatus) {
+  const a = STATE.actions.find(x => x._dbId === dbId);
+  if (!a) return;
+
+  const now = new Date().toISOString();
+  const stamps = {};
+  if (newStatus === 'In Production'   && !a._approvedAt)  stamps.approved_at  = now;
+  if (newStatus === 'Ready to Launch' && !a._deliveredAt) stamps.delivered_at = now;
+  if (newStatus === 'Testing'         && !a._launchedAt)  stamps.launched_at  = now;
+  if (newStatus === 'Loser'           && !a._killedAt)    stamps.killed_at    = now;
+  if ((newStatus === 'Scale' || newStatus === 'Winner') && !a._scaledAt) stamps.scaled_at = now;
+
+  // Update in-memory first (optimistic)
+  a._liveStatus = newStatus;
+  a.liveStatus = newStatus;
+  Object.keys(stamps).forEach(k => {
+    a['_' + k.replace(/_at$/, 'At').replace(/^(.)/, (_, c) => c)] = stamps[k];
+  });
+  renderAll();
+
+  // Persist
+  const patch = { live_status: newStatus, payload: Object.assign({}, a, { liveStatus: newStatus }) };
+  Object.assign(patch, stamps);
+  // also put stamps inside payload for older read code
+  if (Object.keys(stamps).length) patch.payload = Object.assign({}, patch.payload, stamps);
+
+  const { error } = await SB.from('manual_actions').update(patch).eq('id', dbId);
+  if (error) {
+    toast('Update failed: ' + error.message, 'err');
+    console.error(error);
+  } else {
+    toast(`Marked as ${newStatus}`, 'ok');
+  }
+}
+
+async function quickKill(dbId)   { editStatus(dbId, 'Loser'); }
+async function quickLaunch(dbId) { editStatus(dbId, 'Testing'); }
+async function reviewAction(dbId) {
+  STATE.expandedRows.add(dbId);
+  renderTable();
+  toast('Scrolling to task…');
+  setTimeout(() => {
+    const el = document.querySelector(`tr.expanded`);
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, 50);
+}
+
+function expandActionRow(dbId) {
+  STATE.expandedRows.add(dbId);
+  renderTable();
+  const el = document.querySelector(`.table-section`);
+  if (el) el.scrollIntoView({ behavior: 'smooth' });
+}
+
+// ═════════════════════════════════════════════════════════════
+//  SAVED VIEWS + COLUMN PANEL
+// ═════════════════════════════════════════════════════════════
+function initSavedViews() {
+  document.querySelectorAll('#savedViews .sv-btn').forEach(b => {
+    b.onclick = () => {
+      document.querySelectorAll('#savedViews .sv-btn').forEach(x => x.classList.remove('on'));
+      b.classList.add('on');
+      STATE.tableView = b.dataset.view;
+      renderTable();
+    };
+  });
+}
+
+function initColumnPanel() {
+  const panel = $('colsPanel');
+  panel.innerHTML = TABLE_COLS.map(c =>
+    `<label><input type="checkbox" data-col="${c.key}" ${STATE.tableCols[c.key] ? 'checked' : ''}> ${esc(c.label)}</label>`
+  ).join('');
+  panel.querySelectorAll('input').forEach(input => {
+    input.onchange = () => {
+      STATE.tableCols[input.dataset.col] = input.checked;
+      renderTable();
+    };
+  });
+  $('colsBtn').onclick = (e) => {
+    e.stopPropagation();
+    panel.classList.toggle('hide');
+  };
+  document.addEventListener('click', (e) => {
+    if (!panel.contains(e.target) && e.target.id !== 'colsBtn') panel.classList.add('hide');
+  });
+}
+
+// ═════════════════════════════════════════════════════════════
+//  MODE TOGGLE + RANGE
+// ═════════════════════════════════════════════════════════════
+function initModeToggle() {
+  document.querySelectorAll('#modeToggle .mt-btn').forEach(b => {
+    b.onclick = () => {
+      document.querySelectorAll('#modeToggle .mt-btn').forEach(x => x.classList.remove('on'));
+      b.classList.add('on');
+      STATE.mode = b.dataset.mode;
+      if (STATE.mode === 'clickup-window') {
+        $('apView').classList.add('hide');
+        $('cuView').classList.remove('hide');
+        initCuWindow();
+      } else {
+        $('apView').classList.remove('hide');
+        $('cuView').classList.add('hide');
+      }
+    };
+  });
+}
+
+// ═════════════════════════════════════════════════════════════
+//  CLICKUP WINDOW (real sync)
+// ═════════════════════════════════════════════════════════════
+function getClickUpKey() { return localStorage.getItem('immuvi_api_key') || ''; }
+
+function getProductListId() {
+  const prod = STATE.products.find(p => p.id === STATE.activeProductId);
+  if (!prod) return '';
+  const c = prod.config || {};
+  return c.clickup_list_id || c.clickupListId || '';
+}
+
+function initCuWindow() {
+  const key = getClickUpKey();
+  const listId = getProductListId();
+  const hasKey = !!key;
+  const hasList = !!listId;
+
+  let statusMsg = '';
+  if (!hasKey) statusMsg = '⚠ No ClickUp API key in localStorage. Click "Set API Key" below, or open the main dashboard and save your key there.';
+  else if (!hasList) statusMsg = '⚠ This product has no ClickUp list linked. Link one in the main dashboard → Command HQ → Product Profiles.';
+  else statusMsg = `✓ Connected · list ID: ${listId}`;
+  $('cuStatus').textContent = statusMsg;
+  $('cuSyncBtn').disabled = !hasKey || !hasList;
+
+  $('cuSyncBtn').onclick = () => syncClickUpWindow(key, listId);
+  $('cuSetKeyBtn').onclick = () => {
+    const k = prompt('Paste ClickUp API key (pk_xxxx…)', getClickUpKey());
+    if (k != null) {
+      localStorage.setItem('immuvi_api_key', k.trim());
+      toast('Key saved', 'ok');
+      initCuWindow();
+    }
+  };
+
+  if (hasKey && hasList && !STATE._cuLoaded) syncClickUpWindow(key, listId);
+}
+
+// Fetch all tasks from a ClickUp list (paginated, include closed)
+async function fetchClickUpTasks(listId, key) {
+  const all = [];
+  let page = 0;
+  while (page < 10) {
+    const url = `https://api.clickup.com/api/v2/list/${listId}/task?page=${page}&include_closed=true&subtasks=true&order_by=created&reverse=true`;
+    const res = await fetch(url, { headers: { 'Authorization': key, 'Content-Type': 'application/json' } });
+    if (!res.ok) {
+      const body = await res.text().catch(() => '');
+      throw new Error(`ClickUp API ${res.status}: ${body.slice(0, 200)}`);
+    }
+    const data = await res.json();
+    const tasks = data.tasks || [];
+    all.push(...tasks);
+    if (tasks.length < 100) break;
+    page++;
+  }
+  return all;
+}
+
+async function syncClickUpWindow(key, listId) {
+  $('cuList').innerHTML = '<div class="loading-state">Fetching from ClickUp…</div>';
+  try {
+    const tasks = await fetchClickUpTasks(listId, key);
+    STATE._cuLoaded = true;
+    STATE._cuTasks = tasks;
+    renderCuWindow(tasks);
+    toast(`Loaded ${tasks.length} tasks from ClickUp`, 'ok');
+  } catch (e) {
+    console.error('ClickUp sync failed:', e);
+    toast('Sync failed — see console', 'err');
+    const hint = e.message.includes('Failed to fetch') || e.message.includes('CORS')
+      ? '<br><br>💡 If you opened this as <code>file://</code>, ClickUp\'s API blocks browser calls. Open via a local server: <code>cd "' +
+        'Clickup " && python3 -m http.server 8099</code> then visit <code>http://localhost:8099/action-plan-live.html</code>'
+      : '';
+    $('cuList').innerHTML = `<div style="color:var(--rosed);padding:20px;text-align:left;font-size:0.8rem;line-height:1.6">
+      <strong>Error:</strong> ${esc(e.message)}${hint}
+    </div>`;
+  }
+}
+
+function renderCuWindow(tasks) {
+  const apIds = new Set();
+  STATE.actions.forEach(a => { if (a._clickupId) apIds.add(a._clickupId); });
+
+  const statusOf = t => ((t.status && t.status.status) || '').toLowerCase();
+
+  const readyNotInAp = tasks.filter(t =>
+    /ready to launch|ready|to launch/.test(statusOf(t)) && !apIds.has(t.id));
+  const testingNotInAp = tasks.filter(t =>
+    /testing|in review/.test(statusOf(t)) && !apIds.has(t.id));
+  const everythingElse = tasks.filter(t => !apIds.has(t.id) &&
+    !/ready to launch|ready|to launch|testing|in review/.test(statusOf(t))).slice(0, 50);
+
+  const section = (title, arr, highlight) => {
+    if (!arr.length) return '';
+    return `
+      <div class="cuw-section">
+        <div class="cuw-section-title">${title} · ${arr.length}</div>
+        ${arr.slice(0, 30).map(t => `
+          <div style="display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:center;padding:9px 12px;background:${highlight || 'var(--bg)'};border-radius:8px;margin-bottom:5px;">
+            <span style="font-family:'JetBrains Mono',monospace;font-size:0.65rem;color:var(--ink3)">${esc(t.id.slice(0, 8))}</span>
+            <span style="font-size:0.82rem">
+              <strong>${esc(t.name || '')}</strong>
+              <span style="font-size:0.68rem;color:var(--ink3);margin-left:8px">${esc((t.status&&t.status.status)||'')}</span>
+            </span>
+            <div style="display:flex;gap:5px">
+              <button class="tbl-link-btn" onclick="cuOnboard('${escAttr(t.id)}', ${escAttr(JSON.stringify(t.name||''))})">+ Onboard</button>
+              <a class="tbl-link-btn" href="https://app.clickup.com/t/${escAttr(t.id)}" target="_blank">↗</a>
+            </div>
+          </div>`).join('')}
+        ${arr.length > 30 ? `<div style="font-size:0.72rem;color:var(--ink3);padding:8px;text-align:center">+ ${arr.length - 30} more…</div>` : ''}
+      </div>`;
+  };
+
+  $('cuList').innerHTML =
+    section('🚀 Ready to Launch — not in Action Plan', readyNotInAp, 'rgba(16,217,138,0.05)') +
+    section('🧪 Testing — not in Action Plan', testingNotInAp, 'rgba(255,176,32,0.05)') +
+    section('📜 Other ClickUp tasks (first 50)', everythingElse, 'var(--bg)');
+
+  if (!readyNotInAp.length && !testingNotInAp.length && !everythingElse.length) {
+    $('cuList').innerHTML = '<div style="text-align:center;padding:30px;color:var(--ink3);font-size:0.85rem">✓ All ClickUp tasks are already in your Action Plan, or none match.</div>';
+  }
+}
+
+// ═════════════════════════════════════════════════════════════
+//  BACKFILL FROM CLICKUP — reads Approved Date + Launch Date
+//  custom fields + date_created, patches Supabase rows.
+// ═════════════════════════════════════════════════════════════
+async function backfillFromClickUp() {
+  console.log('[backfill] starting…');
+  const key = getClickUpKey();
+  const listId = getProductListId();
+  console.log('[backfill] key present:', !!key, '· listId:', listId, '· product:', STATE.activeProductId);
+
+  if (!key) {
+    alert('❌ No ClickUp API key found in localStorage.\n\nFix:\n1. Click "🗂 ClickUp Window" at the top\n2. Click "🔑 Set API Key"\n3. Paste your pk_... key\n4. Come back here and click Backfill again');
+    return;
+  }
+  if (!listId) {
+    alert('❌ This product has no ClickUp list linked.\n\nProduct: ' + (STATE.activeProductId || '?') + '\n\nFix: Open the main dashboard (immuvi-command-center.html) and link a ClickUp list to this product.');
+    return;
+  }
+
+  const btn = $('backfillBtn');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Fetching…'; }
+
+  try {
+    const tasks = await fetchClickUpTasks(listId, key);
+    console.log('[backfill] fetched', tasks.length, 'tasks from ClickUp list', listId);
+
+    // Build lookup for actions that have a ClickUp ID
+    const byCu = {};
+    STATE.actions.forEach(a => { if (a._clickupId) byCu[a._clickupId] = a; });
+    console.log('[backfill] actions with _clickupId:', Object.keys(byCu).length, '/', STATE.actions.length);
+
+    let updatedCount = 0;
+    let stampsSet = 0;
+    const patches = [];
+
+    for (const t of tasks) {
+      const action = byCu[t.id];
+      if (!action) continue;
+
+      // Read custom date fields by name match
+      let approvedMs = null, launchedMs = null;
+      for (const cf of (t.custom_fields || [])) {
+        const name = (cf.name || '').toLowerCase();
+        const val = cf.value;
+        if (val == null || val === '') continue;
+        const ms = parseInt(val, 10);
+        if (!ms || isNaN(ms)) continue;
+        if (name.includes('approved') && name.includes('date')) approvedMs = ms;
+        else if (name.includes('launch')   && name.includes('date')) launchedMs = ms;
+      }
+
+      const patch = {};
+      // Approved Date → approved_at (only if not already set)
+      if (approvedMs && !action._approvedAt) {
+        patch.approved_at = new Date(approvedMs).toISOString();
+        stampsSet++;
+      }
+      // Launch Date → launched_at (only if not already set)
+      if (launchedMs && !action._launchedAt) {
+        patch.launched_at = new Date(launchedMs).toISOString();
+        stampsSet++;
+      }
+      // ClickUp's own date_created → stash in payload as created_at_ms
+      const cuCreatedMs = t.date_created ? parseInt(t.date_created, 10) : null;
+      const cuAdType = extractCuAdType(t);
+
+      // Merge payload additions if any
+      const payloadAdds = {};
+      if (cuCreatedMs && (!action.created_at_ms || action.created_at_ms > cuCreatedMs)) {
+        payloadAdds.created_at_ms = cuCreatedMs;
+      }
+      if (cuAdType && action.adType !== cuAdType) {
+        payloadAdds.adType = cuAdType;
+      }
+      if (t.name && action.title !== t.name) {
+        payloadAdds.title = t.name;
+      }
+      if (Object.keys(payloadAdds).length) {
+        patch.payload = Object.assign({}, action, payloadAdds);
+        ['_dbId','_liveStatus','_createdAt','_updatedAt','_approvedAt','_deliveredAt','_launchedAt','_killedAt','_scaledAt','_ageFrom'].forEach(k => delete patch.payload[k]);
+      }
+
+      if (Object.keys(patch).length) {
+        patches.push({ id: action._dbId, patch });
+      }
+    }
+
+    // Apply patches serially (small batches)
+    for (const { id, patch } of patches) {
+      const { error } = await SB.from('manual_actions').update(patch).eq('id', id);
+      if (error) { console.error('Backfill row failed', id, error); continue; }
+      updatedCount++;
+    }
+
+    toast(`Backfill done · ${updatedCount} tasks updated · ${stampsSet} date stamps set`, 'ok');
+
+    // ── Also generate historical activity_events from the now-populated stamps ──
+    await backfillEvents();
+
+    await reload();
+  } catch (e) {
+    console.error('Backfill failed:', e);
+    toast('Backfill failed — see console', 'err');
+    alert('ClickUp backfill failed:\n\n' + e.message +
+      '\n\nIf this is a CORS error, open the file via a local server:\n' +
+      'python3 -m http.server 8099  →  http://localhost:8099/action-plan-live.html');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '📅 Backfill dates'; }
+  }
+}
+
+window.backfillFromClickUp = backfillFromClickUp;
+
+// ═════════════════════════════════════════════════════════════
+//  BACKFILL EVENTS — one-shot historical event generation
+//  Reads the date stamp columns from each manual_action and
+//  writes matching activity_events (deduped by action_id + event_type).
+// ═════════════════════════════════════════════════════════════
+async function backfillEvents() {
+  const pid = STATE.activeProductId;
+  if (!pid) return 0;
+
+  // Reload actions fresh from DB (they may have been just-updated by date backfill)
+  const { data: actions, error } = await SB.from('manual_actions').select('*').eq('product_id', pid);
+  if (error) { console.warn('[backfillEvents] load failed', error); return 0; }
+
+  // Fetch existing events to dedupe
+  const { data: existing } = await SB.from('activity_events').select('action_id,event_type').eq('product_id', pid);
+  const existingKey = new Set((existing || []).map(e => e.action_id + '|' + e.event_type));
+
+  const newEvents = [];
+  const pushIfMissing = (action_id, event_type, at, extra) => {
+    if (!at) return;
+    const key = action_id + '|' + event_type;
+    if (existingKey.has(key)) return;
+    existingKey.add(key);
+    newEvents.push({
+      product_id: pid,
+      action_id,
+      clickup_task_id: extra && extra.clickup_task_id || null,
+      event_type,
+      actor: '—',
+      source: 'backfill',
+      metadata: extra && extra.metadata || {},
+      created_at: at
+    });
+  };
+
+  for (const row of (actions || [])) {
+    const p = row.payload || {};
+    const cuId = p._clickupId || null;
+    const meta = { title: p.title, angle: p.angle, persona: p.persona };
+
+    // created — prefer ClickUp date_created if we stashed it, else Supabase created_at
+    const createdTs = p.created_at_ms ? new Date(p.created_at_ms).toISOString() : row.created_at;
+    pushIfMissing(row.id, 'created', createdTs, { clickup_task_id: cuId, metadata: meta });
+
+    if (row.approved_at)  pushIfMissing(row.id, 'approved',  row.approved_at,  { clickup_task_id: cuId, metadata: meta });
+    if (row.delivered_at) pushIfMissing(row.id, 'delivered', row.delivered_at, { clickup_task_id: cuId, metadata: meta });
+    if (row.launched_at)  pushIfMissing(row.id, 'launched',  row.launched_at,  { clickup_task_id: cuId, metadata: meta });
+    if (row.killed_at)    pushIfMissing(row.id, 'killed',    row.killed_at,    { clickup_task_id: cuId, metadata: meta });
+    if (row.scaled_at) {
+      const etype = row.live_status === 'Winner' ? 'winner' : 'scaled';
+      pushIfMissing(row.id, etype, row.scaled_at, { clickup_task_id: cuId, metadata: meta });
+    }
+  }
+
+  if (!newEvents.length) {
+    toast('Events already up to date', 'ok');
+    return 0;
+  }
+
+  // Insert in batches of 100 to avoid payload size limits
+  let inserted = 0;
+  for (let i = 0; i < newEvents.length; i += 100) {
+    const batch = newEvents.slice(i, i + 100);
+    const { error: insErr } = await SB.from('activity_events').insert(batch);
+    if (insErr) { console.warn('[backfillEvents] insert batch failed', insErr); continue; }
+    inserted += batch.length;
+  }
+  toast(`Generated ${inserted} historical event${inserted>1?'s':''}`, 'ok');
+  return inserted;
+}
+window.backfillEvents = backfillEvents;
+
+// ═════════════════════════════════════════════════════════════
+//  LIVE POLLING FROM CLICKUP
+//  Fetches tasks updated since last poll, patches Supabase.
+//  Supabase realtime then broadcasts to every connected page.
+// ═════════════════════════════════════════════════════════════
+const POLL_INTERVAL_MS = 30 * 1000;
+let _pollTimer = null;
+let _lastPollMs = Date.now() - (24 * 60 * 60 * 1000); // start with last 24h
+
+// Extract "Photo/Video" dropdown value from a ClickUp task's custom_fields array
+function extractCuAdType(t) {
+  for (const cf of (t.custom_fields || [])) {
+    const name = (cf.name || '').toLowerCase();
+    const isPhotoVideo = (name.includes('photo') && name.includes('video'))
+                      || name === 'type' || name === 'ad type' || name === 'creative type';
+    if (!isPhotoVideo) continue;
+    const val = cf.value;
+    if (val == null || val === '') continue;
+
+    const opts = (cf.type_config && cf.type_config.options) || [];
+    // dropdown: value is option UUID
+    let match = opts.find(o => o.id === val);
+    if (match) return match.name;
+    // sometimes it's an orderindex number
+    if (typeof val === 'number' && opts[val]) return opts[val].name;
+    // labels/text fallback — value is the string itself
+    if (typeof val === 'string') return val;
+    // orderindex as string
+    match = opts.find(o => String(o.orderindex) === String(val));
+    if (match) return match.name;
+  }
+  return null;
+}
+
+// ClickUp status → our internal status mapping
+function mapCuStatus(s) {
+  if (!s) return null;
+  const lower = s.toLowerCase().trim();
+  const map = {
+    'to do': 'Untested', 'untested': 'Untested', 'open': 'Untested',
+    'approved': 'Approved',
+    'in production': 'In Production', 'in progress': 'In Production',
+    'ready to launch': 'Ready to Launch', 'ready': 'Ready to Launch',
+    'testing': 'Testing', 'in review': 'Testing',
+    'winner': 'Winner',
+    'scale': 'Scale',
+    'loser': 'Loser', 'killed': 'Loser',
+    'complete': 'Complete', 'closed': 'Complete', 'done': 'Complete'
+  };
+  return map[lower] || null;
+}
+
+async function pollClickUpChanges() {
+  const key = getClickUpKey();
+  const listId = getProductListId();
+  if (!key || !listId) return;
+
+  try {
+    const url = `https://api.clickup.com/api/v2/list/${listId}/task?date_updated_gt=${_lastPollMs}&include_closed=true&subtasks=true`;
+    const res = await fetch(url, { headers: { 'Authorization': key } });
+    if (!res.ok) {
+      console.warn('[poll] http', res.status);
+      return;
+    }
+    const data = await res.json();
+    const tasks = data.tasks || [];
+    const pollTime = Date.now();
+
+    if (!tasks.length) {
+      _lastPollMs = pollTime;
+      updatePollIndicator();
+      return;
+    }
+
+    // Match by _clickupId
+    const byCu = {};
+    STATE.actions.forEach(a => { if (a._clickupId) byCu[a._clickupId] = a; });
+
+    let patched = 0;
+    for (const t of tasks) {
+      const action = byCu[t.id];
+      if (!action) continue;
+
+      const newName   = t.name || '';
+      const cuStatus  = (t.status && t.status.status) || '';
+      const mapped    = mapCuStatus(cuStatus);
+
+      const dbPatch = {};
+      const payloadUpdates = {};
+
+      if (newName && action.title !== newName) {
+        payloadUpdates.title = newName;
+      }
+
+      const cuAdType = extractCuAdType(t);
+      if (cuAdType && action.adType !== cuAdType) {
+        payloadUpdates.adType = cuAdType;
+      }
+
+      if (Object.keys(payloadUpdates).length) {
+        // clone the payload minus virtual fields
+        const cleanPayload = Object.assign({}, action, payloadUpdates);
+        ['_dbId','_liveStatus','_createdAt','_updatedAt','_approvedAt','_deliveredAt','_launchedAt','_killedAt','_scaledAt','_ageFrom'].forEach(k => delete cleanPayload[k]);
+        dbPatch.payload = cleanPayload;
+      }
+
+      if (mapped && action._liveStatus !== mapped) {
+        dbPatch.live_status = mapped;
+        // also stamp transition timestamps if missing
+        const now = new Date().toISOString();
+        if (mapped === 'In Production'   && !action._approvedAt)  dbPatch.approved_at  = now;
+        if (mapped === 'Ready to Launch' && !action._deliveredAt) dbPatch.delivered_at = now;
+        if (mapped === 'Testing'         && !action._launchedAt)  dbPatch.launched_at  = now;
+        if (mapped === 'Loser'           && !action._killedAt)    dbPatch.killed_at    = now;
+        if ((mapped === 'Scale' || mapped === 'Winner') && !action._scaledAt) dbPatch.scaled_at = now;
+      }
+
+      if (Object.keys(dbPatch).length) {
+        // Capture OLD values BEFORE the in-memory update so we can log accurately
+        const oldStatus = action._liveStatus;
+        const oldTitle  = action.title;
+        const statusChanged = mapped && oldStatus !== mapped;
+        const titleChanged  = payloadUpdates.title && oldTitle !== payloadUpdates.title;
+
+        const { error } = await SB.from('manual_actions').update(dbPatch).eq('id', action._dbId);
+        if (!error) {
+          patched++;
+
+          // Update in-memory action BEFORE next poll so we don't fire the same event twice
+          if (mapped)                action._liveStatus = mapped;
+          if (payloadUpdates.title)  action.title       = payloadUpdates.title;
+          if (payloadUpdates.adType) action.adType      = payloadUpdates.adType;
+
+          // Log semantic events with source='clickup-poll' — no more meta clickup_synced_in
+          if (statusChanged) {
+            logEvent('status_changed', {
+              action_id: action._dbId, clickup_task_id: action._clickupId,
+              field_name: 'status', old_value: oldStatus, new_value: mapped,
+              actor: 'ClickUp', source: 'clickup-poll',
+              metadata: { title: action.title, angle: action.angle, persona: action.persona }
+            });
+          }
+          if (titleChanged) {
+            logEvent('renamed', {
+              action_id: action._dbId, clickup_task_id: action._clickupId,
+              field_name: 'title', old_value: oldTitle, new_value: payloadUpdates.title,
+              actor: 'ClickUp', source: 'clickup-poll',
+              metadata: { title: payloadUpdates.title, angle: action.angle, persona: action.persona }
+            });
+          }
+        } else {
+          console.warn('[poll] patch failed', error);
+        }
+      }
+    }
+
+    _lastPollMs = pollTime;
+    if (patched) {
+      console.log('[poll] patched', patched, 'actions from', tasks.length, 'changed ClickUp tasks');
+      toast(`🔄 ${patched} task${patched>1?'s':''} updated from ClickUp`, 'ok');
+    }
+    updatePollIndicator();
+  } catch (e) {
+    console.warn('[poll] failed:', e.message);
+  }
+}
+
+function updatePollIndicator() {
+  const el = $('pollStatus');
+  if (!el) return;
+  const ago = Math.round((Date.now() - _lastPollMs) / 1000);
+  el.textContent = ago < 2 ? 'synced just now' : `synced ${ago}s ago`;
+}
+
+function startPolling() {
+  if (_pollTimer) clearInterval(_pollTimer);
+  _pollTimer = setInterval(pollClickUpChanges, POLL_INTERVAL_MS);
+  // also update the indicator every second
+  setInterval(updatePollIndicator, 1000);
+  // run once immediately on startup
+  pollClickUpChanges();
+}
+
+async function manualSync() {
+  const btn = $('manualSyncBtn');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Syncing…'; }
+  try {
+    // 1. Poll ClickUp for external changes (writes to Supabase)
+    await pollClickUpChanges();
+    // 2. Re-fetch all Supabase tables
+    await reload(true);
+    toast('✓ Fully synced', 'ok');
+  } catch (e) {
+    console.warn('[manualSync] error', e);
+    toast('Sync error — see console', 'err');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '🔄 Sync now'; }
+  }
+}
+
+window.manualSync = manualSync;
+
+// ═════════════════════════════════════════════════════════════
+//  ACTIVITY EVENT LOGGER
+//  Fire-and-forget insert into activity_events. Never blocks.
+// ═════════════════════════════════════════════════════════════
+function logEvent(eventType, opts) {
+  opts = opts || {};
+  const row = {
+    product_id: STATE.activeProductId,
+    action_id: opts.action_id || null,
+    clickup_task_id: opts.clickup_task_id || null,
+    event_type: eventType,
+    field_name: opts.field_name || null,
+    old_value: opts.old_value == null ? null : String(opts.old_value),
+    new_value: opts.new_value == null ? null : String(opts.new_value),
+    actor: opts.actor || getUserLabel(),
+    source: opts.source || 'app',
+    metadata: opts.metadata || {}
+  };
+  SB.from('activity_events').insert(row).then(({ error }) => {
+    if (error) console.warn('[logEvent] failed', error.message);
+  });
+}
+window.logEvent = logEvent;
+
+// ═════════════════════════════════════════════════════════════
+//  UNIVERSAL WRITE PATH
+//  Every edit → optimistic UI → Supabase → ClickUp (parallel)
+//  Failed ClickUp writes land in pending queue with retry banner.
+// ═════════════════════════════════════════════════════════════
+async function saveEdit(dbId, payloadPatch, dbPatch, cuWrite) {
+  const action = STATE.actions.find(x => x._dbId === dbId);
+  if (!action) return;
+
+  // 1. Optimistic UI update
+  Object.assign(action, payloadPatch || {});
+  renderAll();
+
+  // 2. Build Supabase patch
+  const cleanPayload = Object.assign({}, action);
+  ['_dbId','_liveStatus','_createdAt','_updatedAt','_approvedAt','_deliveredAt','_launchedAt','_killedAt','_scaledAt','_ageFrom'].forEach(k => delete cleanPayload[k]);
+  const patch = Object.assign({ payload: cleanPayload }, dbPatch || {});
+
+  // 3. Write to Supabase
+  const { error } = await SB.from('manual_actions').update(patch).eq('id', dbId);
+  if (error) {
+    console.error('[saveEdit] DB error', error);
+    toast('Save failed: ' + error.message, 'err');
+    return;
+  }
+
+  // 4. Write to ClickUp (parallel, with retry)
+  if (cuWrite && action._clickupId) {
+    tryCuWrite(action._clickupId, cuWrite, dbId).catch(() => {});
+  }
+}
+
+// Centralized field edit — infers what to push to ClickUp based on field name
+async function editField(dbId, field, value) {
+  const action = STATE.actions.find(x => x._dbId === dbId);
+  if (!action) return;
+
+  const oldValue = action[field];
+  if (oldValue === value) return;   // no-op
+
+  const patch = { [field]: value };
+  let cuWrite = null;
+  let eventType = null;
+
+  if (field === 'title')       { cuWrite = { kind: 'task', body: { name: value } }; eventType = 'renamed'; }
+  if (field === 'description') { cuWrite = { kind: 'task', body: { description: value } }; eventType = 'desc_edited'; }
+  if (field === 'dueDate') {
+    const due = value ? new Date(value).getTime() : null;
+    cuWrite = { kind: 'task', body: { due_date: due, due_date_time: false } };
+    eventType = 'due_changed';
+  }
+  if (field === 'funnelStage') { cuWrite = { kind: 'cfield', fieldKey: 'funnel', value }; eventType = 'funnel_changed'; }
+  if (field === 'adType')      { cuWrite = { kind: 'cfield', fieldKey: 'photo_video', value }; eventType = 'type_changed'; }
+  if (field === 'angle')       { cuWrite = { kind: 'cfield', fieldKey: 'angle', value }; eventType = 'angle_changed'; }
+  if (field === 'persona')     { cuWrite = { kind: 'cfield', fieldKey: 'persona', value }; eventType = 'persona_changed'; }
+  if (field === 'priority')    { eventType = 'priority_changed'; }
+
+  await saveEdit(dbId, patch, null, cuWrite);
+
+  if (eventType) {
+    logEvent(eventType, {
+      action_id: dbId, clickup_task_id: action._clickupId,
+      field_name: field, old_value: oldValue, new_value: value,
+      metadata: { title: action.title, angle: action.angle, persona: action.persona }
+    });
+  }
+}
+
+// Status edit — handles timestamp stamps + ClickUp status write
+async function editStatus(dbId, newStatus) {
+  const action = STATE.actions.find(x => x._dbId === dbId);
+  if (!action) return;
+
+  const now = new Date().toISOString();
+  const stamps = {};
+  if (newStatus === 'In Production'   && !action._approvedAt)  stamps.approved_at  = now;
+  if (newStatus === 'Ready to Launch' && !action._deliveredAt) stamps.delivered_at = now;
+  if (newStatus === 'Testing'         && !action._launchedAt)  stamps.launched_at  = now;
+  if (newStatus === 'Loser'           && !action._killedAt)    stamps.killed_at    = now;
+  if ((newStatus === 'Scale' || newStatus === 'Winner') && !action._scaledAt) stamps.scaled_at = now;
+
+  action._liveStatus = newStatus;
+  action.liveStatus = newStatus;
+  Object.keys(stamps).forEach(k => {
+    if (k === 'approved_at')  action._approvedAt  = stamps[k];
+    if (k === 'delivered_at') action._deliveredAt = stamps[k];
+    if (k === 'launched_at')  action._launchedAt  = stamps[k];
+    if (k === 'killed_at')    action._killedAt    = stamps[k];
+    if (k === 'scaled_at')    action._scaledAt    = stamps[k];
+  });
+
+  const dbPatch = Object.assign({ live_status: newStatus }, stamps);
+  const cuWrite = { kind: 'task', body: { status: newStatus } };
+
+  await saveEdit(dbId, { liveStatus: newStatus }, dbPatch, cuWrite);
+  toast(`Marked as ${newStatus}`, 'ok');
+
+  // Log both the generic + the specific event
+  const meta = { title: action.title, angle: action.angle, persona: action.persona, from_status: action._liveStatus };
+  logEvent('status_changed', {
+    action_id: dbId, clickup_task_id: action._clickupId,
+    old_value: meta.from_status, new_value: newStatus, metadata: meta
+  });
+  const shortcut = { 'Testing':'launched', 'Loser':'killed', 'Scale':'scaled', 'Winner':'winner',
+                     'Ready to Launch':'delivered', 'In Production':'approved' }[newStatus];
+  if (shortcut) logEvent(shortcut, {
+    action_id: dbId, clickup_task_id: action._clickupId, metadata: meta
+  });
+}
+
+window.editField = editField;
+window.editStatus = editStatus;
+
+// ═════════════════════════════════════════════════════════════
+//  CLICKUP WRITE HELPERS
+// ═════════════════════════════════════════════════════════════
+async function cuUpdateTask(cuId, body) {
+  const key = getClickUpKey();
+  if (!key) throw new Error('No API key');
+  const res = await fetch(`https://api.clickup.com/api/v2/task/${cuId}`, {
+    method: 'PUT',
+    headers: { 'Authorization': key, 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+  if (!res.ok) throw new Error(`ClickUp ${res.status}: ${await res.text()}`);
+  return res.json();
+}
+
+async function cuSetCustomField(cuId, fieldId, value) {
+  const key = getClickUpKey();
+  if (!key) throw new Error('No API key');
+  const res = await fetch(`https://api.clickup.com/api/v2/task/${cuId}/field/${fieldId}`, {
+    method: 'POST',
+    headers: { 'Authorization': key, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ value })
+  });
+  if (!res.ok) throw new Error(`ClickUp ${res.status}: ${await res.text()}`);
+  return res.json();
+}
+
+async function cuDeleteTask(cuId) {
+  const key = getClickUpKey();
+  if (!key) throw new Error('No API key');
+  const res = await fetch(`https://api.clickup.com/api/v2/task/${cuId}`, {
+    method: 'DELETE',
+    headers: { 'Authorization': key }
+  });
+  if (!res.ok && res.status !== 404) throw new Error(`ClickUp ${res.status}`);
+  return true;
+}
+
+// Fetch + cache the custom field map for the current list
+async function ensureFieldMap() {
+  const listId = getProductListId();
+  const key = getClickUpKey();
+  if (!listId || !key) return null;
+  if (STATE.cuFieldMap[listId]) return STATE.cuFieldMap[listId];
+
+  const res = await fetch(`https://api.clickup.com/api/v2/list/${listId}/field`, {
+    headers: { 'Authorization': key }
+  });
+  if (!res.ok) return null;
+  const data = await res.json();
+  const map = {};
+  for (const f of (data.fields || [])) {
+    const name = (f.name || '').toLowerCase();
+    if (/angle/.test(name))        map.angle       = f;
+    if (/persona/.test(name))      map.persona     = f;
+    if (/funnel/.test(name))       map.funnel      = f;
+    if (/photo/.test(name) && /video/.test(name)) map.photo_video = f;
+    if (name === 'type' || name === 'ad type' || name === 'creative type') map.photo_video = f;
+    if (/ad link|ad url/.test(name)) map.ad_link   = f;
+    if (/drive link|drive url/.test(name)) map.drive_link = f;
+  }
+  STATE.cuFieldMap[listId] = map;
+  return map;
+}
+
+// Find the dropdown option UUID that matches a string value
+function findOptionId(fieldDef, value) {
+  const opts = (fieldDef.type_config && fieldDef.type_config.options) || [];
+  const hit = opts.find(o => (o.name || '').toLowerCase() === String(value).toLowerCase());
+  return hit ? hit.id : null;
+}
+
+// Try a ClickUp write, enqueue for retry on failure
+async function tryCuWrite(cuId, w, dbId, attempt) {
+  attempt = attempt || 1;
+  try {
+    if (w.kind === 'task') {
+      await cuUpdateTask(cuId, w.body);
+    } else if (w.kind === 'cfield') {
+      const map = await ensureFieldMap();
+      const fieldDef = map && map[w.fieldKey];
+      if (!fieldDef) { console.warn('No CU field for', w.fieldKey); return; }
+      let val = w.value;
+      // dropdowns need option UUID, not the name
+      if (fieldDef.type === 'drop_down' || fieldDef.type === 'labels') {
+        const optId = findOptionId(fieldDef, w.value);
+        if (!optId) { console.warn('Option not found for', w.value, 'in', w.fieldKey); return; }
+        val = optId;
+      }
+      await cuSetCustomField(cuId, fieldDef.id, val);
+    }
+    dequeueRetry(dbId, w);
+  } catch (e) {
+    console.warn('[cu write] attempt', attempt, 'failed:', e.message);
+    if (attempt < 3) {
+      const backoff = [1000, 3000, 9000][attempt - 1] || 9000;
+      setTimeout(() => tryCuWrite(cuId, w, dbId, attempt + 1), backoff);
+    } else {
+      enqueueRetry(cuId, w, dbId);
+    }
+  }
+}
+
+function enqueueRetry(cuId, w, dbId) {
+  STATE.pendingWrites.push({ cuId, w, dbId, at: Date.now() });
+  updateRetryBanner();
+}
+function dequeueRetry(dbId, w) {
+  STATE.pendingWrites = STATE.pendingWrites.filter(p => !(p.dbId === dbId && p.w.kind === w.kind));
+  updateRetryBanner();
+}
+function updateRetryBanner() {
+  const n = STATE.pendingWrites.length;
+  const b = $('retryBanner');
+  if (!b) return;
+  if (n === 0) { b.classList.add('hide'); return; }
+  b.classList.remove('hide');
+  $('retryCount').textContent = n;
+  $('retryS').textContent = n === 1 ? '' : 's';
+}
+async function retryPendingWrites() {
+  const items = STATE.pendingWrites.slice();
+  STATE.pendingWrites = [];
+  updateRetryBanner();
+  for (const it of items) {
+    await tryCuWrite(it.cuId, it.w, it.dbId);
+  }
+}
+function clearPendingWrites() {
+  STATE.pendingWrites = [];
+  updateRetryBanner();
+}
+window.retryPendingWrites = retryPendingWrites;
+window.clearPendingWrites = clearPendingWrites;
+
+// ═════════════════════════════════════════════════════════════
+//  CREATE CLICKUP TASK (for tasks with no _clickupId yet)
+// ═════════════════════════════════════════════════════════════
+async function createClickUpTask(dbId) {
+  const action = STATE.actions.find(x => x._dbId === dbId);
+  if (!action) return;
+  const key = getClickUpKey();
+  const listId = getProductListId();
+  if (!key) { alert('No ClickUp API key'); return; }
+  if (!listId) { alert('This product has no ClickUp list linked'); return; }
+
+  try {
+    toast('Creating ClickUp task…');
+    const body = {
+      name: action.title || '(untitled)',
+      description: action.description || '',
+      status: action._liveStatus || 'Untested'
+    };
+    if (action.dueDate) {
+      body.due_date = new Date(action.dueDate).getTime();
+      body.due_date_time = false;
+    }
+    const res = await fetch(`https://api.clickup.com/api/v2/list/${listId}/task`, {
+      method: 'POST',
+      headers: { 'Authorization': key, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    if (!res.ok) throw new Error(`ClickUp ${res.status}: ${await res.text()}`);
+    const newTask = await res.json();
+
+    action._clickupId = newTask.id;
+    await saveEdit(dbId, { _clickupId: newTask.id }, {}, null);
+
+    // Now set custom fields (angle, persona, funnel, photo_video)
+    const map = await ensureFieldMap();
+    const setField = async (key, value) => {
+      const def = map && map[key];
+      if (!def || !value) return;
+      let val = value;
+      if (def.type === 'drop_down' || def.type === 'labels') {
+        val = findOptionId(def, value);
+        if (!val) return;
+      }
+      try { await cuSetCustomField(newTask.id, def.id, val); } catch (e) { console.warn('cf set failed', key, e); }
+    };
+    await setField('angle', action.angle);
+    await setField('persona', action.persona);
+    await setField('funnel', action.funnelStage);
+    await setField('photo_video', action.adType);
+
+    toast('✓ ClickUp task created', 'ok');
+    logEvent('clickup_task_created', {
+      action_id: dbId, clickup_task_id: newTask.id,
+      metadata: { title: action.title, angle: action.angle, persona: action.persona }
+    });
+    renderAll();
+  } catch (e) {
+    console.error(e);
+    alert('Create failed: ' + e.message);
+  }
+}
+window.createClickUpTask = createClickUpTask;
+
+// ═════════════════════════════════════════════════════════════
+//  DELETE EVERYWHERE — mirrors main app's deleteAdEverywhere
+// ═════════════════════════════════════════════════════════════
+async function deleteTaskEverywhere(dbId) {
+  const action = STATE.actions.find(x => x._dbId === dbId);
+  if (!action) return;
+
+  const label = action.title || action.sourceAdId || dbId.slice(0, 8);
+  if (!confirm(`Delete "${label}" from ClickUp + Creative Tracker + Matrix + Action Plan + DB?\n\nThis cannot be undone.`)) return;
+
+  const pid = STATE.activeProductId;
+  const adId = action.sourceAdId || action.adId;
+  const cuIds = [];
+  if (action._clickupId) cuIds.push(action._clickupId);
+
+  // Matching ad
+  let matchedAd = null;
+  if (adId) matchedAd = STATE.ads.find(x => x.id === adId);
+  if (!matchedAd && action._clickupId) matchedAd = STATE.ads.find(x => x._clickupId === action._clickupId);
+  if (matchedAd && matchedAd._clickupId && cuIds.indexOf(matchedAd._clickupId) === -1) {
+    cuIds.push(matchedAd._clickupId);
+  }
+
+  // 1. Soft delete ad (if exists)
+  if (matchedAd) {
+    await SB.from('ads').update({ deleted_at: new Date().toISOString() }).eq('id', matchedAd.id);
+    // Tombstone table
+    try {
+      await SB.from('deleted_ads').upsert({
+        id: matchedAd.id,
+        product_id: pid,
+        clickup_task_id: matchedAd._clickupId || null,
+        deleted_at: new Date().toISOString(),
+        deleted_by: 'action-plan-live'
+      }, { onConflict: 'id' });
+    } catch (e) { console.warn('deleted_ads tombstone failed', e); }
+
+    // Purge from matrix_cells.creative_assignments
+    try {
+      const { data: cells } = await SB.from('matrix_cells').select('*').eq('product_id', pid);
+      for (const c of (cells || [])) {
+        const assigns = Array.isArray(c.creative_assignments) ? c.creative_assignments : [];
+        if (assigns.includes(matchedAd.id)) {
+          const updated = assigns.filter(x => x !== matchedAd.id);
+          await SB.from('matrix_cells').update({ creative_assignments: updated }).eq('id', c.id);
+        }
+      }
+    } catch (e) { console.warn('matrix purge failed', e); }
+  }
+
+  // 2. Delete every manual_action tied to this AD (by sourceAdId or adId)
+  const actionsToKill = STATE.actions.filter(a =>
+    a._dbId === dbId ||
+    (adId && (a.sourceAdId === adId || a.adId === adId))
+  );
+  for (const a of actionsToKill) {
+    await SB.from('manual_actions').delete().eq('id', a._dbId);
+  }
+
+  // 3. LocalStorage tombstone for 10min (prevents poll re-import)
+  try {
+    const tombKey = '_deletedCuIds_' + (pid || 'x');
+    const tomb = JSON.parse(localStorage.getItem(tombKey) || '{}');
+    const now = Date.now();
+    cuIds.forEach(c => { tomb[c] = now; });
+    if (matchedAd) tomb[matchedAd.id] = now;
+    Object.keys(tomb).forEach(k => { if (now - tomb[k] > 600000) delete tomb[k]; });
+    localStorage.setItem(tombKey, JSON.stringify(tomb));
+  } catch (e) {}
+
+  // 4. Fire ClickUp DELETEs (staggered 300ms, fire-and-forget)
+  cuIds.forEach((cuId, idx) => {
+    setTimeout(() => { cuDeleteTask(cuId).catch(() => {}); }, idx * 300);
+  });
+
+  // 5. Optimistic: remove from local state immediately
+  STATE.actions = STATE.actions.filter(a => !actionsToKill.some(k => k._dbId === a._dbId));
+  if (matchedAd) STATE.ads = STATE.ads.filter(x => x.id !== matchedAd.id);
+  STATE.expandedRows.delete(dbId);
+  renderAll();
+
+  toast(`Deleted "${label}" everywhere${cuIds.length ? ` (${cuIds.length} ClickUp task${cuIds.length>1?'s':''})` : ''}`, 'ok');
+  logEvent('deleted', {
+    action_id: dbId, clickup_task_id: action._clickupId,
+    metadata: { title: action.title, angle: action.angle, persona: action.persona, cu_ids_deleted: cuIds.length }
+  });
+}
+window.deleteTaskEverywhere = deleteTaskEverywhere;
+
+// ═════════════════════════════════════════════════════════════
+//  CONTEXT RESOLVERS — brief link + parent task lookup
+// ═════════════════════════════════════════════════════════════
+function resolveBriefUrl(a) {
+  // Case A: inspiration-sourced
+  if (a._fromInspoId) {
+    const res = STATE.inspirationResults.find(r => r.ins_id === a._fromInspoId);
+    if (res && res.clickup_doc_page_url) return res.clickup_doc_page_url;
+  }
+  // Case B: tracker-sourced format has briefUrl
+  if (a.briefUrl) return a.briefUrl;
+  // Case C: sourceFormatId → find format AD with briefUrl
+  if (a.sourceFormatId) {
+    const fmt = STATE.ads.find(x => x.id === a.sourceFormatId);
+    if (fmt && fmt.briefUrl) return fmt.briefUrl;
+  }
+  return null;
+}
+
+function renderContextBlock(a) {
+  const chips = [];
+
+  // Inspiration-sourced
+  if (a._fromInspoId) {
+    const res = STATE.inspirationResults.find(r => r.ins_id === a._fromInspoId);
+    const ins = STATE.inspirations.find(x => x.id === a._fromInspoId);
+    if (ins || res) {
+      chips.push(`<div class="ctx-row">
+        <span class="ctx-label" style="margin:0">Source:</span>
+        <span>From Inspiration${ins ? ' · ' + esc(ins.title || ins.id) : ''}</span>
+        ${res && res.clickup_doc_page_url ? `<a class="ctx-link" href="${escAttr(res.clickup_doc_page_url)}" target="_blank">📄 Brief doc ↗</a>` : ''}
+        ${ins && ins.url ? `<a class="ctx-link" href="${escAttr(ins.url)}" target="_blank">🔗 Original ad ↗</a>` : ''}
+      </div>`);
+    }
+  }
+
+  // Variation of parent
+  if (a.parentAdId) {
+    const parent = STATE.ads.find(x => x.id === a.parentAdId);
+    const parentName = a.parentTaskName || (parent && parent.formatName) || a.parentAdId;
+    const parentCu = (parent && parent._clickupId) || null;
+    chips.push(`<div class="ctx-row">
+      <span class="ctx-label" style="margin:0">Variation of:</span>
+      <span>${esc(parentName)}</span>
+      ${parentCu ? `<a class="ctx-link" href="https://app.clickup.com/t/${escAttr(parentCu)}" target="_blank">↗ Parent in ClickUp</a>` : ''}
+      ${parent && parent.briefUrl ? `<a class="ctx-link" href="${escAttr(parent.briefUrl)}" target="_blank">📄 Parent brief</a>` : ''}
+    </div>`);
+  }
+
+  // Format source (tracker ad)
+  if (a.sourceFormatId && !a.parentAdId) {
+    const fmt = STATE.ads.find(x => x.id === a.sourceFormatId);
+    const fmtName = (fmt && fmt.formatName) || a._sourceFormatName || a.sourceFormatId;
+    const fmtCu = (fmt && fmt._clickupId) || a._sourceClickupId || null;
+    chips.push(`<div class="ctx-row">
+      <span class="ctx-label" style="margin:0">Produced from:</span>
+      <span>${esc(fmtName)}</span>
+      ${fmtCu ? `<a class="ctx-link" href="https://app.clickup.com/t/${escAttr(fmtCu)}" target="_blank">↗ Format in ClickUp</a>` : ''}
+      ${fmt && fmt.briefUrl ? `<a class="ctx-link" href="${escAttr(fmt.briefUrl)}" target="_blank">📄 Format brief</a>` : ''}
+    </div>`);
+  }
+
+  if (!chips.length) return '';
+  return `<div class="ctx-block"><div class="ctx-label">Context</div>${chips.join('')}</div>`;
+}
+
+async function cuOnboard(taskId, taskName) {
+  const pid = STATE.activeProductId;
+  const row = {
+    product_id: pid,
+    payload: {
+      id: 'cu-onboard-' + Date.now(),
+      title: taskName || 'ClickUp task ' + taskId.slice(0, 8),
+      liveStatus: 'Approved',
+      priority: 'normal',
+      _clickupId: taskId,
+      tag: 'onboarded-from-clickup',
+      createdAt: new Date().toISOString()
+    },
+    live_status: 'Approved'
+  };
+  const { error } = await SB.from('manual_actions').insert(row);
+  if (error) { toast('Onboard failed: ' + error.message, 'err'); return; }
+  toast('Onboarded to Action Plan', 'ok');
+  reload(true);
+}
+
+window.cuOnboard = cuOnboard;
+
+function initRange() {
+  document.querySelectorAll('#rangeChip .rc-btn').forEach(b => {
+    b.onclick = () => {
+      document.querySelectorAll('#rangeChip .rc-btn').forEach(x => x.classList.remove('on'));
+      b.classList.add('on');
+      STATE.range.preset = b.dataset.range;
+      const cr = $('customRange');
+      if (STATE.range.preset === 'custom') cr.classList.remove('hide');
+      else cr.classList.add('hide');
+      renderAll();
+    };
+  });
+  $('customFrom').onchange = e => { STATE.range.from = e.target.value; renderAll(); };
+  $('customTo').onchange = e => { STATE.range.to = e.target.value; renderAll(); };
+}
+
+// ═════════════════════════════════════════════════════════════
+//  REALTIME
+// ═════════════════════════════════════════════════════════════
+function subscribeRealtime() {
+  // unsubscribe previous
+  STATE.channels.forEach(c => SB.removeChannel(c));
+  STATE.channels = [];
+  const pid = STATE.activeProductId;
+  if (!pid) return;
+
+  const onChange = async (payload) => {
+    try { await detectAndLogFromRealtime(payload); } catch (e) { console.warn('[rt detect]', e); }
+    reload(true);
+  };
+
+  const tables = ['manual_actions', 'ads', 'angles', 'personas', 'inspirations', 'inspiration_results', 'activity_events'];
+  tables.forEach(t => {
+    const ch = SB.channel('ap-live-' + t)
+      .on('postgres_changes',
+          { event: '*', schema: 'public', table: t, filter: 'product_id=eq.' + pid },
+          onChange)
+      .subscribe();
+    STATE.channels.push(ch);
+  });
+}
+
+// ═════════════════════════════════════════════════════════════
+//  RENDER ALL
+// ═════════════════════════════════════════════════════════════
+function renderAll() {
+  renderHotQueue();
+  renderVelocity();
+  renderToday();
+  renderPulse();
+  renderOverdue();
+  renderPipeline();
+  renderDailyLog();
+  renderScorecard();
+  renderHitRate();
+  renderPatterns();
+  renderTable();
+  renderDebug();
+
+  const now = new Date();
+  $('dateSub').textContent = now.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }).toUpperCase();
+}
+
+function renderDebug() {
+  const prod = STATE.products.find(p => p.id === STATE.activeProductId);
+  const stamped = STATE.actions.filter(a => a._launchedAt).length;
+  const approvedStamped = STATE.actions.filter(a => a._approvedAt).length;
+  const key = getClickUpKey();
+  const listId = getProductListId();
+
+  $('dbgProduct').textContent = 'Product: ' + (prod ? prod.name : '?') + ' (' + (STATE.activeProductId || '—') + ')';
+  $('dbgActions').textContent = 'Actions: ' + STATE.actions.length;
+  $('dbgStamps').textContent = 'Stamps → approved: ' + approvedStamped + ' · launched: ' + stamped;
+  $('dbgKey').textContent = 'ClickUp key: ' + (key ? '✓ set (' + key.slice(0, 6) + '…)' : '✗ MISSING');
+  $('dbgList').textContent = 'List ID: ' + (listId || '✗ MISSING');
+  $('dbgRange').textContent = 'Range: ' + STATE.range.preset;
+
+  // Color-code: yellow if warnings, green if all good
+  const strip = $('debugStrip');
+  const ok = key && listId && STATE.actions.length > 0;
+  if (ok) {
+    strip.style.background = '#DCFCE7';
+    strip.style.borderColor = '#86EFAC';
+    strip.style.color = '#166534';
+  } else {
+    strip.style.background = '#FEE2E2';
+    strip.style.borderColor = '#FCA5A5';
+    strip.style.color = '#991B1B';
+  }
+}
+
+// ═════════════════════════════════════════════════════════════
+//  BOOT
+// ═════════════════════════════════════════════════════════════
+let _reloading = false;
+async function reload(quiet) {
+  if (_reloading) return;
+  _reloading = true;
+  try {
+    if (!quiet) { $('loadingState').classList.remove('hide'); $('apView').classList.add('hide'); }
+    await loadAll();
+    subscribeRealtime();
+    $('loadingState').classList.add('hide');
+    if (STATE.mode === 'action-plan') $('apView').classList.remove('hide');
+    renderAll();
+  } catch (e) {
+    console.error(e);
+    toast('Load failed: ' + e.message, 'err');
+  } finally {
+    _reloading = false;
+  }
+}
+
+async function boot() {
+  initModeToggle();
+  initRange();
+  initSavedViews();
+  initColumnPanel();
+  await loadProducts();
+  await reload();
+  startPolling();                       // begin live ClickUp polling
+}
+
+window.setSort = setSort;
+window.toggleExpand = toggleExpand;
+window.quickKill = quickKill;
+window.quickLaunch = quickLaunch;
+window.reviewAction = reviewAction;
+window.expandActionRow = expandActionRow;
+
+boot();
+</script>
+
+</body>
+</html>

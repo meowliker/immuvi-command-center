@@ -25,6 +25,8 @@ yarn-error.log*
 
 # Dependencies
 node_modules/
+.next/
+*.tsbuildinfo
 __pycache__/
 *.pyc
 .venv/

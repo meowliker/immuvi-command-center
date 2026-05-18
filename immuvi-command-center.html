@@ -20326,13 +20326,95 @@ function apBulkDelete() {
 }
 function apBulkOpenStatusMenu(ev) {
   if (ev) ev.stopPropagation();
-  var statuses = (CLICKUP_STATUSES || []).map(function (s) { return s.status; });
-  if (!statuses.length) statuses = ['Untested','Approved','In Production','Ready to Launch','Testing','Winner','Loser'];
-  var name = prompt('Change status for ' + Object.keys(_apState.selected).length + ' selected to one of:\n\n' + statuses.join(', ') + '\n\nType the exact name:');
-  if (!name) return;
-  Object.keys(_apState.selected).forEach(function (id) { try { updateManualActionStatus(id, name); } catch (e) {} });
-  _apState.selected = {};
-  renderActionPlan();
+  var selectedCount = Object.keys(_apState.selected).length;
+  if (!selectedCount) { toast('No rows selected', 'warn'); return; }
+
+  // Source of truth: CLICKUP_STATUSES (preserves native order + colors)
+  var statuses = (CLICKUP_STATUSES || []).slice().sort(function (a, b) {
+    return (a.orderindex || 0) - (b.orderindex || 0);
+  });
+  if (!statuses.length) {
+    statuses = ['Untested','Approved','In Production','Ready to Launch','Testing','Winner','Mild Winner','Loser','Scale','Killed','Complete']
+      .map(function (n) { return { status: n, color: '#94a3b8' }; });
+  }
+
+  // Build pill list — each pill click triggers immediate bulk apply
+  var pillsHtml = statuses.map(function (s) {
+    var color = s.color || '#94a3b8';
+    // Title-case display label so it matches the inline chip ("testing" → "Testing")
+    var label = (s.status || '').replace(/\b\w/g, function (c) { return c.toUpperCase(); });
+    var safe = escAttr(s.status || '');
+    return '<button class="ap-bulk-status-pill" onclick="apBulkApplyStatus(\'' + safe + '\')" ' +
+      'style="display:flex;align-items:center;gap:10px;width:100%;text-align:left;background:transparent;' +
+      'border:1px solid var(--b);border-radius:8px;padding:10px 14px;margin-bottom:6px;cursor:pointer;' +
+      'font-size:.84rem;color:var(--t1);transition:background .12s">' +
+      '<span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:' + color +
+        ';box-shadow:0 0 0 2px ' + color + '22;flex-shrink:0"></span>' +
+      '<span style="font-weight:600">' + esc(label) + '</span>' +
+      '</button>';
+  }).join('');
+
+  var body =
+    '<style>.ap-bulk-status-pill:hover{background:var(--el)!important;border-color:' + (statuses[0].color || '#94a3b8') + '88!important}</style>' +
+    '<div style="font-size:.78rem;color:var(--t2);margin-bottom:12px">Pick a status to apply to <strong>' +
+      selectedCount + '</strong> selected task' + (selectedCount !== 1 ? 's' : '') + '. ' +
+      'Click = apply immediately. Updates DB + ClickUp for each task.</div>' +
+    '<div style="max-height:60vh;overflow-y:auto">' + pillsHtml + '</div>';
+
+  var foot = '<button class="btn-ghost btn-sm" onclick="closeModal()">Cancel</button>';
+  openModal('Change status — bulk', body, foot);
+}
+
+// Apply a single status to every currently-selected AP row. Mirrors the
+// single-row inline update path (updateManualActionStatus) which handles
+// local state + DB persist + ClickUp PUT + realtime broadcast all in one.
+// 200ms stagger between rows so ClickUp's rate limiter never trips on large
+// batches (same cadence as executeMergePersonas line 15319-15325).
+function apBulkApplyStatus(newStatus) {
+  if (!newStatus) return;
+  var ids = Object.keys(_apState.selected);
+  if (!ids.length) { closeModal(); return; }
+  closeModal();
+
+  var total = ids.length;
+  var done = 0;
+  var failed = 0;
+
+  // Show running progress in a sticky toast. We replace its text as the loop
+  // advances. Simpler than a full progress modal; same UX as bulk-push.
+  var progressToast = (typeof toast === 'function')
+    ? toast('Updating 0 of ' + total + '…', 'info', { sticky: true })
+    : null;
+
+  ids.forEach(function (id, i) {
+    setTimeout(function () {
+      try {
+        updateManualActionStatus(id, newStatus);
+        done++;
+      } catch (e) {
+        failed++;
+        console.warn('[apBulkApplyStatus] failed for', id, e);
+      }
+      // Update the sticky toast — fall back to fresh toast if the sticky API
+      // isn't available (some toast() implementations don't support sticky).
+      if (progressToast && typeof progressToast.update === 'function') {
+        progressToast.update((done + failed) + ' of ' + total +
+          (failed ? ' · ' + failed + ' failed' : '') + '…');
+      }
+      if (done + failed === total) {
+        // Final tally — clear selection + close progress toast, fire summary
+        _apState.selected = {};
+        renderActionPlan();
+        if (progressToast && typeof progressToast.close === 'function') {
+          try { progressToast.close(); } catch (e) {}
+        }
+        var msg = failed === 0
+          ? 'Updated ' + done + ' task' + (done !== 1 ? 's' : '') + ' to ' + newStatus + ' ✓'
+          : done + ' updated · ' + failed + ' failed (check console)';
+        toast(msg, failed === 0 ? 'ok' : 'warn');
+      }
+    }, i * 200);
+  });
 }
 
 // Sequential bulk push to ClickUp with auto-retry (≤2 retries per task).

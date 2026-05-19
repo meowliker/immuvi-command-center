@@ -5370,6 +5370,29 @@ button.mx-dt-action-sent .open { color:#0a84ff; font-weight:700; margin-left:4px
 /* Row hover & click affordance */
 .ins-table tbody tr { cursor:pointer; }
 .ins-table tbody tr.ins-row-active td { background:rgba(79,70,229,0.06); }
+/* 2026-05-19 — Imported-from-another-product marker. Left-edge accent in
+   violet on the first cell of any row whose _sourceProductId is set. Visible
+   at a glance without sacrificing column width. Hover row → tooltip shows
+   "Imported from another product". */
+.ins-table tbody tr[data-imported="1"] td:first-child {
+  box-shadow: inset 3px 0 0 0 #8b5cf6;
+}
+.ins-table tbody tr[data-imported="1"]:hover td { background: rgba(139,92,246,0.04); }
+/* 2026-05-19 — Sticky first column (#). Stays visible when scrolling the
+   wide ins table horizontally. Header gets a higher z-index so it stays
+   above body cells when both stick. Right border separates from scrolling
+   columns so the freeze edge reads visually. */
+.ins-table thead th:first-child,
+.ins-table tbody td:first-child {
+  position: sticky;
+  left: 0;
+  background: var(--card, #ffffff);
+  z-index: 2;
+  border-right: 1px solid var(--b, #e5e7eb);
+}
+.ins-table thead th:first-child { z-index: 3; }
+.ins-table tbody tr.ins-row-active td:first-child { background:#eef0fc; }
+.ins-table tbody tr[data-imported="1"] td:first-child { background:#ffffff; }
 /* Currently classifying — subtle blue highlight + pulse */
 .ins-table tbody tr.ins-row-classifying td { background:rgba(56,182,255,0.07); }
 .ins-table tbody tr.ins-row-classifying td:first-child {
@@ -10097,7 +10120,7 @@ body:not(.booting) #__bootLoader {
         <label class="ap-filter-pill ins-filter-pill" data-key="platform">
           <span class="ap-pill-icon"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="3.5" width="11" height="9" rx="1.5"/><path d="M2.5 6.5h11"/></svg></span>
           <span class="lbl">Platform</span>
-          <select id="insFiltPlatform" onchange="renderInspirations();_insFltPaint()">
+          <select id="insFiltPlatform" onchange="_insFltPaint();renderInspirations()">
             <option value="">All Platforms</option>
             <option>Facebook</option><option>Instagram</option><option>TikTok</option><option>YouTube</option><option>Other</option>
           </select>
@@ -10107,7 +10130,7 @@ body:not(.booting) #__bootLoader {
         <label class="ap-filter-pill ins-filter-pill" data-key="status">
           <span class="ap-pill-icon"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="8" r="5.5"/><circle cx="8" cy="8" r="2" fill="currentColor"/></svg></span>
           <span class="lbl">Status</span>
-          <select id="insFiltStatus" onchange="renderInspirations();_insFltPaint()">
+          <select id="insFiltStatus" onchange="_insFltPaint();renderInspirations()">
             <option value="">All Statuses</option>
             <option>Saved</option><option>Classified</option><option>Briefed</option><option>Live</option><option>Winner</option><option>Loser</option>
           </select>
@@ -10117,7 +10140,7 @@ body:not(.booting) #__bootLoader {
         <label class="ap-filter-pill ins-filter-pill" data-key="hook">
           <span class="ap-pill-icon"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8c0-3 2.5-5 5-5s5 2 5 5-2 5-5 5"/><path d="M8 8l2 2"/></svg></span>
           <span class="lbl">Hook</span>
-          <select id="insFiltHook" onchange="renderInspirations();_insFltPaint()">
+          <select id="insFiltHook" onchange="_insFltPaint();renderInspirations()">
             <option value="">All Hooks</option>
             <option>Curiosity</option><option>Fear</option><option>Social Proof</option><option>Aspirational</option>
             <option>Direct Offer</option><option>POV</option><option>Question</option><option>Pattern Interrupt</option><option>Pain / Problem</option><option>Controversy / Bold Claim</option>
@@ -10128,7 +10151,7 @@ body:not(.booting) #__bootLoader {
         <label class="ap-filter-pill ins-filter-pill" data-key="type">
           <span class="ap-pill-icon"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="3.5" width="11" height="9" rx="1.5"/><path d="M6.5 6.5l3 1.5-3 1.5z" fill="currentColor"/></svg></span>
           <span class="lbl">Type</span>
-          <select id="insFiltType" onchange="renderInspirations();_insFltPaint()">
+          <select id="insFiltType" onchange="_insFltPaint();renderInspirations()">
             <option value="">All Types</option>
             <option>Video</option><option>Photo</option><option>Carousel</option><option>UGC</option>
           </select>
@@ -10138,7 +10161,7 @@ body:not(.booting) #__bootLoader {
         <label class="ap-filter-pill ins-filter-pill" data-key="performance">
           <span class="ap-pill-icon"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 13.5h11M4 11l2-3 2.5 2 3-5"/><circle cx="11.5" cy="5" r="1.2" fill="currentColor"/></svg></span>
           <span class="lbl">Performance</span>
-          <select id="insFiltPerformance" onchange="renderInspirations();_insFltPaint()">
+          <select id="insFiltPerformance" onchange="_insFltPaint();renderInspirations()">
             <option value="">All</option>
             <option value="unused">🟡 Unused</option>
             <option value="placed">📌 Placed</option>
@@ -10153,11 +10176,23 @@ body:not(.booting) #__bootLoader {
         <label class="ap-filter-pill ins-filter-pill" data-key="format">
           <span class="ap-pill-icon"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="2.5" width="11" height="11" rx="1.5"/><path d="M2.5 6.5h11M6.5 2.5v11"/></svg></span>
           <span class="lbl">Format</span>
-          <select id="insFiltFormat" onchange="renderInspirations();_insFltPaint()">
+          <select id="insFiltFormat" onchange="_insFltPaint();renderInspirations()">
             <option value="">All Formats</option>
             <option>Airplane Window Text</option><option>WhatsApp Chat Scroll</option><option>Hand Draw Reveal</option>
             <option>Couple Overlay Labels</option><option>Comment Reply Sticker</option><option>Typewriter Text Build</option>
             <option>Card Flip Reveal</option><option>POV Palm Reading</option><option>AI Portrait Generation</option><option>Other</option>
+          </select>
+          <span class="caret">▾</span>
+        </label>
+
+        <!-- 2026-05-19 — Source filter: Original (created here) vs Imported (from another product) -->
+        <label class="ap-filter-pill ins-filter-pill" data-key="source">
+          <span class="ap-pill-icon"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11V5l5-2 5 2v6l-5 2-5-2z"/><path d="M3 5l5 2 5-2M8 7v8"/></svg></span>
+          <span class="lbl">Source</span>
+          <select id="insFiltSource" onchange="_insFltPaint();renderInspirations()">
+            <option value="">All</option>
+            <option value="original">Original only</option>
+            <option value="imported">Imported only</option>
           </select>
           <span class="caret">▾</span>
         </label>
@@ -10179,6 +10214,12 @@ body:not(.booting) #__bootLoader {
         <span class="ap-result-count" id="insResultCount">— / —</span>
       </div>
     </div>
+    <!-- 2026-05-19 — Active-filter chips strip. Hidden when no filters
+         active. Mirrors the AP pattern so the buyer can see at-a-glance
+         what's filtering the table and clear individual filters or all
+         at once. _insRenderActiveChips() (called from _insFltPaint)
+         populates this with one button per active filter. -->
+    <div id="insActiveChips" style="display:none"></div>
     <div class="ins-table-wrap">
       <table class="ins-table">
         <thead>
@@ -14704,11 +14745,12 @@ function _producerOpenDetailPopover(taskId, anchorEl) {
   pop.style.zIndex = 9999;
   pop.innerHTML = html;
   document.body.appendChild(pop);
-  var rect = anchorEl ? anchorEl.getBoundingClientRect() : { left: 100, top: 100, bottom: 130 };
+  var rect = anchorEl ? anchorEl.getBoundingClientRect() : { left: 100, top: 100, bottom: 130, height: 24 };
   var inner = pop.querySelector('.producer-detail-pop');
   inner.style.position = 'fixed';
-  inner.style.left = Math.max(8, Math.min(window.innerWidth - 360, rect.left)) + 'px';
-  inner.style.top = (rect.bottom + 6) + 'px';
+  // 2026-05-19 — use smart placement so the popup flips up when there's no
+  // room below + caps height with scroll instead of clipping invisibly.
+  _smartPlacePopup(inner, rect);
   // Outside-click close.
   setTimeout(function () {
     var closer = function (e) {
@@ -18006,18 +18048,69 @@ function openTestingCheckpointPopover(adId, anchorEl) {
   pop.className = 'ap-picker-wrap';
   pop.innerHTML = html;
   document.body.appendChild(pop);
-  var rect = anchorEl ? anchorEl.getBoundingClientRect() : { left: 100, bottom: 100, top: 100 };
+  var rect = anchorEl ? anchorEl.getBoundingClientRect() : { left: 100, bottom: 100, top: 100, height: 24 };
   var inner = pop.querySelector('.ap-picker');
   inner.style.position = 'fixed';
-  inner.style.left = Math.max(8, rect.left) + 'px';
-  inner.style.top = (rect.bottom + 6) + 'px';
   inner.style.zIndex = 9999;
+  _smartPlacePopup(inner, rect);
   setTimeout(function () {
     document.addEventListener('mousedown', _apClosePickers, true);
     document.addEventListener('keydown',   _apPickerKey,    true);
     window.addEventListener('scroll',      _apClosePickers, true);
     window.addEventListener('resize',      _apClosePickers);
   }, 10);
+}
+
+// 2026-05-19 — Generic smart popup placement.
+// Places `popInnerEl` near `anchorRect` (a getBoundingClientRect() return).
+// Prefers placement below the anchor. Flips to above when the popup would
+// overflow the bottom of the viewport. Slides left/right so it never
+// overflows horizontally. Caps height + adds scroll when neither side has
+// enough room (instead of clipping invisibly).
+// Use: `_smartPlacePopup(inner, anchorEl.getBoundingClientRect())`
+function _smartPlacePopup(popInnerEl, anchorRect, opts) {
+  opts = opts || {};
+  var margin = (opts.margin != null) ? opts.margin : 8;
+  var gap    = (opts.gap    != null) ? opts.gap    : 6;
+  if (!popInnerEl || !anchorRect) return;
+
+  // Measure popup off-screen first so we can compute the right slot
+  var prevVis = popInnerEl.style.visibility;
+  popInnerEl.style.visibility = 'hidden';
+  popInnerEl.style.left = '-9999px';
+  popInnerEl.style.top  = '0px';
+  popInnerEl.style.maxHeight = ''; popInnerEl.style.overflowY = '';
+  var pRect = popInnerEl.getBoundingClientRect();
+  var pw = pRect.width  || 280;
+  var ph = pRect.height || 200;
+
+  var vw = window.innerWidth  || document.documentElement.clientWidth;
+  var vh = window.innerHeight || document.documentElement.clientHeight;
+
+  // Horizontal: prefer anchor's left edge; clamp inside viewport.
+  var left = Math.max(margin, Math.min(vw - pw - margin, anchorRect.left));
+
+  // Vertical: prefer below, flip up if not enough room.
+  var spaceBelow = vh - anchorRect.bottom - gap;
+  var spaceAbove = anchorRect.top - gap;
+  var top;
+  if (ph + margin <= spaceBelow) {
+    top = anchorRect.bottom + gap;
+  } else if (ph + margin <= spaceAbove) {
+    top = anchorRect.top - ph - gap;
+  } else if (spaceBelow >= spaceAbove) {
+    top = anchorRect.bottom + gap;
+    popInnerEl.style.maxHeight = Math.max(120, spaceBelow - margin) + 'px';
+    popInnerEl.style.overflowY = 'auto';
+  } else {
+    top = margin;
+    popInnerEl.style.maxHeight = Math.max(120, spaceAbove + anchorRect.height) + 'px';
+    popInnerEl.style.overflowY = 'auto';
+  }
+
+  popInnerEl.style.left = left + 'px';
+  popInnerEl.style.top  = top  + 'px';
+  popInnerEl.style.visibility = prevVis || '';
 }
 
 // ═════════════════════════════════════════════════════════════════════
@@ -39775,6 +39868,8 @@ function renderInspirations() {
   var typeFlt  = (document.getElementById('insFiltType')||{}).value || '';
   var perfFlt  = (document.getElementById('insFiltPerformance')||{}).value || '';
   var search   = ((document.getElementById('insFiltSearch')||{}).value || '').toLowerCase();
+  // 2026-05-19 — source filter: 'original' = created in this product, 'imported' = from another product
+  var sourceFlt = (document.getElementById('insFiltSource')||{}).value || '';
 
   // Build a verdict map per inspiration once (avoids recomputing inside the filter loop)
   var perfVerdicts = {};
@@ -39816,6 +39911,9 @@ function renderInspirations() {
     if (hook && ins.hookType !== hook) return false;
     if (typeFlt && (ins.adType || '') !== typeFlt) return false;
     if (perfFlt && perfVerdicts[ins.id] !== perfFlt) return false;
+    // 2026-05-19 — Source filter
+    if (sourceFlt === 'imported' && !ins._sourceProductId) return false;
+    if (sourceFlt === 'original' && !!ins._sourceProductId) return false;
     if (pipeFilter && typeof window._insPipelinePassesFilter === 'function') {
       var qr = queueByInsId[ins.id] || null;
       if (!window._insPipelinePassesFilter(ins, qr)) return false;
@@ -39959,7 +40057,7 @@ function renderInspirations() {
       ? '<button class="ins-dupe-dot ' + ins._dupeType + '" onclick="toggleDupeBanner(' + insIdQ + ')" title="' + ({ winner:'Similar ad WON — click to see', loser:'Similar ad LOST — click to see', tested:'Similar ad exists — click to see' }[ins._dupeType]||'Duplicate detected') + '">!</button>'
       : '';
 
-    var mainRow = '<tr data-ins-id="' + escAttr(ins.id) + '">' +
+    var mainRow = '<tr data-ins-id="' + escAttr(ins.id) + '"' + (ins._sourceProductId ? ' data-imported="1" title="Imported from another product"' : '') + '>' +
       // 1. #
       '<td style="font-family:\'JetBrains Mono\',monospace;font-size:0.65rem;color:var(--t3);white-space:nowrap">'+esc(ins.id)+dupeDot+'</td>' +
       // 2. Format Name
@@ -40304,10 +40402,20 @@ function openProductPicker() {
             '<table class="ins-picker-table" id="insPickerTable">' +
               '<thead id="insPickerThead"><tr>' +
                 '<th style="width:30px"><input type="checkbox" id="insPickerSelectAll" onchange="toggleAllPickerRows(this.checked)"></th>' +
-                '<th>Format Name</th><th>Brand</th><th>Angle</th><th>Persona</th>' +
-                '<th>Hook</th><th>Structure</th><th>Funnel</th><th>Status</th><th>From</th>' +
+                // 2026-05-19 — clickable sort headers. Default sort = date desc (newest first).
+                '<th style="cursor:pointer;user-select:none" onclick="_setPickerSort(\'id\')"     data-sort-col="id">INS # <span class="sort-arr" data-col="id"></span></th>' +
+                '<th style="cursor:pointer;user-select:none" onclick="_setPickerSort(\'name\')"   data-sort-col="name">Format Name <span class="sort-arr" data-col="name"></span></th>' +
+                '<th style="cursor:pointer;user-select:none" onclick="_setPickerSort(\'brand\')"  data-sort-col="brand">Brand <span class="sort-arr" data-col="brand"></span></th>' +
+                '<th style="cursor:pointer;user-select:none" onclick="_setPickerSort(\'angle\')"  data-sort-col="angle">Angle <span class="sort-arr" data-col="angle"></span></th>' +
+                '<th style="cursor:pointer;user-select:none" onclick="_setPickerSort(\'persona\')" data-sort-col="persona">Persona <span class="sort-arr" data-col="persona"></span></th>' +
+                '<th style="cursor:pointer;user-select:none" onclick="_setPickerSort(\'hook\')"   data-sort-col="hook">Hook <span class="sort-arr" data-col="hook"></span></th>' +
+                '<th style="cursor:pointer;user-select:none" onclick="_setPickerSort(\'structure\')" data-sort-col="structure">Structure <span class="sort-arr" data-col="structure"></span></th>' +
+                '<th style="cursor:pointer;user-select:none" onclick="_setPickerSort(\'funnel\')" data-sort-col="funnel">Funnel <span class="sort-arr" data-col="funnel"></span></th>' +
+                '<th style="cursor:pointer;user-select:none" onclick="_setPickerSort(\'status\')" data-sort-col="status">Status <span class="sort-arr" data-col="status"></span></th>' +
+                '<th style="cursor:pointer;user-select:none" onclick="_setPickerSort(\'from\')"   data-sort-col="from">From <span class="sort-arr" data-col="from"></span></th>' +
+                '<th style="cursor:pointer;user-select:none" onclick="_setPickerSort(\'date\')"   data-sort-col="date">Added <span class="sort-arr" data-col="date">↓</span></th>' +
               '</tr></thead>' +
-              '<tbody id="insPickerTbody"><tr><td colspan="10" style="text-align:center;padding:24px;color:var(--t3);font-size:0.75rem">Select one or more products to preview</td></tr></tbody>' +
+              '<tbody id="insPickerTbody"><tr><td colspan="12" style="text-align:center;padding:24px;color:var(--t3);font-size:0.75rem">Select one or more products to preview</td></tr></tbody>' +
             '</table>' +
           '</div>' +
           '<div class="ins-picker-foot">' +
@@ -40454,10 +40562,15 @@ function refreshPickerPreview() {
 
   if (rows.length === 0) {
     var msg = checked.length > 0 ? 'No items found for selected products' : 'Select one or more products to preview';
-    tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;padding:24px;color:var(--t3);font-size:0.75rem">' + msg + '</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="12" style="text-align:center;padding:24px;color:var(--t3);font-size:0.75rem">' + msg + '</td></tr>';
     _updatePickerCountLabel();
     return;
   }
+
+  // 2026-05-19 — apply current sort before render
+  rows = _pickerSortRows(rows);
+  window._pickerRows = rows;
+  _refreshPickerSortArrows();
 
   var tab          = window._pickerTab || 'inspo';
   var funnelColor  = function(fs) { return fs==='TOF'?'#6366f1':fs==='MOF'?'#f59e0b':'#10b981'; };
@@ -40471,21 +40584,27 @@ function refreshPickerPreview() {
         ? '<span class="ins-cross-reuse-pill active">'+crossUses+' product'+(crossUses>1?'s':'')+'</span>'
         : '<span style="color:var(--t3);font-size:0.7rem">—</span>';
       var statusCls = (ad.status||'').toLowerCase().replace(/\s+/g,'-');
+      var winDate = ad.createdAt || ad.dateCreated || ad.created_at || null;
       return '<tr data-row-type="win"'+hidden+'>' +
         '<td><input type="checkbox" class="ins-picker-row-cb" data-idx="'+i+'" onchange="updatePickerSelectedCount();_updatePickerImportLabel()"></td>' +
+        '<td style="font-size:0.7rem;color:var(--t2);font-family:var(--mono,monospace)">'+esc(ad.id||'—')+'</td>' +
         '<td style="font-weight:500;max-width:160px"><span class="ins-win-badge">🏆 '+esc(ad.status)+'</span> '+esc(ad.formatName||ad.id)+'</td>' +
+        '<td style="font-size:0.7rem;color:var(--t3)">—</td>' +
         '<td style="font-size:0.7rem;max-width:100px">'+esc(ad.angle||'—')+'</td>' +
         '<td style="font-size:0.7rem;max-width:100px">'+esc(ad.persona||'—')+'</td>' +
         '<td style="font-size:0.7rem;white-space:nowrap">'+esc(ad.hookType||'—')+'</td>' +
+        '<td style="font-size:0.7rem;white-space:nowrap">'+esc(ad.creativeStructure||'—')+'</td>' +
         '<td style="font-size:0.7rem"><span style="font-weight:700;color:'+funnelColor(ad.funnelStage)+'">'+esc(ad.funnelStage||'—')+'</span></td>' +
         '<td><span class="ins-status-badge '+statusCls+'">'+esc(ad.status)+'</span></td>' +
-        '<td>'+usedBadge+'</td>' +
         '<td><span class="ins-tag-pill imported">'+esc(row.productName)+'</span></td>' +
+        '<td style="font-size:0.7rem;color:var(--t2);white-space:nowrap" title="'+esc(_pickerFmtDate(winDate,true))+'">'+esc(_pickerFmtDate(winDate))+'</td>' +
       '</tr>';
     } else {
       var ins = row.ins;
+      var insDate = ins.classifiedAt || ins.created_at || ins.createdAt || ins.queuedAt || ins.addedAt || null;
       return '<tr data-row-type="inspo"'+hidden+'>' +
         '<td><input type="checkbox" class="ins-picker-row-cb" data-idx="'+i+'" onchange="updatePickerSelectedCount();_updatePickerImportLabel()"></td>' +
+        '<td style="font-size:0.7rem;color:var(--t2);font-family:var(--mono,monospace)">'+esc(ins.id||'—')+'</td>' +
         '<td style="font-weight:500;max-width:160px">'+esc(ins.formatName || ins.creativeUSP || '—')+'</td>' +
         '<td style="font-size:0.7rem">'+esc(ins.brand||'—')+'</td>' +
         '<td style="font-size:0.7rem;max-width:100px">'+esc(ins.angle||'—')+'</td>' +
@@ -40495,6 +40614,7 @@ function refreshPickerPreview() {
         '<td style="font-size:0.7rem"><span style="font-weight:700;color:'+funnelColor(ins.funnelStage)+'">'+esc(ins.funnelStage||'—')+'</span></td>' +
         '<td><span class="ins-status-badge '+(ins.status||'saved').toLowerCase()+'">'+esc(ins.status||'Saved')+'</span></td>' +
         '<td><span class="ins-tag-pill imported">'+esc(row.productName)+'</span></td>' +
+        '<td style="font-size:0.7rem;color:var(--t2);white-space:nowrap" title="'+esc(_pickerFmtDate(insDate,true))+'">'+esc(_pickerFmtDate(insDate))+'</td>' +
       '</tr>';
     }
   }).join('');
@@ -40507,6 +40627,87 @@ function updatePickerSelectedCount() {
   var selected = document.querySelectorAll('.ins-picker-row-cb:checked').length;
   var el = document.getElementById('insPickerSelectedCount');
   if (el) el.textContent = selected + ' selected';
+}
+
+// 2026-05-19 — Sort + date helpers for the cross-product picker.
+// Default sort = `date desc` (newest classified/created first), matching
+// the main Inspiration tab's natural order.
+window._pickerSort = window._pickerSort || { col: 'date', dir: -1 };
+
+function _pickerFmtDate(ts, absolute) {
+  if (!ts) return '—';
+  var t = (typeof ts === 'string') ? new Date(ts).getTime() : Number(ts);
+  if (!t) return '—';
+  if (absolute) return new Date(t).toISOString().slice(0, 10);
+  var sec = Math.floor((Date.now() - t) / 1000);
+  if (sec < 0)      return 'now';
+  if (sec < 60)     return sec + 's ago';
+  if (sec < 3600)   return Math.floor(sec/60) + 'm ago';
+  if (sec < 86400)  return Math.floor(sec/3600) + 'h ago';
+  if (sec < 86400*7)  return Math.floor(sec/86400) + 'd ago';
+  if (sec < 86400*30) return Math.floor(sec/86400/7) + 'w ago';
+  return new Date(t).toISOString().slice(0, 10);
+}
+
+// Map column key → comparable value from a row (works for both inspo + win).
+function _pickerSortKey(row, col) {
+  if (!row) return '';
+  var x = (row.type === 'inspo') ? row.ins : row.ad;
+  if (!x) return '';
+  switch (col) {
+    case 'id':       return x.id || '';
+    case 'name':     return (x.formatName || x.creativeUSP || x.id || '').toLowerCase();
+    case 'brand':    return (x.brand || '').toLowerCase();
+    case 'angle':    return (x.angle || '').toLowerCase();
+    case 'persona':  return (x.persona || '').toLowerCase();
+    case 'hook':     return (x.hookType || '').toLowerCase();
+    case 'structure':return (x.creativeStructure || '').toLowerCase();
+    case 'funnel':   return (x.funnelStage || '').toLowerCase();
+    case 'status':   return (x.status || '').toLowerCase();
+    case 'from':     return (row.productName || '').toLowerCase();
+    case 'date':     return (x.classifiedAt || x.created_at || x.createdAt || x.queuedAt || x.addedAt || 0);
+    default:         return '';
+  }
+}
+
+function _pickerSortRows(rows) {
+  var s = window._pickerSort || { col: 'date', dir: -1 };
+  var col = s.col, dir = s.dir;
+  // Sort a copy so toggling tab/sort doesn't mutate the source order
+  var out = rows.slice();
+  out.sort(function (a, b) {
+    var av = _pickerSortKey(a, col);
+    var bv = _pickerSortKey(b, col);
+    if (av === bv) return 0;
+    if (av == null || av === '') return 1;
+    if (bv == null || bv === '') return -1;
+    if (av < bv) return -1 * dir;
+    if (av > bv) return  1 * dir;
+    return 0;
+  });
+  return out;
+}
+
+function _setPickerSort(col) {
+  if (!col) return;
+  var s = window._pickerSort || { col: 'date', dir: -1 };
+  if (s.col === col) {
+    s.dir = (s.dir === -1) ? 1 : -1;       // toggle direction
+  } else {
+    s.col = col;
+    // Sensible defaults: date defaults to newest first; everything else asc
+    s.dir = (col === 'date' || col === 'id') ? -1 : 1;
+  }
+  window._pickerSort = s;
+  refreshPickerPreview();
+}
+
+function _refreshPickerSortArrows() {
+  var s = window._pickerSort || { col: 'date', dir: -1 };
+  document.querySelectorAll('.sort-arr').forEach(function (el) {
+    var c = el.getAttribute('data-col');
+    el.textContent = (c === s.col) ? (s.dir === -1 ? '↓' : '↑') : '';
+  });
 }
 
 function toggleAllPickerRows(checked) {
@@ -40536,7 +40737,13 @@ function _doImportInspos(idxs, rows) {
     if (!row || row.type !== 'inspo') return;
     var sourceIns = row.ins;
     if (INSPIRATIONS.some(function(i){ return i.sourceUrl && i.sourceUrl === sourceIns.sourceUrl; })) return;
-    var preservedStatus = (CLASSIFIED_STATUSES.indexOf(sourceIns.status) !== -1) ? sourceIns.status : 'Saved';
+    // 2026-05-19 — Import resets status + classifiedAt so the imported inspo
+    // shows as fresh for THIS product. Source's verdict (Testing/Winner/Loser)
+    // was for THAT product's audience — meaningless here. Classification
+    // metadata (angle/persona/hook/structure) DOES carry over via the
+    // Object.assign(sourceIns, ...) below, so when there was classification
+    // data the new status is 'Classified', not 'Saved'.
+    var preservedStatus = (CLASSIFIED_STATUSES.indexOf(sourceIns.status) !== -1) ? 'Classified' : 'Saved';
     var newIns = Object.assign({}, sourceIns, {
       id:               'INS-' + String(INS_NEXT_ID).padStart(3,'0'),
       status:           preservedStatus,
@@ -40545,10 +40752,13 @@ function _doImportInspos(idxs, rows) {
       _sourceProductId: row.productId,
       _sourceInsId:     sourceIns.id,
       addedAt:          Date.now(),
-      classifiedAt:     sourceIns.classifiedAt || null,
-      _clickupDocPageUrl: '',
-      _clickupDocId:    '',
-      _inspoDocCreated: false
+      classifiedAt:     Date.now()
+      // 2026-05-19 — Removed the resets of _clickupDocPageUrl / _clickupDocId /
+      // _inspoDocCreated. The Object.assign(sourceIns, ...) above now lets
+      // them flow through unchanged, so the imported inspiration's "Brief"
+      // column points to the SAME ClickUp doc that the source had. The brief
+      // content is identical (same creative format/concept), so reusing it
+      // saves a re-classify pass and keeps the editor's link intact.
     });
     INS_NEXT_ID++;
     INSPIRATIONS.unshift(newIns);
@@ -42442,7 +42652,10 @@ window._clearPendingCu = _clearPendingCu;
     }
     // Filter inputs read from DOM each render — include their values.
     function _v(id){ var el=document.getElementById(id); return el ? el.value || '' : ''; }
-    s += '#flt=' + _v('insFiltPlatform') + '|' + _v('insFiltFormat') + '|' + _v('insFiltStatus') + '|' + _v('insFiltHook') + '|' + _v('insFiltType') + '|' + _v('insFiltPerformance') + '|' + _v('insFiltSearch');
+    // 2026-05-20 — include insFiltSource so the no-op-suppression wrapper
+    // doesn't skip the render when only the Source filter changes. Same
+    // bug class as the _apFp+_apColState fix from 2026-05-16.
+    s += '#flt=' + _v('insFiltPlatform') + '|' + _v('insFiltFormat') + '|' + _v('insFiltStatus') + '|' + _v('insFiltHook') + '|' + _v('insFiltType') + '|' + _v('insFiltPerformance') + '|' + _v('insFiltSearch') + '|' + _v('insFiltSource');
     // ADs status fingerprint — performance filter depends on it
     if (typeof ADS !== 'undefined' && Array.isArray(ADS)) {
       var adFp = '';
@@ -43052,7 +43265,9 @@ window._clearPendingCu = _clearPendingCu;
 
   // ── Filter pill paint: highlight pills with non-empty values ──
   window._insFltPaint = function () {
-    [['insFiltPlatform','platform'], ['insFiltStatus','status'], ['insFiltHook','hook'], ['insFiltType','type'], ['insFiltFormat','format'], ['insFiltPerformance','performance']].forEach(function(pair){
+    // 2026-05-19 — added 'source' so the new Source filter updates its label
+    // + integrates with the clear-button "any hot" check.
+    [['insFiltPlatform','platform'], ['insFiltStatus','status'], ['insFiltHook','hook'], ['insFiltType','type'], ['insFiltFormat','format'], ['insFiltPerformance','performance'], ['insFiltSource','source']].forEach(function(pair){
       var el = document.getElementById(pair[0]);
       if (!el) return;
       var pill = el.closest('.ins-filter-pill');
@@ -43063,9 +43278,9 @@ window._clearPendingCu = _clearPendingCu;
       var lbl = pill.querySelector('.lbl');
       if (lbl) {
         var defaultLbl = pair[1].charAt(0).toUpperCase() + pair[1].slice(1);
-        // Performance filter shows the selected option's text, not the value key
+        // Performance + Source filters show option text, not value key
         var displayValue = hot
-          ? (pair[1] === 'performance' ? (el.options[el.selectedIndex] ? el.options[el.selectedIndex].textContent : el.value) : el.value)
+          ? ((pair[1] === 'performance' || pair[1] === 'source') ? (el.options[el.selectedIndex] ? el.options[el.selectedIndex].textContent : el.value) : el.value)
           : defaultLbl;
         lbl.textContent = displayValue;
       }
@@ -43078,19 +43293,70 @@ window._clearPendingCu = _clearPendingCu;
       (document.getElementById('insFiltType')        || {}).value ||
       (document.getElementById('insFiltFormat')      || {}).value ||
       (document.getElementById('insFiltPerformance') || {}).value ||
+      (document.getElementById('insFiltSource')      || {}).value ||
       (document.getElementById('insFiltSearch')      || {}).value
     );
     var btn = document.getElementById('insClearFiltersBtn');
     if (btn) btn.style.display = anyHot ? '' : 'none';
+    // 2026-05-19 — render the active-chips strip below the toolbar for
+    // instant visual feedback. Mirrors AP at line ~20325.
+    if (typeof window._insRenderActiveChips === 'function') window._insRenderActiveChips();
   };
 
   window._insClearAllFilters = function () {
-    ['insFiltPlatform','insFiltStatus','insFiltHook','insFiltType','insFiltFormat','insFiltPerformance','insFiltSearch'].forEach(function(id){
+    ['insFiltPlatform','insFiltStatus','insFiltHook','insFiltType','insFiltFormat','insFiltPerformance','insFiltSource','insFiltSearch'].forEach(function(id){
       var el = document.getElementById(id);
       if (el) el.value = '';
     });
-    if (typeof renderInspirations === 'function') renderInspirations();
     window._insFltPaint();
+    if (typeof renderInspirations === 'function') renderInspirations();
+  };
+
+  // 2026-05-19 — Active-filter chips strip. One chip per active filter with
+  // × to clear that single filter, plus a "Clear all" button on the right.
+  // Hidden when no filters are active. Called from _insFltPaint so it
+  // updates instantly on every change (before the table re-renders).
+  window._insRenderActiveChips = function () {
+    var box = document.getElementById('insActiveChips');
+    if (!box) return;
+    var sources = [
+      ['insFiltPlatform',    'Platform'],
+      ['insFiltStatus',      'Status'],
+      ['insFiltHook',        'Hook'],
+      ['insFiltType',        'Type'],
+      ['insFiltFormat',      'Format'],
+      ['insFiltPerformance', 'Performance'],
+      ['insFiltSource',      'Source'],
+      ['insFiltSearch',      'Search'],
+    ];
+    var chips = [];
+    sources.forEach(function (p) {
+      var el = document.getElementById(p[0]);
+      if (!el || !el.value) return;
+      var valText = (el.tagName === 'SELECT' && el.options[el.selectedIndex])
+                      ? el.options[el.selectedIndex].textContent
+                      : el.value;
+      chips.push(
+        '<button class="ap-active-chip" onclick="_insClearOneFilter(\'' + p[0] + '\')">' +
+          '<span class="ap-active-chip-k">' + p[1] + ':</span> ' +
+          '<span class="ap-active-chip-v">' + (valText || '—').replace(/</g,'&lt;') + '</span>' +
+          '<span class="ap-active-chip-x">×</span>' +
+        '</button>'
+      );
+    });
+    if (!chips.length) { box.innerHTML = ''; box.style.display = 'none'; return; }
+    box.style.display = '';
+    box.innerHTML = '<div class="ap-active-chips"><span class="ap-active-chips-lbl">Active:</span>' +
+                    chips.join('') +
+                    '<button class="ap-active-chips-clearall" onclick="_insClearAllFilters()">Clear all</button>' +
+                    '</div>';
+  };
+
+  window._insClearOneFilter = function (filterId) {
+    var el = document.getElementById(filterId);
+    if (el) el.value = '';
+    window._insFltPaint();
+    if (typeof renderInspirations === 'function') renderInspirations();
   };
 
   // Result counter — written by renderInspirations after filter

@@ -3391,6 +3391,31 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   margin-left: 1px;
 }
 
+/* ─────────────────────────────────────────────────────────────────────
+   2026-05-19 — Live-refresh smoothing.
+
+   Two layers:
+   1. View Transitions API crossfade — wraps the renderAll() call so the
+      full-panel innerHTML swap on every 30s sync poll fades from old to
+      new instead of blinking.
+   2. Min-height stabilizers on the five heavy panels so a brief empty
+      state during the swap doesn't cause surrounding layout to jump.
+
+   Both are progressive enhancement. Safari ≥18 and Chrome/Edge ≥111 use
+   the native crossfade; Firefox falls back to instant swap (current
+   behavior — no regression).
+   ───────────────────────────────────────────────────────────────────── */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 0.18s;
+  animation-timing-function: ease-out;
+}
+#panel-matrix,
+#panel-actions,
+#panel-creatives,
+#panel-angles,
+#panel-personas { min-height: 600px; }
+
 /* Segmented Window / Lifetime toggle (replaces the legacy radios). */
 .ap-fbv2 .ap-mode-seg {
   display: inline-flex;
@@ -12446,8 +12471,8 @@ const DB = {
       }
     });
     return {
-      ANGLES: (angles.data || []).map(function (a) { return { id: a.id, name: a.name, status: a.status, sourceLink: a.source_link || '', notes: a.notes || '', createdAt: a.created_at ? new Date(a.created_at).getTime() : null }; }),
-      PERSONAS: (personas.data || []).map(function (p) { return { id: p.id, name: p.name, status: p.status, sourceLink: p.source_link || '', notes: p.notes || '' }; }),
+      ANGLES: (angles.data || []).map(function (a) { return { id: a.id, name: a.name, status: a.status, sourceLink: a.source_link || '', notes: a.notes || '', createdAt: a.created_at ? new Date(a.created_at).getTime() : null, archivedAt: a.archived_at ? new Date(a.archived_at).getTime() : null }; }),
+      PERSONAS: (personas.data || []).map(function (p) { return { id: p.id, name: p.name, status: p.status, sourceLink: p.source_link || '', notes: p.notes || '', archivedAt: p.archived_at ? new Date(p.archived_at).getTime() : null }; }),
       ADS: (ads.data || []).map(_rowToAd),
       MATRIX_CELL_META: meta,
       CELL_CREATIVE_ASSIGNMENTS: assigns,
@@ -12498,7 +12523,8 @@ const DB = {
     }
     const angleRows = survivingLocalAngles.map(function (a) {
       // 2026-05-17 — last-line defense: strip badge-like suffix at the DB-write boundary.
-      return { id: a.id, product_id: productId, name: _normalizeTaxonomyName(a.name || ''), status: a.status || 'Untested', source_link: a.sourceLink || null, notes: a.notes || null };
+      // 2026-05-19 — carry archived_at through so saveState doesn't clobber it.
+      return { id: a.id, product_id: productId, name: _normalizeTaxonomyName(a.name || ''), status: a.status || 'Untested', source_link: a.sourceLink || null, notes: a.notes || null, archived_at: a.archivedAt ? new Date(a.archivedAt).toISOString() : null };
     });
     const angleIds = new Set(angleRows.map(function (r) { return r.id; }));
     const angleOrphans = (existingAngles.data || []).filter(function (r) { return !angleIds.has(r.id); }).map(function (r) { return r.id; });
@@ -12519,7 +12545,7 @@ const DB = {
       }
     }
     const personaRows = survivingLocalPersonas.map(function (p) {
-      return { id: p.id, product_id: productId, name: _normalizeTaxonomyName(p.name || ''), status: p.status || 'Untested', source_link: p.sourceLink || null, notes: p.notes || null };
+      return { id: p.id, product_id: productId, name: _normalizeTaxonomyName(p.name || ''), status: p.status || 'Untested', source_link: p.sourceLink || null, notes: p.notes || null, archived_at: p.archivedAt ? new Date(p.archivedAt).toISOString() : null };
     });
     const personaIds = new Set(personaRows.map(function (r) { return r.id; }));
     const personaOrphans = (existingPersonas.data || []).filter(function (r) { return !personaIds.has(r.id); }).map(function (r) { return r.id; });
@@ -16651,11 +16677,23 @@ function _renderBootTabOnly(activeTabId) {
   scheduleIdle(renderNext);
 }
 
+// 2026-05-19 — View Transitions wrapper. If the browser supports
+// document.startViewTransition (Chrome 111+, Edge 111+, Safari 18+),
+// wrapping a render call in it produces a native 180ms crossfade from
+// old DOM to new — kills the harsh 30s-poll blink. Falls through to
+// direct call on Firefox / older browsers (no regression).
+function _safeViewTransition(fn) {
+  if (typeof document !== 'undefined' && typeof document.startViewTransition === 'function') {
+    try { document.startViewTransition(fn); return; } catch (e) {}
+  }
+  try { fn(); } catch (e) { throw e; }
+}
+
 function renderAll() {
   // Capture scroll BEFORE any DOM swap so we can restore even when the
   // browser would otherwise reset scrollTop to 0 after a big innerHTML write.
   var prevY = (typeof window !== 'undefined') ? (window.scrollY || window.pageYOffset || 0) : 0;
-  _renderAllInternal();
+  _safeViewTransition(_renderAllInternal);
   if (typeof requestAnimationFrame === 'function') {
     requestAnimationFrame(function () {
       try { window.scrollTo(0, prevY); } catch (e) {}
@@ -16933,13 +16971,27 @@ function renderAngles() {
     return;
   }
 
-  // Header
-  var html = '<div class="tracker-header">' +
+  // 2026-05-19 — Archive view filter
+  var _viewA = _archInclude.anglesTracker || 'active';
+  var _activeCountA = 0, _archivedCountA = 0;
+  for (var _i2 = 0; _i2 < ANGLES.length; _i2++) {
+    if (ANGLES[_i2].archivedAt) _archivedCountA++; else _activeCountA++;
+  }
+  var html = '<div class="tracker-view-bar" style="display:flex;gap:6px;align-items:center;padding:8px 12px;background:var(--el);border-radius:8px 8px 0 0;border-bottom:1px solid var(--b);font-size:.74rem">' +
+    '<span style="color:var(--t3);margin-right:6px">Show:</span>' +
+    '<button onclick="_setAnglesTrackerView(\'active\')"   style="padding:4px 10px;border:1px solid var(--b);border-radius:999px;background:' + (_viewA==='active'?'var(--win)':'transparent') + ';color:' + (_viewA==='active'?'#fff':'var(--t1)') + ';cursor:pointer;font-weight:600">Active <span style="opacity:.7">· ' + _activeCountA + '</span></button>' +
+    '<button onclick="_setAnglesTrackerView(\'archived\')" style="padding:4px 10px;border:1px solid var(--b);border-radius:999px;background:' + (_viewA==='archived'?'#475569':'transparent') + ';color:' + (_viewA==='archived'?'#fff':'var(--t1)') + ';cursor:pointer;font-weight:600">Archived <span style="opacity:.7">· ' + _archivedCountA + '</span></button>' +
+    '<button onclick="_setAnglesTrackerView(\'all\')"      style="padding:4px 10px;border:1px solid var(--b);border-radius:999px;background:' + (_viewA==='all'?'var(--t1)':'transparent') + ';color:' + (_viewA==='all'?'#fff':'var(--t1)') + ';cursor:pointer;font-weight:600">All <span style="opacity:.7">· ' + (_activeCountA + _archivedCountA) + '</span></button>' +
+    '</div>';
+  html += '<div class="tracker-header">' +
     '<span>#</span><span>Angle Name</span><span>Status</span><span>Source Link</span><span>Stats</span><span>Notes</span><span>Actions</span>' +
   '</div>';
 
   for (var i = 0; i < ANGLES.length; i++) {
     var ang = ANGLES[i];
+    var _isArchivedA = !!ang.archivedAt;
+    if (_viewA === 'active'   && _isArchivedA) continue;
+    if (_viewA === 'archived' && !_isArchivedA) continue;
     // Auto-derive status from ads — sync back to stored value
     var derivedAngStatus = deriveAngleStatus(ang.name);
     ang.status = derivedAngStatus;
@@ -16979,12 +17031,19 @@ function renderAngles() {
       ? '<span class="tr-stat-pill tr-clickable pill-creatives" onclick="showCreativesPopup(event,\'angle\',\'' + escJs(ang.name) + '\')" title="View all creatives">&#127912; ' + stats.creatives + ' creative' + (stats.creatives !== 1 ? 's' : '') + '</span>'
       : '<span class="tr-stat-pill">0 creatives</span>';
 
-    html += '<div class="' + rowCls + '" style="--i:' + i + '">' +
+    var _archivedChipA = _isArchivedA
+      ? '<span style="margin-left:8px;font-size:.6rem;padding:2px 8px;border-radius:999px;background:#e5e7eb;color:#475569;font-weight:600;letter-spacing:.04em">📦 ARCHIVED</span>'
+      : '';
+    var _archBtnA = _isArchivedA
+      ? '<button onclick="unarchiveAngle(' + i + ')" title="Restore" style="color:#059669"><svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M2 8a6 6 0 1 1 1.76 4.24M2 13v-3h3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>'
+      : '<button onclick="archiveAngle(' + i + ')" title="Archive"><svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M1 4h14v3H1zM2 7v7h12V7M6 10h4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>';
+    var _rowStyleA = '--i:' + i + (_isArchivedA ? ';opacity:.55;background:#f9fafb' : '');
+    html += '<div class="' + rowCls + '" style="' + _rowStyleA + '">' +
       '<div class="tr-num">' + (i + 1) + '</div>' +
       '<div class="tr-name" contenteditable="true" ' +
         'onblur="updateAngleName(' + i + ', this.textContent)" ' +
         'ondblclick="this.focus()" ' +
-        'title="Double-click to edit">' + esc(ang.name) + winnerBadge + '</div>' +
+        'title="Double-click to edit">' + esc(ang.name) + winnerBadge + _archivedChipA + '</div>' +
       '<div class="tr-status"><span class="tr-status-badge ' + c.cls + '" title="Auto-derived from creatives">' + esc(derivedAngStatus) + '</span></div>' +
       '<div class="tr-src">' + srcCell + '</div>' +
       '<div class="tr-stats">' +
@@ -16997,6 +17056,7 @@ function renderAngles() {
         'title="Click to edit notes">' + esc(ang.notes || '') + '</div>' +
       '<div class="tr-actions">' +
         '<button onclick="openEditAngle(' + i + ')" title="Edit"><svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M11.5 2.5l2 2L5 13H3v-2L11.5 2.5z" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>' +
+        _archBtnA +
         '<button class="tr-del" onclick="deleteAngle(' + i + ')" title="Delete"><svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M2 4h12M5 4V2h6v2M6 7v5M10 7v5M3 4l1 9h8l1-9" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>' +
       '</div>' +
     '</div>';
@@ -17061,12 +17121,29 @@ function renderPersonas() {
     return;
   }
 
-  var html = '<div class="tracker-header">' +
+  // 2026-05-19 — Archive view filter (Active / Archived / All)
+  var _view = _archInclude.personasTracker || 'active';
+  var _activeCount = 0, _archivedCount = 0;
+  for (var _i = 0; _i < PERSONAS.length; _i++) {
+    if (PERSONAS[_i].archivedAt) _archivedCount++; else _activeCount++;
+  }
+  function _pillCls(v) { return 'tr-view-pill' + (v === _view ? ' on' : ''); }
+  var html = '<div class="tracker-view-bar" style="display:flex;gap:6px;align-items:center;padding:8px 12px;background:var(--el);border-radius:8px 8px 0 0;border-bottom:1px solid var(--b);font-size:.74rem">' +
+    '<span style="color:var(--t3);margin-right:6px">Show:</span>' +
+    '<button class="' + _pillCls('active')   + '" onclick="_setPersonasTrackerView(\'active\')"   style="padding:4px 10px;border:1px solid var(--b);border-radius:999px;background:' + (_view==='active'?'var(--win)':'transparent') + ';color:' + (_view==='active'?'#fff':'var(--t1)') + ';cursor:pointer;font-weight:600">Active <span style="opacity:.7">· ' + _activeCount + '</span></button>' +
+    '<button class="' + _pillCls('archived') + '" onclick="_setPersonasTrackerView(\'archived\')" style="padding:4px 10px;border:1px solid var(--b);border-radius:999px;background:' + (_view==='archived'?'#475569':'transparent') + ';color:' + (_view==='archived'?'#fff':'var(--t1)') + ';cursor:pointer;font-weight:600">Archived <span style="opacity:.7">· ' + _archivedCount + '</span></button>' +
+    '<button class="' + _pillCls('all')      + '" onclick="_setPersonasTrackerView(\'all\')"      style="padding:4px 10px;border:1px solid var(--b);border-radius:999px;background:' + (_view==='all'?'var(--t1)':'transparent') + ';color:' + (_view==='all'?'#fff':'var(--t1)') + ';cursor:pointer;font-weight:600">All <span style="opacity:.7">· ' + (_activeCount + _archivedCount) + '</span></button>' +
+    '</div>';
+  html += '<div class="tracker-header">' +
     '<span>#</span><span>Persona Name</span><span>Status</span><span>Source Link</span><span>Stats</span><span>Notes</span><span>Actions</span>' +
   '</div>';
 
   for (var i = 0; i < PERSONAS.length; i++) {
     var per = PERSONAS[i];
+    // 2026-05-19 — apply archive view filter
+    var _isArchived = !!per.archivedAt;
+    if (_view === 'active'   && _isArchived) continue;
+    if (_view === 'archived' && !_isArchived) continue;
     // Auto-derive status from ads — sync back to stored value
     var derivedPerStatus = derivePersonaStatus(per.name);
     per.status = derivedPerStatus;
@@ -17106,12 +17183,19 @@ function renderPersonas() {
       ? '<span class="tr-stat-pill tr-clickable pill-creatives" onclick="showCreativesPopup(event,\'persona\',\'' + escJs(per.name) + '\')" title="View all creatives">&#127912; ' + stats.creatives + ' creative' + (stats.creatives !== 1 ? 's' : '') + '</span>'
       : '<span class="tr-stat-pill">0 creatives</span>';
 
-    html += '<div class="' + rowCls + '" style="--i:' + i + '">' +
+    var _archivedChip = _isArchived
+      ? '<span style="margin-left:8px;font-size:.6rem;padding:2px 8px;border-radius:999px;background:#e5e7eb;color:#475569;font-weight:600;letter-spacing:.04em">📦 ARCHIVED</span>'
+      : '';
+    var _archBtn = _isArchived
+      ? '<button onclick="unarchivePersona(' + i + ')" title="Restore" style="color:#059669"><svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M2 8a6 6 0 1 1 1.76 4.24M2 13v-3h3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>'
+      : '<button onclick="archivePersona(' + i + ')" title="Archive"><svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M1 4h14v3H1zM2 7v7h12V7M6 10h4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>';
+    var _rowStyle = '--i:' + i + (_isArchived ? ';opacity:.55;background:#f9fafb' : '');
+    html += '<div class="' + rowCls + '" style="' + _rowStyle + '">' +
       '<div class="tr-num">' + (i + 1) + '</div>' +
       '<div class="tr-name" contenteditable="true" ' +
         'onblur="updatePersonaName(' + i + ', this.textContent)" ' +
         'ondblclick="this.focus()" ' +
-        'title="Double-click to edit">' + esc(per.name) + winnerBadge + '</div>' +
+        'title="Double-click to edit">' + esc(per.name) + winnerBadge + _archivedChip + '</div>' +
       '<div class="tr-status"><span class="tr-status-badge ' + c.cls + '" title="Auto-derived from creatives">' + esc(derivedPerStatus) + '</span></div>' +
       '<div class="tr-src">' + srcCell + '</div>' +
       '<div class="tr-stats">' +
@@ -17124,6 +17208,7 @@ function renderPersonas() {
         'title="Click to edit notes">' + esc(per.notes || '') + '</div>' +
       '<div class="tr-actions">' +
         '<button onclick="openEditPersona(' + i + ')" title="Edit"><svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M11.5 2.5l2 2L5 13H3v-2L11.5 2.5z" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>' +
+        _archBtn +
         '<button class="tr-del" onclick="deletePersona(' + i + ')" title="Delete"><svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M2 4h12M5 4V2h6v2M6 7v5M10 7v5M3 4l1 9h8l1-9" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>' +
       '</div>' +
     '</div>';
@@ -19470,21 +19555,9 @@ function apApplyFilters(resolved) {
     if (f.hygieneOnly && r.age.state !== 'red') return false;
     if (f.anomaliesOnly && apComputeAnomalies(r).length === 0) return false;
     if (range) {
-      // 2026-05-18 — 4-way date basis. Each mode picks a different timestamp
-      // from the row to compare against the range.
-      //   window   = status moved in period (existing default, status-change-at)
-      //   activity = any edit landed in period (updated-at, falls back to status-change-at)
-      //   created  = task born in period (created-at)
-      //   lifetime = any signal in period (broadest: max of created/updated/status)
-      var ts;
-      var d = r.display;
-      switch (f.dateMode) {
-        case 'created':  ts = d.createdAt; break;
-        case 'activity': ts = d.updatedAt || d.lastStatusChangeAt; break;
-        case 'lifetime': ts = Math.max(d.createdAt || 0, d.lastStatusChangeAt || 0, d.updatedAt || 0); break;
-        case 'window':
-        default:         ts = d.lastStatusChangeAt; break;
-      }
+      // window mode = use lastStatusChangeAt (event-in-period)
+      // lifetime mode = use createdAt
+      var ts = (f.dateMode === 'lifetime') ? r.display.createdAt : r.display.lastStatusChangeAt;
       if (!ts || ts < range.from || ts > range.to) return false;
     }
     return true;
@@ -19846,10 +19919,8 @@ function renderApFilterStrip(allResolved, filtered) {
   } catch (e) {}
   html += '<span class="ap-fb-sep"></span>';
   html += '<div class="ap-mode-seg" role="tablist">' +
-            '<button class="' + (f.dateMode === 'window'   ? 'on' : '') + '" onclick="setApDateMode(\'window\')" title="Status moved within the period">Window</button>' +
-            '<button class="' + (f.dateMode === 'lifetime' ? 'on' : '') + '" onclick="setApDateMode(\'lifetime\')" title="Any signal (created, edited, or status changed) within the period">Lifetime</button>' +
-            '<button class="' + (f.dateMode === 'activity' ? 'on' : '') + '" onclick="setApDateMode(\'activity\')" title="Any field edit within the period">Activity</button>' +
-            '<button class="' + (f.dateMode === 'created'  ? 'on' : '') + '" onclick="setApDateMode(\'created\')" title="Task created within the period">Created</button>' +
+            '<button class="' + (f.dateMode === 'window'   ? 'on' : '') + '" onclick="setApDateMode(\'window\')">Window</button>' +
+            '<button class="' + (f.dateMode === 'lifetime' ? 'on' : '') + '" onclick="setApDateMode(\'lifetime\')">Lifetime</button>' +
           '</div>';
   html += '<span class="ap-fb-grow"></span>';
   // Active-filter count for the Clear button badge. 'all' is the new
@@ -19942,15 +20013,13 @@ function renderApDateDropdown() {
     html += '<label>To <input type="date" value="' + (f.dateTo || '') + '" onchange="setApDateCustom(null, this.value)"></label>';
     html += '</div>';
   }
-  // 2026-05-18 — Basis row: 4-way picker mirrors the main filter-strip toggle.
-  // Window (status moved) / Lifetime (any signal) / Activity (any edit) / Created (born).
+  // Basis row — matrix has Created / Status changed / Last edit. We expose
+  // Activity (status changed) vs Created (lifetime) for plain-English.
   html += '<div class="ap-date-basis">';
   html += '<span class="lbl">Compare against</span>';
   html += '<div class="ap-date-basis-seg">';
-  html += '<button class="' + (f.dateMode === 'window'   ? 'on' : '') + '" onclick="setApDateMode(\'window\')" title="Status moved within the period">Window</button>';
-  html += '<button class="' + (f.dateMode === 'lifetime' ? 'on' : '') + '" onclick="setApDateMode(\'lifetime\')" title="Any signal (created, edited, or status changed) within the period">Lifetime</button>';
-  html += '<button class="' + (f.dateMode === 'activity' ? 'on' : '') + '" onclick="setApDateMode(\'activity\')" title="Any field edit within the period">Activity</button>';
-  html += '<button class="' + (f.dateMode === 'created'  ? 'on' : '') + '" onclick="setApDateMode(\'created\')" title="Task created within the period">Created</button>';
+  html += '<button class="' + (f.dateMode === 'window' ? 'on' : '') + '" onclick="setApDateMode(\'window\')" title="Status moved within the period">Activity</button>';
+  html += '<button class="' + (f.dateMode === 'lifetime' ? 'on' : '') + '" onclick="setApDateMode(\'lifetime\')" title="Task was created within the period">Created</button>';
   html += '</div>';
   html += '</div>';
   html += '</div>';
@@ -21917,6 +21986,121 @@ function addPersonaRow() {
   updateTabCounts();
   saveState();
   toast('Persona added');
+}
+
+// 2026-05-19 — Archive/Restore for personas + angles.
+// State lives in localStorage per-user so toggling Show Archived survives
+// reload. Three contexts: matrix (default OFF), persona tracker, angle tracker.
+var _archInclude = (function () {
+  try {
+    var raw = JSON.parse(localStorage.getItem('immuvi.archInclude.v1') || '{}');
+    return {
+      matrix: raw.matrix === true,
+      personasTracker: raw.personasTracker || 'active', // 'active' | 'archived' | 'all'
+      anglesTracker:   raw.anglesTracker   || 'active'
+    };
+  } catch (e) {
+    return { matrix: false, personasTracker: 'active', anglesTracker: 'active' };
+  }
+})();
+function _saveArchInclude() {
+  try { localStorage.setItem('immuvi.archInclude.v1', JSON.stringify(_archInclude)); } catch (e) {}
+}
+function _toggleArchiveInMatrix() {
+  _archInclude.matrix = !_archInclude.matrix;
+  _saveArchInclude();
+  renderMatrix();
+}
+function _setPersonasTrackerView(view) {
+  _archInclude.personasTracker = view;
+  _saveArchInclude();
+  renderPersonas();
+}
+function _setAnglesTrackerView(view) {
+  _archInclude.anglesTracker = view;
+  _saveArchInclude();
+  renderAngles();
+}
+
+async function archivePersona(idx) {
+  var p = PERSONAS[idx];
+  if (!p) return;
+  if (!confirm('Archive persona "' + p.name + '"?\n\nIt will be hidden from the Creative Matrix and AP filters. Ads keep their tagging. You can restore it any time from the Personas tab.')) return;
+  p.archivedAt = Date.now();
+  try {
+    if (typeof SB !== 'undefined' && SB && p.id) {
+      var r = await SB.from('personas').update({ archived_at: new Date(p.archivedAt).toISOString() }).eq('id', p.id);
+      if (r.error) throw new Error(r.error.message);
+    }
+    saveState();
+    renderPersonas();
+    if (typeof renderMatrix === 'function') renderMatrix();
+    if (typeof renderActionPlan === 'function') renderActionPlan();
+    toast('Archived persona: ' + p.name, 'ok');
+  } catch (e) {
+    p.archivedAt = null;
+    toast('Archive failed: ' + (e.message || e), 'err');
+  }
+}
+async function unarchivePersona(idx) {
+  var p = PERSONAS[idx];
+  if (!p) return;
+  var prev = p.archivedAt;
+  p.archivedAt = null;
+  try {
+    if (typeof SB !== 'undefined' && SB && p.id) {
+      var r = await SB.from('personas').update({ archived_at: null }).eq('id', p.id);
+      if (r.error) throw new Error(r.error.message);
+    }
+    saveState();
+    renderPersonas();
+    if (typeof renderMatrix === 'function') renderMatrix();
+    if (typeof renderActionPlan === 'function') renderActionPlan();
+    toast('Restored persona: ' + p.name, 'ok');
+  } catch (e) {
+    p.archivedAt = prev;
+    toast('Restore failed: ' + (e.message || e), 'err');
+  }
+}
+async function archiveAngle(idx) {
+  var a = ANGLES[idx];
+  if (!a) return;
+  if (!confirm('Archive angle "' + a.name + '"?\n\nIt will be hidden from the Creative Matrix and AP filters. Ads keep their tagging. You can restore it any time from the Angles tab.')) return;
+  a.archivedAt = Date.now();
+  try {
+    if (typeof SB !== 'undefined' && SB && a.id) {
+      var r = await SB.from('angles').update({ archived_at: new Date(a.archivedAt).toISOString() }).eq('id', a.id);
+      if (r.error) throw new Error(r.error.message);
+    }
+    saveState();
+    renderAngles();
+    if (typeof renderMatrix === 'function') renderMatrix();
+    if (typeof renderActionPlan === 'function') renderActionPlan();
+    toast('Archived angle: ' + a.name, 'ok');
+  } catch (e) {
+    a.archivedAt = null;
+    toast('Archive failed: ' + (e.message || e), 'err');
+  }
+}
+async function unarchiveAngle(idx) {
+  var a = ANGLES[idx];
+  if (!a) return;
+  var prev = a.archivedAt;
+  a.archivedAt = null;
+  try {
+    if (typeof SB !== 'undefined' && SB && a.id) {
+      var r = await SB.from('angles').update({ archived_at: null }).eq('id', a.id);
+      if (r.error) throw new Error(r.error.message);
+    }
+    saveState();
+    renderAngles();
+    if (typeof renderMatrix === 'function') renderMatrix();
+    if (typeof renderActionPlan === 'function') renderActionPlan();
+    toast('Restored angle: ' + a.name, 'ok');
+  } catch (e) {
+    a.archivedAt = prev;
+    toast('Restore failed: ' + (e.message || e), 'err');
+  }
 }
 
 function deletePersona(idx) {
@@ -27283,8 +27467,17 @@ function apResolveCard(act) {
   // tracker-format / blank brief). Drives the "Origin" chip on the row.
   // Auto-adopted virtual cards override to "adopted" so the rose-colored CU
   // chip surfaces in the Source column.
+  // 2026-05-19 — Layer 3 of app-created-heal: if the AD has `app-created` tag
+  // (= was pushed by THIS app), the virtual card represents an in-flight
+  // app-created task whose MA hasn't materialized yet (Layer 2 auto-heal will
+  // promote it on this same render). Show it as "App-pushed" (stone), NOT
+  // "From ClickUp" (rose), so the icon and the "App only" filter stay correct
+  // even during the brief virtual-state window.
+  var _adIsAppCreated = (ad && Array.isArray(ad._tags) && ad._tags.indexOf('app-created') !== -1);
   var source = (act && act._virtual)
-    ? { kind: 'adopted', label: 'From ClickUp', refId: null, refUrl: null }
+    ? (_adIsAppCreated
+        ? { kind: 'manual', label: 'App-pushed', refId: null, refUrl: null }
+        : { kind: 'adopted', label: 'From ClickUp', refId: null, refUrl: null })
     : { kind: 'manual', label: 'Manual', refId: null, refUrl: null };
   if (ad) {
     if (ad._fromInspoId) {
@@ -27636,6 +27829,35 @@ function apResolveAllCards() {
         if (!ad || !ad.id) continue;
         if (ad.deleted_at || ad.deletedAt) continue;
         if (maCoveredAdIds[ad.id]) continue;
+        // 2026-05-19 — Layer 2 of app-created-heal: if the AD was pushed by
+        // THIS app (has `app-created` tag), DON'T synthesize a virtual.
+        // Instead materialize a clean MA on the spot via _lazyPromoteVirtual
+        // (Phase 2 path from feature_auto_adopt_heal_via_clickup_tag.md — it
+        // detects `app-created` and creates a heal- MA without _origin /
+        // _adoptedAt markers). Continuous self-heal: any MA wiped by a
+        // multi-tab race or sync glitch comes back on the next render.
+        // Honors feedback_ap_auto_adopt.md invariant #2 (lazy-promote is the
+        // only path that turns a virtual into an MA).
+        if (Array.isArray(ad._tags) && ad._tags.indexOf('app-created') !== -1 &&
+            typeof _lazyPromoteVirtual === 'function') {
+          var newMaId = null;
+          try { newMaId = _lazyPromoteVirtual(ad); } catch (e) { console.warn('[apResolve] lazy-promote failed', ad.id, e); }
+          if (newMaId && typeof MANUAL_ACTIONS !== 'undefined') {
+            var promoted = null;
+            for (var pi = 0; pi < MANUAL_ACTIONS.length; pi++) {
+              if (MANUAL_ACTIONS[pi] && MANUAL_ACTIONS[pi].id === newMaId) { promoted = MANUAL_ACTIONS[pi]; break; }
+            }
+            if (promoted) {
+              var rp = apResolveCard(promoted);
+              if (rp) {
+                out.push(rp);
+                maCoveredAdIds[ad.id] = true;
+                continue;
+              }
+            }
+          }
+          // Fall through to virtual synthesis if lazy-promote didn't produce a usable MA.
+        }
         // Synthesize a minimal act so apResolveCard can build a card around it.
         var synAct = {
           id: 'va:' + ad.id,
@@ -30277,7 +30499,23 @@ function renderMatrix() {
   // Ensure modal DOM exists (created lazily, once).
   if (typeof _mxv4EnsureModal === 'function') _mxv4EnsureModal();
 
+  // 2026-05-19 — Archive filtering. Build lookup sets of archived
+  // persona/angle names. By default the matrix hides them; user can toggle
+  // via the "N archived hidden" badge in the header below.
+  var _archivedPersonaSet = {};
+  var _archivedAngleSet   = {};
+  for (var _api = 0; _api < PERSONAS.length; _api++) {
+    if (PERSONAS[_api] && PERSONAS[_api].archivedAt) _archivedPersonaSet[PERSONAS[_api].name] = true;
+  }
+  for (var _aai = 0; _aai < ANGLES.length; _aai++) {
+    if (ANGLES[_aai] && ANGLES[_aai].archivedAt) _archivedAngleSet[ANGLES[_aai].name] = true;
+  }
+  var _archIncludeMatrix = (typeof _archInclude !== 'undefined' && _archInclude && _archInclude.matrix) ? true : false;
+
   var masterPersonas = deriveMasterPersonas();
+  if (!_archIncludeMatrix) {
+    masterPersonas = masterPersonas.filter(function(pn){ return !_archivedPersonaSet[pn]; });
+  }
 
   // Split personas into active / inactive
   var activePersonas   = masterPersonas.filter(function(pn){ return isPersonaActive(pn); });
@@ -30306,6 +30544,18 @@ function renderMatrix() {
   if (_matrixPersonaFilter === 'active' && inactivePersonas.length > 0) {
     html += '<span class="mx-hidden-pill">' + inactivePersonas.length + ' inactive hidden</span>';
   }
+  // 2026-05-19 — Archive toggle pill: shows when there are archived rows/cols
+  // hidden. Click to flip the in-session include flag.
+  var _archAngleHidden = 0, _archPersonaHidden = 0;
+  Object.keys(_archivedAngleSet).forEach(function(){ _archAngleHidden++; });
+  Object.keys(_archivedPersonaSet).forEach(function(){ _archPersonaHidden++; });
+  var _archTotal = _archAngleHidden + _archPersonaHidden;
+  if (_archTotal > 0) {
+    var _archLabel = _archIncludeMatrix
+      ? ('Hiding 0 · showing ' + _archTotal + ' archived')
+      : (_archTotal + ' archived hidden');
+    html += '<span class="mx-hidden-pill" style="cursor:pointer;background:' + (_archIncludeMatrix ? '#dbeafe' : '#f3f4f6') + '" onclick="_toggleArchiveInMatrix()" title="Click to toggle archived rows/cols">' + esc(_archLabel) + '</span>';
+  }
   html += '</div>';
   html += '</div>';
 
@@ -30331,6 +30581,11 @@ function renderMatrix() {
   // sorter returns a copy, so the canonical ANGLES array (used by Action
   // Plan, coverage strip, etc.) is never mutated.
   var sortedAngles = (typeof _sortAnglesForMatrix === 'function') ? _sortAnglesForMatrix(ANGLES) : ANGLES;
+  // 2026-05-19 — drop archived angles from the row iteration unless the
+  // include-archived toggle is on.
+  if (!_archIncludeMatrix) {
+    sortedAngles = sortedAngles.filter(function (a) { return !_archivedAngleSet[a.name]; });
+  }
   var dragMode = _mxv4.angleSort === 'manual';
   sortedAngles.forEach(function (angle, ai) {
     var cls = classify(angle.status);

@@ -1359,8 +1359,107 @@ body::before {
   color: var(--t2);
   cursor: pointer;
   transition: all 0.15s;
+  margin-top: 10px;
 }
 .varlab-add:hover { background: var(--bg); color: var(--t1); border-color: var(--t1); }
+
+/* ─── 2026-05-20 Spawn-Variations modal redesign ───
+   Option-1 table view + global defaults strip + per-row Advanced expander.
+   See feature/feedback memory under varlab redesign. */
+.varlab-globals {
+  display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px 18px;
+  padding: 12px 14px; background: var(--bg, #f9fafb); border-radius: 10px;
+  margin-bottom: 14px; border: 1px solid var(--border, #e5e7eb);
+}
+.varlab-globals .vl-lbl { font-size: 0.68rem; color: var(--t3); font-weight: 600; }
+.varlab-globals .vl-glbl { display: flex; flex-direction: column; gap: 4px; min-width: 140px; flex: 1 1 140px; }
+.varlab-globals .vl-glbl-cap { font-size: 0.62rem; color: var(--t3); text-transform: uppercase; letter-spacing: 0.04em; font-weight: 600; }
+.varlab-globals select,
+.varlab-globals input[type="date"] {
+  width: 100%; padding: 6px 8px;
+  border: 1px solid var(--border); border-radius: 6px;
+  font-size: 0.74rem; background: var(--card); color: var(--t1);
+  font-family: inherit;
+}
+.varlab-globals .vl-glbl-note {
+  flex-basis: 100%; font-size: 0.62rem; color: var(--t3); margin-top: 2px;
+}
+
+.varlab-tbl { width: 100%; border-collapse: collapse; }
+.varlab-tbl thead th {
+  text-align: left; padding: 8px 10px; font-size: 0.62rem;
+  font-weight: 600; color: var(--t3); text-transform: uppercase; letter-spacing: 0.04em;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg, #fafafa); position: sticky; top: 0; z-index: 1;
+}
+.varlab-tbl tbody tr.vl-tbl-row td {
+  padding: 8px 10px; border-bottom: 1px solid var(--border, #f1f5f9);
+  vertical-align: top;
+}
+.varlab-tbl tbody tr.vl-tbl-row.is-open td { border-bottom-color: transparent; }
+.varlab-tbl td.vl-tbl-num,
+.varlab-tbl th.vl-tbl-num {
+  width: 48px; font-family: 'JetBrains Mono', monospace; font-size: 0.72rem;
+  color: var(--t2); font-weight: 700; text-align: center; padding-top: 14px;
+}
+.varlab-tbl td.vl-tbl-axis,
+.varlab-tbl th.vl-tbl-axis { width: 140px; }
+.varlab-tbl td.vl-tbl-axis select {
+  width: 100%; padding: 6px 8px;
+  border: 1px solid var(--border); border-radius: 6px;
+  font-size: 0.74rem; background: var(--card); color: var(--t1); font-family: inherit;
+}
+.varlab-tbl td.vl-tbl-brief textarea {
+  width: 100%; padding: 6px 10px;
+  border: 1px solid var(--border); border-radius: 6px;
+  font-size: 0.78rem; background: var(--card); color: var(--t1);
+  font-family: inherit; resize: vertical; min-height: 34px;
+}
+.varlab-tbl td.vl-tbl-actions,
+.varlab-tbl th.vl-tbl-actions {
+  width: 64px; text-align: right; white-space: nowrap; padding-top: 10px;
+}
+.varlab-tbl button.vl-adv-toggle,
+.varlab-tbl button.vl-row-rm {
+  background: transparent; border: 1px solid transparent;
+  width: 24px; height: 24px; border-radius: 6px;
+  font-size: 0.78rem; line-height: 1; cursor: pointer;
+  color: var(--t3); padding: 0; margin-left: 2px;
+  transition: all 0.12s;
+}
+.varlab-tbl button.vl-adv-toggle:hover { background: var(--bg); color: var(--t1); }
+.varlab-tbl button.vl-adv-toggle.is-open { color: var(--inprog, #3b82f6); background: rgba(59,130,246,0.08); }
+.varlab-tbl button.vl-row-rm:hover { color: var(--lose, #ef4444); background: rgba(239,68,68,0.08); }
+
+.varlab-tbl tr.vl-tbl-adv-row.is-hidden { display: none; }
+.varlab-tbl tr.vl-tbl-adv-row td {
+  padding: 0 10px 14px 56px; background: var(--bg, #fafafa);
+  border-bottom: 1px solid var(--border, #f1f5f9);
+}
+.vl-adv-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 10px 14px;
+  padding: 10px 12px;
+  background: var(--card, #fff); border: 1px solid var(--border); border-radius: 8px;
+}
+.vl-adv-cell.vl-adv-full { grid-column: 1 / -1; }
+.vl-adv-cell label { display: block; font-size: 0.62rem; color: var(--t3); margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.04em; font-weight: 600; }
+.vl-adv-cell input[type="text"],
+.vl-adv-cell input[type="date"],
+.vl-adv-cell select {
+  width: 100%; padding: 6px 8px;
+  border: 1px solid var(--border); border-radius: 6px;
+  font-size: 0.74rem; background: var(--card); color: var(--t1);
+  font-family: inherit;
+}
+.vl-adv-cell .vl-fromto {
+  display: grid; grid-template-columns: 1fr auto 1fr; gap: 8px; align-items: center;
+}
+.vl-adv-cell .vl-fromto .vl-arrow { color: var(--t3); font-size: 0.7rem; }
+.vl-adv-cell .vl-toggle {
+  font-size: 0.62rem; color: var(--t3); cursor: pointer; margin-left: 8px;
+  text-decoration: underline;
+}
+.vl-adv-cell .vl-toggle:hover { color: var(--inprog, #3b82f6); }
 .varlab-modal-ftr {
   padding: 14px 22px;
   border-top: 1px solid var(--border);
@@ -18172,7 +18271,11 @@ var _AP_COL_REGISTRY = {
     }
   },
   title: {
-    label: 'Task name', locked: true, sortable: true, sortKey: 'title',
+    // 2026-05-20 — `locked: true` keeps the column pinned-leftmost (no
+    // drag-to-reorder), but `lockedResize: false` opts back in to the
+    // user-drag resize handle so the column can be widened for long task
+    // names without cramping the rest of the table.
+    label: 'Task name', locked: true, lockedResize: false, sortable: true, sortKey: 'title',
     renderCell: function (r) {
       var anomalies = apComputeAnomalies(r);
       var titleBadgesHtml = '';
@@ -19253,8 +19356,18 @@ function _apMountColumnHandlers() {
     var key = th.getAttribute('data-col');
     var def = _AP_COL_REGISTRY[key];
 
-    // Resize handle (skip locked columns — they aren't user-resizable).
-    if (!(def && def.locked) && !th.querySelector('.ap-col-resizer')) {
+    // 2026-05-20 — Split `locked` into independent flags so a column can be
+    // resizable without becoming reorderable (or vice versa). Backward-compat:
+    // legacy `locked: true` still means "both locked" unless an explicit
+    // lockedResize/lockedReorder overrides it.
+    //   locked: true                              → resize locked, reorder locked
+    //   locked: true, lockedResize: false         → resize allowed, reorder locked
+    //   locked: false (or absent)                 → both allowed
+    var lockedResize  = !!(def && (def.lockedResize  === true || (def.locked === true && def.lockedResize  !== false)));
+    var lockedReorder = !!(def && (def.lockedReorder === true || (def.locked === true && def.lockedReorder !== false)));
+
+    // Resize handle (skip columns that have lockedResize).
+    if (!lockedResize && !th.querySelector('.ap-col-resizer')) {
       var handle = document.createElement('span');
       handle.className = 'ap-col-resizer';
       handle.title = 'Drag to resize';
@@ -19269,9 +19382,9 @@ function _apMountColumnHandlers() {
       th.appendChild(handle);
     }
 
-    // Header drag-to-reorder. Locked columns (cb, source, title, del) stay
-    // pinned in their default positions — they're not draggable.
-    if (def && def.locked) return;
+    // Header drag-to-reorder. Reorder-locked columns (default for cb, source,
+    // title, del, 🎨) stay pinned in their default positions.
+    if (lockedReorder) return;
     th.setAttribute('draggable', 'true');
     th.addEventListener('dragstart', _apThDragStart);
     th.addEventListener('dragend',   _apThDragEnd);
@@ -26948,6 +27061,19 @@ function pollFullSync() {
         }
       }
 
+      // 2026-05-20 — KL- 12991/9821 duplicate-card root-cause fix.
+      // Run the MA sourceAdId repair pass after Pass 1's in-place merge has
+      // landed any fresh ADs. Repairs any MA whose sourceAdId is dead but
+      // whose _clickupId matches a live AD (spawn dup-collapse pattern).
+      // Mark `changed` so the renderAll() below picks up the heal.
+      try {
+        var _repaired = _apRepairMASourceAdIds();
+        if (_repaired > 0) {
+          changed = true;
+          try { console.log('[pollFullSync] _apRepairMASourceAdIds repaired', _repaired, 'MA(s)'); } catch (e) {}
+        }
+      } catch (e) { console.warn('[pollFullSync] MA repair failed:', e); }
+
       _onSyncSuccess(dot, fieldUpdates, changed);
 
       if (changed) {
@@ -27478,6 +27604,57 @@ function apResolveCard(act) {
         ad = ADS[j]; break;
       }
     }
+    // 2026-05-20 root-cause fix for KL- 12991/9821 duplicate-card bug.
+    // When match succeeds via _clickupId, the MA's sourceAdId is by definition
+    // pointing at a dead/stale AD (e.g. a composite spawn id like
+    // '<parentCuId>-V1' that got dup-collapsed by sync into the canonical CU
+    // task id). Rewrite sourceAdId to the live AD's id so:
+    //   1. apResolveAllCards' covered-index keys on the LIVE id, suppressing
+    //      the virtual-pass duplicate.
+    //   2. Future apResolveCard calls hit the fast id-lookup path (line ~27470)
+    //      instead of falling through to the _clickupId scan.
+    //   3. The MA self-heals on next saveState flush — durable across reloads.
+    // Mirrors the rewrite the title-based fallback already does at line ~27530.
+    // _clickupId is NOT touched (MA already had the right _clickupId — that's
+    // what we matched on); see the comment block in the title-fallback below.
+    if (ad && act.sourceAdId !== ad.id) {
+      try {
+        // 2026-05-20b — Recover provenance from the dead twin's id pattern.
+        // Spawn convention is `<parentCuId>-V<n>` (variation) or
+        // `<parentCuId>-PROD-<TAG>` (tracker push). When the live AD has no
+        // parentAdId (sync-imported from scratch, no inherited provenance),
+        // infer it from the dead twin id we're about to discard. Without
+        // this, the source.kind resolves to 'blank' → yellow page icon
+        // instead of the correct 'variation' (purple branching circles).
+        // Runs BEFORE the sourceAdId rewrite so the dead id is still
+        // available to parse.
+        var _deadSrc = act.sourceAdId || '';
+        if (_deadSrc && !ad.parentAdId && typeof ADS !== 'undefined') {
+          var _vm = _deadSrc.match(/^(.+)-V\d+$/);
+          var _pm = _deadSrc.match(/^(.+)-PROD-[A-Z0-9]+$/);
+          var _inferredParent = (_vm && _vm[1]) || (_pm && _pm[1]) || null;
+          if (_inferredParent && _inferredParent !== ad.id) {
+            for (var _pi = 0; _pi < ADS.length; _pi++) {
+              if (ADS[_pi] && ADS[_pi].id === _inferredParent && !ADS[_pi].deletedAt) {
+                ad.parentAdId = _inferredParent;
+                if (typeof _writeAdRowDirect === 'function') {
+                  try { _writeAdRowDirect(ad); } catch (e) {}
+                }
+                break;
+              }
+            }
+          }
+        }
+        act.sourceAdId = ad.id;
+        // Flush the heal to DB so a different tab / poll doesn't re-corrupt
+        // by overwriting our in-memory rewrite with stale state. Skip if
+        // _writeManualActionRowDirect isn't ready (boot ordering) — next
+        // debounced save will pick it up.
+        if (typeof _writeManualActionRowDirect === 'function' && act._dbId) {
+          try { _writeManualActionRowDirect(act); } catch (e) {}
+        }
+      } catch (e) {}
+    }
   }
   // Fallback chain: ClickUp sync sometimes appends suffixes to formatName
   // (e.g. "AR-101-12346" → "AR-101-12346 (12346/12345-2)"), so an exact
@@ -27904,6 +28081,17 @@ function apResolveAllCards() {
     var r = apResolveCard(ma);
     if (r) {
       out.push(r);
+      // 2026-05-20 — KL- 12991/9821 duplicate-card root-cause fix.
+      // Always stamp the LIVE AD's id (from apResolveCard's resolution) into
+      // the covered index, NOT just ma.sourceAdId/adId. apResolveCard's
+      // fallback chain can resolve a MA to a live AD via _clickupId, title,
+      // or cell-scope even when sourceAdId points at a dead local twin
+      // (e.g. spawn ids like '<parentCuId>-V1' that got dup-collapsed by
+      // sync). Without this, the virtual-pass below sees ad.id as uncovered
+      // and synthesizes a duplicate card. The sourceAdId stamp inside
+      // apResolveCard's _clickupId/title fallbacks heals the MA, but we
+      // belt-and-suspenders here for any future code path that bypasses it.
+      if (r.ad && r.ad.id) maCoveredAdIds[r.ad.id] = true;
       var sid = (ma && (ma.sourceAdId || ma.adId)) || (r.ad && r.ad.id);
       if (sid) maCoveredAdIds[sid] = true;
     }
@@ -28044,6 +28232,73 @@ function apToggleIncludeAdopted(on) {
   _apState.filters.includeAdopted = !!on;
   if (typeof _apSaveState === 'function') _apSaveState();
   if (typeof renderActionPlan === 'function') renderActionPlan();
+}
+
+// ─── MA sourceAdId repair (2026-05-20) ─────────────────────────────
+// Companion to apResolveCard's _clickupId-fallback rewrite (line ~27475).
+// Walks MANUAL_ACTIONS for MAs whose sourceAdId references a missing or
+// soft-deleted AD but whose _clickupId matches a live AD — and repoints
+// sourceAdId to the live AD's id. Heals the data class behind the
+// KL- 12991/9821 duplicate-card bug:
+//   • User spawns N variations from a winner. App creates local AD-NNN /
+//     composite '<parentCuId>-V<n>' ids.
+//   • Push to ClickUp returns fresh CU task ids.
+//   • Sync dup-collapses the local twin into the canonical CU id, but the
+//     covering MA's sourceAdId isn't re-pointed → orphan reference.
+//   • Without repair, apResolveAllCards' covered-index keys on the dead
+//     id, so the virtual-card pass double-renders the live AD.
+// Idempotent. Skip if SB/ADS/MANUAL_ACTIONS aren't ready (boot ordering).
+// Called from pollFullSync after the in-place merge.
+function _apRepairMASourceAdIds() {
+  if (typeof MANUAL_ACTIONS === 'undefined' || !Array.isArray(MANUAL_ACTIONS)) return 0;
+  if (typeof ADS === 'undefined' || !Array.isArray(ADS)) return 0;
+  // O(1) lookups for ADs by id, by _clickupId, by clickupTaskId.
+  var adById = {};
+  var adByCu = {};
+  for (var i = 0; i < ADS.length; i++) {
+    var a = ADS[i]; if (!a || a.deletedAt || a.deleted_at) continue;
+    if (a.id) adById[a.id] = a;
+    if (a._clickupId) adByCu[a._clickupId] = a;
+    if (a.clickupTaskId) adByCu[a.clickupTaskId] = a;
+  }
+  var repaired = 0;
+  for (var mi = 0; mi < MANUAL_ACTIONS.length; mi++) {
+    var ma = MANUAL_ACTIONS[mi]; if (!ma) continue;
+    var src = ma.sourceAdId || ma._sourceAdId || ma.adId;
+    if (src && adById[src]) continue;                       // already valid
+    if (!ma._clickupId) continue;                           // can't cross-match
+    var live = adByCu[ma._clickupId];
+    if (!live || !live.id) continue;                        // no live AD with this CU id
+    if (live.id === src) continue;                          // already correct (defensive)
+    // 2026-05-20b — Same provenance recovery as apResolveCard's _clickupId
+    // fallback. Infer parentAdId from dead twin id pattern when the live
+    // AD has none. Runs BEFORE sourceAdId rewrite so the dead id is still
+    // parseable.
+    try {
+      if (src && !live.parentAdId) {
+        var vm = src.match(/^(.+)-V\d+$/);
+        var pm = src.match(/^(.+)-PROD-[A-Z0-9]+$/);
+        var inferredParent = (vm && vm[1]) || (pm && pm[1]) || null;
+        if (inferredParent && inferredParent !== live.id && adById[inferredParent]) {
+          live.parentAdId = inferredParent;
+          if (typeof _writeAdRowDirect === 'function') {
+            try { _writeAdRowDirect(live); } catch (e) {}
+          }
+          try { console.log('[ap-repair] AD', live.id, 'parentAdId ←', inferredParent, '(inferred from', src, ')'); } catch (e) {}
+        }
+      }
+    } catch (e) {}
+    ma.sourceAdId = live.id;
+    if (ma.adId === src) ma.adId = live.id;                 // keep adId aligned too
+    repaired++;
+    // Immediate DB flush so the heal is durable; falls back to next
+    // debounced saveState if the helper isn't ready.
+    if (typeof _writeManualActionRowDirect === 'function' && ma._dbId) {
+      try { _writeManualActionRowDirect(ma); } catch (e) {}
+    }
+    try { console.log('[ap-repair] MA', ma.id, 'sourceAdId', src, '→', live.id); } catch (e) {}
+  }
+  return repaired;
 }
 
 // ─── Auto-adopt heal pass (2026-05-16) ─────────────────────────────
@@ -41798,7 +42053,14 @@ window._clearPendingCu = _clearPendingCu;
   };
 
   // ── Spawn modal
-  var _vlMod = { rows: [], parentId: null, angle: '', persona: '' };
+  // 2026-05-20 — added globals (editorIds/reviewerIds/due) for the per-modal
+  // defaults strip; per-row Advanced overrides take precedence at spawn time.
+  // `lastTemplateAxis` lets "+ Add variation" inherit the template's axis.
+  var _vlMod = {
+    rows: [], parentId: null, angle: '', persona: '',
+    editorIds: [], reviewerIds: [], due: '',
+    lastTemplateAxis: ''
+  };
   function freshRow(axis) {
     return {
       axis: axis || 'Hook',
@@ -41808,30 +42070,49 @@ window._clearPendingCu = _clearPendingCu;
       brief: '',
       editorIds: [], reviewerIds: [],
       due: '',
-      mode: 'split' // 'split' for From→To, 'note' for single-line
+      mode: 'split', // 'split' for From→To, 'note' for single-line
+      _advancedOpen: false
     };
   }
   function applyTemplate(t) {
+    syncGlobalsFromDom();   // 2026-05-20 Phase A — preserve any global assign before wiping rows
     _vlMod.rows = [];
     for (var i = 0; i < t.count; i++) _vlMod.rows.push(freshRow(t.axis));
+    _vlMod.lastTemplateAxis = t.axis;
     renderModal();
   }
   window._varlabApplyTemplate = function (idx) {
     var t = TEMPLATES[idx]; if (!t) return; applyTemplate(t);
   };
   window._varlabAddRow = function () {
-    _vlMod.rows.push(freshRow());
+    // 2026-05-20 Phase A — preserve user input across re-render. Without
+    // syncAllRowsFromDom() any text typed into existing rows (only in DOM,
+    // not yet in _vlMod.rows[i]) gets discarded when renderModal() rebuilds
+    // from state. Caused the "V1 brief disappears when V3 is added" bug.
+    syncAllRowsFromDom();
+    syncGlobalsFromDom();
+    _vlMod.rows.push(freshRow(_vlMod.lastTemplateAxis || ''));
     renderModal();
   };
   window._varlabRemoveRow = function (idx) {
+    syncAllRowsFromDom();
+    syncGlobalsFromDom();
     _vlMod.rows.splice(idx, 1);
     if (!_vlMod.rows.length) _vlMod.rows.push(freshRow());
     renderModal();
   };
   window._varlabRowToggleMode = function (idx) {
     var r = _vlMod.rows[idx]; if (!r) return;
+    syncAllRowsFromDom();     // capture sibling rows' state too, not just this one
+    syncGlobalsFromDom();
     r.mode = (r.mode === 'split') ? 'note' : 'split';
-    syncRowFromDom(idx);
+    renderModal();
+  };
+  window._varlabRowToggleAdvanced = function (idx) {
+    var r = _vlMod.rows[idx]; if (!r) return;
+    syncAllRowsFromDom();
+    syncGlobalsFromDom();
+    r._advancedOpen = !r._advancedOpen;
     renderModal();
   };
   function readVal(id) { var el = document.getElementById(id); return el ? el.value : ''; }
@@ -41854,6 +42135,13 @@ window._clearPendingCu = _clearPendingCu;
   function syncAllRowsFromDom() {
     for (var i = 0; i < _vlMod.rows.length; i++) syncRowFromDom(i);
   }
+  // 2026-05-20 Phase D — Capture the per-modal global defaults strip
+  // (Editor / Reviewer / Due) into _vlMod so re-renders don't lose them.
+  function syncGlobalsFromDom() {
+    _vlMod.editorIds   = readMulti('vl_global_editor');
+    _vlMod.reviewerIds = readMulti('vl_global_reviewer');
+    _vlMod.due         = readVal('vl_global_due') || '';
+  }
 
   function membersOpts(selected) {
     var members = (typeof CLICKUP_MEMBERS !== 'undefined' && Array.isArray(CLICKUP_MEMBERS)) ? CLICKUP_MEMBERS : [];
@@ -41872,6 +42160,24 @@ window._clearPendingCu = _clearPendingCu;
       bd.onclick = function (e) { if (e.target === bd) closeModal(); };
       document.body.appendChild(bd);
     }
+    // ─── Phase B (2026-05-20) — capture scroll + focus + selection BEFORE
+    // innerHTML replace, so add/remove/toggle don't yank you back to the top
+    // of the modal or kill your typing focus.
+    var _prevScroll = 0;
+    var _prevFocus = null;
+    try {
+      var _bodyEl = bd.querySelector('.varlab-modal-body');
+      if (_bodyEl) _prevScroll = _bodyEl.scrollTop;
+      var _ae = document.activeElement;
+      if (_ae && _ae.id && bd.contains(_ae)) {
+        _prevFocus = { id: _ae.id };
+        if (typeof _ae.selectionStart === 'number') {
+          _prevFocus.selStart = _ae.selectionStart;
+          _prevFocus.selEnd = _ae.selectionEnd;
+        }
+      }
+    } catch (e) {}
+
     var parent = ADS.find(function (a) { return a.id === _vlMod.parentId; });
     var pName = parent ? (parent.formatName || parent.id) : _vlMod.parentId;
     var stats = buildStats(_vlMod.parentId);
@@ -41880,9 +42186,38 @@ window._clearPendingCu = _clearPendingCu;
       : 'No variations yet — start the lab.';
 
     var axes = allAxes();
-    var rowsHtml = _vlMod.rows.map(function (r, i) {
+    var templatesHtml = '<div class="varlab-templates">' +
+      '<span class="vl-lbl">Quick templates:</span>' +
+      TEMPLATES.map(function (t, i) { return '<button onclick="_varlabApplyTemplate(' + i + ')">' + esc(t.lbl) + '</button>'; }).join('') +
+      '</div>';
+
+    // ─── Phase D (2026-05-20) — global defaults strip. Editor/Reviewer/Due
+    // set here apply to every row at spawn time UNLESS that row set its own
+    // value in the per-row Advanced expander. Stops the "pick assignees 5
+    // times for a 5-variation batch" tedium.
+    var globalsHtml =
+      '<div class="varlab-globals">' +
+        '<span class="vl-lbl">Assign to:</span>' +
+        '<label class="vl-glbl"><span class="vl-glbl-cap">Editor</span>' +
+          '<select id="vl_global_editor" multiple size="2">' + membersOpts(_vlMod.editorIds) + '</select>' +
+        '</label>' +
+        '<label class="vl-glbl"><span class="vl-glbl-cap">Reviewer</span>' +
+          '<select id="vl_global_reviewer" multiple size="2">' + membersOpts(_vlMod.reviewerIds) + '</select>' +
+        '</label>' +
+        '<label class="vl-glbl"><span class="vl-glbl-cap">Due</span>' +
+          '<input type="date" id="vl_global_due" value="' + escAttr(_vlMod.due) + '">' +
+        '</label>' +
+        '<div class="vl-glbl-note">Defaults · per-row Advanced (▸) overrides</div>' +
+      '</div>';
+
+    // ─── Phase C (2026-05-20) — table view. Visible: # / axis / brief.
+    // Advanced (▸ click) expander reveals From→To, Hypothesis, per-row
+    // Editor/Reviewer/Due as overrides for the globals above.
+    var rowsTbody = _vlMod.rows.map(function (r, i) {
       var axisOpts = axes.map(function (a) { return '<option value="' + esc(a) + '"' + (a === r.axis ? ' selected' : '') + '>' + esc(a) + '</option>'; }).join('') +
-                     '<option value="__custom__"' + (r.axis === '__custom__' ? ' selected' : '') + '>+ Custom axis…</option>';
+                     '<option value="__custom__"' + (r.axis === '__custom__' ? ' selected' : '') + '>+ Custom…</option>';
+      var advClass = r._advancedOpen ? ' is-open' : '';
+      var advArrow = r._advancedOpen ? '▾' : '▸';
       var changeBlock = '';
       if (r.mode === 'split') {
         changeBlock =
@@ -41895,51 +42230,60 @@ window._clearPendingCu = _clearPendingCu;
         changeBlock =
           '<input type="text" id="vlrow_from_' + i + '" placeholder="Describe the change in one line…" value="' + escAttr(r.from) + '">';
       }
-      return '<div class="varlab-row">' +
-        '<span class="vl-row-num">V' + (i + 1) + '</span>' +
-        '<button class="vl-row-rm" title="Remove" onclick="_varlabRemoveRow(' + i + ')">×</button>' +
-        '<div class="vl-grid">' +
-          '<div>' +
-            '<label>Change axis</label>' +
-            '<select id="vlrow_axis_' + i + '" onchange="_varlabAxisOnChange(' + i + ')">' + axisOpts + '</select>' +
-            (r.axis === '__custom__'
-              ? '<input type="text" id="vlrow_customaxis_' + i + '" placeholder="Name the new axis (e.g. Voiceover, Lighting)" value="' + escAttr(r.customAxis) + '" style="margin-top:6px">'
-              : '') +
+      var advBody =
+        '<div class="vl-adv-grid">' +
+          (r.axis === '__custom__'
+            ? '<div class="vl-adv-cell vl-adv-full"><label>Custom axis name</label><input type="text" id="vlrow_customaxis_' + i + '" placeholder="e.g. Voiceover, Lighting" value="' + escAttr(r.customAxis) + '"></div>'
+            : '') +
+          '<div class="vl-adv-cell vl-adv-full">' +
+            '<label>What is changing <span class="vl-toggle" onclick="_varlabRowToggleMode(' + i + ')">' + (r.mode === 'split' ? 'use single-line note' : 'use From → To') + '</span></label>' +
+            changeBlock +
           '</div>' +
-          '<div>' +
-            '<label>Due date</label>' +
+          '<div class="vl-adv-cell vl-adv-full">' +
+            '<label>Hypothesis</label>' +
+            '<input type="text" id="vlrow_hyp_' + i + '" placeholder="Why this change should win…" value="' + escAttr(r.hypothesis) + '">' +
+          '</div>' +
+          '<div class="vl-adv-cell">' +
+            '<label>Editor (override)</label>' +
+            '<select id="vlrow_editor_' + i + '" multiple size="2">' + membersOpts(r.editorIds) + '</select>' +
+          '</div>' +
+          '<div class="vl-adv-cell">' +
+            '<label>Reviewer (override)</label>' +
+            '<select id="vlrow_reviewer_' + i + '" multiple size="2">' + membersOpts(r.reviewerIds) + '</select>' +
+          '</div>' +
+          '<div class="vl-adv-cell">' +
+            '<label>Due (override)</label>' +
             '<input type="date" id="vlrow_due_' + i + '" value="' + escAttr(r.due) + '">' +
           '</div>' +
-        '</div>' +
-        '<div style="margin-top:10px">' +
-          '<label>What is changing <span class="vl-toggle" onclick="_varlabRowToggleMode(' + i + ')">' + (r.mode === 'split' ? 'use single-line note' : 'use From → To') + '</span></label>' +
-          changeBlock +
-        '</div>' +
-        '<div style="margin-top:10px">' +
-          '<label>Hypothesis</label>' +
-          '<input type="text" id="vlrow_hyp_' + i + '" placeholder="Why this change should win…" value="' + escAttr(r.hypothesis) + '">' +
-        '</div>' +
-        '<div style="margin-top:10px">' +
-          '<label>Editor brief (optional — for the assignee in ClickUp)</label>' +
-          '<textarea id="vlrow_brief_' + i + '" rows="2" placeholder="Specifics for the editor: scope, references, do/don\'t…">' + esc(r.brief) + '</textarea>' +
-        '</div>' +
-        '<div class="vl-grid" style="margin-top:10px">' +
-          '<div>' +
-            '<label>Editor</label>' +
-            '<select id="vlrow_editor_' + i + '" multiple size="3">' + membersOpts(r.editorIds) + '</select>' +
-          '</div>' +
-          '<div>' +
-            '<label>Reviewer (optional)</label>' +
-            '<select id="vlrow_reviewer_' + i + '" multiple size="3">' + membersOpts(r.reviewerIds) + '</select>' +
-          '</div>' +
-        '</div>' +
         '</div>';
+      var advRow =
+        '<tr class="vl-tbl-adv-row' + (r._advancedOpen ? '' : ' is-hidden') + '">' +
+          '<td colspan="4">' + advBody + '</td>' +
+        '</tr>';
+      return '<tr class="vl-tbl-row' + advClass + '">' +
+          '<td class="vl-tbl-num">V' + (i + 1) + '</td>' +
+          '<td class="vl-tbl-axis">' +
+            '<select id="vlrow_axis_' + i + '" onchange="_varlabAxisOnChange(' + i + ')">' + axisOpts + '</select>' +
+          '</td>' +
+          '<td class="vl-tbl-brief">' +
+            '<textarea id="vlrow_brief_' + i + '" rows="2" placeholder="Specifics for the editor: scope, references, do/don\'t…">' + esc(r.brief) + '</textarea>' +
+          '</td>' +
+          '<td class="vl-tbl-actions">' +
+            '<button class="vl-adv-toggle' + (r._advancedOpen ? ' is-open' : '') + '" title="' + (r._advancedOpen ? 'Hide' : 'Show') + ' advanced fields" onclick="_varlabRowToggleAdvanced(' + i + ')">' + advArrow + '</button>' +
+            '<button class="vl-row-rm" title="Remove this variation" onclick="_varlabRemoveRow(' + i + ')">×</button>' +
+          '</td>' +
+        '</tr>' + advRow;
     }).join('');
-
-    var templatesHtml = '<div class="varlab-templates">' +
-      '<span class="vl-lbl">Quick templates:</span>' +
-      TEMPLATES.map(function (t, i) { return '<button onclick="_varlabApplyTemplate(' + i + ')">' + esc(t.lbl) + '</button>'; }).join('') +
-      '</div>';
+    var rowsHtml =
+      '<table class="varlab-tbl">' +
+        '<thead><tr>' +
+          '<th class="vl-tbl-num">#</th>' +
+          '<th class="vl-tbl-axis">Axis</th>' +
+          '<th class="vl-tbl-brief">Editor brief</th>' +
+          '<th class="vl-tbl-actions"></th>' +
+        '</tr></thead>' +
+        '<tbody>' + rowsTbody + '</tbody>' +
+      '</table>';
 
     bd.innerHTML =
       '<div class="varlab-modal" role="dialog" aria-label="Spawn variations">' +
@@ -41952,23 +42296,44 @@ window._clearPendingCu = _clearPendingCu;
         '</div>' +
         '<div class="varlab-modal-body">' +
           templatesHtml +
+          globalsHtml +
           rowsHtml +
-          '<button class="varlab-add" onclick="_varlabAddRow()">+ Add another variation</button>' +
+          '<button class="varlab-add" onclick="_varlabAddRow()">+ Add variation</button>' +
         '</div>' +
         '<div class="varlab-modal-ftr">' +
           '<button class="vl-cancel" onclick="_varlabCloseSpawnModal()">Cancel</button>' +
           '<button class="vl-spawn" onclick="_varlabConfirmSpawn()">Spawn ' + _vlMod.rows.length + ' variation' + (_vlMod.rows.length === 1 ? '' : 's') + ' → Action Plan</button>' +
         '</div>' +
       '</div>';
+
+    // ─── Phase B — restore scroll + focus + selection after render.
+    try {
+      var _bodyEl2 = bd.querySelector('.varlab-modal-body');
+      if (_bodyEl2 && _prevScroll) _bodyEl2.scrollTop = _prevScroll;
+      if (_prevFocus && _prevFocus.id) {
+        var _f = document.getElementById(_prevFocus.id);
+        if (_f) {
+          _f.focus();
+          if (typeof _prevFocus.selStart === 'number' && typeof _f.setSelectionRange === 'function') {
+            try { _f.setSelectionRange(_prevFocus.selStart, _prevFocus.selEnd); } catch (e) {}
+          }
+        }
+      }
+    } catch (e) {}
   }
   window._varlabAxisOnChange = function (i) {
-    syncRowFromDom(i);
+    syncAllRowsFromDom();   // 2026-05-20 Phase A — sibling rows' brief text survives axis change
+    syncGlobalsFromDom();
     renderModal();
   };
   function closeModal() {
     var bd = document.getElementById('varlabModalBd');
     if (bd && bd.parentNode) bd.parentNode.removeChild(bd);
+    // 2026-05-20 Phase D — also reset globals + advanced flags so reopening
+    // on a different parent doesn't inherit stale state.
     _vlMod.rows = []; _vlMod.parentId = null;
+    _vlMod.editorIds = []; _vlMod.reviewerIds = []; _vlMod.due = '';
+    _vlMod.lastTemplateAxis = '';
   }
   window._varlabCloseSpawnModal = closeModal;
 
@@ -41983,6 +42348,18 @@ window._clearPendingCu = _clearPendingCu;
   // ── Spawn — creates ADs + MANUAL_ACTIONS, pushes each to ClickUp.
   window._varlabConfirmSpawn = async function () {
     syncAllRowsFromDom();
+    syncGlobalsFromDom();   // 2026-05-20 Phase D — capture the globals strip before spawn
+    // Apply global defaults to any row whose own field is empty. Per-row
+    // values (set via the Advanced expander) take precedence.
+    var _gEditors  = (_vlMod.editorIds || []).slice();
+    var _gReviewers = (_vlMod.reviewerIds || []).slice();
+    var _gDue      = _vlMod.due || '';
+    for (var _gi = 0; _gi < _vlMod.rows.length; _gi++) {
+      var _gr = _vlMod.rows[_gi]; if (!_gr) continue;
+      if ((!_gr.editorIds   || !_gr.editorIds.length)   && _gEditors.length)   _gr.editorIds   = _gEditors.slice();
+      if ((!_gr.reviewerIds || !_gr.reviewerIds.length) && _gReviewers.length) _gr.reviewerIds = _gReviewers.slice();
+      if (!_gr.due && _gDue) _gr.due = _gDue;
+    }
     if (!_vlMod.parentId) { try { toast('No parent selected', 'err'); } catch (e) {} return; }
     var parent = ADS.find(function (a) { return a.id === _vlMod.parentId; });
     if (!parent) { try { toast('Parent task not found', 'err'); } catch (e) {} return; }

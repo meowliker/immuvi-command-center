@@ -40585,9 +40585,13 @@ function refreshPickerPreview() {
         : '<span style="color:var(--t3);font-size:0.7rem">—</span>';
       var statusCls = (ad.status||'').toLowerCase().replace(/\s+/g,'-');
       var winDate = ad.createdAt || ad.dateCreated || ad.created_at || null;
+      // 2026-05-20 — INS # column shows the task name (formatName) for
+      // winning formats instead of the raw ClickUp id. The id is still kept
+      // as a hover-title so admins can copy it when needed.
+      var winSerial = ad.formatName || ad.id || '—';
       return '<tr data-row-type="win"'+hidden+'>' +
         '<td><input type="checkbox" class="ins-picker-row-cb" data-idx="'+i+'" onchange="updatePickerSelectedCount();_updatePickerImportLabel()"></td>' +
-        '<td style="font-size:0.7rem;color:var(--t2);font-family:var(--mono,monospace)">'+esc(ad.id||'—')+'</td>' +
+        '<td style="font-size:0.7rem;color:var(--t2);font-family:var(--mono,monospace);max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+esc(ad.id||'')+'">'+esc(winSerial)+'</td>' +
         '<td style="font-weight:500;max-width:160px"><span class="ins-win-badge">🏆 '+esc(ad.status)+'</span> '+esc(ad.formatName||ad.id)+'</td>' +
         '<td style="font-size:0.7rem;color:var(--t3)">—</td>' +
         '<td style="font-size:0.7rem;max-width:100px">'+esc(ad.angle||'—')+'</td>' +

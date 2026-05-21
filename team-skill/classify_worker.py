@@ -1123,10 +1123,16 @@ class Worker:
         inspiration's identifier IS the `id` column (values like 'ARI-INS-001').
         Queue's `ins_id` corresponds to inspirations' `id`.
 
-        We require: row exists AND data->>'_clickupDocPageUrl' is set AND
-        data->>'hookType' is set AND data->>'creativeStructure' is set.
-        Without all three, the dashboard renders the row blank — which is
-        not a real classification, so we treat it as failure.
+        We require: row exists AND ALL 9 dashboard-critical fields are
+        non-empty in data:
+            _clickupDocPageUrl, brand, angle, persona, creativeStructure,
+            hookType, productionStyle, funnelStage, adType.
+        This matches the contract the skill prompt commits to (lines
+        ~1053–1061) and the May 9 fix `bfbc474`. Previously this only
+        checked 3 fields, allowing partially-filled rows to flip the queue
+        to "classified" with blank columns in the dashboard. Now if ANY of
+        the 9 is missing, this returns (False, …) → the worker requeues
+        and the skill retries up to MAX_ATTEMPTS_BEFORE_FAILED.
 
         Returns: (success: bool, message: str).
         """
@@ -1142,7 +1148,17 @@ class Worker:
                 return (False, f"no inspirations row for id={ins_id}")
             data = (rows[0] or {}).get("data") or {}
             missing = []
-            for k in ("_clickupDocPageUrl", "hookType", "creativeStructure"):
+            for k in (
+                "_clickupDocPageUrl",
+                "brand",
+                "angle",
+                "persona",
+                "creativeStructure",
+                "hookType",
+                "productionStyle",
+                "funnelStage",
+                "adType",
+            ):
                 if not data.get(k):
                     missing.append(k)
             if missing:

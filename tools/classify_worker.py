@@ -1068,12 +1068,18 @@ class Worker:
             f"  If the verification SELECT shows the row missing or fields blank, that is a FAIL.\n"
         )
 
-        # Auto-route: prefer claude (the skill's native agent) but fall back
-        # to codex on machines that only have Codex installed. The
+        # Auto-route: choose between claude and codex via env var.
+        # CLASSIFY_AGENT_PREFER=codex  → use codex (Mac Mini default, frees up
+        #                                claude pool for strategist / briefing)
+        # CLASSIFY_AGENT_PREFER=claude → use claude (historical default)
+        # Either way, build_agent_cmd() falls back to whichever is installed.
         # classify-inspiration SKILL.md auto-updates via Step 0 from Vercel,
         # so it works under either agent as long as the skill files exist
         # locally for that agent.
-        cmd = build_agent_cmd(prompt, prefer="claude")
+        _prefer = (os.environ.get("CLASSIFY_AGENT_PREFER") or "claude").strip().lower()
+        if _prefer not in ("claude", "codex"):
+            _prefer = "claude"
+        cmd = build_agent_cmd(prompt, prefer=_prefer)
         agent_label = cmd[0] if cmd[0] == "claude" else "codex"
         log(f"[{job.get('id')}] running skill on {ins_id} via {agent_label} (timeout {CLAUDE_CLI_TIMEOUT_SECONDS}s)")
         try:
@@ -1123,10 +1129,16 @@ class Worker:
         inspiration's identifier IS the `id` column (values like 'ARI-INS-001').
         Queue's `ins_id` corresponds to inspirations' `id`.
 
-        We require: row exists AND data->>'_clickupDocPageUrl' is set AND
-        data->>'hookType' is set AND data->>'creativeStructure' is set.
-        Without all three, the dashboard renders the row blank — which is
-        not a real classification, so we treat it as failure.
+        We require: row exists AND ALL 9 dashboard-critical fields are
+        non-empty in data:
+            _clickupDocPageUrl, brand, angle, persona, creativeStructure,
+            hookType, productionStyle, funnelStage, adType.
+        This matches the contract the skill prompt commits to (lines
+        ~1053–1061) and the May 9 fix `bfbc474`. Previously this only
+        checked 3 fields, allowing partially-filled rows to flip the queue
+        to "classified" with blank columns in the dashboard. Now if ANY of
+        the 9 is missing, this returns (False, …) → the worker requeues
+        and the skill retries up to MAX_ATTEMPTS_BEFORE_FAILED.
 
         Returns: (success: bool, message: str).
         """
@@ -1142,7 +1154,17 @@ class Worker:
                 return (False, f"no inspirations row for id={ins_id}")
             data = (rows[0] or {}).get("data") or {}
             missing = []
-            for k in ("_clickupDocPageUrl", "hookType", "creativeStructure"):
+            for k in (
+                "_clickupDocPageUrl",
+                "brand",
+                "angle",
+                "persona",
+                "creativeStructure",
+                "hookType",
+                "productionStyle",
+                "funnelStage",
+                "adType",
+            ):
                 if not data.get(k):
                     missing.append(k)
             if missing:

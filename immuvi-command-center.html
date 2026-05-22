@@ -10016,6 +10016,39 @@ body:not(.booting) #__bootLoader {
   0%, 100% { opacity: 0.85; }
   50%      { opacity: 1; filter: brightness(1.15); }
 }
+
+/* ── Winning Artifact section (Edit Creative modal) ── */
+.tdv-section { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--b); }
+.tdv-title { font-size: 0.72rem; font-weight: 700; color: var(--t3); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 10px; display: flex; align-items: center; gap: 8px; }
+.tdv-hint { font-size: 0.7rem; color: var(--t3); margin-bottom: 10px; }
+.tdv-paste-row { display: flex; gap: 8px; align-items: stretch; margin-bottom: 12px; }
+.tdv-paste-row input { flex: 1; padding: 8px 10px; border: 1px solid var(--b); border-radius: 6px; background: var(--card); color: var(--t1); font-size: 0.8rem; }
+.tdv-paste-row input:focus { outline: none; border-color: var(--win); }
+.tdv-paste-row button { padding: 8px 14px; border: 1px solid var(--win); background: rgba(214,255,75,0.18); color: var(--b-ink); border-radius: 6px; font-size: 0.78rem; font-weight: 600; cursor: pointer; }
+.tdv-paste-row button:hover { background: rgba(214,255,75,0.32); }
+.tdv-browse-row { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; }
+.tdv-browse-row button { padding: 6px 12px; border: 1px solid var(--b); background: var(--card); color: var(--t1); border-radius: 6px; font-size: 0.74rem; cursor: pointer; }
+.tdv-browse-row button:hover { border-color: var(--t3); }
+.tdv-browse-row .tdv-or { font-size: 0.7rem; color: var(--t3); }
+.tdv-list { display: flex; flex-direction: column; gap: 6px; }
+.tdv-list-row { display: flex; align-items: center; gap: 10px; padding: 8px 10px; background: var(--el); border-radius: 6px; }
+.tdv-list-row .tdv-list-star { color: var(--win); font-size: 14px; }
+.tdv-list-row .tdv-list-name { flex: 1; font-size: 0.8rem; color: var(--t1); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tdv-list-row .tdv-list-link { font-size: 0.72rem; color: var(--inprog); text-decoration: none; padding: 4px 8px; border-radius: 4px; background: rgba(37,99,235,0.08); }
+.tdv-list-row .tdv-list-link:hover { background: rgba(37,99,235,0.18); }
+.tdv-list-row .tdv-list-unmark { padding: 4px 8px; border: 1px solid var(--b); background: var(--card); color: var(--t2); border-radius: 4px; font-size: 0.7rem; cursor: pointer; }
+.tdv-list-row .tdv-list-unmark:hover { color: var(--lose); border-color: var(--lose); }
+.tdv-empty { padding: 12px; text-align: center; color: var(--t3); font-size: 0.78rem; font-style: italic; }
+.tdv-grid-wrap { margin-top: 12px; padding-top: 12px; border-top: 1px dashed var(--b); }
+.tdv-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 10px; }
+.tdv-tile { position: relative; aspect-ratio: 9 / 16; border-radius: 8px; overflow: hidden; background: var(--el); border: 2px solid transparent; cursor: pointer; transition: border-color 0.18s ease, transform 0.18s ease; }
+.tdv-tile:hover { border-color: var(--t3); transform: translateY(-1px); }
+.tdv-tile.is-winner { border-color: var(--win); background: rgba(214,255,75,0.08); }
+.tdv-tile img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.tdv-tile .tdv-name { position: absolute; left: 0; right: 0; bottom: 0; padding: 6px 8px; background: linear-gradient(to top, rgba(0,0,0,0.85), transparent); color: #fff; font-size: 0.7rem; font-weight: 600; }
+.tdv-tile .tdv-star { position: absolute; top: 6px; right: 6px; width: 26px; height: 26px; border-radius: 50%; background: rgba(0,0,0,0.55); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 14px; transition: background 0.18s ease; }
+.tdv-tile.is-winner .tdv-star { background: var(--win); color: var(--b-ink); }
+.tdv-loading { padding: 16px; text-align: center; color: var(--t3); font-size: 0.8rem; }
 </style>
 </head>
 <body class="booting">
@@ -24205,6 +24238,12 @@ function openEditCreative(id) {
     '<div class="form-group"><label>Angle</label><select class="f-inp" id="ecAngle">' + angOpts + '</select></div>' +
     '<div class="form-group"><label>Persona</label><select class="f-inp" id="ecPersona">' + perOpts + '</select></div>';
 
+  // Winning Artifact section — appears only when this ad's status is a winner state.
+  // Defined in the data-layer additions just after _videoWinners.
+  if (typeof _mxv3RenderTaskVideos === 'function') {
+    body += _mxv3RenderTaskVideos(ad);
+  }
+
   var foot = '<button class="btn-add" onclick="saveEditCreative(\'' + escAttr(ad.id) + '\')">Save</button> <button class="btn-ghost" onclick="closeModal()">Cancel</button>';
   openModal('Edit Creative ' + ad.id, body, foot);
 }
@@ -32575,6 +32614,241 @@ var _videoWinners = (function () {
 
   return { listForAd: listForAd, listAll: listAll, mark: mark, unmark: unmark };
 })();
+
+// ── Winning Artifact section (Edit Creative modal) ──
+// Renders inside openEditCreative for tasks with status Winner / Mild Winner / Scale.
+// Two paths: paste a Drive file URL, or browse the linked Drive folder.
+// Both write to task_video_winners via _videoWinners; also mirrors to
+// ad.meta._winningArtifacts and posts a best-effort ClickUp comment.
+
+function _isWinnerStatus(s) {
+  s = (s || '').toLowerCase();
+  return s === 'winner' || s === 'mild winner' || s === 'scale';
+}
+
+// Parse a Drive file URL into a synthetic file object usable by _videoWinners.mark.
+// Accepts:  /file/d/<ID>/view   or   ?id=<ID>   or just a raw 25+-char Drive ID
+function _parseDriveFileUrl(url, defaultName) {
+  if (!url) return null;
+  url = String(url).trim();
+  if (!url) return null;
+  var m = url.match(/\/file\/d\/([a-zA-Z0-9_-]{20,})/) ||
+          url.match(/[?&]id=([a-zA-Z0-9_-]{20,})/) ||
+          (/^[a-zA-Z0-9_-]{20,}$/.test(url) ? [null, url] : null);
+  if (!m) return null;
+  var fid = m[1];
+  var name = defaultName || ('drive-file-' + fid.slice(-6) + '.mp4');
+  return {
+    id: fid,
+    name: name,
+    webViewLink: 'https://drive.google.com/file/d/' + fid + '/view',
+    thumbnailLink: null
+  };
+}
+
+// Build the Winning Artifact section HTML. Returns '' (empty string) if the
+// ad's status is not a winner state — caller can safely concatenate.
+function _mxv3RenderTaskVideos(ad) {
+  if (!ad || !_isWinnerStatus(ad.status)) return '';
+
+  var folderId  = _driveFolder.parseFolderId(ad.driveLink || '');
+  var hasFolder = !!folderId;
+
+  // Async-refresh the list once the modal is in the DOM
+  setTimeout(function () { _mxv3RefreshWinnersList(ad); }, 0);
+
+  var html = '<div class="tdv-section">';
+  html += '<div class="tdv-title">🏆 Winning Artifact</div>';
+  html += '<div class="tdv-hint">Mark the specific file(s) that won. Saved to Supabase + mirrored to ClickUp as a comment.</div>';
+
+  // Path 1: paste URL
+  html += '<div class="tdv-paste-row">';
+  html += '  <input type="text" id="tdv-paste-' + escAttr(ad.id) + '" placeholder="Paste Drive file URL (https://drive.google.com/file/d/…)">';
+  html += '  <button type="button" onclick="_mxv3SaveWinnerFromPaste(\'' + escAttr(ad.id) + '\')">Save as winner</button>';
+  html += '</div>';
+
+  // Path 2: browse folder
+  if (hasFolder) {
+    html += '<div class="tdv-browse-row">';
+    html += '  <span class="tdv-or">OR</span>';
+    html += '  <button type="button" onclick="_mxv3ToggleBrowseGrid(\'' + escAttr(ad.id) + '\')">📂 Browse Drive folder</button>';
+    html += '</div>';
+  }
+
+  // Existing winners list (refreshed by _mxv3RefreshWinnersList)
+  html += '<div id="tdv-winners-' + escAttr(ad.id) + '">';
+  html += '  <div class="tdv-empty">Loading…</div>';
+  html += '</div>';
+
+  // Grid slot for browse mode (hidden until user clicks)
+  html += '<div id="tdv-slot-' + escAttr(ad.id) + '" style="display:none"></div>';
+
+  html += '</div>';
+  return html;
+}
+
+async function _mxv3RefreshWinnersList(ad) {
+  var slot = document.getElementById('tdv-winners-' + ad.id);
+  if (!slot) return;
+  var winners = await _videoWinners.listForAd(ad.id);
+  if (!winners.length) {
+    slot.innerHTML = '<div class="tdv-empty">No winner files marked yet.</div>';
+    return;
+  }
+  var html = '<div class="tdv-list">';
+  winners.forEach(function (w) {
+    html += '<div class="tdv-list-row">';
+    html += '  <span class="tdv-list-star">⭐</span>';
+    html += '  <span class="tdv-list-name" title="' + escAttr(w.file_name || w.drive_file_id) + '">' + esc(w.file_name || w.drive_file_id) + '</span>';
+    if (w.web_view_url) html += '  <a class="tdv-list-link" href="' + escAttr(w.web_view_url) + '" target="_blank" rel="noopener">open</a>';
+    html += '  <button class="tdv-list-unmark" type="button" onclick="_mxv3UnmarkWinner(\'' + escAttr(ad.id) + '\',\'' + escAttr(w.drive_file_id) + '\')">unmark</button>';
+    html += '</div>';
+  });
+  html += '</div>';
+  slot.innerHTML = html;
+}
+
+async function _mxv3SaveWinnerFromPaste(adId) {
+  var inp = document.getElementById('tdv-paste-' + adId);
+  if (!inp) return;
+  var url = inp.value.trim();
+  if (!url) { toast('Paste a Drive file URL first', 'err'); inp.focus(); return; }
+
+  var ad = (ADS || []).find(function (a) { return a.id === adId; });
+  var defaultName = ad ? ((ad.formatName || ad.id) + ' winner') : null;
+  var file = _parseDriveFileUrl(url, defaultName);
+  if (!file) { toast('Could not parse Drive file ID from that URL', 'err'); inp.focus(); return; }
+
+  var rec = await _videoWinners.mark(adId, file, null);
+  if (!rec) { toast('Save failed', 'err'); return; }
+
+  _mirrorWinnerToAdMeta(ad, file);
+  _mxv3SyncWinnerToClickup(ad, file).catch(function (e) { console.warn('[clickup-sync] failed', e); });
+
+  inp.value = '';
+  toast('Saved ' + file.name + ' as winner');
+  if (ad) await _mxv3RefreshWinnersList(ad);
+}
+
+async function _mxv3ToggleBrowseGrid(adId) {
+  var slot = document.getElementById('tdv-slot-' + adId);
+  if (!slot) return;
+  var isOpen = slot.style.display !== 'none';
+  if (isOpen) { slot.style.display = 'none'; return; }
+
+  slot.style.display = '';
+  slot.innerHTML = '<div class="tdv-grid-wrap"><div class="tdv-loading">Loading Drive folder…</div></div>';
+
+  var ad = (ADS || []).find(function (a) { return a.id === adId; });
+  if (!ad) return;
+  var folderId = _driveFolder.parseFolderId(ad.driveLink || '');
+  if (!folderId) {
+    slot.innerHTML = '<div class="tdv-grid-wrap"><div class="tdv-empty">No folder URL on this task.</div></div>';
+    return;
+  }
+  var info = await _driveFolder.fetch(folderId);
+  if (!info || !info.files) {
+    slot.innerHTML = '<div class="tdv-grid-wrap"><div class="tdv-empty">Folder not accessible or empty.</div></div>';
+    return;
+  }
+  var winners = await _videoWinners.listForAd(adId);
+  var winSet = {};
+  winners.forEach(function (w) { winSet[w.drive_file_id] = true; });
+
+  var media = info.files.filter(function (f) {
+    var mt = f.mimeType || '';
+    return mt.indexOf('video/') === 0 || mt.indexOf('image/') === 0;
+  });
+  if (media.length === 0) {
+    slot.innerHTML = '<div class="tdv-grid-wrap"><div class="tdv-empty">No video or image files in this folder.</div></div>';
+    return;
+  }
+
+  var html = '<div class="tdv-grid-wrap"><div class="tdv-grid">';
+  media.forEach(function (f) {
+    var isWin = !!winSet[f.id];
+    var thumb = f.thumbnailLink || 'https://placehold.co/240x320/1a1a1a/fff?text=' + encodeURIComponent(f.name || '?');
+    html += '<div class="tdv-tile' + (isWin ? ' is-winner' : '') + '"' +
+            ' onclick="_mxv3ToggleVideoWinner(\'' + escAttr(adId) + '\',\'' + escAttr(f.id) + '\')"' +
+            ' title="' + escAttr(f.name || '') + (isWin ? ' — winner (click to unmark)' : ' (click to mark winner)') + '">' +
+              '<img src="' + escAttr(thumb) + '" alt="" loading="lazy">' +
+              '<div class="tdv-star">' + (isWin ? '⭐' : '☆') + '</div>' +
+              '<div class="tdv-name">' + esc(f.name || 'unnamed') + '</div>' +
+            '</div>';
+  });
+  html += '</div></div>';
+  slot.innerHTML = html;
+}
+
+async function _mxv3ToggleVideoWinner(adId, fileId) {
+  var ad = (ADS || []).find(function (a) { return a.id === adId; });
+  if (!ad) { toast('Task not found', 'err'); return; }
+  var folderId = _driveFolder.parseFolderId(ad.driveLink || '');
+  var info = folderId ? await _driveFolder.fetch(folderId) : null;
+  var file = info && info.files ? info.files.find(function (f) { return f.id === fileId; }) : null;
+  if (!file) { toast('Video file not found', 'err'); return; }
+
+  var winners = await _videoWinners.listForAd(adId);
+  var isWin = winners.some(function (w) { return w.drive_file_id === fileId; });
+
+  if (isWin) {
+    var ok = await _videoWinners.unmark(adId, fileId);
+    if (!ok) { toast('Failed to unmark', 'err'); return; }
+    _unmirrorWinnerFromAdMeta(ad, fileId);
+    toast('Unmarked ' + (file.name || fileId));
+  } else {
+    var rec = await _videoWinners.mark(adId, file, null);
+    if (!rec) { toast('Failed to mark', 'err'); return; }
+    _mirrorWinnerToAdMeta(ad, file);
+    _mxv3SyncWinnerToClickup(ad, file).catch(function (e) { console.warn('[clickup-sync] failed', e); });
+    toast('Marked ' + (file.name || fileId) + ' as winner');
+  }
+
+  await _mxv3RefreshWinnersList(ad);
+  // re-render the grid to reflect the new state
+  var slot = document.getElementById('tdv-slot-' + adId);
+  if (slot && slot.style.display !== 'none') {
+    slot.style.display = 'none';
+    _mxv3ToggleBrowseGrid(adId);
+  }
+}
+
+async function _mxv3UnmarkWinner(adId, fileId) {
+  var ok = await _videoWinners.unmark(adId, fileId);
+  if (!ok) { toast('Failed to unmark', 'err'); return; }
+  var ad = (ADS || []).find(function (a) { return a.id === adId; });
+  if (ad) _unmirrorWinnerFromAdMeta(ad, fileId);
+  toast('Unmarked');
+  if (ad) await _mxv3RefreshWinnersList(ad);
+}
+
+function _mirrorWinnerToAdMeta(ad, file) {
+  if (!ad) return;
+  ad.meta = ad.meta || {};
+  ad.meta._winningArtifacts = ad.meta._winningArtifacts || [];
+  if (!ad.meta._winningArtifacts.some(function (w) { return w.id === file.id; })) {
+    ad.meta._winningArtifacts.push({ id: file.id, name: file.name, url: file.webViewLink || null });
+  }
+}
+function _unmirrorWinnerFromAdMeta(ad, fileId) {
+  if (!ad || !ad.meta || !ad.meta._winningArtifacts) return;
+  ad.meta._winningArtifacts = ad.meta._winningArtifacts.filter(function (w) { return w.id !== fileId; });
+}
+
+// Best-effort ClickUp comment sync. Uses existing apiFetch + the ClickUp proxy.
+async function _mxv3SyncWinnerToClickup(ad, file) {
+  if (!ad || !ad._clickupId) return;
+  if (typeof apiFetch !== 'function') return;
+  var commentText = '🏆 Winner file: ' + (file.name || 'unnamed') + ' — ' + (file.webViewLink || '');
+  try {
+    await apiFetch('/task/' + encodeURIComponent(ad._clickupId) + '/comment', {
+      method: 'POST',
+      body: { comment_text: commentText, notify_all: false }
+    });
+  } catch (e) {
+    console.warn('[clickup-sync] comment failed', e);
+  }
+}
 
 // ── classifyCell — derive cell-level state from creatives ─────────
 function _mxv3ClassifyCell(angleName, personaName) {

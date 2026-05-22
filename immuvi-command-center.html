@@ -32545,12 +32545,42 @@ var _driveFolder = (function () {
 
   function _now() { return Date.now(); }
 
-  async function fetchFolder(folderId) {
+  async function fetchFolder(folderId, adId) {
     if (!folderId) return null;
     var hit = cache[folderId];
     if (hit && (_now() - hit.at) < TTL_MS) {
       return hit.data === null ? null : JSON.parse(JSON.stringify(hit.data));
     }
+
+    // Phase 2 cache-first lookup: if caller passed adId, check task_drive_cache
+    if (adId && typeof SB !== 'undefined' && SB) {
+      try {
+        var r = await SB.from('task_drive_cache').select('*').eq('ad_id', adId);
+        if (!r.error && r.data && r.data.length > 0) {
+          var synthetic = {
+            folder_id: folderId,
+            folder_name: '(cached)',
+            files: r.data.map(function (row) {
+              return {
+                id: row.drive_file_id,
+                name: row.file_name,
+                mimeType: row.mime_type,
+                thumbnailLink: row.thumbnail_url,
+                webViewLink: row.web_view_url,
+                size: row.size_bytes ? String(row.size_bytes) : null,
+                modifiedTime: row.modified_time,
+              };
+            })
+          };
+          cache[folderId] = { at: _now(), data: synthetic };
+          return JSON.parse(JSON.stringify(synthetic));
+        }
+      } catch (e) {
+        console.warn('[_driveFolder] cache lookup failed; falling back to live', adId, e);
+      }
+    }
+
+    // Fall back to live API call
     try {
       var resp = await fetch('/api/drive/list?folder=' + encodeURIComponent(folderId));
       if (resp.status === 404) {
@@ -32777,7 +32807,7 @@ async function _mxv3ToggleBrowseGrid(adId) {
     slot.innerHTML = '<div class="tdv-grid-wrap"><div class="tdv-empty">No folder URL on this task.</div></div>';
     return;
   }
-  var info = await _driveFolder.fetch(folderId);
+  var info = await _driveFolder.fetch(folderId, adId);
   if (!info || !info.files) {
     slot.innerHTML = '<div class="tdv-grid-wrap"><div class="tdv-empty">Folder not accessible or empty.</div></div>';
     return;
@@ -32815,7 +32845,7 @@ async function _mxv3ToggleVideoWinner(adId, fileId) {
   var ad = (ADS || []).find(function (a) { return a.id === adId; });
   if (!ad) { toast('Task not found', 'err'); return; }
   var folderId = _driveFolder.parseFolderId(ad.driveLink || '');
-  var info = folderId ? await _driveFolder.fetch(folderId) : null;
+  var info = folderId ? await _driveFolder.fetch(folderId, adId) : null;
   var file = info && info.files ? info.files.find(function (f) { return f.id === fileId; }) : null;
   if (!file) { toast('Video file not found', 'err'); return; }
 
@@ -33596,7 +33626,7 @@ async function _mxv3SeedFromVariation(parentAdId, driveFileId, angleName, person
 
   // Resolve the file: pull from cached Drive folder listing
   var folderId = _driveFolder.parseFolderId(parent.driveLink || '');
-  var info = folderId ? await _driveFolder.fetch(folderId) : null;
+  var info = folderId ? await _driveFolder.fetch(folderId, parentAdId) : null;
   var file = info && info.files ? info.files.find(function (f) { return f.id === driveFileId; }) : null;
   // file may be null in legacy mode (file pasted by URL, never listed) — graceful fallback
   var fileName = file ? file.name : driveFileId;

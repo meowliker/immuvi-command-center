@@ -33590,6 +33590,112 @@ function _mxv3ToggleTrackerGroup(adId) {
   if (el) el.classList.toggle('open', _mxv3TrackerOpenSet[adId]);
 }
 
+async function _mxv3SeedFromVariation(parentAdId, driveFileId, angleName, personaName) {
+  var parent = (ADS || []).find(function (a) { return a.id === parentAdId; });
+  if (!parent) { toast('Parent task not found', 'err'); return; }
+
+  // Resolve the file: pull from cached Drive folder listing
+  var folderId = _driveFolder.parseFolderId(parent.driveLink || '');
+  var info = folderId ? await _driveFolder.fetch(folderId) : null;
+  var file = info && info.files ? info.files.find(function (f) { return f.id === driveFileId; }) : null;
+  // file may be null in legacy mode (file pasted by URL, never listed) — graceful fallback
+  var fileName = file ? file.name : driveFileId;
+  var fileViewUrl = file ? file.webViewLink : ('https://drive.google.com/file/d/' + driveFileId + '/view');
+
+  // Build new ad — production task, seeded from the winning variation.
+  var newId = (typeof nextSerialId === 'function') ? nextSerialId() : ('AD-' + Date.now());
+  var prodFormatName = parent.formatName
+    ? (parent.formatName + ' → ' + (angleName || 'new cell'))
+    : ('Seeded from ' + parentAdId);
+
+  var newAd = {
+    id:                    newId,
+    formatName:            prodFormatName,
+    adLink:                fileViewUrl || parent.adLink || '',
+    driveLink:             '',
+    _sourceFormatDriveLink: parent.driveLink || '',
+    adType:                parent.adType || '',
+    funnelStage:           parent.funnelStage || '',
+    status:                'Untested',
+    angle:                 angleName,
+    persona:               personaName,
+    taskType:              'production',
+    adOrigin:              'Seeded-From-Winner',
+    sourceFormatId:        parent.id,
+    _sourceClickupId:      parent._clickupId || '',
+    _sourceFormatName:     parent.formatName || '',
+    _sourceWinnerFileId:   driveFileId,
+    _sourceWinnerFileName: fileName,
+    _sourceWinnerFileUrl:  fileViewUrl,
+    parentAdId:            null,
+    variationNumber:       null,
+    _clickupId:            null,
+    _clickupStatus:        null,
+    hookType:              parent.hookType || '',
+    creativeStructure:     parent.creativeStructure || '',
+    productionStyle:       parent.productionStyle || '',
+    creativeHypothesis:    parent.creativeHypothesis || '',
+    creativeUSP:           parent.creativeUSP || '',
+    notes:                 parent.notes || '',
+    dateCreated:           Date.now(),
+    createdAt:             Date.now(),
+    _localNew:             true,
+    _fromInspoId:          parent._fromInspoId || null   // preserve chain to original inspo
+  };
+
+  ADS.push(newAd);
+
+  // Push into the target cell
+  var cellKey = angleName + '||' + personaName;
+  if (typeof CELL_CREATIVE_ASSIGNMENTS === 'object' && CELL_CREATIVE_ASSIGNMENTS) {
+    if (!CELL_CREATIVE_ASSIGNMENTS[cellKey]) CELL_CREATIVE_ASSIGNMENTS[cellKey] = [];
+    CELL_CREATIVE_ASSIGNMENTS[cellKey].push(newId);
+  }
+  if (typeof ANGLE_PERSONAS === 'object' && ANGLE_PERSONAS) {
+    if (!ANGLE_PERSONAS[angleName]) ANGLE_PERSONAS[angleName] = [];
+    if (ANGLE_PERSONAS[angleName].indexOf(personaName) === -1) ANGLE_PERSONAS[angleName].push(personaName);
+  }
+
+  if (typeof saveState === 'function') { try { saveState(); } catch (e) {} }
+  if (typeof renderMatrix === 'function') { try { renderMatrix(); } catch (e) {} }
+  if (typeof renderMxv3Drawer === 'function') { try { renderMxv3Drawer(); } catch (e) {} }
+
+  // Fire-and-forget brief generation request
+  _mxv3RequestBriefForVariation(parentAdId, driveFileId, newId);
+
+  toast('Seeded ' + newId + ' from ' + fileName + '. Brief generation queued.');
+}
+
+// Fire-and-forget brief request. The actual worker (tools/variation_brief_worker.py,
+// Task 8) pulls jobs from variation_brief_queue and writes results to variation_briefs.
+async function _mxv3RequestBriefForVariation(parentAdId, driveFileId, newAdId) {
+  if (!SB) return;
+  try {
+    // Already have a brief? Short-circuit
+    var found = await SB.from('variation_briefs')
+      .select('clickup_doc_page_url')
+      .eq('drive_file_id', driveFileId);
+    if (!found.error && found.data && found.data.length > 0) {
+      console.log('[seed] brief already exists for', driveFileId, '→', found.data[0].clickup_doc_page_url);
+      return;
+    }
+    // Enqueue
+    var ins = await SB.from('variation_brief_queue').insert({
+      parent_ad_id: parentAdId,
+      drive_file_id: driveFileId,
+      target_ad_id: newAdId,
+      status: 'pending'
+    });
+    if (ins.error) {
+      console.warn('[seed] brief enqueue failed', ins.error);
+    } else {
+      console.log('[seed] brief generation queued for', driveFileId);
+    }
+  } catch (e) {
+    console.error('[seed] brief request failed', e);
+  }
+}
+
 function _mxv3RenderAddInspiration(angleName, personaName) {
   var q = (_mxv3.addSearch || '').toLowerCase();
   var src = (typeof INSPIRATIONS !== 'undefined' && Array.isArray(INSPIRATIONS)) ? INSPIRATIONS : [];

@@ -5491,6 +5491,125 @@ button.mx-dt-action-sent .open { color:#0a84ff; font-weight:700; margin-left:4px
 }
 .ins-table thead th:first-child { z-index: 3; }
 .ins-table tbody tr.ins-row-active td:first-child { background:#eef0fc; }
+
+/* ─────────────────────────────────────────────────────────────────────
+   2026-05-20 — Competitors tab (Creative Strategy OS — Phase A)
+   3-bucket discovery + founder approval flow.
+   ───────────────────────────────────────────────────────────────────── */
+.comp-view-pill {
+  padding: 5px 12px;
+  border: 1px solid var(--b, #e2e8f0);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--t1, #0f172a);
+  font-size: .72rem;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background .15s, border-color .15s;
+}
+.comp-view-pill:hover { background: white; border-color: #cbd5e1; }
+.comp-view-pill.on   { background: var(--t1, #0f172a); color: #fff; border-color: var(--t1, #0f172a); }
+
+.comp-bucket { min-height: 200px; }
+.comp-bucket-body { display: flex; flex-direction: column; gap: 8px; }
+
+.comp-card {
+  background: white;
+  border: 1px solid var(--b, #e2e8f0);
+  border-radius: 10px;
+  padding: 12px 14px;
+  position: relative;
+  transition: border-color .15s, box-shadow .15s;
+}
+.comp-card:hover { border-color: #94a3b8; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
+.comp-card.approved { border-left: 3px solid #dc2626; }   /* heart-red accent for approved */
+
+.comp-card-head {
+  display: flex; align-items: flex-start; justify-content: space-between; gap: 8px;
+}
+.comp-card-name {
+  font-weight: 700; font-size: .85rem; color: var(--t1, #0f172a);
+  flex: 1; min-width: 0;
+}
+.comp-card-meta {
+  display: flex; gap: 6px; align-items: center; flex-wrap: wrap;
+  margin-top: 6px;
+  font-size: .65rem; color: var(--t3, #94a3b8);
+}
+.comp-card-pill {
+  background: #f1f5f9; color: #475569;
+  padding: 2px 7px; border-radius: 999px; font-weight: 600;
+}
+.comp-card-pill.live { background: #dcfce7; color: #166534; }
+.comp-card-pill.stale { background: #fef3c7; color: #92400e; }
+
+.comp-heart-btn {
+  background: transparent; border: 0; cursor: pointer;
+  font-size: 1.15rem; line-height: 1; padding: 0;
+  color: #cbd5e1; transition: transform .12s, color .12s;
+  flex-shrink: 0;
+}
+.comp-heart-btn:hover { transform: scale(1.15); }
+.comp-heart-btn.on { color: #dc2626; }
+
+.comp-card-actions {
+  display: flex; gap: 6px; margin-top: 8px;
+  font-size: .66rem;
+}
+.comp-card-actions a, .comp-card-actions button {
+  background: transparent; border: 1px solid var(--b, #e2e8f0);
+  padding: 3px 8px; border-radius: 6px;
+  font-size: .65rem; font-weight: 600;
+  color: var(--t2, #475569);
+  text-decoration: none; cursor: pointer; font-family: inherit;
+}
+.comp-card-actions a:hover, .comp-card-actions button:hover { background: var(--el, #f8fafc); }
+
+.comp-empty-bucket {
+  border: 1px dashed var(--b, #e2e8f0);
+  border-radius: 8px;
+  padding: 24px 12px;
+  text-align: center;
+  color: var(--t3, #94a3b8);
+  font-size: .72rem;
+}
+
+.comp-summary {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 10px;
+}
+.comp-summary-card {
+  background: white;
+  border: 1px solid var(--b, #e2e8f0);
+  border-radius: 10px;
+  padding: 12px 14px;
+}
+.comp-summary-card .lbl {
+  font-size: .62rem; color: var(--t3, #94a3b8);
+  text-transform: uppercase; letter-spacing: .06em; font-weight: 600;
+}
+.comp-summary-card .val {
+  font-size: 1.6rem; font-weight: 700; color: var(--t1, #0f172a);
+  line-height: 1.1; margin-top: 2px;
+}
+.comp-summary-card .sub {
+  font-size: .68rem; color: var(--t2, #475569); margin-top: 2px;
+}
+
+#panel-competitors { max-width: none; padding-left: 24px; padding-right: 24px; }
+
+/* 2026-05-20 — Job status chips on brand cards */
+.comp-job-chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 2px 8px; border-radius: 999px;
+  font-size: .62rem; font-weight: 700; letter-spacing: .04em;
+}
+.comp-job-chip.queued  { background: #f3e8ff; color: #6b21a8; }
+.comp-job-chip.running { background: #fef3c7; color: #92400e; animation: pulse 1.6s ease-in-out infinite; }
+.comp-job-chip.done    { background: #dcfce7; color: #166534; }
+.comp-job-chip.failed  { background: #fee2e2; color: #991b1b; cursor: help; }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.6} }
 .ins-table tbody tr[data-imported="1"] td:first-child { background:#ffffff; }
 /* Currently classifying — subtle blue highlight + pulse */
 .ins-table tbody tr.ins-row-classifying td { background:rgba(56,182,255,0.07); }
@@ -9982,6 +10101,7 @@ body:not(.booting) #__bootLoader {
       <button class="tab on" onclick="showTab('hq',this)" role="tab" aria-selected="true">Command HQ</button>
       <button class="tab" onclick="showTab('angles',this)" role="tab" aria-selected="false">Angles <span class="tab-count" id="anglesCount">0</span></button>
       <button class="tab" onclick="showTab('personas',this)" role="tab" aria-selected="false">Personas <span class="tab-count" id="personasCount">0</span></button>
+      <button class="tab" onclick="showTab('competitors',this)" role="tab" aria-selected="false">Competitors <span class="tab-count" id="competitorsCount">0</span></button>
       <button class="tab" onclick="showTab('creatives',this)" role="tab" aria-selected="false">Creative Tracker <span class="tab-count" id="creativesCount">0</span></button>
       <button class="tab" onclick="showTab('matrix',this)" role="tab" aria-selected="false">Creative Matrix <span class="tab-count" id="matrixCount">0</span></button>
       <button class="tab" onclick="showTab('actions',this)" role="tab" aria-selected="false">Action Plan <span class="tab-count" id="actionsCount">0</span></button>
@@ -10050,6 +10170,76 @@ body:not(.booting) #__bootLoader {
       </thead>
       <tbody id="personasBody"></tbody>
     </table>
+  </section>
+
+  <!-- ===== PANEL 3.5: COMPETITORS (Creative Strategy OS — Phase A 2026-05-20) =====
+       The Approved Brand List per product.
+       3-bucket discovery (Direct / Indirect / Similar Niche) + founder approval (heart).
+       Drives downstream phases (B/C/D) by limiting research to approved brands only. -->
+  <section id="panel-competitors" class="panel" role="tabpanel">
+    <div class="flex-between mb-16">
+      <div>
+        <div class="sh" style="margin:0;border:0;padding:0">Competitors</div>
+        <div style="font-size:.74rem;color:var(--t2);margin-top:4px">
+          Curate the brands you want to track per product. Approved brands feed the strategist's recommendation engine.
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <button class="btn-ghost btn-sm" onclick="_compRunDiscovery()" id="compRunBtn">🔍 Run discovery</button>
+        <button class="btn-ghost btn-sm" onclick="_compGenerateRecommendations()" title="Strategist synthesizes recommendations from approved brands' creatives">🧠 Generate recommendations</button>
+        <button class="btn-primary btn-sm" onclick="_compOpenAddBrand()">+ Add brand</button>
+      </div>
+    </div>
+
+    <!-- Summary strip -->
+    <div id="competitorsSummary" style="margin-bottom:16px"></div>
+
+    <!-- 2026-05-20 — Live activity strip: shows currently-running / queued / recently-finished jobs -->
+    <div id="competitorsLiveActivity" style="margin-bottom:16px"></div>
+
+    <!-- Filter pill bar -->
+    <div class="comp-filter-bar" style="display:flex;gap:8px;align-items:center;padding:10px 12px;background:var(--el);border-radius:10px 10px 0 0;border:1px solid var(--b);border-bottom:none;font-size:.74rem;flex-wrap:wrap">
+      <span style="color:var(--t3);margin-right:6px">Show:</span>
+      <button class="comp-view-pill" data-view="all"      onclick="_compSetView('all')">All <span style="opacity:.7" id="compCountAll">·0</span></button>
+      <button class="comp-view-pill on" data-view="approved" onclick="_compSetView('approved')">❤ Approved <span style="opacity:.7" id="compCountApproved">·0</span></button>
+      <button class="comp-view-pill" data-view="pending"  onclick="_compSetView('pending')">Pending review <span style="opacity:.7" id="compCountPending">·0</span></button>
+      <span class="ap-fb-grow" style="flex:1"></span>
+      <input type="text" id="compFilterSearch" placeholder="Search brand name…" oninput="_compRenderBuckets()"
+             style="padding:5px 10px;border-radius:6px;border:1px solid var(--b);background:white;font-size:.72rem;width:220px">
+    </div>
+
+    <!-- 3-bucket grid -->
+    <div class="card" style="border-radius:0 0 10px 10px;border:1px solid var(--b);padding:18px">
+      <div class="comp-bucket-grid" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:18px">
+        <!-- Direct -->
+        <div class="comp-bucket" data-category="direct">
+          <div class="comp-bucket-head" style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:10px">
+            <h3 style="margin:0;font-size:.88rem;font-weight:700;color:#dc2626">🎯 Direct</h3>
+            <span class="comp-bucket-count" id="compCountDirect" style="font-size:.7rem;color:var(--t3);font-weight:600">0</span>
+          </div>
+          <div style="font-size:.66rem;color:var(--t3);margin-bottom:10px">Same offer, same audience. The brands you compete head-to-head with.</div>
+          <div class="comp-bucket-body" id="compBucketDirect"></div>
+        </div>
+        <!-- Indirect -->
+        <div class="comp-bucket" data-category="indirect">
+          <div class="comp-bucket-head" style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:10px">
+            <h3 style="margin:0;font-size:.88rem;font-weight:700;color:#d97706">↔ Indirect</h3>
+            <span class="comp-bucket-count" id="compCountIndirect" style="font-size:.7rem;color:var(--t3);font-weight:600">0</span>
+          </div>
+          <div style="font-size:.66rem;color:var(--t3);margin-bottom:10px">Different offer, same audience. Solve the same problem differently.</div>
+          <div class="comp-bucket-body" id="compBucketIndirect"></div>
+        </div>
+        <!-- Similar Niche -->
+        <div class="comp-bucket" data-category="similar_niche">
+          <div class="comp-bucket-head" style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:10px">
+            <h3 style="margin:0;font-size:.88rem;font-weight:700;color:#7c3aed">✨ Similar niche</h3>
+            <span class="comp-bucket-count" id="compCountSimilar" style="font-size:.7rem;color:var(--t3);font-weight:600">0</span>
+          </div>
+          <div style="font-size:.66rem;color:var(--t3);margin-bottom:10px">Adjacent niche. Brands whose creative mechanics we can borrow and adapt.</div>
+          <div class="comp-bucket-body" id="compBucketSimilar"></div>
+        </div>
+      </div>
+    </div>
   </section>
 
   <!-- ===== PANEL 4: CREATIVE TRACKER ===== -->
@@ -10184,6 +10374,24 @@ body:not(.booting) #__bootLoader {
   </section>
 
   <section id="panel-strategist" class="panel" role="tabpanel">
+    <!-- 2026-05-20 — Strategist Recommendations (Creative Strategy OS Phase C+D) -->
+    <div class="card" style="padding:16px;margin-bottom:18px;border:1px solid var(--b);border-radius:10px">
+      <div class="flex-between" style="margin-bottom:12px">
+        <div>
+          <div class="sh" style="margin:0;border:0;padding:0">🧠 Test recommendations <span class="count" id="recCount" style="font-size:.7rem;color:var(--t3);font-weight:600;margin-left:6px">0</span></div>
+          <div style="font-size:.74rem;color:var(--t2);margin-top:4px">
+            Strategist's picks for what to test next, based on our memory + approved competitor creatives.
+            HIGH/MED/LOW confidence (no fake %).
+          </div>
+        </div>
+        <div style="display:flex;gap:8px">
+          <button class="btn-ghost btn-sm" onclick="_recFilter('pending')" id="recFiltPending">Pending</button>
+          <button class="btn-ghost btn-sm" onclick="_recFilter('approved')" id="recFiltApproved">Approved</button>
+          <button class="btn-ghost btn-sm" onclick="_recFilter('rejected')" id="recFiltRejected">Rejected</button>
+        </div>
+      </div>
+      <div id="strategistRecsBox"></div>
+    </div>
     <div id="strategistRoot">
       <div class="empty-state" style="padding:48px;text-align:center;color:var(--t3)">
         <div style="font-size:1.1rem;margin-bottom:8px">Loading strategist memory…</div>
@@ -16770,16 +16978,17 @@ var _renderedTabs = {}; // id → true once rendered at least once
 // Map of tab id → renderer function name (looked up at call time so
 // hot-reload / late definitions still work).
 var _TAB_RENDERERS = {
-  'hq':          'renderHQ',
-  'angles':      'renderAngles',
-  'personas':    'renderPersonas',
-  'creatives':   'renderCreatives',  // Creative Tracker
-  'matrix':      'renderMatrix',
-  'actions':     'renderActionPlan',
-  'production':  'renderProduction',
-  'inspiration': 'renderInspirations',
-  'strategist':  null, // Strategist re-renders on tab show via its own hook
-  'admin':       null  // Admin renders via its own onclick path
+  'hq':           'renderHQ',
+  'angles':       'renderAngles',
+  'personas':     'renderPersonas',
+  'competitors':  'renderCompetitors',  // 2026-05-20 — Creative Strategy OS Phase A
+  'creatives':    'renderCreatives',    // Creative Tracker
+  'matrix':       'renderMatrix',
+  'actions':      'renderActionPlan',
+  'production':   'renderProduction',
+  'inspiration':  'renderInspirations',
+  'strategist':   null,
+  'admin':        null
 };
 
 function _renderTabIfNeeded(tabId) {
@@ -17207,6 +17416,1052 @@ function renderAngles() {
 }
 
 // ── 4c. PERSONAS ──
+
+// ════════════════════════════════════════════════════════════════════
+// 2026-05-20 — Creative Strategy OS · Phase A — Competitors tab
+// ════════════════════════════════════════════════════════════════════
+// The "Approved Brand List" per product. Founder curates 3 buckets:
+//   - Direct (same offer, same audience)
+//   - Indirect (different offer, same audience)
+//   - Similar Niche (adjacent niche, borrowable creative mechanics)
+// Heart toggles `approved=true`. Approved brands drive downstream phases
+// (B = per-brand top-20, C = strategist recs, D = one-click → task).
+// ════════════════════════════════════════════════════════════════════
+
+var COMPETITORS = [];                          // hydrated from public.competitor_brands per active product
+var _compView = 'approved';                    // 'all' | 'approved' | 'pending'
+var _compRealtimeChannel = null;               // realtime subscription per-product
+var _compJobs = {};                            // brand_id → {status, started_at, ...}
+var _compCreatives = {};                       // brand_id → array of competitor_creative rows
+var _compRefreshTimer = null;                  // auto-poll while Competitors tab is open
+
+async function _compLoad() {
+  COMPETITORS = [];
+  if (!DB.ready || !activeProductId || !SB) return;
+  try {
+    var res = await SB.from('competitor_brands').select('*')
+      .eq('product_id', activeProductId)
+      .order('approved', { ascending: false })
+      .order('name');
+    COMPETITORS = (res.data || []).map(function (r) {
+      return {
+        id: r.id, productId: r.product_id, name: r.name,
+        category: r.category,
+        metaPageId: r.meta_page_id, metaAdLibraryUrl: r.meta_ad_library_url,
+        homepageUrl: r.homepage_url,
+        activeAdCount: r.active_ad_count,
+        lastSeenAt: r.last_seen_at ? new Date(r.last_seen_at).getTime() : null,
+        approved: !!r.approved,
+        approvedAt: r.approved_at ? new Date(r.approved_at).getTime() : null,
+        approvedBy: r.approved_by,
+        notes: r.notes || '',
+        researchPriority: r.research_priority,
+        createdAt: r.created_at ? new Date(r.created_at).getTime() : null
+      };
+    });
+  } catch (e) {
+    console.warn('[competitors] load failed', e);
+  }
+}
+
+async function renderCompetitors() {
+  // Lazy-load if first time (the lazy-render flag is per-tab not per-product)
+  if (!COMPETITORS.length || _compNeedsReload) {
+    _compNeedsReload = false;
+    await _compLoad();
+  }
+  await _compLoadJobsAndCreatives();
+  _compRenderBuckets();
+  _compRenderSummary();
+  _compRenderLiveActivity();
+  _compStartAutoRefresh();
+}
+
+// 2026-05-20 — Live activity strip at top of Competitors tab.
+// Shows: jobs running NOW + jobs queued + last 5 completions.
+// Auto-refreshes every 4 sec while the tab is open.
+function _compRenderLiveActivity() {
+  var box = document.getElementById('competitorsLiveActivity');
+  if (!box) return;
+  var jobs = Object.values(_compJobs);
+  var running = jobs.filter(function (j) { return j && (j.status === 'claimed' || j.status === 'running'); });
+  var pending = jobs.filter(function (j) { return j && j.status === 'pending'; });
+  var recentDone = jobs.filter(function (j) { return j && (j.status === 'done' || j.status === 'failed') && j.finished_at; })
+                       .sort(function (a, b) { return new Date(b.finished_at) - new Date(a.finished_at); })
+                       .slice(0, 5);
+
+  if (!running.length && !pending.length && !recentDone.length) {
+    box.innerHTML = '';
+    return;
+  }
+
+  // Brand lookup for friendly names
+  var brandName = {};
+  COMPETITORS.forEach(function (b) { brandName[b.id] = b.name; });
+
+  var html = '<div style="background:white;border:1px solid var(--b);border-radius:10px;padding:14px 18px;box-shadow:0 1px 2px rgba(0,0,0,.03)">' +
+    '<div style="font-size:.7rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--t3);margin-bottom:10px;display:flex;align-items:center;gap:8px">' +
+      '📡 Live activity' +
+      (running.length ? '<span style="background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:999px;font-size:.62rem;animation:pulse 1.6s ease-in-out infinite">' + running.length + ' running</span>' : '') +
+      (pending.length ? '<span style="background:#f3e8ff;color:#6b21a8;padding:2px 8px;border-radius:999px;font-size:.62rem">' + pending.length + ' queued</span>' : '') +
+    '</div>' +
+    '<div class="comp-live-grid" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px">';
+
+  // Running column
+  html += '<div>' +
+    '<div style="font-size:.65rem;color:#92400e;font-weight:700;margin-bottom:6px">⚙ RUNNING NOW</div>';
+  if (!running.length) {
+    html += '<div style="font-size:.7rem;color:var(--t3);font-style:italic">(idle)</div>';
+  } else {
+    html += running.map(function (j) {
+      var sec = j.started_at ? Math.max(0, Math.floor((Date.now() - new Date(j.started_at)) / 1000)) : 0;
+      var name = brandName[j.brand_id] || j.brand_id || '?';
+      var stage = sec < 10 ? 'starting Claude…' : (sec < 60 ? 'researching brand history…' : (sec < 120 ? 'classifying creatives…' : 'finalizing brief…'));
+      return '<div style="background:#fef3c7;border-left:3px solid #f59e0b;padding:8px 10px;border-radius:6px;margin-bottom:6px;font-size:.74rem">' +
+        '<div style="font-weight:700;color:var(--t1)">' + esc(name) + '</div>' +
+        '<div style="font-size:.66rem;color:var(--t2);margin-top:2px">' + esc(stage) + '</div>' +
+        '<div style="font-size:.6rem;color:var(--t3);margin-top:2px;font-variant-numeric:tabular-nums">⏱ ' + sec + 's elapsed</div>' +
+      '</div>';
+    }).join('');
+  }
+  html += '</div>';
+
+  // Queued column
+  html += '<div>' +
+    '<div style="font-size:.65rem;color:#6b21a8;font-weight:700;margin-bottom:6px">⏳ QUEUED</div>';
+  if (!pending.length) {
+    html += '<div style="font-size:.7rem;color:var(--t3);font-style:italic">(empty)</div>';
+  } else {
+    html += pending.slice(0, 8).map(function (j) {
+      var name = brandName[j.brand_id] || j.brand_id || '?';
+      return '<div style="background:#f3e8ff;border-left:3px solid #a855f7;padding:6px 10px;border-radius:6px;margin-bottom:4px;font-size:.72rem;color:var(--t1)">' +
+        esc(name) +
+      '</div>';
+    }).join('');
+    if (pending.length > 8) html += '<div style="font-size:.65rem;color:var(--t3);margin-top:4px">+ ' + (pending.length - 8) + ' more</div>';
+  }
+  html += '</div>';
+
+  // Recently done column
+  html += '<div>' +
+    '<div style="font-size:.65rem;color:#166534;font-weight:700;margin-bottom:6px">✓ RECENTLY FINISHED</div>';
+  if (!recentDone.length) {
+    html += '<div style="font-size:.7rem;color:var(--t3);font-style:italic">(none yet)</div>';
+  } else {
+    html += recentDone.map(function (j) {
+      var name = brandName[j.brand_id] || j.brand_id || '?';
+      var ago = _compRel(new Date(j.finished_at).getTime());
+      var count = (j.result_summary && (j.result_summary.inserted || j.result_summary.brands_proposed)) || 0;
+      var failed = j.status === 'failed';
+      var bg = failed ? '#fee2e2' : '#dcfce7';
+      var border = failed ? '#dc2626' : '#22c55e';
+      var color = failed ? '#991b1b' : '#166534';
+      var icon = failed ? '✗' : '✓';
+      var label = failed ? 'Failed' : (count + ' creatives');
+      return '<div style="background:' + bg + ';border-left:3px solid ' + border + ';padding:6px 10px;border-radius:6px;margin-bottom:4px;font-size:.72rem;display:flex;justify-content:space-between;align-items:center">' +
+        '<div><span style="color:' + color + ';font-weight:700">' + icon + '</span> ' + esc(name) + '</div>' +
+        '<div style="font-size:.6rem;color:var(--t3);text-align:right">' + esc(label) + '<br>' + esc(ago) + '</div>' +
+      '</div>';
+    }).join('');
+  }
+  html += '</div>';
+
+  html += '</div></div>';
+  box.innerHTML = html;
+}
+
+// 2026-05-20 — Pull last-known job state + creative counts per brand so the
+// cards can show "Running… · ETA 60s" / "Done · 8 creatives" / "Failed" etc.
+async function _compLoadJobsAndCreatives() {
+  if (!SB || !activeProductId) return;
+  try {
+    // Latest job per brand_id for find_creatives_for_brand
+    var jobsRes = await SB.from('competitor_research_queue')
+      .select('id,brand_id,status,job_type,started_at,finished_at,error_message,result_summary')
+      .eq('product_id', activeProductId)
+      .order('created_at', { ascending: false })
+      .limit(200);
+    _compJobs = {};
+    (jobsRes.data || []).forEach(function (j) {
+      if (j.job_type !== 'find_creatives_for_brand' || !j.brand_id) return;
+      // Keep only the latest job per brand
+      if (!_compJobs[j.brand_id]) _compJobs[j.brand_id] = j;
+    });
+    // Creatives per brand — pull ALL fields so the drawer can show them
+    var creatsRes = await SB.from('competitor_creatives')
+      .select('*')
+      .eq('product_id', activeProductId)
+      .order('rank_in_brand');
+    _compCreatives = {};
+    (creatsRes.data || []).forEach(function (c) {
+      if (!_compCreatives[c.brand_id]) _compCreatives[c.brand_id] = [];
+      _compCreatives[c.brand_id].push(c);
+    });
+  } catch (e) {
+    console.warn('[competitors] jobs/creatives load failed', e);
+  }
+}
+
+// Auto-refresh while the user is on the Competitors tab — every 4 sec
+function _compStartAutoRefresh() {
+  if (_compRefreshTimer) clearInterval(_compRefreshTimer);
+  _compRefreshTimer = setInterval(async function () {
+    // Stop refreshing if user has switched away
+    if (typeof activeTabId !== 'undefined' && activeTabId !== 'competitors') {
+      clearInterval(_compRefreshTimer); _compRefreshTimer = null;
+      return;
+    }
+    // Only refresh if anything is running/pending (avoid wasted DB hits)
+    var anyActive = Object.values(_compJobs).some(function (j) {
+      return j && (j.status === 'pending' || j.status === 'claimed' || j.status === 'running');
+    });
+    if (!anyActive && Object.keys(_compJobs).length > 0) return;
+    await _compLoadJobsAndCreatives();
+    _compRenderBuckets();
+    _compRenderSummary();
+    _compRenderLiveActivity();
+  }, 4000);
+}
+var _compNeedsReload = true;  // force a load on first render of this product
+
+function _compSubscribeRealtime() {
+  // Reuse the existing cc-${productId} channel pattern — never a new one
+  // (per feedback_realtime_traffic_budget.md invariant).
+  if (!SB || !activeProductId) return;
+  // The main product channel already exists via DB.subscribeToProduct.
+  // We just register a handler if the channel exists.
+  if (typeof _rtChannel !== 'undefined' && _rtChannel) {
+    // The channel already subscribes to '*' on multiple tables; add competitor_brands.
+    // Note: this is a passive listener — main subscriber wires it up elsewhere if needed.
+  }
+}
+
+function _compRenderSummary() {
+  var box = document.getElementById('competitorsSummary');
+  if (!box) return;
+  var approved = COMPETITORS.filter(function (b) { return b.approved; }).length;
+  var direct   = COMPETITORS.filter(function (b) { return b.category === 'direct'; }).length;
+  var indirect = COMPETITORS.filter(function (b) { return b.category === 'indirect'; }).length;
+  var similar  = COMPETITORS.filter(function (b) { return b.category === 'similar_niche'; }).length;
+  var totalAds = COMPETITORS.filter(function (b) { return b.approved && b.activeAdCount; })
+    .reduce(function (s, b) { return s + (b.activeAdCount || 0); }, 0);
+  box.innerHTML = '<div class="comp-summary">' +
+    '<div class="comp-summary-card"><div class="lbl">Total brands</div><div class="val">' + COMPETITORS.length + '</div><div class="sub">across all 3 buckets</div></div>' +
+    '<div class="comp-summary-card"><div class="lbl">❤ Approved</div><div class="val" style="color:#dc2626">' + approved + '</div><div class="sub">feeding the strategist</div></div>' +
+    '<div class="comp-summary-card"><div class="lbl">🎯 Direct</div><div class="val">' + direct + '</div></div>' +
+    '<div class="comp-summary-card"><div class="lbl">↔ Indirect</div><div class="val">' + indirect + '</div></div>' +
+    '<div class="comp-summary-card"><div class="lbl">✨ Similar niche</div><div class="val">' + similar + '</div></div>' +
+    '<div class="comp-summary-card"><div class="lbl">Ad volume (approved)</div><div class="val">' + totalAds.toLocaleString() + '</div><div class="sub">total active ads visible</div></div>' +
+  '</div>';
+
+  // Filter pill counts
+  var all = COMPETITORS.length;
+  var pending = all - approved;
+  var setText = function (id, v) { var el = document.getElementById(id); if (el) el.textContent = '·' + v; };
+  setText('compCountAll', all);
+  setText('compCountApproved', approved);
+  setText('compCountPending', pending);
+  setText('compCountDirect', direct);
+  setText('compCountIndirect', indirect);
+  setText('compCountSimilar', similar);
+
+  // Tab badge
+  var tabBadge = document.getElementById('competitorsCount');
+  if (tabBadge) tabBadge.textContent = approved + '/' + all;
+}
+
+function _compRenderBuckets() {
+  var search = ((document.getElementById('compFilterSearch') || {}).value || '').toLowerCase().trim();
+  var filtered = COMPETITORS.filter(function (b) {
+    if (_compView === 'approved' && !b.approved) return false;
+    if (_compView === 'pending'  && b.approved)  return false;
+    if (search && (b.name || '').toLowerCase().indexOf(search) === -1) return false;
+    return true;
+  });
+  _compFillBucket('compBucketDirect',  filtered.filter(function (b) { return b.category === 'direct'; }));
+  _compFillBucket('compBucketIndirect', filtered.filter(function (b) { return b.category === 'indirect'; }));
+  _compFillBucket('compBucketSimilar',  filtered.filter(function (b) { return b.category === 'similar_niche'; }));
+
+  // Filter pill UI active state
+  document.querySelectorAll('.comp-view-pill').forEach(function (p) {
+    p.classList.toggle('on', p.getAttribute('data-view') === _compView);
+  });
+}
+
+function _compFillBucket(elId, brands) {
+  var el = document.getElementById(elId);
+  if (!el) return;
+  if (!brands.length) {
+    el.innerHTML = '<div class="comp-empty-bucket">No brands here yet</div>';
+    return;
+  }
+  el.innerHTML = brands.map(_compRenderCard).join('');
+}
+
+function _compRenderCard(b) {
+  var heartCls = b.approved ? 'comp-heart-btn on' : 'comp-heart-btn';
+  var heartTitle = b.approved ? 'Unapprove (remove from research)' : 'Approve (add to research)';
+  var staleMs = 14 * 86400e3;
+  var staleLabel = b.lastSeenAt && (Date.now() - b.lastSeenAt) > staleMs ? 'stale' : 'live';
+  var lastSeenStr = b.lastSeenAt ? _compRel(b.lastSeenAt) : '—';
+  var libUrl = b.metaAdLibraryUrl || (b.metaPageId ? 'https://www.facebook.com/ads/library/?id=' + b.metaPageId : '');
+
+  // 2026-05-20 — Job status + creative count chips
+  var job = _compJobs[b.id];
+  var creatives = _compCreatives[b.id] || [];
+  var statusChip = '';
+  var findBtn = '';
+  if (job) {
+    if (job.status === 'pending') statusChip = '<span class="comp-job-chip queued">⏳ Queued</span>';
+    else if (job.status === 'claimed' || job.status === 'running') statusChip = '<span class="comp-job-chip running">⚙ Running…</span>';
+    else if (job.status === 'failed') statusChip = '<span class="comp-job-chip failed" title="' + escAttr(job.error_message||'') + '">✗ Failed</span>';
+    else if (job.status === 'done')   statusChip = '<span class="comp-job-chip done">✓ Done</span>';
+  }
+  if (b.approved) {
+    if (job && (job.status === 'pending' || job.status === 'claimed' || job.status === 'running')) {
+      findBtn = '<button disabled style="opacity:.5;cursor:not-allowed">⏳ In queue…</button>';
+    } else {
+      findBtn = '<button onclick="_compFindCreatives(\'' + escAttr(b.id) + '\')" style="background:#7c3aed;color:#fff;border-color:#7c3aed">🎯 ' + (creatives.length ? 'Re-fetch creatives' : 'Find creatives') + '</button>';
+    }
+  }
+
+  return '<div class="comp-card' + (b.approved ? ' approved' : '') + '" data-brand-id="' + escAttr(b.id) + '">' +
+    '<div class="comp-card-head">' +
+      '<div class="comp-card-name">' + esc(b.name) + '</div>' +
+      '<button class="' + heartCls + '" onclick="_compToggleApprove(\'' + escAttr(b.id) + '\')" title="' + escAttr(heartTitle) + '">' + (b.approved ? '❤' : '♡') + '</button>' +
+    '</div>' +
+    '<div class="comp-card-meta">' +
+      (b.activeAdCount != null ? '<span class="comp-card-pill ' + (staleLabel === 'live' ? 'live' : 'stale') + '">' + b.activeAdCount + ' ads</span>' : '<span class="comp-card-pill">no ad count</span>') +
+      '<span>Seen ' + esc(lastSeenStr) + '</span>' +
+      statusChip +
+      (creatives.length ? '<span class="comp-card-pill" style="background:#dcfce7;color:#166534">📋 ' + creatives.length + ' creatives</span>' : '') +
+    '</div>' +
+    (b.notes ? '<div style="font-size:.7rem;color:var(--t2);margin-top:6px;font-style:italic">' + esc(b.notes) + '</div>' : '') +
+    '<div class="comp-card-actions">' +
+      (libUrl ? '<a href="' + escAttr(libUrl) + '" target="_blank" rel="noopener">Meta Library ↗</a>' : '') +
+      (b.homepageUrl ? '<a href="' + escAttr(b.homepageUrl) + '" target="_blank" rel="noopener">Site ↗</a>' : '') +
+      (creatives.length ? '<button onclick="_compOpenCreativesDrawer(\'' + escAttr(b.id) + '\')" style="background:#0ea5e9;color:#fff;border-color:#0ea5e9">👁 View ' + creatives.length + '</button>' : '') +
+      findBtn +
+      '<button onclick="_compEditBrand(\'' + escAttr(b.id) + '\')">Edit</button>' +
+      '<button onclick="_compDeleteBrand(\'' + escAttr(b.id) + '\')" style="color:#dc2626">Delete</button>' +
+    '</div>' +
+  '</div>';
+}
+
+// 2026-05-20 — Inspect creatives gathered for a brand. TABLE view (not cards).
+// Group by status_label, sortable columns, expandable "why it works" cells.
+function _compOpenCreativesDrawer(brandId) {
+  var b = COMPETITORS.find(function (x) { return x.id === brandId; });
+  var creatives = (_compCreatives[brandId] || []).slice();
+  if (!b || !creatives.length) return;
+  // Sort by status_label priority then rank
+  var LABEL_RANK = { top_winner: 1, existing_winner: 2, recently_launched: 3, new_angle: 4, unknown: 5 };
+  creatives.sort(function (a, b) {
+    var la = LABEL_RANK[a.status_label] || 9, lb = LABEL_RANK[b.status_label] || 9;
+    if (la !== lb) return la - lb;
+    return (a.rank_in_brand || 99) - (b.rank_in_brand || 99);
+  });
+
+  // Count per label for summary chips
+  var countByLabel = {};
+  creatives.forEach(function (c) {
+    var k = c.status_label || 'unknown';
+    countByLabel[k] = (countByLabel[k] || 0) + 1;
+  });
+  var LABEL_LBL = {
+    top_winner: '🏆 Top Winners', existing_winner: '⭐ Existing Winning',
+    recently_launched: '🚀 Recently Launched', new_angle: '✨ New Angles', unknown: '◌ Other'
+  };
+  var LABEL_COLOR = {
+    top_winner: '#059669', existing_winner: '#7c3aed',
+    recently_launched: '#0ea5e9', new_angle: '#f59e0b', unknown: '#94a3b8'
+  };
+  var summaryChips = Object.keys(countByLabel).map(function (k) {
+    return '<span style="background:' + LABEL_COLOR[k] + '20;color:' + LABEL_COLOR[k] + ';padding:3px 10px;border-radius:999px;font-size:.7rem;font-weight:700">' +
+      esc(LABEL_LBL[k] || k) + ' · ' + countByLabel[k] + '</span>';
+  }).join(' ');
+
+  // Glossary banner — explains the status labels + the LLM-vs-real-data caveat
+  var glossaryHtml = '<details style="margin-bottom:14px;background:#f8fafc;border:1px solid var(--b);border-radius:8px;padding:8px 12px"><summary style="cursor:pointer;font-size:.7rem;font-weight:700;color:var(--t2);letter-spacing:.04em;text-transform:uppercase">📖 Definitions + data source</summary>' +
+    '<div style="margin-top:10px;display:grid;grid-template-columns:1fr 1fr;gap:14px;font-size:.72rem;line-height:1.5">' +
+      '<div><strong style="color:#059669">🏆 Top Winner</strong> — LLM thinks this is a long-running, high-volume ad (3+ visible variants, active 30+ days).</div>' +
+      '<div><strong style="color:#7c3aed">⭐ Existing Winning</strong> — A proven recurring angle this brand is known for.</div>' +
+      '<div><strong style="color:#0ea5e9">🚀 Recently Launched</strong> — LLM estimates first-seen in the last 30 days.</div>' +
+      '<div><strong style="color:#f59e0b">✨ New Angle</strong> — A fresh angle this brand hasn\'t been historically known for.</div>' +
+    '</div>' +
+    '<div style="margin-top:10px;background:#fef3c7;border-left:3px solid #f59e0b;padding:8px 12px;border-radius:6px;font-size:.7rem;line-height:1.5">' +
+      '<strong>⚠ Data source caveat:</strong> Current data is LLM-researched (not real Meta Ad Library). Briefs are plausible but ad URLs, video files, launch dates, and variant counts are LLM estimates — not real Meta data. ' +
+      'To get real URLs + playable videos + real timestamps, add an Apify Meta Ad Library scraper ($49/mo). The worker swap is a 30-min job.' +
+    '</div>' +
+    '</details>';
+
+  // The actual table (with new columns)
+  var tableHtml = '<div style="overflow-x:auto;border:1px solid var(--b);border-radius:8px;max-height:60vh">' +
+    '<table style="width:100%;border-collapse:collapse;font-size:.74rem">' +
+      '<thead style="position:sticky;top:0;background:var(--el);z-index:1">' +
+        '<tr style="text-align:left;border-bottom:2px solid var(--b)">' +
+          '<th style="padding:8px 10px;width:36px" title="Rank by objective signal (days active × variant count) when from Apify; LLM rank otherwise">#</th>' +
+          '<th style="padding:8px 6px;width:74px" title="Image / video preview">Preview</th>' +
+          '<th style="padding:8px 10px;width:108px" title="Top Winner / Existing Winning / Recently Launched / New Angle — defined in the Definitions panel">Status</th>' +
+          '<th style="padding:8px 10px;min-width:220px" title="The opening line / first 3 seconds — what stops the scroll">Hook</th>' +
+          '<th style="padding:8px 10px;width:120px" title="The core message / promise of the ad">Angle</th>' +
+          '<th style="padding:8px 10px;width:120px" title="The target audience this ad speaks to">Persona</th>' +
+          '<th style="padding:8px 10px;width:70px" title="photo / video / carousel / reel">Format</th>' +
+          '<th style="padding:8px 10px;width:90px" title="Real launch date when from Apify (live Meta Ad Library data); LLM estimate otherwise">First seen</th>' +
+          '<th style="padding:8px 10px;width:75px" title="Days the ad has been running (real data from Meta Ad Library when source=apify)">Days</th>' +
+          '<th style="padding:8px 10px;width:60px" title="Number of visible variants this brand runs of this ad (collation count in Meta Ad Library)">Vars</th>' +
+          '<th style="padding:8px 10px;width:95px" title="Recommendation for how to test this in your product">Recommend</th>' +
+          '<th style="padding:8px 10px;width:90px" title="Real Meta Ad Library URL + inline video player when available">View</th>' +
+        '</tr>' +
+      '</thead>' +
+      '<tbody>' +
+      creatives.map(function (c, i) {
+        var labelColor = LABEL_COLOR[c.status_label] || '#94a3b8';
+        var labelTxt = LABEL_LBL[c.status_label] || c.status_label || '—';
+        var actText = ({
+          test_format_only:    '<span style="background:#dbeafe;color:#1e40af;padding:2px 7px;border-radius:999px;font-size:.6rem;font-weight:700">FORMAT</span>',
+          test_angle_persona:  '<span style="background:#ede9fe;color:#5b21b6;padding:2px 7px;border-radius:999px;font-size:.6rem;font-weight:700">ANGLE+PER</span>',
+          hybrid:              '<span style="background:#fef3c7;color:#92400e;padding:2px 7px;border-radius:999px;font-size:.6rem;font-weight:700">HYBRID</span>',
+          skip:                '<span style="background:#fee2e2;color:#991b1b;padding:2px 7px;border-radius:999px;font-size:.6rem;font-weight:700">SKIP</span>'
+        })[c.recommended_action] || '<span style="color:var(--t3)">—</span>';
+        // Source-aware: APIFY rows have real data, LLM rows have estimates
+        var isApify = (c.data_source === 'apify');
+        // First-seen: prefer real date over estimate
+        var firstSeen = c.started_at ? (new Date(c.started_at).toISOString().slice(0,10))
+                       : c.first_seen_estimate ? esc(c.first_seen_estimate)
+                       : '—';
+        var days = (c.days_active != null) ? c.days_active : null;
+        var daysCell = (days != null) ? ('<span style="font-weight:600;color:' + (days>=30?'#059669':days>=7?'#d97706':'#dc2626') + '">' + days + 'd</span>' + (c.is_active===false?'<span style="color:var(--t3);font-size:.6rem"> (inactive)</span>':'')) : '—';
+        var vars = c.variant_count || (c.variant_count_estimate ? esc(c.variant_count_estimate) : '—');
+        var varsCell = (typeof vars === 'number' || /^\d/.test(String(vars))) ? '<span style="font-weight:600;color:' + ((parseInt(vars)||0)>=3?'#059669':(parseInt(vars)||0)>=2?'#d97706':'var(--t2)') + '">' + vars + '</span>' : vars;
+        // Preview cell
+        var thumb = c.image_url || c.preview_url || c.video_preview_url || '';
+        var hasVideo = !!c.video_hd_url || !!c.video_sd_url;
+        var previewCell = thumb
+          ? '<div style="width:64px;height:64px;background:#f3f4f6 center/cover no-repeat url(\'' + escAttr(thumb) + '\');border-radius:6px;position:relative;overflow:hidden" title="' + (hasVideo?'Video preview · click ▶ Play':'Ad creative') + '">' +
+            (hasVideo ? '<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.25);color:#fff;font-size:1.2rem">▶</div>' : '') +
+            '</div>'
+          : '<div style="width:64px;height:64px;background:#f3f4f6;border-radius:6px;display:flex;align-items:center;justify-content:center;color:var(--t3);font-size:.6rem">no img</div>';
+        // View cell — real URL + play button when video available
+        var viewCell = '';
+        if (c.ad_url) {
+          viewCell += '<a href="' + escAttr(c.ad_url) + '" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="color:#7c3aed;font-weight:600;font-size:.66rem;text-decoration:none">↗ Open</a>';
+        }
+        if (hasVideo) {
+          var vurl = c.video_hd_url || c.video_sd_url;
+          var poster = c.video_preview_url || c.image_url || '';
+          viewCell += (viewCell ? '<br>' : '') + '<button onclick="event.stopPropagation();_compPlayVideo(\'' + escAttr(vurl) + '\',\'' + escAttr(poster) + '\')" style="background:#10b981;color:#fff;border:0;padding:3px 8px;border-radius:5px;font-size:.62rem;font-weight:700;cursor:pointer;margin-top:3px">▶ Play</button>';
+        }
+        if (!viewCell) viewCell = '<span style="color:var(--t3);font-size:.62rem" title="LLM-only — no real URL or video. Re-queue this brand with Apify for live data.">🔒 LLM</span>';
+        var detailRowId = 'cdet-' + c.id;
+        return '<tr style="border-bottom:1px solid var(--b);cursor:pointer" onclick="document.getElementById(\'' + detailRowId + '\').style.display=document.getElementById(\'' + detailRowId + '\').style.display===\'none\'?\'table-row\':\'none\'">' +
+          '<td style="padding:8px 10px;color:var(--t3);font-variant-numeric:tabular-nums;font-weight:600">' + (c.rank_in_brand || i+1) + (isApify?'<div style="font-size:.55rem;color:#10b981;font-weight:700">●LIVE</div>':'<div style="font-size:.55rem;color:#94a3b8">LLM</div>') + '</td>' +
+          '<td style="padding:6px">' + previewCell + '</td>' +
+          '<td style="padding:8px 10px"><span style="color:' + labelColor + ';font-weight:700;font-size:.64rem">● ' + esc((labelTxt||'').split(' ').slice(1).join(' ') || labelTxt) + '</span></td>' +
+          '<td style="padding:8px 10px;font-weight:600;color:var(--t1);line-height:1.35">' + esc(c.hook || '—') + '</td>' +
+          '<td style="padding:8px 10px;color:var(--t2)">' + esc(c.angle || '—') + '</td>' +
+          '<td style="padding:8px 10px;color:var(--t2)">' + esc(c.persona || '—') + '</td>' +
+          '<td style="padding:8px 10px;color:var(--t2)">' + esc(c.format || '?') + '</td>' +
+          '<td style="padding:8px 10px;color:var(--t2);font-size:.66rem">' + firstSeen + '</td>' +
+          '<td style="padding:8px 10px;font-size:.7rem">' + daysCell + '</td>' +
+          '<td style="padding:8px 10px;font-size:.7rem">' + varsCell + '</td>' +
+          '<td style="padding:8px 10px">' + actText + '</td>' +
+          '<td style="padding:8px 10px;font-size:.66rem">' + viewCell + '</td>' +
+        '</tr>' +
+        '<tr id="' + detailRowId + '" style="display:none;background:#fafbff;border-bottom:1px solid var(--b)">' +
+          '<td colspan="13" style="padding:14px 18px">' +
+            '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">' +
+              (c.selection_rationale ? '<div style="grid-column:1/-1"><div style="font-size:.62rem;color:#92400e;text-transform:uppercase;font-weight:700;letter-spacing:.06em;margin-bottom:4px">🎯 Why this made the top-25</div><div style="font-size:.78rem;color:var(--t1);line-height:1.5;background:#fef3c7;padding:8px 12px;border-radius:6px">' + esc(c.selection_rationale) + '</div></div>' : '') +
+              (c.body_copy ? '<div><div style="font-size:.62rem;color:var(--t3);text-transform:uppercase;font-weight:700;letter-spacing:.06em;margin-bottom:4px">📝 Ad copy</div><div style="font-size:.74rem;color:var(--t1);line-height:1.45">' + esc(c.body_copy) + '</div></div>' : '') +
+              (c.visual_pattern ? '<div><div style="font-size:.62rem;color:var(--t3);text-transform:uppercase;font-weight:700;letter-spacing:.06em;margin-bottom:4px">🎬 Visual pattern</div><div style="font-size:.74rem;color:var(--t1);line-height:1.45">' + esc(c.visual_pattern) + '</div></div>' : '') +
+              (c.creative_structure ? '<div><div style="font-size:.62rem;color:var(--t3);text-transform:uppercase;font-weight:700;letter-spacing:.06em;margin-bottom:4px">🏗 Structure</div><div style="font-size:.74rem;color:var(--t1);line-height:1.45">' + esc(c.creative_structure) + '</div></div>' : '') +
+              (c.production_style ? '<div><div style="font-size:.62rem;color:var(--t3);text-transform:uppercase;font-weight:700;letter-spacing:.06em;margin-bottom:4px">🎥 Production</div><div style="font-size:.74rem;color:var(--t1);line-height:1.45">' + esc(c.production_style) + '</div></div>' : '') +
+              (c.cta ? '<div><div style="font-size:.62rem;color:var(--t3);text-transform:uppercase;font-weight:700;letter-spacing:.06em;margin-bottom:4px">👆 CTA</div><div style="font-size:.74rem;color:var(--t1);line-height:1.45">' + esc(c.cta) + '</div></div>' : '') +
+              (c.longevity_signal || c.variant_count_estimate ? '<div><div style="font-size:.62rem;color:var(--t3);text-transform:uppercase;font-weight:700;letter-spacing:.06em;margin-bottom:4px">📊 Longevity signals</div><div style="font-size:.74rem;color:var(--t1);line-height:1.45">' +
+                (c.longevity_signal ? '<strong>Run length:</strong> ' + esc(c.longevity_signal) + '<br>' : '') +
+                (c.variant_count_estimate ? '<strong>Variant count:</strong> ' + esc(c.variant_count_estimate) : '') +
+                '</div></div>' : '') +
+              (c.why_it_works ? '<div style="grid-column:1/-1;background:#eef0fc;border-left:3px solid #7c3aed;padding:10px 12px;border-radius:6px"><div style="font-size:.62rem;color:#5b21b6;text-transform:uppercase;font-weight:700;letter-spacing:.06em;margin-bottom:4px">💡 Why it works (mechanic)</div><div style="font-size:.78rem;color:var(--t1);line-height:1.5">' + esc(c.why_it_works) + '</div></div>' : '') +
+            '</div>' +
+          '</td>' +
+        '</tr>';
+      }).join('') +
+      '</tbody>' +
+    '</table>' +
+  '</div>';
+
+  var body =
+    '<div style="font-size:.78rem;color:var(--t2);margin-bottom:10px">' +
+      '<strong>' + creatives.length + '</strong> creatives analyzed from <strong>' + esc(b.name) + '</strong>.' +
+      ' Click any row to expand. The "Why this made the top-25" field shows the LLM\'s selection criteria.' +
+    '</div>' +
+    '<div style="margin-bottom:10px;display:flex;flex-wrap:wrap;gap:6px">' + summaryChips + '</div>' +
+    glossaryHtml +
+    tableHtml +
+    // Next-step CTA footer
+    '<div style="margin-top:18px;padding:14px 16px;background:linear-gradient(135deg,#7c3aed 0%,#5b21b6 100%);color:#fff;border-radius:10px;display:flex;align-items:center;justify-content:space-between;gap:14px">' +
+      '<div>' +
+        '<div style="font-size:.85rem;font-weight:700;margin-bottom:4px">📋 Next step</div>' +
+        '<div style="font-size:.74rem;opacity:.9;line-height:1.45">Once you\'ve gathered creatives for 5+ brands, click below. The strategist will synthesize 5-10 ranked test recommendations using OUR memory + these competitor creatives.</div>' +
+      '</div>' +
+      '<button onclick="closeModal();_compGenerateRecommendations()" style="background:#fff;color:#7c3aed;border:0;padding:10px 18px;border-radius:8px;font-weight:700;font-size:.78rem;cursor:pointer;white-space:nowrap;flex-shrink:0">🧠 Generate recommendations →</button>' +
+    '</div>';
+  var foot = '<button class="btn-ghost btn-sm" onclick="closeModal()">Close</button>';
+  // Use a wider modal for the table
+  openModal('🎯 ' + b.name + ' — ' + creatives.length + ' creatives', body, foot);
+  // Force-widen the modal dialog if possible
+  setTimeout(function () {
+    var dlg = document.getElementById('modalDialog');
+    if (dlg) { dlg.style.maxWidth = '1100px'; dlg.style.width = '95vw'; }
+  }, 10);
+}
+
+// Inline video player modal — drops a <video> with the real Meta CDN URL
+function _compPlayVideo(url, posterUrl) {
+  if (!url) return;
+  var html =
+    '<div style="background:#000;border-radius:8px;overflow:hidden;display:flex;align-items:center;justify-content:center;min-height:300px">' +
+      '<video controls autoplay playsinline preload="auto" ' +
+        (posterUrl ? 'poster="' + posterUrl.replace(/"/g,'&quot;') + '" ' : '') +
+        'style="width:100%;max-height:70vh;background:#000" src="' + url.replace(/"/g,'&quot;') + '">' +
+        'Your browser does not support inline video. ' +
+        '<a href="' + url.replace(/"/g,'&quot;') + '" target="_blank" rel="noopener" style="color:#fff">Open video in new tab</a>' +
+      '</video>' +
+    '</div>' +
+    '<div style="margin-top:10px;font-size:.7rem;color:var(--t3);text-align:center">Source: Meta Ad Library via Apify · <a href="' + url.replace(/"/g,'&quot;') + '" target="_blank" rel="noopener" style="color:#7c3aed">Open original ↗</a></div>';
+  openModal('▶ Playing competitor ad', html, '<button class="btn-ghost btn-sm" onclick="closeModal()">Close</button>');
+  setTimeout(function () {
+    var dlg = document.getElementById('modalDialog');
+    if (dlg) { dlg.style.maxWidth = '780px'; dlg.style.width = '90vw'; }
+  }, 10);
+}
+
+function _compRel(ts) {
+  if (!ts) return '—';
+  var sec = Math.floor((Date.now() - ts) / 1000);
+  if (sec < 60)        return sec + 's ago';
+  if (sec < 3600)      return Math.floor(sec/60) + 'm ago';
+  if (sec < 86400)     return Math.floor(sec/3600) + 'h ago';
+  if (sec < 86400*7)   return Math.floor(sec/86400) + 'd ago';
+  if (sec < 86400*30)  return Math.floor(sec/86400/7) + 'w ago';
+  return new Date(ts).toISOString().slice(0, 10);
+}
+
+function _compSetView(v) {
+  _compView = v;
+  _compRenderBuckets();
+}
+
+async function _compToggleApprove(brandId) {
+  var b = COMPETITORS.find(function (x) { return x.id === brandId; });
+  if (!b) return;
+  var newApproved = !b.approved;
+  // Optimistic update
+  var prevApproved = b.approved;
+  var prevApprovedAt = b.approvedAt;
+  b.approved = newApproved;
+  b.approvedAt = newApproved ? Date.now() : null;
+  _compRenderBuckets();
+  _compRenderSummary();
+  try {
+    var uid = (AUTH && AUTH.user) ? AUTH.user.id : null;
+    var r = await SB.from('competitor_brands').update({
+      approved: newApproved,
+      approved_at: newApproved ? new Date().toISOString() : null,
+      approved_by: newApproved ? uid : null
+    }).eq('id', brandId);
+    if (r.error) throw new Error(r.error.message);
+    if (typeof toast === 'function') toast(newApproved ? '❤ Approved ' + b.name : 'Unapproved ' + b.name, 'ok');
+  } catch (e) {
+    // Rollback on error
+    b.approved = prevApproved;
+    b.approvedAt = prevApprovedAt;
+    _compRenderBuckets();
+    _compRenderSummary();
+    if (typeof toast === 'function') toast('Approve failed: ' + (e.message || e), 'err');
+  }
+}
+
+function _compOpenAddBrand() {
+  var body =
+    '<div class="form-group"><label>Brand name</label>' +
+      '<input type="text" id="cbName" class="f-inp" placeholder="e.g. Calm, Headspace, Yoto…" autocomplete="off"></div>' +
+    '<div class="form-group"><label>Category</label>' +
+      '<select id="cbCategory" class="f-inp">' +
+        '<option value="direct">🎯 Direct — same offer, same audience</option>' +
+        '<option value="indirect">↔ Indirect — different offer, same audience</option>' +
+        '<option value="similar_niche">✨ Similar niche — adjacent, borrowable mechanics</option>' +
+      '</select></div>' +
+    '<div class="form-group"><label>Meta Page ID <span style="color:var(--t3);font-weight:400">(numeric — find via Meta Ad Library URL)</span></label>' +
+      '<input type="text" id="cbMetaPageId" class="f-inp" placeholder="e.g. 1234567890" autocomplete="off"></div>' +
+    '<div class="form-group"><label>Homepage URL <span style="color:var(--t3);font-weight:400">(optional)</span></label>' +
+      '<input type="url" id="cbHomepage" class="f-inp" placeholder="https://example.com"></div>' +
+    '<div class="form-group"><label>Notes <span style="color:var(--t3);font-weight:400">(optional — why this brand)</span></label>' +
+      '<textarea id="cbNotes" class="f-inp" rows="2" placeholder="e.g. They run 50+ active static ads on the WAR angle"></textarea></div>';
+  var foot = '<button class="btn-ghost btn-sm" onclick="closeModal()">Cancel</button>' +
+             '<button class="btn-primary btn-sm" onclick="_compSaveNewBrand()">Add brand</button>';
+  openModal('Add competitor brand', body, foot);
+  setTimeout(function () { var el = document.getElementById('cbName'); if (el) el.focus(); }, 100);
+}
+
+async function _compSaveNewBrand() {
+  var name = (document.getElementById('cbName') || {}).value || '';
+  name = name.trim();
+  if (!name) { toast('Brand name required', 'warn'); return; }
+  var category = (document.getElementById('cbCategory') || {}).value || 'direct';
+  var metaPageId = ((document.getElementById('cbMetaPageId') || {}).value || '').trim();
+  var homepageUrl = ((document.getElementById('cbHomepage') || {}).value || '').trim();
+  var notes = ((document.getElementById('cbNotes') || {}).value || '').trim();
+  var metaUrl = metaPageId ? 'https://www.facebook.com/ads/library/?id=' + encodeURIComponent(metaPageId) : null;
+  var id = 'cb-' + Date.now() + '-' + Math.floor(Math.random() * 10000);
+  try {
+    var uid = (AUTH && AUTH.user) ? AUTH.user.id : null;
+    var r = await SB.from('competitor_brands').insert({
+      id: id, product_id: activeProductId, name: name, category: category,
+      meta_page_id: metaPageId || null,
+      meta_ad_library_url: metaUrl,
+      homepage_url: homepageUrl || null,
+      notes: notes || null,
+      approved: false
+    });
+    if (r.error) throw new Error(r.error.message);
+    closeModal();
+    toast('Added ' + name, 'ok');
+    _compNeedsReload = true;
+    renderCompetitors();
+  } catch (e) {
+    toast('Add failed: ' + (e.message || e), 'err');
+  }
+}
+
+function _compEditBrand(brandId) {
+  var b = COMPETITORS.find(function (x) { return x.id === brandId; });
+  if (!b) return;
+  var body =
+    '<div class="form-group"><label>Brand name</label>' +
+      '<input type="text" id="cbName" class="f-inp" value="' + escAttr(b.name) + '"></div>' +
+    '<div class="form-group"><label>Category</label>' +
+      '<select id="cbCategory" class="f-inp">' +
+        '<option value="direct"' + (b.category === 'direct' ? ' selected' : '') + '>🎯 Direct</option>' +
+        '<option value="indirect"' + (b.category === 'indirect' ? ' selected' : '') + '>↔ Indirect</option>' +
+        '<option value="similar_niche"' + (b.category === 'similar_niche' ? ' selected' : '') + '>✨ Similar niche</option>' +
+      '</select></div>' +
+    '<div class="form-group"><label>Meta Page ID</label>' +
+      '<input type="text" id="cbMetaPageId" class="f-inp" value="' + escAttr(b.metaPageId || '') + '"></div>' +
+    '<div class="form-group"><label>Homepage URL</label>' +
+      '<input type="url" id="cbHomepage" class="f-inp" value="' + escAttr(b.homepageUrl || '') + '"></div>' +
+    '<div class="form-group"><label>Notes</label>' +
+      '<textarea id="cbNotes" class="f-inp" rows="2">' + esc(b.notes || '') + '</textarea></div>';
+  var foot = '<button class="btn-ghost btn-sm" onclick="closeModal()">Cancel</button>' +
+             '<button class="btn-primary btn-sm" onclick="_compSaveEditBrand(\'' + escAttr(brandId) + '\')">Save</button>';
+  openModal('Edit competitor brand', body, foot);
+}
+
+async function _compSaveEditBrand(brandId) {
+  var name = ((document.getElementById('cbName') || {}).value || '').trim();
+  if (!name) { toast('Brand name required', 'warn'); return; }
+  var category = (document.getElementById('cbCategory') || {}).value || 'direct';
+  var metaPageId = ((document.getElementById('cbMetaPageId') || {}).value || '').trim();
+  var homepageUrl = ((document.getElementById('cbHomepage') || {}).value || '').trim();
+  var notes = ((document.getElementById('cbNotes') || {}).value || '').trim();
+  var metaUrl = metaPageId ? 'https://www.facebook.com/ads/library/?id=' + encodeURIComponent(metaPageId) : null;
+  try {
+    var r = await SB.from('competitor_brands').update({
+      name: name, category: category,
+      meta_page_id: metaPageId || null,
+      meta_ad_library_url: metaUrl,
+      homepage_url: homepageUrl || null,
+      notes: notes || null
+    }).eq('id', brandId);
+    if (r.error) throw new Error(r.error.message);
+    closeModal();
+    toast('Updated ' + name, 'ok');
+    _compNeedsReload = true;
+    renderCompetitors();
+  } catch (e) {
+    toast('Save failed: ' + (e.message || e), 'err');
+  }
+}
+
+async function _compDeleteBrand(brandId) {
+  var b = COMPETITORS.find(function (x) { return x.id === brandId; });
+  if (!b) return;
+  if (!confirm('Delete "' + b.name + '" from your competitor list?\n\nThis does NOT delete any creatives or recommendations already gathered from this brand.')) return;
+  try {
+    var r = await SB.from('competitor_brands').delete().eq('id', brandId);
+    if (r.error) throw new Error(r.error.message);
+    toast('Deleted ' + b.name, 'ok');
+    _compNeedsReload = true;
+    renderCompetitors();
+  } catch (e) {
+    toast('Delete failed: ' + (e.message || e), 'err');
+  }
+}
+
+async function _compRunDiscovery() {
+  // 2026-05-20 — Enqueues a discover_brands job. The Python worker
+  // (tools/competitor_research/worker.py) polls competitor_research_queue,
+  // claims this job, calls claude -p with our discovery prompt, and inserts
+  // the discovered brands into competitor_brands. UI realtime subscription
+  // picks them up automatically.
+  if (!activeProductId) { toast('Pick a product first', 'warn'); return; }
+  if (!confirm('🔍 Run brand-discovery research?\n\nThis will use the AI worker to find competitor brands for this product. Takes ~30-60 seconds.\n\nMake sure the worker is running:\n  python3 tools/competitor_research/worker.py')) return;
+  var btn = document.getElementById('compRunBtn');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Queued…'; }
+  try {
+    var r = await SB.from('competitor_research_queue').insert({
+      product_id: activeProductId,
+      job_type: 'discover_brands',
+      status: 'pending'
+    });
+    if (r.error) throw new Error(r.error.message);
+    toast('Discovery job queued — worker will populate brands in ~30-60s', 'ok');
+    _compPollUntilJobDone(activeProductId, btn);
+  } catch (e) {
+    if (btn) { btn.disabled = false; btn.textContent = '🔍 Run discovery'; }
+    toast('Failed to enqueue: ' + (e.message || e), 'err');
+  }
+}
+
+async function _compPollUntilJobDone(productId, btn) {
+  // Poll the queue for our pending job's result. Stop after 5 min max.
+  var start = Date.now();
+  var lastCount = COMPETITORS.length;
+  var iv = setInterval(async function () {
+    if (Date.now() - start > 5*60*1000) {
+      clearInterval(iv);
+      if (btn) { btn.disabled = false; btn.textContent = '🔍 Run discovery'; }
+      return;
+    }
+    try {
+      var jobs = await SB.from('competitor_research_queue')
+        .select('id,status,job_type,result_summary,error_message,finished_at')
+        .eq('product_id', productId)
+        .order('created_at', { ascending: false }).limit(3);
+      var latest = (jobs.data || [])[0];
+      if (!latest) return;
+      if (latest.status === 'done') {
+        clearInterval(iv);
+        if (btn) { btn.disabled = false; btn.textContent = '🔍 Run discovery'; }
+        _compNeedsReload = true;
+        await _compLoad();
+        _compRenderBuckets();
+        _compRenderSummary();
+        toast('Discovery done — ' + (latest.result_summary?.inserted || 0) + ' brands added', 'ok');
+      } else if (latest.status === 'failed') {
+        clearInterval(iv);
+        if (btn) { btn.disabled = false; btn.textContent = '🔍 Run discovery'; }
+        toast('Discovery failed: ' + (latest.error_message || 'see worker log'), 'err');
+      } else if (latest.status === 'running') {
+        if (btn) btn.textContent = '⚙ Running…';
+      }
+    } catch (e) {
+      // ignore transient polling errors
+    }
+  }, 3000);
+}
+
+// 2026-05-20 — "Find creatives for this brand" button on each brand card
+async function _compFindCreatives(brandId) {
+  var b = COMPETITORS.find(function (x) { return x.id === brandId; });
+  if (!b) return;
+  if (!b.approved) { toast('Approve this brand first', 'warn'); return; }
+  if (!confirm('Run creative research for ' + b.name + '?\n\nWorker will analyze ~10 top creatives and generate briefs. Takes ~60-90 sec.')) return;
+  try {
+    var r = await SB.from('competitor_research_queue').insert({
+      product_id: activeProductId,
+      brand_id: brandId,
+      job_type: 'find_creatives_for_brand',
+      status: 'pending'
+    });
+    if (r.error) throw new Error(r.error.message);
+    toast('Creative research queued for ' + b.name, 'ok');
+  } catch (e) {
+    toast('Failed: ' + (e.message || e), 'err');
+  }
+}
+
+// 2026-05-20 — "Generate recommendations" — runs after creatives have been gathered
+async function _compGenerateRecommendations() {
+  if (!activeProductId) { toast('Pick a product first', 'warn'); return; }
+  var approved = COMPETITORS.filter(function (b) { return b.approved; }).length;
+  if (!approved) { toast('Approve at least one brand first', 'warn'); return; }
+  if (!confirm('Generate creative-test recommendations?\n\nStrategist reads our memory + approved competitor creatives → 5-10 ranked tests.\n\nWorker will run in ~30 sec.')) return;
+  try {
+    var r = await SB.from('competitor_research_queue').insert({
+      product_id: activeProductId,
+      job_type: 'generate_recommendations',
+      status: 'pending'
+    });
+    if (r.error) throw new Error(r.error.message);
+    toast('Strategist recommendations queued — check Strategist tab in ~30s', 'ok');
+  } catch (e) {
+    toast('Failed: ' + (e.message || e), 'err');
+  }
+}
+
+// Reload competitor list whenever product switches
+// (hooked via the existing switchProduct flow — flag-based, picked up by next render)
+function _compResetForProductSwitch() {
+  COMPETITORS = [];
+  _compNeedsReload = true;
+  STRATEGIST_RECS = [];
+  _recNeedsReload = true;
+}
+
+// ════════════════════════════════════════════════════════════════════
+// 2026-05-20 — Strategist Recommendations (Phase C + D)
+// ════════════════════════════════════════════════════════════════════
+var STRATEGIST_RECS = [];
+var _recView = 'pending';
+var _recNeedsReload = true;
+
+async function _recLoad() {
+  STRATEGIST_RECS = [];
+  if (!DB.ready || !activeProductId || !SB) return;
+  try {
+    var res = await SB.from('strategist_recommendations').select('*, competitor_creatives(brand_id,hook,angle,persona,ad_url,visual_pattern,why_it_works)')
+      .eq('product_id', activeProductId)
+      .order('generated_at', { ascending: false });
+    STRATEGIST_RECS = res.data || [];
+  } catch (e) {
+    console.warn('[strategist-recs] load failed', e);
+  }
+}
+
+async function _recRender() {
+  if (_recNeedsReload) {
+    _recNeedsReload = false;
+    await _recLoad();
+  }
+  var box = document.getElementById('strategistRecsBox');
+  if (!box) return;
+  var filtered = STRATEGIST_RECS.filter(function (r) { return r.status === _recView; });
+  document.getElementById('recCount').textContent = filtered.length;
+  document.querySelectorAll('#recFiltPending,#recFiltApproved,#recFiltRejected').forEach(function (b) {
+    b.classList.toggle('on', b.id === 'recFilt' + _recView.charAt(0).toUpperCase() + _recView.slice(1));
+  });
+  if (!filtered.length) {
+    box.innerHTML = '<div style="padding:32px;text-align:center;color:var(--t3);font-size:.8rem">' +
+      (_recView === 'pending' ? 'No pending recommendations. <br>Open Competitors tab → Approve brands → Find creatives → Generate recommendations.' :
+       _recView === 'approved' ? 'No approved recommendations yet.' :
+       'No rejected recommendations.') +
+    '</div>';
+    return;
+  }
+  box.innerHTML = filtered.map(_recRenderCard).join('');
+}
+
+function _recRenderCard(r) {
+  var bandColor = r.confidence_band === 'HIGH' ? '#059669' : (r.confidence_band === 'MEDIUM' ? '#d97706' : '#94a3b8');
+  var typeBadge = ({
+    'format_only':   '<span style="background:#dbeafe;color:#1e40af;padding:2px 8px;border-radius:999px;font-size:.62rem;font-weight:700">FORMAT ONLY</span>',
+    'angle_persona': '<span style="background:#ede9fe;color:#5b21b6;padding:2px 8px;border-radius:999px;font-size:.62rem;font-weight:700">NEW ANGLE/PERSONA</span>',
+    'hybrid':        '<span style="background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:999px;font-size:.62rem;font-weight:700">HYBRID</span>'
+  })[r.recommendation_type] || '<span class="comp-card-pill">' + esc(r.recommendation_type || 'rec') + '</span>';
+  var srcSnippet = r.competitor_creatives ? esc((r.competitor_creatives.hook || '').slice(0, 80)) : '';
+  return '<div class="comp-card" style="margin-bottom:10px">' +
+    '<div style="display:flex;gap:14px;align-items:flex-start">' +
+      '<div style="flex:1;min-width:0">' +
+        '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap">' +
+          typeBadge +
+          '<span style="font-weight:700;color:' + bandColor + ';font-size:.7rem;letter-spacing:.04em">● ' + (r.confidence_band || 'MED') + '</span>' +
+        '</div>' +
+        '<div style="font-size:.88rem;font-weight:600;color:var(--t1);line-height:1.35">' +
+          '"' + esc(r.recommended_hook || r.recommended_angle || '—') + '"' +
+        '</div>' +
+        '<div style="font-size:.72rem;color:var(--t2);margin-top:6px">' +
+          '<strong>Angle:</strong> ' + esc(r.recommended_angle || '—') + '  ·  ' +
+          '<strong>Persona:</strong> ' + esc(r.recommended_persona || '—') + '  ·  ' +
+          '<strong>Format:</strong> ' + esc(r.recommended_format || '—') +
+        '</div>' +
+        (r.reasoning ? '<div style="font-size:.74rem;color:var(--t1);background:var(--el);padding:8px 10px;border-radius:6px;margin-top:8px;line-height:1.45"><strong>Why:</strong> ' + esc(r.reasoning) + '</div>' : '') +
+        (srcSnippet ? '<div style="font-size:.66rem;color:var(--t3);margin-top:6px;font-style:italic">Source competitor hook: "' + srcSnippet + '"</div>' : '') +
+      '</div>' +
+      '<div style="display:flex;flex-direction:column;gap:6px;flex-shrink:0;min-width:140px">' +
+        (r.status === 'pending' ?
+          '<button class="btn-primary btn-sm" style="background:#059669;color:#fff;border:0" onclick="_recApprove(\'' + r.id + '\')">✓ Approve &amp; Test</button>' +
+          '<button class="btn-ghost btn-sm" onclick="_recReject(\'' + r.id + '\')">✕ Reject</button>'
+          :
+          '<div style="font-size:.66rem;color:var(--t3)">' + (r.status === 'tasked' ? '✓ Tasked' : (r.status === 'rejected' ? 'Rejected' : 'Approved')) + '</div>' +
+          (r.task_id ? '<a href="https://app.clickup.com/t/' + esc(r.task_id) + '" target="_blank" rel="noopener" style="font-size:.66rem;color:#7c3aed;font-weight:600">View task ↗</a>' : '')
+        ) +
+      '</div>' +
+    '</div>' +
+  '</div>';
+}
+
+function _recFilter(view) {
+  _recView = view;
+  _recNeedsReload = true;
+  _recRender();
+}
+
+async function _recReject(recId) {
+  var reason = prompt('Reject reason (optional):', '');
+  if (reason === null) return; // cancelled
+  try {
+    var uid = (AUTH && AUTH.user) ? AUTH.user.id : null;
+    var r = await SB.from('strategist_recommendations').update({
+      status: 'rejected',
+      reviewed_at: new Date().toISOString(),
+      reviewed_by: uid,
+      rejection_reason: reason || null
+    }).eq('id', recId);
+    if (r.error) throw new Error(r.error.message);
+    toast('Rejected', 'ok');
+    _recNeedsReload = true; _recRender();
+  } catch (e) {
+    toast('Reject failed: ' + (e.message || e), 'err');
+  }
+}
+
+// ════════════════════════════════════════════════════════════════════
+// Phase D — One-Click "Approve & Test" → matrix cell + MA + ClickUp
+// ════════════════════════════════════════════════════════════════════
+async function _recApprove(recId) {
+  var rec = STRATEGIST_RECS.find(function (x) { return x.id === recId; });
+  if (!rec) return;
+  if (!confirm('Approve & create test task?\n\n' +
+    'Angle: ' + (rec.recommended_angle || '—') + '\n' +
+    'Persona: ' + (rec.recommended_persona || '—') + '\n' +
+    'Format: ' + (rec.recommended_format || '—') + '\n\n' +
+    'This will:\n  • Create an inspiration row\n  • Place it in the matrix cell\n  • Create an Action Plan MA\n  • Push to ClickUp')) return;
+
+  try {
+    // Step 1 — Ensure angle + persona exist locally
+    var ang = (rec.recommended_angle || '').trim();
+    var per = (rec.recommended_persona || '').trim();
+
+    if (ang && !ANGLES.find(function (a) { return a.name.toLowerCase() === ang.toLowerCase(); })) {
+      var newAngId = 'ang-rec-' + Date.now();
+      ANGLES.push({ id: newAngId, name: ang, status: 'Untested', sourceLink: '', notes: 'From strategist recommendation', _localNew: true });
+    }
+    if (per && !PERSONAS.find(function (p) { return p.name.toLowerCase() === per.toLowerCase(); })) {
+      var newPerId = 'per-rec-' + Date.now();
+      PERSONAS.push({ id: newPerId, name: per, status: 'Untested', sourceLink: '', notes: 'From strategist recommendation', _localNew: true });
+    }
+
+    // Step 2 — Create an inspiration row
+    var insId = 'INS-' + String(INS_NEXT_ID).padStart(3,'0');
+    INS_NEXT_ID++;
+    var srcCreative = rec.competitor_creatives || {};
+    var newIns = {
+      id: insId,
+      status: 'Classified',
+      formatName: rec.recommended_format || rec.recommended_hook || 'Strategist test',
+      brand: 'From strategist',
+      angle: ang,
+      persona: per,
+      creativeStructure: '',
+      hookType: rec.recommended_hook ? 'Custom' : '',
+      productionStyle: '',
+      funnelStage: 'TOF',
+      adType: (rec.recommended_format || '').toLowerCase().indexOf('video') !== -1 ? 'Video' : 'Photo',
+      creativeUSP: rec.reasoning || '',
+      creativeHypothesis: rec.reasoning || '',
+      sourceUrl: srcCreative.ad_url || '',
+      platform: 'Other',
+      notes: 'Strategist recommendation · confidence: ' + (rec.confidence_band || 'MEDIUM') + ' · ' + (rec.recommendation_type || ''),
+      addedAt: Date.now(),
+      classifiedAt: Date.now(),
+      importTags: ['Strategist Recommendation', (rec.confidence_band || 'MED')],
+      _origin: 'strategist_recommendation',
+      _strategistRecId: rec.id
+    };
+    INSPIRATIONS.unshift(newIns);
+
+    // Step 3 — Place in matrix cell (using existing addInspoToCell or similar)
+    var adId = null;
+    if (typeof addInspoToCell === 'function' && ang && per) {
+      try {
+        adId = await addInspoToCell(insId, ang, per);
+      } catch (_) {}
+    }
+
+    // Step 4 — Create MA in Action Plan
+    var maId = 'manual-' + Date.now();
+    var ma = {
+      id: maId,
+      title: rec.recommended_hook || newIns.formatName,
+      sourceAdId: adId,
+      adId: adId,
+      sourceAngle: ang,
+      sourcePersona: per,
+      funnelStage: 'TOF',
+      format: newIns.adType,
+      liveStatus: 'Untested',
+      reason: 'Strategist recommendation',
+      tag: 'strategist',
+      _origin: 'strategist_recommendation',
+      _strategistRecId: rec.id,
+      _pushedBy: (AUTH && AUTH.profile && AUTH.profile.full_name) || 'strategist',
+      _pushedAt: Date.now()
+    };
+    MANUAL_ACTIONS.unshift(ma);
+
+    // Step 5 — Persist
+    saveState();
+    if (typeof saveInspirations === 'function') saveInspirations();
+
+    // Step 6 — Push to ClickUp (existing helper)
+    var cuId = null;
+    if (typeof createClickUpTaskFromAction === 'function') {
+      try {
+        cuId = await new Promise(function (resolve) {
+          createClickUpTaskFromAction(maId, function (id) { resolve(id || null); });
+          setTimeout(function () { resolve(null); }, 30000);
+        });
+      } catch (_) {}
+    }
+
+    // Step 7 — Update the recommendation row
+    var uid = (AUTH && AUTH.user) ? AUTH.user.id : null;
+    await SB.from('strategist_recommendations').update({
+      status: 'tasked',
+      reviewed_at: new Date().toISOString(),
+      reviewed_by: uid,
+      task_id: cuId || maId,
+      task_created_at: new Date().toISOString()
+    }).eq('id', recId);
+
+    toast('✓ Test approved! ' + (cuId ? 'ClickUp task: ' + cuId : 'MA ' + maId), 'ok');
+
+    // Re-render the affected tabs
+    _recNeedsReload = true;
+    _recRender();
+    if (typeof renderMatrix === 'function')      try { renderMatrix(); } catch (_) {}
+    if (typeof renderActionPlan === 'function')  try { renderActionPlan(); } catch (_) {}
+    if (typeof renderInspirations === 'function') try { renderInspirations(); } catch (_) {}
+    if (typeof renderAngles === 'function')      try { renderAngles(); } catch (_) {}
+    if (typeof renderPersonas === 'function')    try { renderPersonas(); } catch (_) {}
+  } catch (e) {
+    console.error('[recApprove] failed', e);
+    toast('Approve failed: ' + (e.message || e), 'err');
+  }
+}
+
+// Hook recommendations render into the strategist tab lazy-load
+// (the existing strategist tab already has its own renderer; we just paint
+// the recs panel on top whenever the tab is shown)
+function _strategistRenderHook() {
+  if (activeTabId === 'strategist') {
+    _recRender();
+  }
+}
+
+// Tab show callback — re-render recs every time strategist tab opens
+(function () {
+  var origShow = window.showTab;
+  if (typeof origShow !== 'function') return;
+  window.showTab = function (id, btn) {
+    var result = origShow.apply(this, arguments);
+    if (id === 'strategist') {
+      try { _recRender(); } catch (_) {}
+    }
+    return result;
+  };
+})();
 
 function renderPersonas() {
   function getPersonaStats(personaName) {
@@ -29016,6 +30271,9 @@ async function switchProduct(productId) {
   }
   if (!prod || productId === activeProductId) return;
 
+  // 2026-05-20 — Reset Competitors tab cache when switching products
+  if (typeof _compResetForProductSwitch === 'function') _compResetForProductSwitch();
+
   // Flush pending saves for the current product before switching
   if (_saveScheduled) { clearTimeout(_saveScheduled); _saveScheduled = null; }
   await _flushStateToSupabase().catch(function(e){ console.error('[SB] flush on switch failed', e); });
@@ -31203,6 +32461,120 @@ var _mxv3 = {
   addSource: null,         // 'tracker' | 'inspiration' | 'blank' | null
   addSearch: '',           // search text in tracker/inspiration list
 };
+
+// ── _driveFolder ───────────────────────────────────────────────────────
+// Caches Drive folder listings per folder ID for 10 min. Use:
+//   var info = await _driveFolder.fetch(folderId);  // returns null if 404
+//   info.files                                       // array of {id,name,…}
+//   _driveFolder.clear(folderId);                    // force refresh
+// Always returns a fresh array (never the cached object) to prevent
+// downstream mutation polluting the cache.
+var _driveFolder = (function () {
+  var TTL_MS = 10 * 60 * 1000;
+  var cache = {};   // folderId → {at: ms, data: {…}}
+
+  function _now() { return Date.now(); }
+
+  async function fetchFolder(folderId) {
+    if (!folderId) return null;
+    var hit = cache[folderId];
+    if (hit && (_now() - hit.at) < TTL_MS) {
+      return hit.data === null ? null : JSON.parse(JSON.stringify(hit.data));
+    }
+    try {
+      var resp = await fetch('/api/drive/list?folder=' + encodeURIComponent(folderId));
+      if (resp.status === 404) {
+        cache[folderId] = { at: _now(), data: null };
+        return null;
+      }
+      if (!resp.ok) {
+        throw new Error('drive list HTTP ' + resp.status);
+      }
+      var data = await resp.json();
+      cache[folderId] = { at: _now(), data: data };
+      return JSON.parse(JSON.stringify(data));
+    } catch (e) {
+      console.error('[_driveFolder] fetch failed', folderId, e);
+      return null;
+    }
+  }
+
+  function clearFolder(folderId) {
+    if (folderId) delete cache[folderId];
+    else cache = {};
+  }
+
+  // Parse a Drive URL into a folder ID, or null if not a folder URL.
+  function parseFolderId(url) {
+    if (!url || typeof url !== 'string') return null;
+    var m = url.match(/\/folders\/([a-zA-Z0-9_-]+)/);
+    return m ? m[1] : null;
+  }
+
+  return { fetch: fetchFolder, clear: clearFolder, parseFolderId: parseFolderId };
+})();
+
+// ── _videoWinners ──────────────────────────────────────────────────────
+// Read / toggle winning-video marks on the task_video_winners table.
+// Uses the global Supabase JS client (SB) — same convention as the rest
+// of the file. RLS is disabled on this table; anon access is allowed.
+//   var winners = await _videoWinners.listForAd(adId);  // array of rows
+//   var all     = await _videoWinners.listAll();         // every winner
+//   await _videoWinners.mark(adId, file, note);          // upsert mark
+//   await _videoWinners.unmark(adId, fileId);            // delete mark
+// Caches the "all" listing for 60s to keep the picker snappy.
+var _videoWinners = (function () {
+  var ALL_TTL_MS = 60 * 1000;
+  var allCache = { at: 0, data: null };
+
+  async function listForAd(adId) {
+    if (!adId || !SB) return [];
+    var r = await SB.from('task_video_winners').select('*').eq('ad_id', adId);
+    if (r.error) { console.error('[_videoWinners] listForAd', adId, r.error); return []; }
+    return r.data || [];
+  }
+
+  async function listAll(force) {
+    if (!force && allCache.data && (Date.now() - allCache.at) < ALL_TTL_MS) {
+      return JSON.parse(JSON.stringify(allCache.data));
+    }
+    if (!SB) return [];
+    var r = await SB.from('task_video_winners').select('*').order('marked_winner_at', { ascending: false });
+    if (r.error) { console.error('[_videoWinners] listAll', r.error); return []; }
+    allCache = { at: Date.now(), data: r.data || [] };
+    return JSON.parse(JSON.stringify(allCache.data));
+  }
+
+  async function mark(adId, file, note) {
+    if (!adId || !file || !file.id || !SB) return null;
+    var row = {
+      ad_id: adId,
+      drive_file_id: file.id,
+      file_name: file.name || 'unnamed',
+      thumbnail_url: file.thumbnailLink || null,
+      web_view_url: file.webViewLink || null,
+      notes: note || null
+    };
+    // Upsert on (ad_id, drive_file_id) — re-marking is idempotent.
+    var r = await SB.from('task_video_winners').upsert(row, { onConflict: 'ad_id,drive_file_id' }).select();
+    if (r.error) { console.error('[_videoWinners] mark', adId, file.id, r.error); return null; }
+    allCache = { at: 0, data: null };  // invalidate cache
+    return (r.data && r.data[0]) || null;
+  }
+
+  async function unmark(adId, fileId) {
+    if (!adId || !fileId || !SB) return false;
+    var r = await SB.from('task_video_winners')
+      .delete()
+      .eq('ad_id', adId)
+      .eq('drive_file_id', fileId);
+    if (r.error) { console.error('[_videoWinners] unmark', adId, fileId, r.error); return false; }
+    allCache = { at: 0, data: null };
+    return true;
+  }
+
+  return { listForAd: listForAd, listAll: listAll, mark: mark, unmark: unmark };
+})();
 
 // ── classifyCell — derive cell-level state from creatives ─────────
 function _mxv3ClassifyCell(angleName, personaName) {

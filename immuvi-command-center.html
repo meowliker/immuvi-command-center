@@ -33364,10 +33364,25 @@ function _f7ActiveCount(tab) {
 // parent format appears exactly once.
 function _isParentFormat(a) {
   if (!a) return false;
-  if (a.parentAdId) return false;
-  if (a.taskType === 'production') return false;
+  if (a.parentAdId) {
+    // Variation row — only seed-worthy if it's a proven winner.
+    // (Most teams keep variation rows lightweight; the real winning DNA
+    // is in the Drive file marked as winner, surfaced separately. But
+    // legacy variation rows that ARE marked Winner should still appear.)
+    var s = (a.status || '').toLowerCase();
+    if (s !== 'winner' && s !== 'mild winner' && s !== 'scale') return false;
+  }
+  // taskType==='production' is ambiguous: it tags both tracker-clones
+  // (have sourceFormatId) AND inspo-spawned originals (no sourceFormatId).
+  // Only tracker-clones should be hidden — inspo-spawned tasks ARE the
+  // per-cell parent and belong in the Tracker picker.
+  if (a.taskType === 'production' && a.sourceFormatId) return false;
   if (a.trackerRefId) return false;
-  if (a.variationNumber && a.variationNumber > 0) return false;
+  if (a.variationNumber && a.variationNumber > 0) {
+    // Defense in depth — some legacy rows have variationNumber set without parentAdId.
+    var s2 = (a.status || '').toLowerCase();
+    if (s2 !== 'winner' && s2 !== 'mild winner' && s2 !== 'scale') return false;
+  }
   return true;
 }
 

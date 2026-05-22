@@ -1,0 +1,9 @@
+{
+  "name": "immuvi-command-center",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "test:drive": "node tests/api/test_drive_endpoint.js",
+    "test:db": "bash tests/db/test_video_winners.sh"
+  }
+}

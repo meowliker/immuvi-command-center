@@ -10050,9 +10050,23 @@ body:not(.booting) #__bootLoader {
 .tdv-tile.is-winner { border-color: var(--win); background: rgba(214,255,75,0.08); }
 .tdv-tile img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .tdv-tile .tdv-name { position: absolute; left: 0; right: 0; bottom: 0; padding: 6px 8px; background: linear-gradient(to top, rgba(0,0,0,0.85), transparent); color: #fff; font-size: 0.7rem; font-weight: 600; }
-.tdv-tile .tdv-star { position: absolute; top: 6px; right: 6px; width: 26px; height: 26px; border-radius: 50%; background: rgba(0,0,0,0.55); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 14px; transition: background 0.18s ease; }
+.tdv-tile .tdv-star { position: absolute; top: 6px; right: 6px; width: 26px; height: 26px; border-radius: 50%; background: rgba(0,0,0,0.55); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 14px; transition: background 0.18s ease, transform 0.12s ease; border: none; cursor: pointer; padding: 0; z-index: 2; }
+.tdv-tile .tdv-star:hover { background: rgba(0,0,0,0.85); transform: scale(1.08); }
 .tdv-tile.is-winner .tdv-star { background: var(--win); color: var(--b-ink); }
+.tdv-tile .tdv-tile-play { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%) scale(0.9); width: 46px; height: 46px; border-radius: 50%; background: rgba(0,0,0,0.65); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 18px; padding-left: 3px; opacity: 0; transition: opacity 0.18s ease, transform 0.18s cubic-bezier(0.16,1,0.3,1); pointer-events: none; }
+.tdv-tile:hover .tdv-tile-play { opacity: 1; transform: translate(-50%, -50%) scale(1); }
 .tdv-loading { padding: 16px; text-align: center; color: var(--t3); font-size: 0.8rem; }
+/* ── Drive video player overlay (z-index above .modal-overlay at 10010) ── */
+.tdv-vid-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.78); z-index: 10020; display: flex; align-items: center; justify-content: center; animation: tdvVidIn 0.18s ease-out; }
+@keyframes tdvVidIn { from { opacity: 0; } to { opacity: 1; } }
+.tdv-vid-frame { position: relative; width: min(420px, 92vw); background: #000; border-radius: 14px; overflow: hidden; box-shadow: 0 24px 64px rgba(0,0,0,0.55); }
+.tdv-vid-frame iframe { width: 100%; aspect-ratio: 9 / 16; border: 0; display: block; background: #000; }
+.tdv-vid-hdr { position: absolute; top: 0; left: 0; right: 0; display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; background: linear-gradient(to bottom, rgba(0,0,0,0.7), transparent); z-index: 2; gap: 8px; }
+.tdv-vid-name { color: #fff; font-size: 0.82rem; font-weight: 600; text-shadow: 0 1px 2px rgba(0,0,0,0.6); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 0; }
+.tdv-vid-hdr-actions { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+.tdv-vid-open, .tdv-vid-close { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; border-radius: 50%; background: rgba(0,0,0,0.5); border: none; color: #fff; font-size: 14px; cursor: pointer; text-decoration: none; transition: background 0.16s ease; }
+.tdv-vid-open:hover, .tdv-vid-close:hover { background: rgba(0,0,0,0.85); }
+.tdv-vid-close { font-size: 18px; }
 /* ── Tree picker for winning variations (Add Creative → Tracker) ── */
 .fwv-group { border: 1px solid var(--b); border-radius: 10px; margin-bottom: 8px; overflow: hidden; transition: border-color 0.18s ease; }
 .fwv-group:hover { border-color: var(--t3); }
@@ -32873,11 +32887,15 @@ async function _mxv3ToggleBrowseGrid(adId) {
     // and requires the browser to be logged into Google).
     var thumb = 'https://drive.google.com/thumbnail?id=' + encodeURIComponent(f.id) + '&sz=w320';
     var fallback = 'https://placehold.co/240x320/1a1a1a/fff?text=' + encodeURIComponent(f.name || '?');
+    // 2026-05-23: tile body click now PLAYS the video in a lightbox.
+    // Star is a separate button that toggles winner (event.stopPropagation
+    // prevents the body click from firing).
     html += '<div class="tdv-tile' + (isWin ? ' is-winner' : '') + '"' +
-            ' onclick="_mxv3ToggleVideoWinner(\'' + escAttr(adId) + '\',\'' + escAttr(f.id) + '\')"' +
-            ' title="' + escAttr(f.name || '') + (isWin ? ' — winner (click to unmark)' : ' (click to mark winner)') + '">' +
+            ' onclick="_mxv3PlayDriveVideo(\'' + escAttr(f.id) + '\',\'' + escAttr(f.name || '') + '\')"' +
+            ' title="' + escAttr(f.name || '') + ' — click to play; ⭐ to toggle winner">' +
               '<img src="' + escAttr(thumb) + '" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.onerror=null;this.src=\'' + escAttr(fallback) + '\'">' +
-              '<div class="tdv-star">' + (isWin ? '⭐' : '☆') + '</div>' +
+              '<div class="tdv-tile-play" aria-hidden="true">▶</div>' +
+              '<button type="button" class="tdv-star" onclick="event.stopPropagation();_mxv3ToggleVideoWinner(\'' + escAttr(adId) + '\',\'' + escAttr(f.id) + '\')" title="' + (isWin ? 'Unmark winner' : 'Mark as winner') + '">' + (isWin ? '⭐' : '☆') + '</button>' +
               '<div class="tdv-name">' + esc(f.name || 'unnamed') + '</div>' +
             '</div>';
   });
@@ -32925,6 +32943,47 @@ async function _mxv3UnmarkWinner(adId, fileId) {
   if (ad) _unmirrorWinnerFromAdMeta(ad, fileId);
   toast('Unmarked');
   if (ad) await _mxv3RefreshWinnersList(ad);
+}
+
+// ── Drive video player overlay ────────────────────────────────────────
+// Plays a Drive file inline via Google's /file/d/<id>/preview iframe.
+// Backdrop is z-indexed above the Winning Artifact modal so it sits on
+// top. Esc + outside-click both close it.
+function _mxv3PlayDriveVideo(fileId, fileName) {
+  if (!fileId) return;
+  // Tear down any existing player (shouldn't happen normally but defensive)
+  _mxv3CloseDriveVideo();
+
+  var overlay = document.createElement('div');
+  overlay.id = 'tdv-vid-overlay';
+  overlay.className = 'tdv-vid-overlay';
+  overlay.onclick = function (e) { if (e.target === overlay) _mxv3CloseDriveVideo(); };
+
+  var frame = document.createElement('div');
+  frame.className = 'tdv-vid-frame';
+  frame.innerHTML =
+    '<div class="tdv-vid-hdr">' +
+      '<span class="tdv-vid-name">' + esc(fileName || 'video') + '</span>' +
+      '<div class="tdv-vid-hdr-actions">' +
+        '<a class="tdv-vid-open" href="https://drive.google.com/file/d/' + encodeURIComponent(fileId) + '/view" target="_blank" rel="noopener" title="Open in Drive">↗</a>' +
+        '<button type="button" class="tdv-vid-close" onclick="_mxv3CloseDriveVideo()" aria-label="Close">×</button>' +
+      '</div>' +
+    '</div>' +
+    '<iframe src="https://drive.google.com/file/d/' + encodeURIComponent(fileId) + '/preview" ' +
+      'allow="autoplay; encrypted-media" allowfullscreen></iframe>';
+  overlay.appendChild(frame);
+  document.body.appendChild(overlay);
+  document.addEventListener('keydown', _mxv3DriveVideoEsc);
+}
+
+function _mxv3CloseDriveVideo() {
+  var el = document.getElementById('tdv-vid-overlay');
+  if (el && el.parentNode) el.parentNode.removeChild(el);
+  document.removeEventListener('keydown', _mxv3DriveVideoEsc);
+}
+
+function _mxv3DriveVideoEsc(e) {
+  if (e.key === 'Escape') _mxv3CloseDriveVideo();
 }
 
 function _mirrorWinnerToAdMeta(ad, file) {

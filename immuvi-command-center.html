@@ -1035,7 +1035,9 @@ body::before {
   background: rgba(15,23,42,0.45);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
-  z-index: 200;
+  /* 2026-05-23: was 200; raised above the mxv4 cell drawer (z-index 9000)
+     so modals opened from inside the drawer aren't visually hidden. */
+  z-index: 10010;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -36946,9 +36948,12 @@ function _mxv4ColumnRegistry() {
       var isWin = (a.status === 'Winner' || a.status === 'Mild Winner' || a.status === 'Scale');
       var spawnBtn = '';
       if (isWin) {
-        // 🏆 Winning Artifact entry — opens focused modal to mark winning files
-        spawnBtn += '<button class="mxv4-detail-action trophy" style="padding:4px 8px;font-size:0.78rem;margin-right:4px;border:1px solid var(--win);background:rgba(214,255,75,0.18);color:var(--b-ink);border-radius:6px;cursor:pointer" ' +
+        // 🏆 Winning Artifact entry — compact icon-only button so the row
+        // doesn't wrap onto multiple lines next to 🌱 Spawn / Moved ↗.
+        spawnBtn += '<button class="mxv4-detail-action trophy" style="padding:2px 6px;font-size:0.78rem;margin-right:4px;border:1px solid transparent;background:transparent;color:var(--b-ink);border-radius:5px;cursor:pointer;line-height:1.1" ' +
                     'onclick="event.stopPropagation();openWinningArtifactModal(\'' + escAttr(ad.id) + '\')" ' +
+                    'onmouseover="this.style.background=\'rgba(214,255,75,0.28)\';this.style.borderColor=\'var(--win)\'" ' +
+                    'onmouseout="this.style.background=\'transparent\';this.style.borderColor=\'transparent\'" ' +
                     'title="Mark winning video files for this task">🏆</button>';
         spawnBtn += '<button class="mxv4-detail-action replicate" style="padding:4px 10px;font-size:0.7rem;margin-right:4px" ' +
                    'onclick="event.stopPropagation();_varlabOpenSpawnModal(\'' + escAttr(ad.id) + '\',\'' + escJs(ctx.angleName) + '\',\'' + escJs(ctx.personaName) + '\')" ' +

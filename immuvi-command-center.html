@@ -36958,14 +36958,18 @@ function _mxv4ColumnRegistry() {
       if (isWin) {
         // 🏆 Winning Artifact entry — compact icon-only button so the row
         // doesn't wrap onto multiple lines next to 🌱 Spawn / Moved ↗.
-        spawnBtn += '<button class="mxv4-detail-action trophy" style="padding:2px 6px;font-size:0.78rem;margin-right:4px;border:1px solid transparent;background:transparent;color:var(--b-ink);border-radius:5px;cursor:pointer;line-height:1.1" ' +
+        spawnBtn += '<button class="mxv4-detail-action trophy" style="padding:2px 6px;font-size:0.85rem;border:1px solid transparent;background:transparent;color:var(--b-ink);border-radius:5px;cursor:pointer;line-height:1" ' +
                     'onclick="event.stopPropagation();openWinningArtifactModal(\'' + escAttr(ad.id) + '\')" ' +
                     'onmouseover="this.style.background=\'rgba(214,255,75,0.28)\';this.style.borderColor=\'var(--win)\'" ' +
                     'onmouseout="this.style.background=\'transparent\';this.style.borderColor=\'transparent\'" ' +
                     'title="Mark winning video files for this task">🏆</button>';
-        spawnBtn += '<button class="mxv4-detail-action replicate" style="padding:4px 10px;font-size:0.7rem;margin-right:4px" ' +
-                   'onclick="event.stopPropagation();_varlabOpenSpawnModal(\'' + escAttr(ad.id) + '\',\'' + escJs(ctx.angleName) + '\',\'' + escJs(ctx.personaName) + '\')" ' +
-                   'title="Spawn variations of this winner">🌱 Spawn</button>';
+        // 2026-05-23: Spawn shrunk to icon-only too (full label moved to title)
+        // so 🏆 + 🌱 + Moved fit on one row in the narrow ACTION column.
+        spawnBtn += '<button class="mxv4-detail-action replicate" style="padding:2px 6px;font-size:0.85rem;border:1px solid transparent;background:transparent;color:var(--b-ink);border-radius:5px;cursor:pointer;line-height:1" ' +
+                    'onclick="event.stopPropagation();_varlabOpenSpawnModal(\'' + escAttr(ad.id) + '\',\'' + escJs(ctx.angleName) + '\',\'' + escJs(ctx.personaName) + '\')" ' +
+                    'onmouseover="this.style.background=\'rgba(214,255,75,0.28)\';this.style.borderColor=\'var(--win)\'" ' +
+                    'onmouseout="this.style.background=\'transparent\';this.style.borderColor=\'transparent\'" ' +
+                    'title="Spawn variations of this winner">🌱</button>';
       }
       var labChip = '';
       try {
@@ -36983,7 +36987,10 @@ function _mxv4ColumnRegistry() {
       } else {
         actionPart = '<button class="mxv4-detail-action" style="padding:4px 10px;font-size:0.7rem" onclick="createActionFromMatrix(\'' + escAttr(ad.id) + '\',\'' + escJs(ctx.angleName) + '\',\'' + escJs(ctx.personaName) + '\', this)">→ Plan</button>';
       }
-      return '<td><div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">' + spawnBtn + actionPart + (labChip ? '<span style="margin-left:2px">' + labChip + '</span>' : '') + '</div></td>';
+      // 2026-05-23: flex-wrap:nowrap so 🏆 + Spawn + Moved stay on one row.
+      // white-space:nowrap on the cell so it can grow horizontally instead
+      // of stacking — matches the user's "clean, single-line" requirement.
+      return '<td style="white-space:nowrap"><div style="display:inline-flex;align-items:center;gap:4px;flex-wrap:nowrap">' + spawnBtn + actionPart + (labChip ? '<span style="margin-left:2px">' + labChip + '</span>' : '') + '</div></td>';
     } };
   cols['delete'] = { id: 'delete', label: '', source: 'app',
     render: function (a, ad) {

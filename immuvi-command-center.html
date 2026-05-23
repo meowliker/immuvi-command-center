@@ -36946,7 +36946,11 @@ function _mxv4ColumnRegistry() {
       var isWin = (a.status === 'Winner' || a.status === 'Mild Winner' || a.status === 'Scale');
       var spawnBtn = '';
       if (isWin) {
-        spawnBtn = '<button class="mxv4-detail-action replicate" style="padding:4px 10px;font-size:0.7rem;margin-right:4px" ' +
+        // 🏆 Winning Artifact entry — opens focused modal to mark winning files
+        spawnBtn += '<button class="mxv4-detail-action trophy" style="padding:4px 8px;font-size:0.78rem;margin-right:4px;border:1px solid var(--win);background:rgba(214,255,75,0.18);color:var(--b-ink);border-radius:6px;cursor:pointer" ' +
+                    'onclick="event.stopPropagation();openWinningArtifactModal(\'' + escAttr(ad.id) + '\')" ' +
+                    'title="Mark winning video files for this task">🏆</button>';
+        spawnBtn += '<button class="mxv4-detail-action replicate" style="padding:4px 10px;font-size:0.7rem;margin-right:4px" ' +
                    'onclick="event.stopPropagation();_varlabOpenSpawnModal(\'' + escAttr(ad.id) + '\',\'' + escJs(ctx.angleName) + '\',\'' + escJs(ctx.personaName) + '\')" ' +
                    'title="Spawn variations of this winner">🌱 Spawn</button>';
       }

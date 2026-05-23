@@ -6354,6 +6354,8 @@ button.mx-dt-action-sent .open { color:#0a84ff; font-weight:700; margin-left:4px
   border: 1px solid var(--b); background: var(--el); cursor: pointer;
   font-family: 'Satoshi', sans-serif; font-weight: 500;
 }
+.mxv3-cre-trophy-btn { padding: 4px 8px; border: 1px solid var(--win); background: rgba(214,255,75,0.12); color: var(--b-ink); border-radius: 6px; font-size: 0.78rem; cursor: pointer; transition: background 0.16s ease; }
+.mxv3-cre-trophy-btn:hover { background: rgba(214,255,75,0.28); }
 .mxv3-cre-action-btn {
   font-size: 0.7rem; padding: 5px 10px; border-radius: 6px;
   border: 1px solid var(--inprog); background: rgba(37,99,235,0.06);
@@ -22441,6 +22443,21 @@ function renderApDrawerMbBody(card) {
   html += '</div>';
   html += '</section>';
 
+  // Winning Artifact — only when this card's resolved status is a winner state.
+  // Resolves the ad object (preferred) or falls back to a synthetic ad-like
+  // object built from the action's source linkage, so we can render even
+  // when the card isn't strictly tied to an ad row.
+  var _waAd = card.ad || (act.sourceAdId ? (ADS || []).find(function (x) { return x.id === act.sourceAdId; }) : null);
+  if (_waAd && typeof _isWinnerStatus === 'function' && _isWinnerStatus(d.status) && typeof _mxv3RenderTaskVideos === 'function') {
+    var _waHtml = _mxv3RenderTaskVideos(_waAd);
+    if (_waHtml) {
+      html += '<section class="ap-dr-sec">';
+      html += '<div class="ap-dr-sec-hdr">WINNING ARTIFACT</div>';
+      html += _waHtml;
+      html += '</section>';
+    }
+  }
+
   // 2. Assignments
   html += '<section class="ap-dr-sec">';
   html += '<div class="ap-dr-sec-hdr">ASSIGNMENTS</div>';
@@ -32748,6 +32765,27 @@ function _mxv3RenderTaskVideos(ad) {
   return html;
 }
 
+// Reusable entry point: opens a focused modal containing just the Winning
+// Artifact section for one ad. Used from Creative Matrix cell drawer rows
+// and any other surface that wants to surface winner-marking without the
+// full Edit Creative form.
+function openWinningArtifactModal(adId) {
+  if (typeof openModal !== 'function') return;
+  var ad = (ADS || []).find(function (a) { return a.id === adId; });
+  if (!ad) { if (typeof toast === 'function') toast('Task not found', 'err'); return; }
+  if (!_isWinnerStatus(ad.status)) {
+    if (typeof toast === 'function') toast('Mark status as Winner / Mild Winner / Scale first');
+    return;
+  }
+  var body = _mxv3RenderTaskVideos(ad);
+  if (!body) {
+    if (typeof toast === 'function') toast('Nothing to show');
+    return;
+  }
+  var foot = '<button class="btn-ghost" onclick="closeModal()">Close</button>';
+  openModal('🏆 Winning Artifact — ' + (ad.formatName || ad.id), body, foot);
+}
+
 async function _mxv3RefreshWinnersList(ad) {
   var slot = document.getElementById('tdv-winners-' + ad.id);
   if (!slot) return;
@@ -33310,6 +33348,10 @@ function _mxv3RenderCreativesTab(angleName, personaName, st) {
       html += '<option value="' + esc(s) + '"' + (a.status === s ? ' selected' : '') + '>' + esc(s) + '</option>';
     });
     html += '</select>';
+    // 🏆 Winning Artifact entry — only on Winner/Mild Winner/Scale rows
+    if (_isWinnerStatus(a.status)) {
+      html += ' <button class="mxv3-cre-trophy-btn" onclick="event.stopPropagation();openWinningArtifactModal(\'' + escAttr(ad.id) + '\')" title="Mark winning video files for this task">🏆</button>';
+    }
 
     // Action plan: link or push button (reuses createActionFromMatrix)
     if (actionInfo && actionInfo.inActionPlan) {

@@ -4,7 +4,7 @@
 // ~/.classify-inspiration.env before running).
 
 import { strict as assert } from 'node:assert';
-import handler from '../../api/drive.js';
+import handler from '../../api/drive/list.js';
 
 const AT_079_FOLDER = '1rRLCkrljGA91imdRl-vFhxnM08j_ACnU';
 

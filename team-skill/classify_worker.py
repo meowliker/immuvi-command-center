@@ -1068,12 +1068,18 @@ class Worker:
             f"  If the verification SELECT shows the row missing or fields blank, that is a FAIL.\n"
         )
 
-        # Auto-route: prefer claude (the skill's native agent) but fall back
-        # to codex on machines that only have Codex installed. The
+        # Auto-route: choose between claude and codex via env var.
+        # CLASSIFY_AGENT_PREFER=codex  → use codex (Mac Mini default, frees up
+        #                                claude pool for strategist / briefing)
+        # CLASSIFY_AGENT_PREFER=claude → use claude (historical default)
+        # Either way, build_agent_cmd() falls back to whichever is installed.
         # classify-inspiration SKILL.md auto-updates via Step 0 from Vercel,
         # so it works under either agent as long as the skill files exist
         # locally for that agent.
-        cmd = build_agent_cmd(prompt, prefer="claude")
+        _prefer = (os.environ.get("CLASSIFY_AGENT_PREFER") or "claude").strip().lower()
+        if _prefer not in ("claude", "codex"):
+            _prefer = "claude"
+        cmd = build_agent_cmd(prompt, prefer=_prefer)
         agent_label = cmd[0] if cmd[0] == "claude" else "codex"
         log(f"[{job.get('id')}] running skill on {ins_id} via {agent_label} (timeout {CLAUDE_CLI_TIMEOUT_SECONDS}s)")
         try:

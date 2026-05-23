@@ -10067,6 +10067,14 @@ body:not(.booting) #__bootLoader {
 .tdv-vid-open, .tdv-vid-close { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; border-radius: 50%; background: rgba(0,0,0,0.5); border: none; color: #fff; font-size: 14px; cursor: pointer; text-decoration: none; transition: background 0.16s ease; }
 .tdv-vid-open:hover, .tdv-vid-close:hover { background: rgba(0,0,0,0.85); }
 .tdv-vid-close { font-size: 18px; }
+.tdv-prov-banner { display: flex; align-items: center; gap: 12px; padding: 12px 14px; background: linear-gradient(135deg, rgba(214,255,75,0.12), rgba(214,255,75,0.04)); border: 1px solid rgba(214,255,75,0.35); border-radius: 10px; margin-bottom: 16px; }
+.tdv-prov-icon { font-size: 1.4rem; flex-shrink: 0; }
+.tdv-prov-text { flex: 1; min-width: 0; }
+.tdv-prov-line1 { font-size: 0.84rem; font-weight: 600; color: var(--t1); overflow: hidden; text-overflow: ellipsis; }
+.tdv-prov-line2 { font-size: 0.7rem; color: var(--t3); margin-top: 2px; }
+.tdv-prov-actions { display: flex; gap: 6px; flex-shrink: 0; flex-wrap: wrap; }
+.tdv-prov-btn { padding: 6px 12px; border: 1px solid var(--b); background: var(--card); color: var(--t1); border-radius: 6px; font-size: 0.74rem; cursor: pointer; transition: border-color 0.16s ease, background 0.16s ease; }
+.tdv-prov-btn:hover { border-color: var(--win); background: rgba(214,255,75,0.12); }
 /* ── Tree picker for winning variations (Add Creative → Tracker) ── */
 .fwv-group { border: 1px solid var(--b); border-radius: 10px; margin-bottom: 8px; overflow: hidden; transition: border-color 0.18s ease; }
 .fwv-group:hover { border-color: var(--t3); }
@@ -10090,8 +10098,10 @@ body:not(.booting) #__bootLoader {
 .fwv-group.open .fwv-child:nth-child(2) { transition-delay: 60ms; }
 .fwv-group.open .fwv-child:nth-child(3) { transition-delay: 120ms; }
 .fwv-group.open .fwv-child:nth-child(4) { transition-delay: 180ms; }
-.fwv-thumb { width: 72px; aspect-ratio: 9/16; border-radius: 6px; overflow: hidden; background: var(--el); flex-shrink: 0; }
+.fwv-thumb { width: 72px; aspect-ratio: 9/16; border-radius: 6px; overflow: hidden; background: var(--el); flex-shrink: 0; position: relative; }
 .fwv-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.fwv-thumb-play { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%) scale(0.9); width: 28px; height: 28px; border-radius: 50%; background: rgba(0,0,0,0.65); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 10px; padding-left: 1px; opacity: 0; transition: opacity 0.18s ease, transform 0.18s cubic-bezier(0.16,1,0.3,1); pointer-events: none; }
+.fwv-thumb:hover .fwv-thumb-play { opacity: 1; transform: translate(-50%, -50%) scale(1); }
 .fwv-child-body { flex: 1; min-width: 0; }
 .fwv-child-name { font-weight: 600; font-size: 0.82rem; color: var(--t1); }
 .fwv-child-meta { font-size: 0.7rem; color: var(--t2); margin-top: 3px; }
@@ -24291,6 +24301,7 @@ function openEditCreative(id) {
   }
 
   var body =
+    _mxv3RenderProvenanceBanner(ad) +
     '<div class="form-group"><label>Format Name</label><select class="f-inp" id="ecFormatName">' + fmtOpts + '</select></div>' +
     '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">' +
       '<div class="form-group" style="margin:0"><label>Inspiration Link <span style="color:var(--t3);font-weight:400">— reference / inspo URL</span></label><input type="text" class="f-inp" id="ecAdLink" value="' + escAttr(ad.adLink || '') + '"></div>' +
@@ -32647,6 +32658,42 @@ var _driveFolder = (function () {
   return { fetch: fetchFolder, clear: clearFolder, parseFolderId: parseFolderId };
 })();
 
+// Resolve a Drive link from multiple possible storage locations on an ad.
+// Falls through: ad.driveLink → ad.meta._customFields["drive link"] (and
+// case variants) → ad._sourceFormatDriveLink. Returns '' if none.
+function _resolveDriveLink(ad) {
+  if (!ad) return '';
+  var meta = ad.meta || {};
+  var cf = meta._customFields || meta.customFields || {};
+  var candidates = [
+    ad.driveLink,
+    cf['drive link'],
+    cf['Drive Link'],
+    cf.driveLink,
+    ad._sourceFormatDriveLink
+  ];
+  for (var i = 0; i < candidates.length; i++) {
+    var v = candidates[i];
+    if (typeof v === 'string' && v.trim()) return v.trim();
+  }
+  return '';
+}
+
+// Classify a Drive URL: {kind, id, url}
+//   kind = 'folder' | 'file' | 'none' | 'unknown'
+//   id   = the Drive id (folder or file), present when kind is folder|file
+//   url  = the original url, present when non-empty
+function _parseDriveAny(url) {
+  if (!url || typeof url !== 'string') return { kind: 'none', url: '' };
+  url = url.trim();
+  if (!url) return { kind: 'none', url: '' };
+  var m;
+  if ((m = url.match(/\/folders\/([a-zA-Z0-9_-]+)/))) return { kind: 'folder', id: m[1], url: url };
+  if ((m = url.match(/\/file\/d\/([a-zA-Z0-9_-]+)/))) return { kind: 'file', id: m[1], url: url };
+  if ((m = url.match(/[?&]id=([a-zA-Z0-9_-]+)/))) return { kind: 'file', id: m[1], url: url };
+  return { kind: 'unknown', url: url };
+}
+
 // ── _videoWinners ──────────────────────────────────────────────────────
 // Read / toggle winning-video marks on the task_video_winners table.
 // Uses the global Supabase JS client (SB) — same convention as the rest
@@ -32692,6 +32739,14 @@ var _videoWinners = (function () {
     var r = await SB.from('task_video_winners').upsert(row, { onConflict: 'ad_id,drive_file_id' }).select();
     if (r.error) { console.error('[_videoWinners] mark', adId, file.id, r.error); return null; }
     allCache = { at: 0, data: null };  // invalidate cache
+    // Auto-trigger brief generation in the background so the brief is ready
+    // before anyone seeds this winner into a new cell. Idempotent: short-
+    // circuits if a brief already exists or is queued.
+    if (typeof _requestBriefIfNeeded === 'function') {
+      _requestBriefIfNeeded(adId, file.id, adId).catch(function (e) {
+        console.warn('[mark] brief request failed', e);
+      });
+    }
     return (r.data && r.data[0]) || null;
   }
 
@@ -32745,27 +32800,34 @@ function _parseDriveFileUrl(url, defaultName) {
 function _mxv3RenderTaskVideos(ad) {
   if (!ad || !_isWinnerStatus(ad.status)) return '';
 
-  var folderId  = _driveFolder.parseFolderId(ad.driveLink || '');
-  var hasFolder = !!folderId;
+  var link   = _resolveDriveLink(ad);
+  var parsed = _parseDriveAny(link);
 
-  // Async-refresh the list once the modal is in the DOM
   setTimeout(function () { _mxv3RefreshWinnersList(ad); }, 0);
 
   var html = '<div class="tdv-section">';
   html += '<div class="tdv-title">🏆 Winning Artifact</div>';
   html += '<div class="tdv-hint">Mark the specific file(s) that won. Saved to Supabase + mirrored to ClickUp as a comment.</div>';
 
-  // Path 1: paste URL
+  // Path 1 — paste URL (always shown)
   html += '<div class="tdv-paste-row">';
   html += '  <input type="text" id="tdv-paste-' + escAttr(ad.id) + '" placeholder="Paste Drive file URL (https://drive.google.com/file/d/…)">';
   html += '  <button type="button" onclick="_mxv3SaveWinnerFromPaste(\'' + escAttr(ad.id) + '\')">Save as winner</button>';
   html += '</div>';
 
-  // Path 2: browse folder
-  if (hasFolder) {
+  // Path 2 — depends on what kind of Drive link is set on the task
+  if (parsed.kind === 'folder') {
     html += '<div class="tdv-browse-row">';
     html += '  <span class="tdv-or">OR</span>';
     html += '  <button type="button" onclick="_mxv3ToggleBrowseGrid(\'' + escAttr(ad.id) + '\')">📂 Browse Drive folder</button>';
+    html += '</div>';
+  } else if (parsed.kind === 'file') {
+    // Single-file mode: the task itself links to one Drive file.
+    html += '<div class="tdv-browse-row" style="flex-wrap:wrap;gap:8px">';
+    html += '  <span class="tdv-or">OR</span>';
+    html += '  <span class="tdv-single-file-hint" style="font-size:0.72rem;color:var(--t3)">Drive link is a single file:</span>';
+    html += '  <button type="button" onclick="_mxv3PlayDriveVideo(\'' + escAttr(parsed.id) + '\',\'' + escAttr((ad.formatName || ad.id) + ' (linked file)') + '\')">▶ Play</button>';
+    html += '  <button type="button" onclick="_mxv3MarkLinkedFileAsWinner(\'' + escAttr(ad.id) + '\',\'' + escAttr(parsed.id) + '\')">⭐ Mark as winner</button>';
     html += '</div>';
   }
 
@@ -32779,6 +32841,66 @@ function _mxv3RenderTaskVideos(ad) {
 
   html += '</div>';
   return html;
+}
+
+// Provenance banner shown at the top of the Edit Creative modal when this
+// ad was seeded from a specific winning variation. Provides quick access
+// to: play the source video, view the brief (if generated), open the
+// parent task in Creative Tracker.
+function _mxv3RenderProvenanceBanner(ad) {
+  if (!ad) return '';
+  var fileId   = ad._sourceWinnerFileId;
+  var fileName = ad._sourceWinnerFileName || (fileId ? ('drive-file-' + fileId.slice(-6)) : '');
+  var parentId = ad.sourceFormatId;
+  if (!fileId && !parentId) return '';
+
+  var parent = parentId ? (ADS || []).find(function (a) { return a.id === parentId; }) : null;
+  var parentLbl = parent ? (parent.formatName || parent.id) : (parentId || 'parent');
+
+  var html = '<div class="tdv-prov-banner">';
+  html += '<span class="tdv-prov-icon">🌱</span>';
+  html += '<div class="tdv-prov-text">';
+  html += '<div class="tdv-prov-line1">Seeded from ' + esc(fileName || 'winning file') + ' of ' + esc(parentLbl) + '</div>';
+  html += '<div class="tdv-prov-line2">This task carries the DNA of a proven winner.</div>';
+  html += '</div>';
+  html += '<div class="tdv-prov-actions">';
+  if (fileId) {
+    html += '<button type="button" class="tdv-prov-btn" onclick="_mxv3PlayDriveVideo(\'' + escAttr(fileId) + '\',\'' + escAttr(fileName || 'source video') + '\')" title="Play the source winning video">▶ Play source</button>';
+    html += '<button type="button" class="tdv-prov-btn" onclick="_mxv3OpenVariationBrief(\'' + escAttr(fileId) + '\')" title="View the brief generated for this winner">📄 View brief</button>';
+  }
+  html += '</div>';
+  html += '</div>';
+  return html;
+}
+
+// Open the brief for a drive_file_id in a modal. If no brief yet, show a
+// helpful message + lets the user kick off generation manually.
+async function _mxv3OpenVariationBrief(fileId) {
+  if (!SB) return;
+  try {
+    var r = await SB.from('variation_briefs').select('*').eq('drive_file_id', fileId).limit(1);
+    if (r.error) throw r.error;
+    if (!r.data || r.data.length === 0) {
+      var foot = '<button class="btn-ghost" onclick="closeModal()">Close</button>';
+      openModal('📄 Brief — not yet generated', '<div style="padding:12px;color:var(--t2)">No brief exists for this file yet. The background worker will generate one when it next runs.</div>', foot);
+      return;
+    }
+    var brief = r.data[0];
+    var bodyHtml = '<div class="tdv-brief-body">';
+    if (brief.clickup_doc_page_url) {
+      bodyHtml += '<div style="margin-bottom:10px"><a class="btn-add btn-sm" href="' + escAttr(brief.clickup_doc_page_url) + '" target="_blank" rel="noopener">↗ Open in ClickUp</a></div>';
+    }
+    // Render markdown as preformatted text (lightweight — full markdown
+    // rendering would require a library; the brief is human-readable as
+    // plain text anyway).
+    bodyHtml += '<pre style="white-space:pre-wrap;font-family:inherit;font-size:0.82rem;color:var(--t1);background:var(--el);padding:14px;border-radius:8px;max-height:60vh;overflow-y:auto">' + esc(brief.brief_markdown || '') + '</pre>';
+    bodyHtml += '</div>';
+    var foot2 = '<button class="btn-ghost" onclick="closeModal()">Close</button>';
+    openModal('📄 Variation Brief', bodyHtml, foot2);
+  } catch (e) {
+    console.error('[brief] open failed', e);
+    if (typeof toast === 'function') toast('Failed to load brief', 'err');
+  }
 }
 
 // Reusable entry point: opens a focused modal containing just the Winning
@@ -32845,6 +32967,24 @@ async function _mxv3SaveWinnerFromPaste(adId) {
   if (ad) await _mxv3RefreshWinnersList(ad);
 }
 
+async function _mxv3MarkLinkedFileAsWinner(adId, fileId) {
+  var ad = (ADS || []).find(function (a) { return a.id === adId; });
+  if (!ad) { toast('Task not found', 'err'); return; }
+  if (!fileId) { toast('No linked Drive file id', 'err'); return; }
+  var file = {
+    id: fileId,
+    name: (ad.formatName || ad.id) + ' — linked file',
+    webViewLink: 'https://drive.google.com/file/d/' + fileId + '/view',
+    thumbnailLink: null
+  };
+  var rec = await _videoWinners.mark(adId, file, 'linked-file');
+  if (!rec) { toast('Save failed', 'err'); return; }
+  _mirrorWinnerToAdMeta(ad, file);
+  _mxv3SyncWinnerToClickup(ad, file).catch(function (e) { console.warn('[clickup-sync] failed', e); });
+  toast('Marked linked file as winner');
+  await _mxv3RefreshWinnersList(ad);
+}
+
 async function _mxv3ToggleBrowseGrid(adId) {
   var slot = document.getElementById('tdv-slot-' + adId);
   if (!slot) return;
@@ -32856,7 +32996,7 @@ async function _mxv3ToggleBrowseGrid(adId) {
 
   var ad = (ADS || []).find(function (a) { return a.id === adId; });
   if (!ad) return;
-  var folderId = _driveFolder.parseFolderId(ad.driveLink || '');
+  var folderId = _driveFolder.parseFolderId(_resolveDriveLink(ad));
   if (!folderId) {
     slot.innerHTML = '<div class="tdv-grid-wrap"><div class="tdv-empty">No folder URL on this task.</div></div>';
     return;
@@ -32906,7 +33046,7 @@ async function _mxv3ToggleBrowseGrid(adId) {
 async function _mxv3ToggleVideoWinner(adId, fileId) {
   var ad = (ADS || []).find(function (a) { return a.id === adId; });
   if (!ad) { toast('Task not found', 'err'); return; }
-  var folderId = _driveFolder.parseFolderId(ad.driveLink || '');
+  var folderId = _driveFolder.parseFolderId(_resolveDriveLink(ad));
   var info = folderId ? await _driveFolder.fetch(folderId, adId) : null;
   var file = info && info.files ? info.files.find(function (f) { return f.id === fileId; }) : null;
   if (!file) { toast('Video file not found', 'err'); return; }
@@ -33709,7 +33849,10 @@ async function _mxv3RefreshTrackerTree(slotId, angleName, personaName) {
       var fallback = 'https://placehold.co/72x128/1a1a1a/fff?text=' + encodeURIComponent(w.file_name || '?');
       var when = (typeof _f7FormatDate === 'function') ? _f7FormatDate(Date.parse(w.marked_winner_at)) : '';
       html += '<div class="fwv-child">';
-      html += '<div class="fwv-thumb"><img src="' + escAttr(thumb) + '" loading="lazy" alt="" referrerpolicy="no-referrer" onerror="this.onerror=null;this.src=\'' + escAttr(fallback) + '\'"></div>';
+      html += '<div class="fwv-thumb" onclick="_mxv3PlayDriveVideo(\'' + escAttr(w.drive_file_id) + '\',\'' + escAttr(w.file_name || '') + '\')" title="Play this winning video" style="cursor:pointer;position:relative">' +
+                '<img src="' + escAttr(thumb) + '" loading="lazy" alt="" referrerpolicy="no-referrer" onerror="this.onerror=null;this.src=\'' + escAttr(fallback) + '\'">' +
+                '<div class="fwv-thumb-play">▶</div>' +
+              '</div>';
       html += '<div class="fwv-child-body">';
       html += '<div class="fwv-child-name">' + esc(w.file_name || 'unnamed') + ' ⭐</div>';
       html += '<div class="fwv-child-meta">Won ' + esc(when) + (w.notes ? ' · ' + esc(w.notes) : '') +
@@ -33736,7 +33879,7 @@ async function _mxv3SeedFromVariation(parentAdId, driveFileId, angleName, person
   if (!parent) { toast('Parent task not found', 'err'); return; }
 
   // Resolve the file: pull from cached Drive folder listing
-  var folderId = _driveFolder.parseFolderId(parent.driveLink || '');
+  var folderId = _driveFolder.parseFolderId(_resolveDriveLink(parent));
   var info = folderId ? await _driveFolder.fetch(folderId, parentAdId) : null;
   var file = info && info.files ? info.files.find(function (f) { return f.id === driveFileId; }) : null;
   // file may be null in legacy mode (file pasted by URL, never listed) — graceful fallback
@@ -33807,34 +33950,52 @@ async function _mxv3SeedFromVariation(parentAdId, driveFileId, angleName, person
   toast('Seeded ' + newId + ' from ' + fileName + '. Brief generation queued.');
 }
 
-// Fire-and-forget brief request. The actual worker (tools/variation_brief_worker.py,
-// Task 8) pulls jobs from variation_brief_queue and writes results to variation_briefs.
-async function _mxv3RequestBriefForVariation(parentAdId, driveFileId, newAdId) {
-  if (!SB) return;
+// Enqueue a brief generation job for a (parent, file) pair, idempotently:
+//   - Skip if a brief already exists in variation_briefs for this drive_file_id
+//   - Skip if a job is already pending/classifying for this drive_file_id
+// Called from BOTH the mark path (proactive — brief ready before seed) AND
+// the seed path (safety net — defends against race where mark didn't enqueue).
+async function _requestBriefIfNeeded(parentAdId, driveFileId, targetAdId) {
+  if (!parentAdId || !driveFileId || typeof SB === 'undefined' || !SB) return false;
   try {
-    // Already have a brief? Short-circuit
     var found = await SB.from('variation_briefs')
-      .select('clickup_doc_page_url')
-      .eq('drive_file_id', driveFileId);
+      .select('drive_file_id')
+      .eq('drive_file_id', driveFileId)
+      .limit(1);
     if (!found.error && found.data && found.data.length > 0) {
-      console.log('[seed] brief already exists for', driveFileId, '→', found.data[0].clickup_doc_page_url);
-      return;
+      console.log('[brief] already exists for', driveFileId, '— skip enqueue');
+      return false;
     }
-    // Enqueue
+    var existing = await SB.from('variation_brief_queue')
+      .select('id,status')
+      .eq('drive_file_id', driveFileId)
+      .in('status', ['pending', 'classifying'])
+      .limit(1);
+    if (!existing.error && existing.data && existing.data.length > 0) {
+      console.log('[brief] already queued for', driveFileId, '— skip enqueue');
+      return false;
+    }
     var ins = await SB.from('variation_brief_queue').insert({
       parent_ad_id: parentAdId,
       drive_file_id: driveFileId,
-      target_ad_id: newAdId,
+      target_ad_id: targetAdId || parentAdId,   // queue table is NOT NULL — use parent_ad_id as fallback
       status: 'pending'
     });
     if (ins.error) {
-      console.warn('[seed] brief enqueue failed', ins.error);
-    } else {
-      console.log('[seed] brief generation queued for', driveFileId);
+      console.warn('[brief] enqueue failed', ins.error);
+      return false;
     }
+    console.log('[brief] queued for', driveFileId);
+    return true;
   } catch (e) {
-    console.error('[seed] brief request failed', e);
+    console.error('[brief] request failed', e);
+    return false;
   }
+}
+
+// Backwards-compat wrapper used by _mxv3SeedFromVariation.
+async function _mxv3RequestBriefForVariation(parentAdId, driveFileId, newAdId) {
+  return _requestBriefIfNeeded(parentAdId, driveFileId, newAdId);
 }
 
 function _mxv3RenderAddInspiration(angleName, personaName) {

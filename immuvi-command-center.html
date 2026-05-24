@@ -10075,6 +10075,10 @@ body:not(.booting) #__bootLoader {
 .tdv-prov-actions { display: flex; gap: 6px; flex-shrink: 0; flex-wrap: wrap; }
 .tdv-prov-btn { padding: 6px 12px; border: 1px solid var(--b); background: var(--card); color: var(--t1); border-radius: 6px; font-size: 0.74rem; cursor: pointer; transition: border-color 0.16s ease, background 0.16s ease; }
 .tdv-prov-btn:hover { border-color: var(--win); background: rgba(214,255,75,0.12); }
+.tdv-prov-status { display: inline-block; font-size: 0.66rem; padding: 2px 8px; border-radius: 999px; margin-left: 6px; vertical-align: middle; }
+.tdv-prov-status.pill-ready { background: rgba(214,255,75,0.25); color: var(--b-ink); border: 1px solid var(--win); }
+.tdv-prov-status.pill-loading { background: rgba(245,158,11,0.16); color: #92400e; border: 1px solid rgba(245,158,11,0.4); }
+.tdv-prov-status.pill-none { background: var(--el); color: var(--t3); border: 1px solid var(--b); }
 /* ── Tree picker for winning variations (Add Creative → Tracker) ── */
 .fwv-group { border: 1px solid var(--b); border-radius: 10px; margin-bottom: 8px; overflow: hidden; transition: border-color 0.18s ease; }
 .fwv-group:hover { border-color: var(--t3); }
@@ -32857,11 +32861,16 @@ function _mxv3RenderProvenanceBanner(ad) {
   var parent = parentId ? (ADS || []).find(function (a) { return a.id === parentId; }) : null;
   var parentLbl = parent ? (parent.formatName || parent.id) : (parentId || 'parent');
 
+  // Async status update — runs after DOM insertion
+  if (fileId) {
+    setTimeout(function () { _mxv3UpdateProvenanceBriefStatus(fileId); }, 0);
+  }
+
   var html = '<div class="tdv-prov-banner">';
   html += '<span class="tdv-prov-icon">🌱</span>';
   html += '<div class="tdv-prov-text">';
   html += '<div class="tdv-prov-line1">Seeded from ' + esc(fileName || 'winning file') + ' of ' + esc(parentLbl) + '</div>';
-  html += '<div class="tdv-prov-line2">This task carries the DNA of a proven winner.</div>';
+  html += '<div class="tdv-prov-line2">This task carries the DNA of a proven winner. <span id="tdv-prov-brief-status-' + escAttr(fileId || 'none') + '" class="tdv-prov-status pill-loading">⏳ checking brief…</span></div>';
   html += '</div>';
   html += '<div class="tdv-prov-actions">';
   if (fileId) {
@@ -32871,6 +32880,32 @@ function _mxv3RenderProvenanceBanner(ad) {
   html += '</div>';
   html += '</div>';
   return html;
+}
+
+async function _mxv3UpdateProvenanceBriefStatus(fileId) {
+  if (!SB || !fileId) return;
+  var el = document.getElementById('tdv-prov-brief-status-' + fileId);
+  if (!el) return;
+  try {
+    var r = await SB.from('variation_briefs').select('clickup_doc_page_url').eq('drive_file_id', fileId).limit(1);
+    if (!r.error && r.data && r.data.length > 0 && r.data[0].clickup_doc_page_url) {
+      el.textContent = '✓ brief ready';
+      el.className = 'tdv-prov-status pill-ready';
+      return;
+    }
+    // No brief yet — check if queued
+    var q = await SB.from('variation_brief_queue').select('id,status').eq('drive_file_id', fileId).in('status', ['pending','classifying']).limit(1);
+    if (!q.error && q.data && q.data.length > 0) {
+      el.textContent = '⏳ generating brief…';
+      el.className = 'tdv-prov-status pill-loading';
+      return;
+    }
+    el.textContent = 'no brief yet';
+    el.className = 'tdv-prov-status pill-none';
+  } catch (e) {
+    el.textContent = 'brief status unknown';
+    el.className = 'tdv-prov-status pill-none';
+  }
 }
 
 // Open the brief for a drive_file_id in a modal. If no brief yet, show a
@@ -32938,6 +32973,7 @@ async function _mxv3RefreshWinnersList(ad) {
     html += '  <span class="tdv-list-star">⭐</span>';
     html += '  <span class="tdv-list-name" title="' + escAttr(w.file_name || w.drive_file_id) + '">' + esc(w.file_name || w.drive_file_id) + '</span>';
     if (w.web_view_url) html += '  <a class="tdv-list-link" href="' + escAttr(w.web_view_url) + '" target="_blank" rel="noopener">open</a>';
+    html += '  <button class="tdv-list-link" type="button" onclick="_mxv3OpenVariationBrief(\'' + escAttr(w.drive_file_id) + '\')" title="View / generate brief for this winner" style="cursor:pointer">📄 brief</button>';
     html += '  <button class="tdv-list-unmark" type="button" onclick="_mxv3UnmarkWinner(\'' + escAttr(ad.id) + '\',\'' + escAttr(w.drive_file_id) + '\')">unmark</button>';
     html += '</div>';
   });
@@ -33895,7 +33931,7 @@ async function _mxv3SeedFromVariation(parentAdId, driveFileId, angleName, person
   var newAd = {
     id:                    newId,
     formatName:            prodFormatName,
-    adLink:                fileViewUrl || parent.adLink || '',
+    adLink:                fileViewUrl,
     driveLink:             '',
     _sourceFormatDriveLink: parent.driveLink || '',
     adType:                parent.adType || '',
@@ -33995,7 +34031,45 @@ async function _requestBriefIfNeeded(parentAdId, driveFileId, targetAdId) {
 
 // Backwards-compat wrapper used by _mxv3SeedFromVariation.
 async function _mxv3RequestBriefForVariation(parentAdId, driveFileId, newAdId) {
-  return _requestBriefIfNeeded(parentAdId, driveFileId, newAdId);
+  if (!parentAdId || !driveFileId || typeof SB === 'undefined' || !SB) return;
+  // Re-use the shared enqueue helper (added in Task 13). It already short-
+  // circuits if a brief exists or a job is queued.
+  await _requestBriefIfNeeded(parentAdId, driveFileId, newAdId);
+  // Kick off a lightweight poller: when the brief lands, patch the new
+  // task's ClickUp description with the doc URL. Bounded — gives up after
+  // 10 minutes so it doesn't run forever.
+  _mxv3PollBriefAndPatchDescription(parentAdId, driveFileId, newAdId, 0).catch(function (e) {
+    console.warn('[brief-poll] poller errored', e);
+  });
+}
+
+async function _mxv3PollBriefAndPatchDescription(parentAdId, driveFileId, newAdId, attempt) {
+  if (attempt > 20) return;  // 20 × 30s = 10 min max
+  try {
+    var r = await SB.from('variation_briefs').select('clickup_doc_page_url,brief_markdown').eq('drive_file_id', driveFileId).limit(1);
+    if (!r.error && r.data && r.data.length > 0 && r.data[0].clickup_doc_page_url) {
+      var docUrl = r.data[0].clickup_doc_page_url;
+      var ad = (ADS || []).find(function (a) { return a.id === newAdId; });
+      if (ad && ad._clickupId) {
+        try {
+          var tr = await apiFetch('/task/' + encodeURIComponent(ad._clickupId));
+          var existingDesc = (tr && tr.description) || '';
+          if (existingDesc.indexOf(docUrl) === -1) {
+            var newDesc = existingDesc + '\n| 📌 Winner Brief | ' + docUrl + ' |';
+            await apiFetch('/task/' + encodeURIComponent(ad._clickupId), {
+              method: 'PUT',
+              body: { description: newDesc }
+            });
+            console.log('[brief-poll] patched ClickUp description on', ad._clickupId);
+          }
+        } catch (e) { console.warn('[brief-poll] patch failed', e); }
+      }
+      return;  // done
+    }
+  } catch (e) { console.warn('[brief-poll] check failed', e); }
+  setTimeout(function () {
+    _mxv3PollBriefAndPatchDescription(parentAdId, driveFileId, newAdId, attempt + 1);
+  }, 30 * 1000);
 }
 
 function _mxv3RenderAddInspiration(angleName, personaName) {

@@ -626,6 +626,59 @@ class Worker:
             log(f"claim failed for {cid}: {e}")
             return None
 
+    def claim_next_variation_brief_job(self):
+        """Atomically claim a pending variation_brief_queue row. Mirrors
+        claim_next_job (which is for inspiration_queue) — same pattern:
+        SELECT order_by created_at ASC, then PATCH ?status=eq.pending to
+        flip to classifying so a second worker on the same row loses the
+        race and finds nothing left.
+
+        Returns the claimed row dict, or None if no pending work.
+        """
+        try:
+            rows = self.sb.select(
+                "variation_brief_queue",
+                "select=id,parent_ad_id,drive_file_id,target_ad_id,attempts"
+                "&status=eq.pending&order=created_at.asc&limit=1",
+            )
+            if not rows:
+                return None
+            job = rows[0]
+            patch = {
+                "status": "classifying",
+                "claimed_by": self.worker_id,
+                "claimed_at": _now_iso(),
+                "attempts": (job.get("attempts") or 0) + 1,
+            }
+            updated = self.sb.update(
+                "variation_brief_queue",
+                f"id=eq.{urllib.parse.quote(job['id'])}&status=eq.pending",
+                patch,
+            )
+            if not updated:
+                return None  # lost the race to another worker
+            return updated[0]
+        except Exception as e:
+            log(f"claim_next_variation_brief_job error: {e}")
+            return None
+
+    def _resolve_brief_context(self, parent_ad_id, target_ad_id):
+        """Look up parent + target ads from public.ads for the brief prompt.
+        Best-effort — missing fields just become 'unknown' downstream."""
+        ctx = {"parent_ad": None, "target_ad": None}
+        try:
+            qs = (
+                "select=id,format_name,clickup_task_id,product_id,meta&"
+                f"id=in.({urllib.parse.quote(parent_ad_id)},{urllib.parse.quote(target_ad_id)})"
+            )
+            rows = self.sb.select("ads", qs)
+            for r in rows:
+                if r.get("id") == parent_ad_id: ctx["parent_ad"] = r
+                if r.get("id") == target_ad_id: ctx["target_ad"] = r
+        except Exception as e:
+            log(f"_resolve_brief_context error: {e}")
+        return ctx
+
     # ── Producer parallel-execution helpers ──
 
     def _active_producer_count(self) -> int:
@@ -722,6 +775,49 @@ class Worker:
             log(f"[{queue_id}] classify pool exception: {e}\n{traceback.format_exc()}")
             try:
                 self.mark_failure(job, f"worker exception: {e}")
+            except Exception:
+                pass
+
+    def _execute_variation_brief_job(self, job: dict) -> None:
+        """Run a single variation_brief_queue job end-to-end on a pool thread.
+
+        Mirrors _execute_classify_job's structure (idempotency check →
+        skill run → mark done/fail → rate-limit-cooldown bookkeeping).
+        Shares the same _classify_pool, so this job competes for the
+        same N concurrency slots as inspiration jobs.
+        """
+        queue_id      = job.get("id")
+        drive_file_id = job.get("drive_file_id")
+        parent_ad_id  = job.get("parent_ad_id")
+        target_ad_id  = job.get("target_ad_id")
+        try:
+            self._mark_brief_classifying(queue_id)
+            # Idempotency: skip the skill if the brief is already complete.
+            pre_ok, pre_msg = self._verify_variation_brief_row(drive_file_id)
+            if pre_ok:
+                log(f"[{queue_id}] variation_briefs row already complete — skipping skill run")
+                self._mark_brief_done(queue_id)
+                self.increment_completed()
+                return
+            ctx = self._resolve_brief_context(parent_ad_id, target_ad_id)
+            outcome = self.run_variation_brief_skill_on_job(job, ctx)
+            err = (outcome.get("error") or "").lower()
+            rl_signals = ("rate_limit", "rate limit", "429", "529", "overloaded", "5-hour", "5 hour")
+            if any(t in err for t in rl_signals):
+                self._claude_cooldown_until = time.time() + CLASSIFY_RATE_LIMIT_COOLDOWN_SECONDS
+                log(f"[{queue_id}] RATE-LIMIT SIGNAL on brief job — pausing classify pool for "
+                    f"{CLASSIFY_RATE_LIMIT_COOLDOWN_SECONDS}s. Error: {err[:200]}")
+            if outcome.get("success"):
+                self._mark_brief_done(queue_id)
+                self.increment_completed()
+                log(f"[{queue_id}] ✓ brief generated")
+            else:
+                self._mark_brief_failure(job, outcome.get("error", "unknown error"))
+                self.increment_failed()
+        except Exception as e:
+            log(f"[{queue_id}] brief pool exception: {e}\n{traceback.format_exc()}")
+            try:
+                self._mark_brief_failure(job, f"worker exception: {e}")
             except Exception:
                 pass
 
@@ -1068,18 +1164,12 @@ class Worker:
             f"  If the verification SELECT shows the row missing or fields blank, that is a FAIL.\n"
         )
 
-        # Auto-route: choose between claude and codex via env var.
-        # CLASSIFY_AGENT_PREFER=codex  → use codex (Mac Mini default, frees up
-        #                                claude pool for strategist / briefing)
-        # CLASSIFY_AGENT_PREFER=claude → use claude (historical default)
-        # Either way, build_agent_cmd() falls back to whichever is installed.
+        # Auto-route: prefer claude (the skill's native agent) but fall back
+        # to codex on machines that only have Codex installed. The
         # classify-inspiration SKILL.md auto-updates via Step 0 from Vercel,
         # so it works under either agent as long as the skill files exist
         # locally for that agent.
-        _prefer = (os.environ.get("CLASSIFY_AGENT_PREFER") or "claude").strip().lower()
-        if _prefer not in ("claude", "codex"):
-            _prefer = "claude"
-        cmd = build_agent_cmd(prompt, prefer=_prefer)
+        cmd = build_agent_cmd(prompt, prefer="claude")
         agent_label = cmd[0] if cmd[0] == "claude" else "codex"
         log(f"[{job.get('id')}] running skill on {ins_id} via {agent_label} (timeout {CLAUDE_CLI_TIMEOUT_SECONDS}s)")
         try:
@@ -1117,6 +1207,128 @@ class Worker:
             return {"success": False, "error": f"claude timeout after {CLAUDE_CLI_TIMEOUT_SECONDS}s"}
         except FileNotFoundError:
             return {"success": False, "error": "claude CLI not found in PATH"}
+        except Exception as e:
+            return {"success": False, "error": f"{type(e).__name__}: {e}"}
+
+    def run_variation_brief_skill_on_job(self, job, ctx):
+        """Invoke the agent CLI to generate a real brief for a winning
+        variation. Mirrors run_skill_on_job's structure: build prompt →
+        subprocess → check OK/FAIL → server-side verify → return outcome.
+
+        Differences from the inspiration flow:
+        - Target table is variation_briefs (UPSERT on drive_file_id)
+        - No inspiration_results write
+        - Source is a Drive file URL, not a competitor ad URL
+        - Brief slant is 'scale this winner', not 'classify this competitor'
+        """
+        queue_id      = job.get("id")
+        parent_ad_id  = job.get("parent_ad_id")
+        target_ad_id  = job.get("target_ad_id")
+        drive_file_id = job.get("drive_file_id")
+        drive_url     = f"https://drive.google.com/file/d/{drive_file_id}/view"
+
+        parent = ctx.get("parent_ad") or {}
+        target = ctx.get("target_ad") or {}
+        parent_name = parent.get("format_name") or parent_ad_id
+        target_name = target.get("format_name") or target_ad_id
+        target_cu   = target.get("clickup_task_id") or ""
+        parent_cu   = parent.get("clickup_task_id") or ""
+        product_id  = target.get("product_id") or parent.get("product_id") or ""
+
+        prompt = (
+            f"Generate a creative brief for a WINNING VIDEO VARIATION using the same\n"
+            f"workflow as the /classify-inspiration skill (download Drive file → ffmpeg\n"
+            f"frames + audio → visual classification → 7-section brief → ClickUp Doc\n"
+            f"page). Do NOT batch-scan, do NOT pause for consolidation, do NOT ask any\n"
+            f"questions.\n\n"
+            f"Target job:\n"
+            f"  queue_id:        {queue_id}\n"
+            f"  drive_file_id:   {drive_file_id}\n"
+            f"  drive_url:       {drive_url}\n"
+            f"  parent_ad_id:    {parent_ad_id}  ({parent_name})\n"
+            f"  parent_clickup:  {parent_cu}\n"
+            f"  target_ad_id:    {target_ad_id}  ({target_name})\n"
+            f"  target_clickup:  {target_cu}\n"
+            f"  product_id:      {product_id}\n\n"
+            f"REQUIRED WORK (all mandatory before printing OK):\n\n"
+            f"  1. Resolve product config from public.products.config (look up by product_id={product_id}):\n"
+            f"     clickup_list_id, doc_id (the ClickUp doc where briefs go).\n"
+            f"  2. Download the Drive video at drive_url. Auth via $GOOGLE_DRIVE_API_KEY\n"
+            f"     (loaded from ~/.classify-inspiration.env). The folder is shared 'Anyone\n"
+            f"     with link' so the API key suffices.\n"
+            f"  3. Use ffmpeg to extract frames (1 per second up to 60s) + audio probe.\n"
+            f"  4. Visually classify the WINNING variation (ALL 8 mandatory):\n"
+            f"     hook_type, creative_structure, production_style, funnel_type,\n"
+            f"     persona, angle, ad_type, brand. Plus body_copy and creative_hypothesis.\n"
+            f"  5. Build a 7-section brief markdown TUNED FOR 'scale this winner':\n"
+            f"     ## What Made This Win\n"
+            f"     ## Hook (verbatim + analysis)\n"
+            f"     ## Creative Structure\n"
+            f"     ## Production Style\n"
+            f"     ## Body Copy + Tone\n"
+            f"     ## Persona Fit\n"
+            f"     ## Variation Ideas (concrete suggestions for how to scale or evolve this winner)\n"
+            f"  6. Create a ClickUp Doc page in the product's brief doc (doc_id from step 1)\n"
+            f"     titled 'Winner Brief — {parent_name} — {drive_file_id[-10:]}'. Capture\n"
+            f"     the page URL.\n\n"
+            f"  7. *** MANDATORY DB WRITE ***\n"
+            f"     UPSERT into public.variation_briefs (drive_file_id is the conflict key):\n"
+            f"       - drive_file_id        = '{drive_file_id}'\n"
+            f"       - ad_id                = '{parent_ad_id}'\n"
+            f"       - brief_markdown       = <full markdown from step 5>\n"
+            f"       - clickup_doc_page_url = <URL captured in step 6>\n"
+            f"       - generated_by         = '{self.worker_id}'\n"
+            f"     Use the Supabase REST API with $SUPABASE_SERVICE_ROLE_KEY (loaded from\n"
+            f"     ~/.classify-inspiration.env). UPSERT is MANDATORY — without it the\n"
+            f"     server-side verify gate rejects this as FAIL.\n\n"
+            f"  8. (Optional but recommended) Post a ClickUp comment on the target task\n"
+            f"     ({target_cu}) with: '🏆 Winner brief: <doc_url>'. Skip if target_clickup\n"
+            f"     is empty.\n\n"
+            f"  9. Do NOT touch variation_brief_queue at all — the worker handles queue state.\n\n"
+            f"VERIFICATION (you must pass before printing OK):\n"
+            f"  SELECT from public.variation_briefs WHERE drive_file_id='{drive_file_id}'.\n"
+            f"  Both brief_markdown and clickup_doc_page_url MUST be non-empty.\n"
+            f"  If either is missing, print 'FAIL {queue_id}: missing <field>'.\n\n"
+            f"OUTPUT (the LAST line of stdout — nothing else after):\n"
+            f"  On success:  'OK {queue_id}'\n"
+            f"  On failure:  'FAIL {queue_id}: <one-line reason>'\n"
+        )
+
+        _prefer = (os.environ.get("CLASSIFY_AGENT_PREFER") or "claude").strip().lower()
+        if _prefer not in ("claude", "codex"):
+            _prefer = "claude"
+        cmd = build_agent_cmd(prompt, prefer=_prefer)
+        agent_label = cmd[0] if cmd[0] == "claude" else "codex"
+        log(f"[{queue_id}] running brief skill on {drive_file_id} via {agent_label} "
+            f"(timeout {CLAUDE_CLI_TIMEOUT_SECONDS}s)")
+        try:
+            r = subprocess.run(
+                cmd,
+                capture_output=True, text=True,
+                timeout=CLAUDE_CLI_TIMEOUT_SECONDS,
+            )
+            stdout = (r.stdout or "").strip()
+            stderr = (r.stderr or "").strip()
+            tail = stdout[-500:] if stdout else stderr[-500:]
+            if r.returncode != 0:
+                return {"success": False, "error": f"{agent_label} exit {r.returncode}: {tail}"}
+            ok_marker = f"OK {queue_id}"
+            fail_marker = f"FAIL {queue_id}"
+            skill_says_ok = ok_marker in stdout
+            if fail_marker in stdout:
+                idx = stdout.find(fail_marker)
+                return {"success": False, "error": stdout[idx:idx + 300]}
+            verify_ok, verify_msg = self._verify_variation_brief_row(drive_file_id)
+            if not verify_ok:
+                return {"success": False, "error": f"skill returned without persisting: {verify_msg}"}
+            if skill_says_ok:
+                return {"success": True}
+            log(f"[{queue_id}] brief skill exit 0 with no OK marker but verify passed; tail: {tail[-200:]}")
+            return {"success": True, "warning": "no_ok_marker_but_verified"}
+        except subprocess.TimeoutExpired:
+            return {"success": False, "error": f"{agent_label} timeout after {CLAUDE_CLI_TIMEOUT_SECONDS}s"}
+        except FileNotFoundError:
+            return {"success": False, "error": f"{agent_label} CLI not found in PATH"}
         except Exception as e:
             return {"success": False, "error": f"{type(e).__name__}: {e}"}
 
@@ -1173,6 +1385,34 @@ class Worker:
         except Exception as e:
             return (False, f"verify query failed: {e}")
 
+    def _verify_variation_brief_row(self, drive_file_id):
+        """Confirm the skill actually wrote a usable row to public.variation_briefs.
+
+        Required: row exists AND brief_markdown is non-empty AND
+        clickup_doc_page_url is non-empty. Without all three, the
+        downstream UI surfaces (provenance banner, picker brief button,
+        ClickUp description patcher) can't function — treat as failure.
+
+        Returns: (success: bool, message: str).
+        """
+        try:
+            qs = (
+                "select=id,brief_markdown,clickup_doc_page_url&"
+                f"drive_file_id=eq.{urllib.parse.quote(drive_file_id)}&limit=1"
+            )
+            rows = self.sb.select("variation_briefs", qs)
+            if not rows:
+                return (False, f"no variation_briefs row for {drive_file_id}")
+            row = rows[0] or {}
+            missing = []
+            if not row.get("brief_markdown"):       missing.append("brief_markdown")
+            if not row.get("clickup_doc_page_url"): missing.append("clickup_doc_page_url")
+            if missing:
+                return (False, f"row exists but missing: {','.join(missing)}")
+            return (True, "verified")
+        except Exception as e:
+            return (False, f"verify query failed: {e}")
+
     # ── Outcome bookkeeping ──
 
     def mark_classifying(self, job_id):
@@ -1220,6 +1460,52 @@ class Worker:
             )
         except Exception as e:
             log(f"could not flip {job.get('id')} to {new_status}: {e}")
+
+    def _mark_brief_classifying(self, job_id):
+        try:
+            self.sb.update(
+                "variation_brief_queue",
+                f"id=eq.{urllib.parse.quote(job_id)}",
+                {"status": "classifying"},
+            )
+        except Exception as e:
+            log(f"could not flip brief {job_id} to classifying: {e}")
+
+    def _mark_brief_done(self, job_id):
+        try:
+            self.sb.update(
+                "variation_brief_queue",
+                f"id=eq.{urllib.parse.quote(job_id)}",
+                {
+                    "status": "done",
+                    "processed_at": _now_iso(),
+                    "error_message": None,
+                },
+            )
+        except Exception as e:
+            log(f"could not flip brief {job_id} to done: {e}")
+
+    def _mark_brief_failure(self, job, error):
+        attempts = (job.get("attempts") or 1)
+        if attempts >= MAX_ATTEMPTS_BEFORE_FAILED:
+            new_status = "failed"
+            log(f"[{job.get('id')}] BRIEF FINAL FAILURE after {attempts} attempts: {error}")
+        else:
+            new_status = "pending"
+            log(f"[{job.get('id')}] brief attempt {attempts} failed, requeuing: {error}")
+        try:
+            self.sb.update(
+                "variation_brief_queue",
+                f"id=eq.{urllib.parse.quote(job.get('id'))}",
+                {
+                    "status": new_status,
+                    "claimed_by": None,
+                    "claimed_at": None,
+                    "error_message": str(error)[:500],
+                },
+            )
+        except Exception as e:
+            log(f"could not flip brief {job.get('id')} to {new_status}: {e}")
 
     def increment_completed(self):
         try:
@@ -1350,6 +1636,28 @@ class Worker:
                         _active = self._active_classify_count()
                         log(f"[classify] dispatched {_classify_dispatched} new job(s); "
                             f"{_active}/{CLASSIFY_MAX_CONCURRENCY} slot(s) in use")
+
+                    # ── VARIATION BRIEF PARALLEL DISPATCH (2026-05-23) ──
+                    # Shares _classify_pool with inspiration jobs (per design
+                    # decision — winning-variation briefs are infrequent and
+                    # don't need their own concurrency budget). Reaps already
+                    # happened above; here we only dispatch.
+                    _brief_dispatched = 0
+                    while self._classify_has_capacity():
+                        brief_job = self.claim_next_variation_brief_job()
+                        if not brief_job:
+                            break
+                        fut = self._classify_pool.submit(
+                            self._execute_variation_brief_job, brief_job
+                        )
+                        with self._classify_lock:
+                            self._classify_futures[brief_job["id"]] = fut
+                        _brief_dispatched += 1
+                    if _brief_dispatched > 0:
+                        _active = self._active_classify_count()
+                        log(f"[brief] dispatched {_brief_dispatched} new job(s); "
+                            f"{_active}/{CLASSIFY_MAX_CONCURRENCY} slot(s) in use")
+
                     # Heartbeat-relevant busy flag: True if ANY classify slot is occupied.
                     self.is_busy = self._active_classify_count() > 0
 

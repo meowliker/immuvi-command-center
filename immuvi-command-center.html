@@ -24292,13 +24292,30 @@ async function deleteAdEverywhere(adId) {
   _saveQueue = _saveQueue.then(function(){ return _flushStateToSupabase(activeProductId); })
     .catch(function(e){ console.error('[SB] delete flush error', e); });
 
-  // Fire ClickUp deletes (fire-and-forget, staggered to avoid rate limits)
+  // Fire ClickUp deletes (staggered to avoid rate limits). 2026-05-25:
+  // track per-task failures and tell the user if any ClickUp side didn't
+  // delete — local Matrix/AP/DB are already clean, but if ClickUp still
+  // has the task the user needs to know to manually clean it up there.
   if (cuIdsToDelete.length > 0) {
-    cuIdsToDelete.forEach(function(cuId, idx) {
-      setTimeout(function() { apiDeleteTask(cuId).catch(function(){}); }, idx * 300);
+    var _cuTotal = cuIdsToDelete.length;
+    var _cuFailed = [];
+    var _suffix = unlinkedInspoId ? ' · inspiration unlinked' : '';
+    Promise.all(cuIdsToDelete.map(function (cuId, idx) {
+      return new Promise(function (resolve) {
+        setTimeout(function () {
+          apiDeleteTask(cuId)
+            .then(function () { resolve(); })
+            .catch(function (e) { _cuFailed.push({ cuId: cuId, err: (e && e.message) || String(e) }); resolve(); });
+        }, idx * 300);
+      });
+    })).then(function () {
+      if (_cuFailed.length === 0) {
+        toast('Deleted ' + adId + ' everywhere (' + _cuTotal + ' ClickUp task' + (_cuTotal > 1 ? 's' : '') + ')' + _suffix, 'ok');
+      } else {
+        console.error('[deleteAdEverywhere] ClickUp deletes failed for', _cuFailed.map(function (f) { return f.cuId; }));
+        toast('Local delete OK · ' + _cuFailed.length + ' of ' + _cuTotal + ' ClickUp task(s) failed — see console / delete manually in ClickUp', 'err', 7000);
+      }
     });
-    var suffix = unlinkedInspoId ? ' · inspiration unlinked' : '';
-    toast('Deleted ' + adId + ' everywhere (' + cuIdsToDelete.length + ' ClickUp task' + (cuIdsToDelete.length > 1 ? 's' : '') + ')' + suffix, 'ok');
   } else {
     var suffix2 = unlinkedInspoId ? ' · inspiration unlinked' : '';
     toast('Deleted ' + adId + ' everywhere' + suffix2, 'ok');
@@ -26167,7 +26184,21 @@ function deleteProdTask(id) {
 // ============================================================
 
 function needsProxy() {
-  return window.location.protocol === 'file:' || (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1');
+  // 2026-05-25: always use the /api/clickup proxy when served from http(s),
+  // regardless of hostname. Previously this returned `false` on localhost,
+  // causing the browser to call api.clickup.com directly — which CORS-blocks
+  // any DELETE / non-trivial header request. The symptom: deleting an ad
+  // worked locally (Supabase + Matrix UI updated) but the ClickUp task
+  // survived because the DELETE was silently CORS-rejected and the error
+  // got swallowed by apiDeleteTask's fallback chain.
+  //
+  // vercel dev serves api/*.js as functions even on localhost:3000, so the
+  // proxy IS available locally — we just need to use it.
+  //
+  // Only the file:// case still bypasses the proxy: that mode is for
+  // running the HTML standalone with no server, no functions available.
+  if (window.location.protocol === 'file:') return false;
+  return true;
 }
 
 // Build a ClickUp API URL. When served from a non-localhost origin (i.e. Vercel),
@@ -26255,19 +26286,26 @@ function apiUpdateTask(taskId, updates) {
 }
 
 function apiDeleteTask(taskId) {
-  // Try DELETE first; if corsproxy swallows it (returns non-ok or empty error),
-  // fall back to updating the task status to "Cancelled" so it's visibly removed.
+  // 2026-05-25: surface the failure if both DELETE and the cancelled-status
+  // fallback fail. Previously the last-resort .catch returned {} silently,
+  // so the user saw a green "Deleted" toast but the ClickUp task survived.
+  // Now: any final failure throws → deleteAdEverywhere catches → user toast.
   return apiFetch('/task/' + taskId, { method: 'DELETE' })
-    .catch(function(err) {
-      // Corsproxy sometimes blocks DELETE — try the ClickUp trash via POST workaround
-      // by updating the task to a terminal state so the user can see it's gone
-      console.warn('Direct DELETE failed (' + (err.message || err) + '), retrying via trash workaround');
+    .catch(function (err) {
+      console.warn('[clickup] DELETE failed for', taskId, '—', err && err.message,
+                   '· falling back to status="cancelled"');
       return apiFetch('/task/' + taskId, {
         method: 'PUT',
         body: { status: 'cancelled' }
-      }).catch(function() {
-        // Last resort: just resolve — local state is already clean
-        return {};
+      }).catch(function (err2) {
+        // BOTH paths failed — surface to caller. Local state is already
+        // clean (deleteAdEverywhere committed the soft-delete first), so
+        // user just needs to know the ClickUp side didn't go through.
+        var msg = '[clickup] both DELETE and status=cancelled failed for task ' + taskId
+                + ': ' + ((err2 && err2.message) || 'unknown') + ' (orig err: '
+                + ((err && err.message) || 'unknown') + ')';
+        console.error(msg);
+        throw new Error(msg);
       });
     });
 }

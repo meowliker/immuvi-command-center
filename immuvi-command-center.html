@@ -32683,6 +32683,20 @@ function _resolveDriveLink(ad) {
   return '';
 }
 
+// Resolve the "use this URL when spawning a child from this parent" URL.
+// If the parent has marked winners (in meta._winningArtifacts mirror),
+// return the most-recently-marked winner's URL. Otherwise return null —
+// caller falls back to parent.adLink / parent.driveLink (legacy folder URL).
+function _resolveSpawnWinnerUrl(parent) {
+  if (!parent) return null;
+  var meta = parent.meta || {};
+  var arts = meta._winningArtifacts;
+  if (!Array.isArray(arts) || arts.length === 0) return null;
+  // Most recently pushed entry — _mirrorWinnerToAdMeta pushes to the end on mark.
+  var w = arts[arts.length - 1];
+  return (w && w.url) || null;
+}
+
 // Classify a Drive URL: {kind, id, url}
 //   kind = 'folder' | 'file' | 'none' | 'unknown'
 //   id   = the Drive id (folder or file), present when kind is folder|file
@@ -33163,16 +33177,34 @@ function _mxv3DriveVideoEsc(e) {
 }
 
 function _mirrorWinnerToAdMeta(ad, file) {
-  if (!ad) return;
+  if (!ad || !file) return;
   ad.meta = ad.meta || {};
   ad.meta._winningArtifacts = ad.meta._winningArtifacts || [];
   if (!ad.meta._winningArtifacts.some(function (w) { return w.id === file.id; })) {
     ad.meta._winningArtifacts.push({ id: file.id, name: file.name, url: file.webViewLink || null });
   }
+  _persistWinningArtifacts(ad);
 }
+
 function _unmirrorWinnerFromAdMeta(ad, fileId) {
   if (!ad || !ad.meta || !ad.meta._winningArtifacts) return;
   ad.meta._winningArtifacts = ad.meta._winningArtifacts.filter(function (w) { return w.id !== fileId; });
+  _persistWinningArtifacts(ad);
+}
+
+// Fire-and-forget: write ad.meta back to public.ads.meta so the
+// _winningArtifacts mirror survives page reload. Uses Supabase JSONB
+// merge (via the standard PATCH on ads with the full meta object).
+async function _persistWinningArtifacts(ad) {
+  if (!ad || !ad.id || typeof SB === 'undefined' || !SB) return;
+  try {
+    // We PATCH the whole meta object — Supabase replaces the JSONB column
+    // wholesale, which is fine because we hold the canonical in-memory copy.
+    var r = await SB.from('ads').update({ meta: ad.meta }).eq('id', ad.id);
+    if (r.error) console.warn('[_persistWinningArtifacts] failed', ad.id, r.error);
+  } catch (e) {
+    console.warn('[_persistWinningArtifacts] exception', ad.id, e);
+  }
 }
 
 // Best-effort ClickUp comment sync. Uses existing apiFetch + the ClickUp proxy.
@@ -39681,9 +39713,13 @@ function executeMxv4Add(angleName, personaName) {
         id:                 serial,
         formatName:         prodFormatName,
         // Source format's adLink / driveLink kept as reference material.
-        adLink:             parent.adLink || parent.driveLink || '',
+        // 2026-05-25: prefer the marked-winner file URL over the parent's
+        // folder URL when this parent has winners marked. Both Inspiration
+        // Link and Inspiration Drive in the ClickUp desc now point at the
+        // specific winning video instead of the whole folder.
+        adLink:             (typeof _resolveSpawnWinnerUrl === 'function' ? _resolveSpawnWinnerUrl(parent) : null) || parent.adLink || parent.driveLink || '',
         driveLink:          '',                        // production output starts blank
-        _sourceFormatDriveLink: parent.driveLink || '', // shown as "Inspiration Drive" in ClickUp desc
+        _sourceFormatDriveLink: (typeof _resolveSpawnWinnerUrl === 'function' ? _resolveSpawnWinnerUrl(parent) : null) || parent.driveLink || '', // shown as "Inspiration Drive" in ClickUp desc
         adType:             parent.adType || '',
         funnelStage:        parent.funnelStage || '',
         status:             'Untested',
@@ -41058,11 +41094,13 @@ function addFormatToCell(angle, persona, sourceAdId, formatName, adType) {
     formatName:         _prodFormatName,
     // If source has a real ad link, carry it over. Otherwise fall back to its drive
     // link so the new task isn't "No link" in the tracker (restores pre-migration behavior).
-    adLink:             (sourceAd && (sourceAd.adLink || sourceAd.driveLink)) || '',
+    // 2026-05-25: prefer marked-winner URL over parent's folder URL
+    adLink:             (typeof _resolveSpawnWinnerUrl === 'function' ? _resolveSpawnWinnerUrl(sourceAd) : null) || (sourceAd && (sourceAd.adLink || sourceAd.driveLink)) || '',
     driveLink:          '',   // production clone starts with empty Drive Link — source format's
                               // driveLink is reference/inspiration material, shown in ClickUp
                               // description as "Inspiration Drive" (not the production output)
-    _sourceFormatDriveLink: (sourceAd && sourceAd.driveLink) || '', // stash for ClickUp desc
+    // 2026-05-25: prefer marked-winner URL over parent's folder URL
+    _sourceFormatDriveLink: (typeof _resolveSpawnWinnerUrl === 'function' ? _resolveSpawnWinnerUrl(sourceAd) : null) || (sourceAd && sourceAd.driveLink) || '', // stash for ClickUp desc
     adType:             adType || (sourceAd && sourceAd.adType) || '',
     funnelStage:        (sourceAd && sourceAd.funnelStage) || 'TOF',
     status:             'Untested',

@@ -25031,10 +25031,15 @@ function buildTaskDescription(ad) {
   // restart and skip the parent-derived prose. The new task carries a
   // briefUrl pointing to its own generated brief; that's the source of
   // truth, not the inherited hypothesis.
+  // NOTE: _fromInspoId is intentionally NOT in this list. An inspo-spawned
+  // task IS NOT a parent-clone — the inspiration IS the source content, and
+  // the user wants the inspiration brief link surfaced in the description
+  // (not hidden). _hasParentRef is specifically for tracker clones whose
+  // parent's hypothesis text shouldn't leak into the child.
   var _hasParentRef = !!(
     (ad && ad.sourceFormatId) || (ad && ad.meta && ad.meta.sourceFormatId) ||
     (ad && ad._sourceClickupId) || (ad && ad.meta && ad.meta._sourceClickupId) ||
-    (ad && ad.parentAdId) || (ad && ad._fromTrackerAdId) || (ad && ad._fromInspoId)
+    (ad && ad.parentAdId) || (ad && ad._fromTrackerAdId)
   );
   var isWinnerSeeded = !!_winnerFileId || _hasParentRef;
 

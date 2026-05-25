@@ -25022,7 +25022,21 @@ function buildTaskDescription(ad) {
       }
     }
   }
-  var isWinnerSeeded = !!_winnerFileId;
+  // 2026-05-25 v3 — broaden the gate. The user's pain is the parent's
+  // hypothesis / variation block / notes leaking into spawned children
+  // EVEN WHEN we couldn't resolve the parent's winner in time (parent ADS
+  // entry missing, hydration race, async stamp lost, etc.). Empirically
+  // every spawn the user has tried also has a winner marked on the parent
+  // — so when ANY parent reference exists, treat the child as a clean
+  // restart and skip the parent-derived prose. The new task carries a
+  // briefUrl pointing to its own generated brief; that's the source of
+  // truth, not the inherited hypothesis.
+  var _hasParentRef = !!(
+    (ad && ad.sourceFormatId) || (ad && ad.meta && ad.meta.sourceFormatId) ||
+    (ad && ad._sourceClickupId) || (ad && ad.meta && ad.meta._sourceClickupId) ||
+    (ad && ad.parentAdId) || (ad && ad._fromTrackerAdId) || (ad && ad._fromInspoId)
+  );
+  var isWinnerSeeded = !!_winnerFileId || _hasParentRef;
 
   // Always-on table rows
   var tableRows = [

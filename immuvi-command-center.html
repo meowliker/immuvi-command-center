@@ -10044,6 +10044,9 @@ body:not(.booting) #__bootLoader {
 .tdv-list-row .tdv-list-unmark:hover { color: var(--lose); border-color: var(--lose); }
 .tdv-empty { padding: 12px; text-align: center; color: var(--t3); font-size: 0.78rem; font-style: italic; }
 .tdv-grid-wrap { margin-top: 12px; padding-top: 12px; border-top: 1px dashed var(--b); }
+.tdv-grid-section-hdr { font-size: 0.74rem; font-weight: 700; color: var(--t2); margin: 14px 0 8px; display: flex; align-items: center; gap: 6px; }
+.tdv-grid-section-hdr:first-child { margin-top: 4px; }
+.tdv-grid-count { background: var(--el); color: var(--t3); font-size: 0.66rem; font-weight: 600; padding: 1px 7px; border-radius: 999px; }
 .tdv-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 10px; }
 .tdv-tile { position: relative; aspect-ratio: 9 / 16; border-radius: 8px; overflow: hidden; background: var(--el); border: 2px solid transparent; cursor: pointer; transition: border-color 0.18s ease, transform 0.18s ease; }
 .tdv-tile:hover { border-color: var(--t3); transform: translateY(-1px); }
@@ -33299,27 +33302,43 @@ async function _mxv3ToggleBrowseGrid(adId) {
     return;
   }
 
-  var html = '<div class="tdv-grid-wrap"><div class="tdv-grid">';
+  // 2026-05-25: backend now returns recursive listings (depth 3 by default),
+  // so a parent folder full of subfolders (e.g. "17 APRIL" → 13009/13010/13011)
+  // shows all nested media in one grid. Group by subfolder for the display so
+  // the strategist can see which variation-set each file belongs to.
+  var byFolder = {};
   media.forEach(function (f) {
-    var isWin = !!winSet[f.id];
-    // 2026-05-23: use Drive's public thumbnail endpoint (no auth required)
-    // instead of f.thumbnailLink (which is lh3.googleusercontent.com/drive-storage/…
-    // and requires the browser to be logged into Google).
-    var thumb = 'https://drive.google.com/thumbnail?id=' + encodeURIComponent(f.id) + '&sz=w320';
-    var fallback = 'https://placehold.co/240x320/1a1a1a/fff?text=' + encodeURIComponent(f.name || '?');
-    // 2026-05-23: tile body click now PLAYS the video in a lightbox.
-    // Star is a separate button that toggles winner (event.stopPropagation
-    // prevents the body click from firing).
-    html += '<div class="tdv-tile' + (isWin ? ' is-winner' : '') + '"' +
-            ' onclick="_mxv3PlayDriveVideo(\'' + escAttr(f.id) + '\',\'' + escAttr(f.name || '') + '\')"' +
-            ' title="' + escAttr(f.name || '') + ' — click to play; ⭐ to toggle winner">' +
-              '<img src="' + escAttr(thumb) + '" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.onerror=null;this.src=\'' + escAttr(fallback) + '\'">' +
-              '<div class="tdv-tile-play" aria-hidden="true">▶</div>' +
-              '<button type="button" class="tdv-star" onclick="event.stopPropagation();_mxv3ToggleVideoWinner(\'' + escAttr(adId) + '\',\'' + escAttr(f.id) + '\')" title="' + (isWin ? 'Unmark winner' : 'Mark as winner') + '">' + (isWin ? '⭐' : '☆') + '</button>' +
-              '<div class="tdv-name">' + esc(f.name || 'unnamed') + '</div>' +
-            '</div>';
+    var k = f.parentFolderName || '';   // '' = root
+    (byFolder[k] = byFolder[k] || []).push(f);
   });
-  html += '</div></div>';
+  var folderKeys = Object.keys(byFolder).sort();   // empty first, then alpha
+
+  var html = '<div class="tdv-grid-wrap">';
+  folderKeys.forEach(function (k) {
+    if (k) {
+      html += '<div class="tdv-grid-section-hdr">📁 ' + esc(k) + ' <span class="tdv-grid-count">' + byFolder[k].length + '</span></div>';
+    } else if (folderKeys.length > 1) {
+      html += '<div class="tdv-grid-section-hdr">📁 root <span class="tdv-grid-count">' + byFolder[k].length + '</span></div>';
+    }
+    html += '<div class="tdv-grid">';
+    byFolder[k].forEach(function (f) {
+      var isWin = !!winSet[f.id];
+      var thumb = 'https://drive.google.com/thumbnail?id=' + encodeURIComponent(f.id) + '&sz=w320';
+      var fallback = 'https://placehold.co/240x320/1a1a1a/fff?text=' + encodeURIComponent(f.name || '?');
+      var titleAttr = f.path || f.name || '';
+      html += '<div class="tdv-tile' + (isWin ? ' is-winner' : '') + '"' +
+              ' onclick="_mxv3PlayDriveVideo(\'' + escAttr(f.id) + '\',\'' + escAttr(titleAttr) + '\')"' +
+              ' title="' + escAttr(titleAttr) + ' — click to play; ⭐ to toggle winner">' +
+                '<img src="' + escAttr(thumb) + '" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.onerror=null;this.src=\'' + escAttr(fallback) + '\'">' +
+                '<div class="tdv-tile-play" aria-hidden="true">▶</div>' +
+                '<button type="button" class="tdv-star" onclick="event.stopPropagation();_mxv3ToggleVideoWinner(\'' + escAttr(adId) + '\',\'' + escAttr(f.id) + '\')" title="' + (isWin ? 'Unmark winner' : 'Mark as winner') + '">' + (isWin ? '⭐' : '☆') + '</button>' +
+                '<div class="tdv-name">' + esc(f.name || 'unnamed') + '</div>' +
+              '</div>';
+    });
+    html += '</div>';   // closes tdv-grid for this folder section
+  });
+  // Only one wrapper to close now — the inner tdv-grid was closed per section above.
+  html += '</div>';
   slot.innerHTML = html;
 }
 

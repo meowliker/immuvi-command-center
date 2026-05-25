@@ -24982,6 +24982,18 @@ function applyBulkDate() {
 function buildTaskDescription(ad) {
   var lines = [];
 
+  // 2026-05-25: when this ad was seeded from a SPECIFIC winning video, treat
+  // it as a clean restart — don't carry over the parent's creative
+  // hypothesis, the variation chain block, the parent's notes, or the
+  // parent's inspiration brief. The new task is about scaling THIS winner,
+  // not re-stating the parent's full context. (User feedback: the parent's
+  // "VARIATION 1/2/3" hypothesis was leaking into the spawned task and
+  // confusing editors.)
+  //
+  // Inspiration Link in the top table is already the winner URL when this
+  // flag is set (Task 17/20 stamps adLink = winner file URL on spawn).
+  var isWinnerSeeded = !!(ad && ad._sourceWinnerFileId);
+
   // Always-on table rows
   var tableRows = [
     ['Angle',   ad.angle   || '—'],
@@ -25008,16 +25020,16 @@ function buildTaskDescription(ad) {
   }
   lines.push('');
 
-  // Creative Hypothesis
-  if (ad.creativeHypothesis && ad.creativeHypothesis.trim()) {
+  // Creative Hypothesis — skip when winner-seeded (parent's hypothesis is noise)
+  if (!isWinnerSeeded && ad.creativeHypothesis && ad.creativeHypothesis.trim()) {
     lines.push('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
     lines.push('🧠 Creative Hypothesis');
     lines.push(ad.creativeHypothesis.trim());
     lines.push('');
   }
 
-  // Inspo scenario: add doc brief link
-  if (ad._fromInspoId) {
+  // Inspo scenario — skip when winner-seeded (the winner IS the inspiration)
+  if (!isWinnerSeeded && ad._fromInspoId) {
     var ins = INSPIRATIONS.find(function(ins){ return ins.id === ad._fromInspoId; });
     if (ins) {
       lines.push('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
@@ -25059,7 +25071,9 @@ function buildTaskDescription(ad) {
   }
 
   // Variation scenario: show parent task + changes + notes
-  if (ad.parentAdId) {
+  // Skip for winner-seeded tasks — the 🏆 Winning Video block above already
+  // identifies the source; this block adds redundant parent context.
+  if (!isWinnerSeeded && ad.parentAdId) {
     var parentAd = ADS.find(function(a){ return a.id === ad.parentAdId; });
     lines.push('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
     lines.push('🔁 Variation of: ' + (ad.parentTaskName || ad.parentAdId));
@@ -25078,18 +25092,19 @@ function buildTaskDescription(ad) {
   // Notes — shown for ALL tasks (variation notes already included above in the
   // variation block via variationNotes; here we catch non-variation tasks and
   // also ad.notes set via the matrix Notes column).
+  // Skip for winner-seeded tasks — parent's notes are noise; the winner block
+  // is the source of truth for the new task's intent.
   var _notesForDesc = (ad.notes || '').trim();
-  // For variations, notes is synced to variationNotes in saveAdNotes, so only
-  // add this section when it's a non-variation task (avoids duplicate note block).
-  if (!ad.parentAdId && _notesForDesc) {
+  if (!isWinnerSeeded && !ad.parentAdId && _notesForDesc) {
     lines.push('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
     lines.push('📝 Notes: ' + _notesForDesc);
     lines.push('');
   }
 
   // Tracker-ref scenario: add reference task link (non-variation)
+  // Skip for winner-seeded tasks — winner block already names the source.
   var isTrackerRef = !ad._fromInspoId && ad._clickupId;
-  if (!ad.parentAdId && !isTrackerRef && ad._fromTrackerAdId) {
+  if (!isWinnerSeeded && !ad.parentAdId && !isTrackerRef && ad._fromTrackerAdId) {
     var refAd = ADS.find(function(a){ return a.id === ad._fromTrackerAdId; });
     if (refAd && refAd._clickupId) {
       lines.push('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');

@@ -24992,7 +24992,37 @@ function buildTaskDescription(ad) {
   //
   // Inspiration Link in the top table is already the winner URL when this
   // flag is set (Task 17/20 stamps adLink = winner file URL on spawn).
-  var isWinnerSeeded = !!(ad && ad._sourceWinnerFileId);
+  //
+  // 2026-05-25 v2: resolve winner up-front from THREE sources so we gate
+  // parent-content blocks correctly even when:
+  //   (a) the spawn path didn't stamp _sourceWinnerFileId on the new ad
+  //       (e.g. browser tab hadn't reloaded the retrofitted spawn fn yet)
+  //   (b) the field landed under ad.meta._sourceWinnerFileId instead of
+  //       ad._sourceWinnerFileId (varies by reload path)
+  //   (c) the parent task has a winner marked in task_video_winners that
+  //       _hydrateWinningArtifactsOnAds has mirrored onto parent.meta.
+  // If ANY of these resolve, the new task is "winner-seeded" and we strip
+  // the parent's hypothesis / variation block / notes from the description.
+  var _winnerFileId  = (ad && ad._sourceWinnerFileId) || (ad && ad.meta && ad.meta._sourceWinnerFileId) || null;
+  var _winnerName    = (ad && ad._sourceWinnerFileName) || (ad && ad.meta && ad.meta._sourceWinnerFileName) || null;
+  var _winnerUrl     = (ad && ad._sourceWinnerFileUrl)  || (ad && ad.meta && ad.meta._sourceWinnerFileUrl)  || null;
+  if (!_winnerFileId) {
+    // Fall back to parent lookup via sourceFormatId / _sourceClickupId / parentAdId
+    var _parentKey = (ad && ad.sourceFormatId) || (ad && ad.meta && ad.meta.sourceFormatId)
+      || (ad && ad._sourceClickupId) || (ad && ad.meta && ad.meta._sourceClickupId)
+      || (ad && ad.parentAdId) || null;
+    if (_parentKey && Array.isArray(ADS)) {
+      var _parent = ADS.find(function (x) { return x && (x.id === _parentKey || x._clickupId === _parentKey || x.clickup_task_id === _parentKey); });
+      var _arts = _parent && _parent.meta && _parent.meta._winningArtifacts;
+      if (Array.isArray(_arts) && _arts.length > 0) {
+        var _w = _arts[_arts.length - 1];
+        _winnerFileId = _w.id;
+        _winnerName   = _w.name;
+        _winnerUrl    = _w.url;
+      }
+    }
+  }
+  var isWinnerSeeded = !!_winnerFileId;
 
   // Always-on table rows
   var tableRows = [
@@ -25045,20 +25075,7 @@ function buildTaskDescription(ad) {
   // 2026-05-25: when this ad was seeded from a specific winning video,
   // surface that explicitly in the description. Survives the stale
   // ClickUp sync because ClickUp's description is the source of truth.
-  var _winnerFileId  = ad._sourceWinnerFileId || (ad.meta && ad.meta._sourceWinnerFileId);
-  var _winnerName    = ad._sourceWinnerFileName || (ad.meta && ad.meta._sourceWinnerFileName);
-  var _winnerUrl     = ad._sourceWinnerFileUrl  || (ad.meta && ad.meta._sourceWinnerFileUrl);
-  if (!_winnerFileId && ad.sourceFormatId) {
-    // No direct winner stamp — try the parent's winners list (most recent winner wins)
-    var _parent = (ADS || []).find(function (x) { return x.id === ad.sourceFormatId; });
-    var _arts = _parent && _parent.meta && _parent.meta._winningArtifacts;
-    if (Array.isArray(_arts) && _arts.length > 0) {
-      var _w = _arts[_arts.length - 1];
-      _winnerFileId = _w.id;
-      _winnerName   = _w.name;
-      _winnerUrl    = _w.url;
-    }
-  }
+  // _winnerFileId / _winnerName / _winnerUrl already resolved at top of fn.
   if (_winnerFileId && _winnerUrl) {
     lines.push('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
     lines.push('🏆 Winning Video');

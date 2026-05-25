@@ -24981,6 +24981,34 @@ function buildTaskDescription(ad) {
     }
   }
 
+  // 2026-05-25: when this ad was seeded from a specific winning video,
+  // surface that explicitly in the description. Survives the stale
+  // ClickUp sync because ClickUp's description is the source of truth.
+  var _winnerFileId  = ad._sourceWinnerFileId || (ad.meta && ad.meta._sourceWinnerFileId);
+  var _winnerName    = ad._sourceWinnerFileName || (ad.meta && ad.meta._sourceWinnerFileName);
+  var _winnerUrl     = ad._sourceWinnerFileUrl  || (ad.meta && ad.meta._sourceWinnerFileUrl);
+  if (!_winnerFileId && ad.sourceFormatId) {
+    // No direct winner stamp — try the parent's winners list (most recent winner wins)
+    var _parent = (ADS || []).find(function (x) { return x.id === ad.sourceFormatId; });
+    var _arts = _parent && _parent.meta && _parent.meta._winningArtifacts;
+    if (Array.isArray(_arts) && _arts.length > 0) {
+      var _w = _arts[_arts.length - 1];
+      _winnerFileId = _w.id;
+      _winnerName   = _w.name;
+      _winnerUrl    = _w.url;
+    }
+  }
+  if (_winnerFileId && _winnerUrl) {
+    lines.push('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    lines.push('🏆 Winning Video');
+    lines.push('| Field | Value |');
+    lines.push('|---|---|');
+    lines.push('| File Name | ' + (_winnerName || 'unnamed'));
+    lines.push('| File URL  | ' + _winnerUrl);
+    if (_winnerFileId) lines.push('| Drive File ID | ' + _winnerFileId);
+    lines.push('');
+  }
+
   // Variation scenario: show parent task + changes + notes
   if (ad.parentAdId) {
     var parentAd = ADS.find(function(a){ return a.id === ad.parentAdId; });
@@ -25809,6 +25837,27 @@ function createClickUpTaskFromAction(actionId, onDone, sourceAdOverride) {
           method: 'POST',
           body: { comment_text: '📋 Production task created: ' + newTaskUrl }
         }).catch(function(){});
+
+        // 2026-05-25: post explicit winner-info comment if this ad was
+        // seeded from a winning video. Survives sync — ClickUp comments
+        // are the durable source of truth.
+        try {
+          var _wfid = sourceAd && (sourceAd._sourceWinnerFileId || (sourceAd.meta && sourceAd.meta._sourceWinnerFileId));
+          var _wnm  = sourceAd && (sourceAd._sourceWinnerFileName || (sourceAd.meta && sourceAd.meta._sourceWinnerFileName));
+          var _wurl = sourceAd && (sourceAd._sourceWinnerFileUrl || (sourceAd.meta && sourceAd.meta._sourceWinnerFileUrl));
+          if (!_wfid && sourceAd && sourceAd.sourceFormatId) {
+            var _p = (ADS || []).find(function (x) { return x.id === sourceAd.sourceFormatId; });
+            var _a = _p && _p.meta && _p.meta._winningArtifacts;
+            if (Array.isArray(_a) && _a.length > 0) { _wfid = _a[_a.length-1].id; _wnm = _a[_a.length-1].name; _wurl = _a[_a.length-1].url; }
+          }
+          if (_wfid && _wurl) {
+            apiFetch('/task/' + newId + '/comment', {
+              method: 'POST',
+              body: { comment_text: '🏆 Winner Video: ' + (_wnm || 'unnamed') + ' — ' + _wurl, notify_all: false }
+            }).then(function () { console.log('[winner-comment] posted on', newId); })
+              .catch(function (e) { console.warn('[winner-comment] failed', e); });
+          }
+        } catch (e) { console.warn('[winner-comment] setup failed', e); }
 
         // Scenario 3 — Brief inheritance: fetch source format's ClickUp comments,
         // look for a brief link, copy it to the new task description + comment.
@@ -27021,6 +27070,16 @@ async function importTasksFromClickUp(tasks) {
   }
 
   ADS = newAds;
+  // 2026-05-25: hydrate _winningArtifacts onto each ad's meta from the
+  // task_video_winners table. The stale ClickUp sync wipes meta on every
+  // snapshot rebuild, so we re-populate from the durable winners table
+  // each time. This ensures _resolveSpawnWinnerUrl(parent) — used by all
+  // spawn flows — can always find the winner URL even after a sync.
+  if (typeof _hydrateWinningArtifactsOnAds === 'function') {
+    _hydrateWinningArtifactsOnAds().catch(function (e) {
+      console.warn('[hydrate winners] failed', e);
+    });
+  }
   // Bug 8: heal any cell-assignment ids that no longer match an AD's current
   // id (e.g. AD-098 cell entry → AD now keyed by its ClickUp task id). Without
   // this, the matrix cell renders as empty after refresh because the lookup
@@ -32703,6 +32762,43 @@ function _resolveSpawnWinnerUrl(parent) {
   // Most recently pushed entry — _mirrorWinnerToAdMeta pushes to the end on mark.
   var w = arts[arts.length - 1];
   return (w && w.url) || null;
+}
+
+// Fetch every row in task_video_winners and stamp them onto the matching
+// ad's meta._winningArtifacts (rebuilding the in-memory mirror). Idempotent.
+// Called on every ADS rebuild (after sync) because the snapshot pulled from
+// ClickUp overwrites meta and wipes the mirror.
+async function _hydrateWinningArtifactsOnAds() {
+  if (typeof SB === 'undefined' || !SB || !Array.isArray(ADS) || ADS.length === 0) return;
+  try {
+    var adIds = ADS.map(function (a) { return a.id; }).filter(Boolean);
+    if (adIds.length === 0) return;
+    // Pull winners only for ads we have locally (limits payload size)
+    var r = await SB.from('task_video_winners').select('ad_id,drive_file_id,file_name,web_view_url').in('ad_id', adIds);
+    if (r.error) { console.warn('[hydrate winners] query failed', r.error); return; }
+    var rows = r.data || [];
+    // Group by ad_id → list of {id,name,url}
+    var byAd = {};
+    rows.forEach(function (w) {
+      (byAd[w.ad_id] = byAd[w.ad_id] || []).push({
+        id: w.drive_file_id,
+        name: w.file_name,
+        url: w.web_view_url || ('https://drive.google.com/file/d/' + w.drive_file_id + '/view')
+      });
+    });
+    // Stamp into each ad's meta._winningArtifacts (replacing whatever's there)
+    ADS.forEach(function (a) {
+      if (!a) return;
+      var winners = byAd[a.id];
+      if (winners && winners.length) {
+        a.meta = a.meta || {};
+        a.meta._winningArtifacts = winners;
+      }
+    });
+    console.log('[hydrate winners] populated', Object.keys(byAd).length, 'ad(s)');
+  } catch (e) {
+    console.warn('[hydrate winners] exception', e);
+  }
 }
 
 // Classify a Drive URL: {kind, id, url}

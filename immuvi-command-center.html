@@ -25529,8 +25529,24 @@ function createClickUpTaskFromAction(actionId, onDone, sourceAdOverride) {
       driveLink:          '',     // production clone has no Drive Link yet (team fills after shooting)
       _inspirationDriveLink: sourceAd._sourceFormatDriveLink || (_srcFmt && _srcFmt.driveLink) || '',
       _fromInspoId:       sourceAd._fromInspoId || null,
-      _fromTrackerAdId:   sourceAd._fromTrackerAdId || null
+      _fromTrackerAdId:   sourceAd._fromTrackerAdId || null,
+      // 2026-05-25: forward the spawn-source markers so buildTaskDescription's
+      // _hasParentRef gate fires and strips the parent's hypothesis / variation
+      // block / notes. Without these the synthetic descAd looks like an
+      // original task to buildTaskDescription and prints parent's prose.
+      sourceFormatId:        sourceAd.sourceFormatId || null,
+      _sourceClickupId:      sourceAd._sourceClickupId || null,
+      _sourceFormatName:     sourceAd._sourceFormatName || null,
+      _sourceWinnerFileId:   sourceAd._sourceWinnerFileId || (sourceAd.meta && sourceAd.meta._sourceWinnerFileId) || null,
+      _sourceWinnerFileName: sourceAd._sourceWinnerFileName || (sourceAd.meta && sourceAd.meta._sourceWinnerFileName) || null,
+      _sourceWinnerFileUrl:  sourceAd._sourceWinnerFileUrl || (sourceAd.meta && sourceAd.meta._sourceWinnerFileUrl) || null,
+      parentAdId:            sourceAd.parentAdId || null
     };
+    // Also: parent-derived hypothesis is noise on a tracker clone. Even if
+    // buildTaskDescription's gate misfires, blank it here so the parent's
+    // "VARIATION 1/2/3 — Airplane window…" prose cannot leak under any code
+    // path. The new task's own brief lives in briefUrl / Winning Video block.
+    descAd.creativeHypothesis = '';
   }
   var desc = descAd ? buildTaskDescription(descAd) : (act.reason || '');
 

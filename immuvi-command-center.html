@@ -32893,6 +32893,46 @@ function _resolveSpawnWinnerUrl(parent) {
   return (w && w.url) || null;
 }
 
+// Like _resolveSpawnWinnerUrl but returns the full winner object
+// {id, name, url} instead of just the URL. Used by spawn flows that
+// need to stamp the new ad's _sourceWinnerFileId/Name/Url fields.
+// Sync — same constraint as _resolveSpawnWinnerUrl, reads only the
+// in-memory meta._winningArtifacts mirror.
+function _resolveSpawnWinnerObject(parent) {
+  if (!parent) return null;
+  var meta = parent.meta || {};
+  var arts = meta._winningArtifacts;
+  if (!Array.isArray(arts) || arts.length === 0) return null;
+  var w = arts[arts.length - 1];
+  if (!w || !w.id) return null;
+  return { id: w.id, name: w.name || '', url: w.url || ('https://drive.google.com/file/d/' + w.id + '/view') };
+}
+
+// Async fallback: if parent.meta._winningArtifacts is empty (e.g. the
+// hydration from Task 18 hasn't run yet, OR sync wiped it between the
+// mark and the spawn), query task_video_winners directly. Returns
+// {id, name, url} of the most-recently-marked winner, or null.
+async function _resolveSpawnWinnerObjectAsync(parentAdId) {
+  if (!parentAdId || typeof SB === 'undefined' || !SB) return null;
+  try {
+    var r = await SB.from('task_video_winners')
+      .select('drive_file_id,file_name,web_view_url,marked_winner_at')
+      .eq('ad_id', parentAdId)
+      .order('marked_winner_at', { ascending: false })
+      .limit(1);
+    if (r.error || !r.data || r.data.length === 0) return null;
+    var w = r.data[0];
+    return {
+      id: w.drive_file_id,
+      name: w.file_name || '',
+      url: w.web_view_url || ('https://drive.google.com/file/d/' + w.drive_file_id + '/view'),
+    };
+  } catch (e) {
+    console.warn('[winner-resolve] async fallback failed', parentAdId, e);
+    return null;
+  }
+}
+
 // Fetch every row in task_video_winners and stamp them onto the matching
 // ad's meta._winningArtifacts (rebuilding the in-memory mirror). Idempotent.
 // Called on every ADS rebuild (after sync) because the snapshot pulled from
@@ -39892,7 +39932,7 @@ function _mxv4RenderAddBlank(angleName, personaName) {
   return html;
 }
 
-function executeMxv4Add(angleName, personaName) {
+async function executeMxv4Add(angleName, personaName) {
   var ids = Object.keys(_mxv4.addSelected);
   if (ids.length === 0) return;
   var cellKey = angleName + '||' + personaName;
@@ -39901,7 +39941,8 @@ function executeMxv4Add(angleName, personaName) {
   if (ANGLE_PERSONAS[angleName].indexOf(personaName) === -1) ANGLE_PERSONAS[angleName].push(personaName);
 
   var spawnedIds = [];
-  ids.forEach(function (id) {
+  // Converted from forEach to for...of so await works inside the tracker-clone branch.
+  for (var _idx = 0; _idx < ids.length; _idx++) { var id = ids[_idx];
     if (id.indexOf('inspo:') === 0) {
       // ── Inspiration spawn ────────────────────────────────────────
       // Old-app naming: {PREFIX}-{SERIAL}-INS-{NNN}.
@@ -39911,7 +39952,7 @@ function executeMxv4Add(angleName, personaName) {
       for (var i = 0; i < (INSPIRATIONS || []).length; i++) {
         if (INSPIRATIONS[i].id === inspoId || ('ins-' + i) === inspoId) { insp = INSPIRATIONS[i]; break; }
       }
-      if (!insp) return;
+      if (!insp) continue;
       var newId = nextSerialId();
       var formatName = generateTaskName('inspo', insp.id || inspoId);
       var newAd = {
@@ -39955,7 +39996,12 @@ function executeMxv4Add(angleName, personaName) {
       // cell — never a passive link to the same parent. Mirrors the
       // canonical addCellProductionFromTracker copy pattern.
       var parent = ADS.find(function (x) { return x.id === id; });
-      if (!parent) return;
+      if (!parent) continue;
+      // 2026-05-25: resolve winner (sync mirror first, async fallback to task_video_winners)
+      var __winner = (typeof _resolveSpawnWinnerObject === 'function') ? _resolveSpawnWinnerObject(parent) : null;
+      if (!__winner && typeof _resolveSpawnWinnerObjectAsync === 'function') {
+        try { __winner = await _resolveSpawnWinnerObjectAsync(parent.id); } catch (e) { __winner = null; }
+      }
       var serial = nextSerialId();
       var prodFormatName = generateTaskName('tracker', null, parent.formatName || parent.id);
       var prodAd = {
@@ -39979,6 +40025,10 @@ function executeMxv4Add(angleName, personaName) {
         sourceFormatId:     parent.id,
         _sourceClickupId:   parent._clickupId || '',
         _sourceFormatName:  parent.formatName || '',
+        // 2026-05-25: stamp winner so _mxv3RequestBriefForVariation can fire
+        _sourceWinnerFileId:   __winner ? __winner.id   : null,
+        _sourceWinnerFileName: __winner ? __winner.name : null,
+        _sourceWinnerFileUrl:  __winner ? __winner.url  : null,
         parentAdId:         null,
         variationNumber:    null,
         _clickupId:         null,
@@ -40015,13 +40065,19 @@ function executeMxv4Add(angleName, personaName) {
       prodAd.dueDate = '';
       prodAd._dueDateMs = null;
       ADS.push(prodAd);
+      // 2026-05-25: if a winner was resolved, enqueue brief generation and
+      // start the in-browser poller that patches the new ClickUp task's
+      // description with the doc URL once the worker generates the brief.
+      if (__winner && typeof _mxv3RequestBriefForVariation === 'function') {
+        _mxv3RequestBriefForVariation(parent.id, __winner.id, prodAd.id);
+      }
       CELL_CREATIVE_ASSIGNMENTS[cellKey].push(serial);
       // Per-cell metadata so the cell label/status starts right.
       var trkCellAdKey = serial + '||' + angleName + '||' + personaName;
       if (!MATRIX_CELL_META[trkCellAdKey]) MATRIX_CELL_META[trkCellAdKey] = { status: 'Not Started', uniqueName: prodFormatName, description: '', dueDate: '' };
       spawnedIds.push(serial);
     }
-  });
+  } // end for loop (was forEach)
 
   // Bug 7: immediate save + broadcast every spawned AD so other tabs see them
   // before the 300ms saveState debounce + 30s sync poll would have fired.
@@ -41310,7 +41366,7 @@ function toggleFormatInCell(checkbox, angleName, personaName, adId, formatName, 
 // Each cell assignment creates its own production AD with a unique ID and _clickupId,
 // so the same format can be added to multiple cells and each gets a separate ClickUp task.
 // ================================================
-function addFormatToCell(angle, persona, sourceAdId, formatName, adType) {
+async function addFormatToCell(angle, persona, sourceAdId, formatName, adType) {
   var cellKey = angle + '||' + persona;
   if (!CELL_CREATIVE_ASSIGNMENTS[cellKey]) CELL_CREATIVE_ASSIGNMENTS[cellKey] = [];
 
@@ -41338,6 +41394,11 @@ function addFormatToCell(angle, persona, sourceAdId, formatName, adType) {
   // (prefix + serial + source format name) so it's identifiable in Action Plan + ClickUp
   var _srcFmtName = (sourceAd && sourceAd.formatName) || formatName;
   var _prodFormatName = generateTaskName('tracker', null, _srcFmtName);
+  // 2026-05-25: resolve winner the same way mxv4LinkFromTracker does
+  var __winnerVS = (typeof _resolveSpawnWinnerObject === 'function') ? _resolveSpawnWinnerObject(sourceAd) : null;
+  if (!__winnerVS && typeof _resolveSpawnWinnerObjectAsync === 'function') {
+    try { __winnerVS = await _resolveSpawnWinnerObjectAsync(sourceAdId); } catch (e) { __winnerVS = null; }
+  }
   var prodAd = {
     id:                 prodAdId,
     formatName:         _prodFormatName,
@@ -41363,6 +41424,10 @@ function addFormatToCell(angle, persona, sourceAdId, formatName, adType) {
     // even after the production clone gets its own _clickupId on push.
     _sourceClickupId:   (sourceAd && sourceAd._clickupId) || '',
     _sourceFormatName:  (sourceAd && sourceAd.formatName) || formatName,
+    _sourceFormatDriveLink: (typeof _resolveSpawnWinnerUrl === 'function' ? _resolveSpawnWinnerUrl(sourceAd) : null) || (sourceAd && sourceAd.driveLink) || '', // stash for ClickUp desc
+    _sourceWinnerFileId:    __winnerVS ? __winnerVS.id   : null,
+    _sourceWinnerFileName:  __winnerVS ? __winnerVS.name : null,
+    _sourceWinnerFileUrl:   __winnerVS ? __winnerVS.url  : null,
     parentAdId:         null,
     variationNumber:    null,
     _clickupId:         null,
@@ -41374,6 +41439,9 @@ function addFormatToCell(angle, persona, sourceAdId, formatName, adType) {
     creativeHypothesis: (sourceAd && sourceAd.creativeHypothesis) || ''
   };
   ADS.push(prodAd);
+  if (__winnerVS && typeof _mxv3RequestBriefForVariation === 'function') {
+    _mxv3RequestBriefForVariation(sourceAdId, __winnerVS.id, prodAd.id);
+  }
   CELL_CREATIVE_ASSIGNMENTS[cellKey].push(prodAdId);
 
   // Initialize per-cell metadata for the new production AD

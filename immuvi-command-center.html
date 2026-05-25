@@ -14279,7 +14279,15 @@ function generateTaskName(source, inspoId, formatName) {
   }
 
   if (source === 'tracker' && formatName) {
-    return prefix + '-' + serial + '-' + formatName;
+    // 2026-05-25: strip leading "PREFIX-NNN-" from the parent's formatName
+    // so child names don't chain prefixes (was producing names like
+    // "AD-026-AD-023-INS-012" — now produces "AD-026-INS-012"). Keep the
+    // descriptive suffix (e.g. INS-012, "ADHD - 13404") intact.
+    var cleanedFormatName = String(formatName).replace(
+      new RegExp('^' + prefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '-\\d{1,4}-', 'i'),
+      ''
+    );
+    return prefix + '-' + serial + '-' + cleanedFormatName;
   }
 
   // Manual

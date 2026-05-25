@@ -13026,7 +13026,36 @@ const DB = {
     });
     const adRows = _filteredStateAds.map(function (a) { return _adToRow(a, productId); });
     const adIds = new Set(adRows.map(function (r) { return r.id; }));
-    const adOrphans = (existingAds.data || []).filter(function (r) { return !adIds.has(r.id); }).map(function (r) { return r.id; });
+    // ──────────────────────────────────────────────────────────────────
+    // 2026-05-25 — Bug 8/9 family REGRESSION GUARD
+    // (see memory/feedback_bug8_orphan_protection.md)
+    //
+    // The OLD logic ("anything in DB but not in local state → DELETE")
+    // destroyed AD-025/026/027/028 on 2026-05-25 when one tab's stale
+    // save raced against a freshly-spawned ad in another tab. Hard
+    // delete left no tombstone, so the id became reusable → cascading
+    // id/format_name desyncs. Same family as Bug 8/9.
+    //
+    // New rule: orphan-cleanup is ONLY for rows that are EXPLICITLY
+    // tombstoned (`deleted_ads` table OR `ads.deleted_at IS NOT NULL`).
+    // _flushTomb already holds that union (fetched above). Anything else
+    // — including rows missing from local state — STAYS UNTOUCHED.
+    //
+    // Explicit deletes still work: deleteAdEverywhere sets deleted_at
+    // and writes a tombstone, which appears in _flushTomb on the next
+    // save, which lands in adOrphans here, which gets cleaned up.
+    //
+    // Bulk soft-deletes also work: same path.
+    //
+    // What we GIVE UP: clearing "ghost" rows in DB that have no
+    // corresponding local state (e.g. a row written by an old client
+    // build and never seen since). Those are now harmless — they'd
+    // only show up if their id matches local state, in which case
+    // they'd be upserted with current data anyway. Net safety win.
+    // ──────────────────────────────────────────────────────────────────
+    const adOrphans = (existingAds.data || [])
+      .filter(function (r) { return _flushTomb.has(r.id); })
+      .map(function (r) { return r.id; });
     if (adOrphans.length) tasks.push(SB.from('ads').delete().in('id', adOrphans));
     // Realtime traffic budget (2026-05-06): skip rows whose content hash
     // matches the last successful save. Identical hash = no change since

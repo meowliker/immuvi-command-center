@@ -1235,6 +1235,21 @@ class Worker:
         parent_cu   = parent.get("clickup_task_id") or ""
         product_id  = target.get("product_id") or parent.get("product_id") or ""
 
+        # 2026-05-25: look up the winner's actual file_name so the brief
+        # title reads "13011-2.png" instead of "VOY5Eiv" (last 6 chars of
+        # the opaque drive_file_id). Falls back to drive_file_id suffix
+        # only if the winners row is missing.
+        winner_label = f"{winner_label}"
+        try:
+            _wrows = self.sb.select(
+                "task_video_winners",
+                f"select=file_name&drive_file_id=eq.{urllib.parse.quote(drive_file_id)}&limit=1",
+            )
+            if _wrows and _wrows[0].get("file_name"):
+                winner_label = _wrows[0]["file_name"]
+        except Exception as e:
+            log(f"winner_label lookup failed (using fallback): {e}")
+
         prompt = (
             f"Generate a creative brief for a WINNING VIDEO VARIATION using the same\n"
             f"workflow as the /classify-inspiration skill (download Drive file → ffmpeg\n"
@@ -1269,7 +1284,7 @@ class Worker:
             f"     consistently inside the same ClickUp doc. Reuse the exact section\n"
             f"     headings + table column names. Sections:\n"
             f"\n"
-            f"       # Winner — {parent_name} — V{drive_file_id[-6:]}\n"
+            f"       # Winner — {parent_name} — {winner_label}\n"
             f"       * * *\n"
             f"       ## 1\\. SNAPSHOT      (table: Brand, Platform=Drive, Duration, Funnel,\n"
             f"                              Format, Hook Type, Angle, Persona, Status=Winner,\n"
@@ -1289,7 +1304,7 @@ class Worker:
             f"     DO NOT use different headings or fewer sections — the user verified\n"
             f"     this. Every section must be present.\n"
             f"  6. Create a ClickUp Doc page in the product's brief doc (doc_id from step 1)\n"
-            f"     titled 'Winner Brief — {parent_name} — V{drive_file_id[-6:]}'. Capture\n"
+            f"     titled 'Winner Brief — {parent_name} — {winner_label}'. Capture\n"
             f"     the page URL.\n\n"
             f"  7. *** MANDATORY DB WRITE ***\n"
             f"     UPSERT into public.variation_briefs (drive_file_id is the conflict key):\n"

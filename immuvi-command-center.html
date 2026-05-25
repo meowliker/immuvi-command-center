@@ -28380,6 +28380,13 @@ function pollFullSync() {
           }
         }
         var _wouldDrop = [];
+        // 2026-05-25 — Bug 8/9 guard #2 (memory/feedback_bug8_orphan_protection.md)
+        // Recent-creation grace window: ads spawned in the last 90s might not
+        // yet be reflected in the ClickUp task fetch (transient race during
+        // task creation + CU's eventual consistency), and the local cell
+        // assignment broadcast may also be in flight. Don't drop them.
+        var _GRACE_MS = 90 * 1000;
+        var _now = Date.now();
         for (var _li3 = 0; _li3 < ADS.length; _li3++) {
           var _ad = ADS[_li3];
           if (_ad._clickupId && !taskMap[_ad._clickupId]) {
@@ -28396,6 +28403,14 @@ function pollFullSync() {
               }
             }
             if (_inCell) continue;
+            // Recent-creation grace: don't drop a freshly-spawned ad.
+            var _adTs = _ad.createdAt || _ad.dateCreated
+              || (_ad.created_at ? Date.parse(_ad.created_at) : 0)
+              || 0;
+            if (_adTs && (_now - _adTs) < _GRACE_MS) {
+              console.log('[poll] reconcile spared recently-created AD', _ad.id, '(age', Math.round((_now-_adTs)/1000)+'s)');
+              continue;
+            }
             _wouldDrop.push(_ad.id);
           }
         }
@@ -30874,7 +30889,33 @@ async function cleanStaleAds(productId) {
 
   // 2. Identify stale ads in current product
   var stale = [];
-  var protectedCount = { variation: 0, newFind: 0, localOnly: 0, inList: 0 };
+  var protectedCount = { variation: 0, newFind: 0, localOnly: 0, inList: 0, recent: 0, inCell: 0, hasAction: 0 };
+
+  // 2026-05-25 — Bug 8/9 guard #3 (memory/feedback_bug8_orphan_protection.md)
+  // Recent-creation grace + cell/action references — same protections as
+  // importTasksFromClickUp Pass 2.5 so the manual cleanup tool doesn't kill
+  // ads that the auto-poll spares. The user destroyed 4 ads (AD-025..028)
+  // on 2026-05-25 — most of which were referenced by cells and actions.
+  var _GRACE_MS_CLEAN = 5 * 60 * 1000;   // 5 min — manual button is less time-critical, give a wider cushion
+  var _now_clean = Date.now();
+  var _adsWithActions_clean = {};
+  if (typeof MANUAL_ACTIONS !== 'undefined' && Array.isArray(MANUAL_ACTIONS)) {
+    for (var _mai_c = 0; _mai_c < MANUAL_ACTIONS.length; _mai_c++) {
+      var _ma_c = MANUAL_ACTIONS[_mai_c];
+      if (_ma_c && _ma_c.sourceAdId) _adsWithActions_clean[_ma_c.sourceAdId] = true;
+      if (_ma_c && _ma_c.adId)       _adsWithActions_clean[_ma_c.adId]       = true;
+    }
+  }
+  function _isInAnyCell(adId) {
+    if (typeof CELL_CREATIVE_ASSIGNMENTS === 'undefined') return false;
+    var _kk = Object.keys(CELL_CREATIVE_ASSIGNMENTS);
+    for (var _i = 0; _i < _kk.length; _i++) {
+      var _arr2 = CELL_CREATIVE_ASSIGNMENTS[_kk[_i]] || [];
+      if (_arr2.indexOf(adId) !== -1) return true;
+    }
+    return false;
+  }
+
   for (var ai = 0; ai < ADS.length; ai++) {
     var ad = ADS[ai];
     if (!ad) continue;
@@ -30890,6 +30931,21 @@ async function cleanStaleAds(productId) {
 
     // Protect: ad whose clickup task IS in current list
     if (liveTaskIds[cuid]) { protectedCount.inList++; continue; }
+
+    // Protect: ad referenced by any MANUAL_ACTION (user-tracked).
+    if (_adsWithActions_clean[ad.id]) { protectedCount.hasAction++; continue; }
+
+    // Protect: ad referenced by any matrix cell (user-organized).
+    if (_isInAnyCell(ad.id)) { protectedCount.inCell++; continue; }
+
+    // Protect: ad created within the grace window (race with CU eventual consistency).
+    var _adTsClean = ad.createdAt || ad.dateCreated
+      || (ad.created_at ? Date.parse(ad.created_at) : 0)
+      || 0;
+    if (_adTsClean && (_now_clean - _adTsClean) < _GRACE_MS_CLEAN) {
+      protectedCount.recent++;
+      continue;
+    }
 
     // Stale — imported from a previous list link, no longer in current list
     stale.push(ad);
@@ -30934,7 +30990,10 @@ async function cleanStaleAds(productId) {
             '• ' + protectedCount.variation + ' winner variations\n' +
             '• ' + protectedCount.newFind + ' manual New Find ads\n' +
             '• ' + protectedCount.localOnly + ' local-only ads (no ClickUp link)\n' +
-            '• ' + protectedCount.inList + ' ads currently in the list\n\n' +
+            '• ' + protectedCount.inList + ' ads currently in the list\n' +
+            '• ' + protectedCount.hasAction + ' ads referenced by an Action Plan row\n' +
+            '• ' + protectedCount.inCell + ' ads assigned to a matrix cell\n' +
+            '• ' + protectedCount.recent + ' ads created in the last 5 min\n\n' +
             'REMOVING (preview, first 5):\n' + sample + more + '\n\n' +
             'This soft-deletes them locally. The ClickUp tasks themselves are NOT touched.';
   if (!confirm(msg)) return;

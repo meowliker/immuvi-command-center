@@ -166,15 +166,9 @@ PGPASSWORD="$SUPABASE_DB_PASSWORD" psql "$SUPABASE_DB_URL" -At -c "
 - All items already classified → "All queued items already processed. Nothing new to do." Stop.
 - Otherwise → print the N items to be processed with their IDs + truncated URLs.
 
-**Mark items as `processing`** so the dashboard can show progress:
-
-```bash
-PGPASSWORD="$SUPABASE_DB_PASSWORD" psql "$SUPABASE_DB_URL" -c "
-  update public.inspiration_queue
-  set status = 'processing'
-  where ins_id in (<comma-separated-quoted-list>) and status = 'pending'
-"
-```
+**Do not mark items as `processing` manually.** The worker owns queue state
+(`pending` → `claimed` → `classifying` → `classified`/`failed`) so multiple
+machines can safely split work without stranding rows.
 
 ---
 
@@ -211,7 +205,10 @@ TASK:
 3. Read each produced frame with the Read tool (up to 6 frames)
 4. Classify using the dimensions in Step 4
 5. Insert the classification into Supabase `public.inspiration_results` via psql
-6. Update the matching `public.inspiration_queue` row: status='done', processed_at=now()
+6. If you were invoked by the worker, do not update `public.inspiration_queue`;
+   the worker verifies the result and marks the row classified. If you are
+   running this skill manually without the worker, update the row to
+   status='classified', processed_at=now().
 7. Clean up: rm -rf /tmp/ins_work_[INS_ID] /tmp/ins_pipeline_[INS_ID].py
 8. Print: "DONE [INS_ID]: [hook_type] | [creative_structure] | [funnel_type]"
 
@@ -233,7 +230,7 @@ import asyncio, json, os, re, shutil, subprocess, sys, urllib.request
 
 _SKILL_DIR = os.path.expanduser('~/.claude/skills/classify-inspiration')
 if _SKILL_DIR not in sys.path: sys.path.insert(0, _SKILL_DIR)
-from fb_ad_classifier import fetch_ad_snapshot, fetch_instagram_og, download_instagram_media, download_video, extract_frames, extract_ad_id, decode_unicode, USER_AGENT, OUTPUT_BASE
+from fb_ad_classifier import fetch_ad_snapshot, download_tiktok_media, download_video, extract_frames, extract_ad_id, decode_unicode, USER_AGENT, OUTPUT_BASE
 
 def detect_platform(url):
     u = url.lower()
@@ -306,26 +303,17 @@ try:
             duration = get_duration(vp)
             frames = extract_frames(vp, work_dir)
             os.remove(vp)
-    elif platform == "instagram":
-        # Instagram public posts redirect anonymous browsers to a login wall,
-        # the og:image path only gives a 640×640 center crop (loses edge text/CTAs),
-        # and the unauthenticated GraphQL endpoint is 403. We use a 3-method
-        # fallback chain implemented in fb_ad_classifier.download_instagram_media:
-        #
-        #   1. gallery-dl --cookies-from-browser   → 1080p original if any browser
-        #                                            on this machine is logged into IG
-        #   2. snapinsta.to via headless Playwright → 1080p, no auth required
-        #   3. og:image via facebookexternalhit UA  → 640×640 crop, always works
-        #
-        # The chain auto-falls through on each failure. The first method that
-        # returns real bytes wins. OG metadata (caption, username) is always
-        # fetched alongside so snapshot.page_name + body_text are populated
-        # regardless of which method downloaded the pixels.
-        ig = download_instagram_media(url, work_dir)
-        snapshot = ig["metadata"]
-        frames = ig["frames"]
-        duration = ig["duration"]
-        print(f"[ig] downloaded via {ig['via']} ({'video' if ig['is_video'] else 'photo'}, {len(frames)} frame(s))", file=sys.stderr)
+    elif platform == "tiktok":
+        # Do not use browser automation for TikTok downloads. TikTok's web UI
+        # commonly blocks automated/browser-save flows behind login or bot
+        # checks. Use the helper's non-browser chain instead:
+        # direct mp4 resolver -> yt-dlp without cookies -> yt-dlp with Chrome cookies
+        # resolver fallback.
+        tt = download_tiktok_media(url, work_dir)
+        snapshot = tt["metadata"]
+        frames = tt["frames"]
+        duration = tt["duration"]
+        print(f"[tiktok] downloaded via {tt['via']} ({len(frames)} frame(s))", file=sys.stderr)
     else:
         vp = download_ytdlp(url, work_dir)
         duration = get_duration(vp)
@@ -486,14 +474,16 @@ Where the JSON file has the full shape:
 }
 ```
 
-Then mark the queue row done:
+If running manually without the worker, mark the queue row classified. If this
+skill was invoked by the worker, skip this step because the worker owns queue
+state:
 
 ```bash
 curl -s -X PATCH "$SUPABASE_URL/rest/v1/inspiration_queue?ins_id=eq.[INS_ID]&product_id=eq.[PRODUCT_ID]" \
   -H "apikey: $SUPABASE_SERVICE_ROLE_KEY" \
   -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY" \
   -H "Content-Type: application/json" \
-  --data '{"status":"done","processed_at":"now()"}'
+  --data '{"status":"classified","processed_at":"now()"}'
 ```
 
 ---

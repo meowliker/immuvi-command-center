@@ -1,0 +1,561 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Immuvi Queue Monitor</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #07080d;
+      --panel: rgba(18, 21, 33, .78);
+      --panel-strong: rgba(25, 30, 48, .94);
+      --line: rgba(255,255,255,.1);
+      --text: #f5f7fb;
+      --muted: #9aa4b7;
+      --green: #3df2a7;
+      --blue: #62b7ff;
+      --purple: #a98bff;
+      --red: #ff6277;
+      --amber: #ffc861;
+      --pink: #ff77c8;
+      --shadow: 0 24px 80px rgba(0,0,0,.42);
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background:
+        radial-gradient(circle at 18% 12%, rgba(98,183,255,.22), transparent 32%),
+        radial-gradient(circle at 88% 8%, rgba(255,119,200,.16), transparent 34%),
+        radial-gradient(circle at 65% 92%, rgba(61,242,167,.14), transparent 36%),
+        var(--bg);
+      color: var(--text);
+      overflow-x: hidden;
+    }
+
+    .mesh {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      opacity: .3;
+      background-image:
+        linear-gradient(rgba(255,255,255,.045) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,.045) 1px, transparent 1px);
+      background-size: 46px 46px;
+      mask-image: linear-gradient(to bottom, black, transparent 80%);
+    }
+
+    main {
+      width: min(1440px, calc(100vw - 36px));
+      margin: 0 auto;
+      padding: 28px 0 42px;
+      position: relative;
+    }
+
+    header {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 18px;
+      align-items: end;
+      margin-bottom: 22px;
+    }
+
+    .eyebrow {
+      color: var(--green);
+      text-transform: uppercase;
+      font-size: 12px;
+      letter-spacing: .18em;
+      font-weight: 800;
+    }
+
+    h1 {
+      margin: 8px 0 8px;
+      font-size: clamp(34px, 5vw, 72px);
+      line-height: .92;
+      letter-spacing: 0;
+    }
+
+    .sub {
+      color: var(--muted);
+      font-size: 15px;
+      max-width: 760px;
+      line-height: 1.55;
+    }
+
+    .actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    button, .linkbtn {
+      appearance: none;
+      border: 1px solid var(--line);
+      color: var(--text);
+      background: rgba(255,255,255,.07);
+      border-radius: 8px;
+      padding: 10px 13px;
+      font-weight: 800;
+      cursor: pointer;
+      text-decoration: none;
+      transition: transform .18s ease, background .18s ease, border-color .18s ease;
+      white-space: nowrap;
+    }
+    button:hover, .linkbtn:hover { transform: translateY(-1px); background: rgba(255,255,255,.12); border-color: rgba(255,255,255,.22); }
+    button.primary {
+      border-color: rgba(61,242,167,.38);
+      background: linear-gradient(135deg, rgba(61,242,167,.25), rgba(98,183,255,.18));
+    }
+    button.danger { border-color: rgba(255,98,119,.35); color: #ffd6dc; }
+    button:disabled { opacity: .5; cursor: wait; transform: none; }
+
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 12px;
+      margin: 20px 0 16px;
+    }
+
+    .stat, .panel {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(18px);
+    }
+
+    .stat {
+      padding: 15px;
+      position: relative;
+      overflow: hidden;
+    }
+    .stat::after {
+      content: "";
+      position: absolute;
+      inset: auto 12px 0;
+      height: 2px;
+      background: linear-gradient(90deg, transparent, var(--accent), transparent);
+      opacity: .85;
+    }
+    .stat .label { color: var(--muted); font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .12em; }
+    .stat .value { font-size: 32px; font-weight: 900; margin-top: 7px; }
+    .stat .hint { color: var(--muted); font-size: 12px; margin-top: 5px; }
+
+    .toolbar {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      justify-content: space-between;
+      margin: 18px 0 12px;
+      flex-wrap: wrap;
+    }
+
+    .tabs, .filters {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    .tab, .filter {
+      border-radius: 8px;
+      padding: 9px 12px;
+      color: var(--muted);
+      background: rgba(255,255,255,.045);
+      border: 1px solid transparent;
+      font-weight: 800;
+      cursor: pointer;
+    }
+    .tab.active, .filter.active {
+      color: var(--text);
+      border-color: rgba(255,255,255,.16);
+      background: rgba(255,255,255,.1);
+    }
+
+    input {
+      width: min(380px, 100%);
+      border: 1px solid var(--line);
+      background: rgba(255,255,255,.07);
+      color: var(--text);
+      border-radius: 8px;
+      padding: 11px 12px;
+      outline: none;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 12px;
+    }
+
+    .row {
+      display: grid;
+      grid-template-columns: 130px minmax(0, 1.4fr) minmax(0, .9fr) 150px 150px auto;
+      gap: 14px;
+      align-items: center;
+      padding: 14px;
+      background: var(--panel-strong);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      animation: rise .35s ease both;
+    }
+
+    @keyframes rise {
+      from { transform: translateY(8px); opacity: 0; }
+      to { transform: translateY(0); opacity: 1; }
+    }
+
+    .id { font-weight: 900; font-size: 15px; }
+    .meta, .small { color: var(--muted); font-size: 12px; line-height: 1.45; }
+    .product { color: #dce4f5; font-weight: 750; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      width: fit-content;
+      border-radius: 999px;
+      padding: 6px 10px;
+      font-size: 12px;
+      font-weight: 900;
+      border: 1px solid currentColor;
+      background: rgba(255,255,255,.06);
+    }
+    .badge::before {
+      content: "";
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: currentColor;
+      box-shadow: 0 0 14px currentColor;
+    }
+    .s-done, .s-classified { color: var(--green); }
+    .s-pending { color: var(--amber); }
+    .s-running, .s-processing { color: var(--blue); }
+    .s-failed, .s-error { color: var(--red); }
+    .s-cancelled { color: var(--muted); }
+
+    .row-actions { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
+    .thumbs { display: flex; gap: 8px; align-items: center; overflow: hidden; }
+    .thumbs a {
+      width: 52px;
+      height: 52px;
+      border-radius: 8px;
+      overflow: hidden;
+      border: 1px solid var(--line);
+      background: rgba(255,255,255,.08);
+      display: block;
+      flex: 0 0 auto;
+    }
+    .thumbs img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .empty {
+      padding: 44px;
+      text-align: center;
+      color: var(--muted);
+      border: 1px dashed rgba(255,255,255,.18);
+      border-radius: 8px;
+      background: rgba(255,255,255,.04);
+    }
+
+    .workers {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 12px;
+      margin-top: 12px;
+    }
+    .worker {
+      padding: 14px;
+      border-radius: 8px;
+      background: rgba(255,255,255,.06);
+      border: 1px solid var(--line);
+    }
+
+    .ideas {
+      margin-top: 18px;
+      padding: 18px;
+    }
+    .ideas h2 { margin: 0 0 12px; font-size: 18px; }
+    .ideas ul { margin: 0; padding-left: 20px; color: var(--muted); line-height: 1.7; }
+
+    .toast {
+      position: fixed;
+      right: 18px;
+      bottom: 18px;
+      max-width: 420px;
+      padding: 13px 15px;
+      border-radius: 8px;
+      background: rgba(16, 21, 34, .96);
+      border: 1px solid var(--line);
+      box-shadow: var(--shadow);
+      transform: translateY(20px);
+      opacity: 0;
+      transition: .22s ease;
+      z-index: 10;
+    }
+    .toast.show { transform: translateY(0); opacity: 1; }
+
+    @media (max-width: 1000px) {
+      header { grid-template-columns: 1fr; }
+      .actions { justify-content: flex-start; }
+      .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .row { grid-template-columns: 1fr; align-items: start; }
+      .row-actions { justify-content: flex-start; }
+    }
+  </style>
+</head>
+<body>
+  <div class="mesh"></div>
+  <main>
+    <header>
+      <div>
+        <div class="eyebrow">Localhost only · Supabase live data</div>
+        <h1>Immuvi Queue Monitor</h1>
+        <div class="sub">Watch inspiration classification and image generation without touching the main Immuvi dashboard. Retry failed work, open ClickUp tasks, and inspect generated assets from one clean local tool.</div>
+      </div>
+      <div class="actions">
+        <button id="refresh" class="primary">Refresh</button>
+        <button id="auto">Auto refresh: on</button>
+      </div>
+    </header>
+
+    <section class="stats">
+      <div class="stat" style="--accent: var(--amber)"><div class="label">Inspiration Pending</div><div id="inspPending" class="value">-</div><div class="hint">Waiting for workers</div></div>
+      <div class="stat" style="--accent: var(--blue)"><div class="label">Image Running</div><div id="prodRunning" class="value">-</div><div class="hint">Generation in progress</div></div>
+      <div class="stat" style="--accent: var(--red)"><div class="label">Failed</div><div id="failedTotal" class="value">-</div><div class="hint">Needs decision</div></div>
+      <div class="stat" style="--accent: var(--green)"><div class="label">Done Recent</div><div id="doneTotal" class="value">-</div><div class="hint">Latest rows loaded</div></div>
+      <div class="stat" style="--accent: var(--purple)"><div class="label">Workers Online</div><div id="workersOnline" class="value">-</div><div class="hint" id="lastUpdated">Loading</div></div>
+    </section>
+
+    <section class="panel" style="padding: 14px;">
+      <div class="toolbar">
+        <div class="tabs">
+          <button class="tab active" data-tab="producers">Image generation</button>
+          <button class="tab" data-tab="inspiration">Inspiration</button>
+          <button class="tab" data-tab="workers">Workers</button>
+        </div>
+        <div class="filters">
+          <button class="filter active" data-filter="active">Active/failed</button>
+          <button class="filter" data-filter="today">Today</button>
+          <button class="filter" data-filter="all">Recent all</button>
+          <input id="search" placeholder="Search task, INS id, product, error..." />
+        </div>
+      </div>
+      <div id="content" class="grid"></div>
+    </section>
+
+    <section class="panel ideas">
+      <h2>Good next additions</h2>
+      <ul>
+        <li>Screenshot QA checklist per image: text readable, correct product, correct persona, no weird artifacts.</li>
+        <li>“Stuck” automation: auto-mark running producer jobs failed after a threshold and requeue once.</li>
+        <li>Slack or desktop alerts when a row fails or runs longer than 30 minutes.</li>
+        <li>Diff view for retries: compare old failed prompt, new prompt, and final ClickUp attachments.</li>
+        <li>Worker controls: pause/resume a worker, assign a job to Mac mini or laptop, and see current capacity.</li>
+        <li>Brief-health audit: show missing brief, malformed ClickUp link, or missing hook/structure/production fields.</li>
+      </ul>
+    </section>
+  </main>
+  <div id="toast" class="toast"></div>
+
+  <script>
+    const state = { data: null, tab: 'producers', filter: 'active', q: '', auto: true };
+    const $ = (id) => document.getElementById(id);
+
+    function statusClass(status) {
+      return 's-' + String(status || 'unknown').toLowerCase();
+    }
+
+    function fmtAge(sec) {
+      if (sec == null) return '-';
+      if (sec < 60) return `${sec}s`;
+      if (sec < 3600) return `${Math.floor(sec / 60)}m`;
+      return `${Math.floor(sec / 3600)}h ${Math.floor((sec % 3600) / 60)}m`;
+    }
+
+    function todayIso() {
+      const d = new Date();
+      return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+    }
+
+    function isToday(iso) {
+      if (!iso) return false;
+      return new Date(iso).getTime() >= todayIso();
+    }
+
+    function showToast(msg) {
+      const el = $('toast');
+      el.textContent = msg;
+      el.classList.add('show');
+      setTimeout(() => el.classList.remove('show'), 3200);
+    }
+
+    async function api(path, body) {
+      const res = await fetch(path, {
+        method: body ? 'POST' : 'GET',
+        headers: body ? { 'Content-Type': 'application/json' } : {},
+        body: body ? JSON.stringify(body) : undefined
+      });
+      const json = await res.json();
+      if (!res.ok || json.ok === false) throw new Error(json.error || 'Request failed');
+      return json;
+    }
+
+    async function refresh() {
+      $('refresh').disabled = true;
+      try {
+        state.data = await api('/api/summary');
+        render();
+      } catch (e) {
+        showToast(e.message);
+      } finally {
+        $('refresh').disabled = false;
+      }
+    }
+
+    function updateStats() {
+      const d = state.data || { inspiration: [], producers: [], workers: [], counts: {} };
+      const inspPending = d.inspiration.filter(x => ['pending', 'processing', 'running'].includes(x.status)).length;
+      const prodRunning = d.producers.filter(x => x.status === 'running' || x.status === 'pending').length;
+      const failed = d.inspiration.filter(x => ['failed', 'error'].includes(x.status)).length + d.producers.filter(x => x.status === 'failed').length;
+      const done = d.inspiration.filter(x => ['done', 'classified'].includes(x.status)).length + d.producers.filter(x => x.status === 'done').length;
+      $('inspPending').textContent = inspPending;
+      $('prodRunning').textContent = prodRunning;
+      $('failedTotal').textContent = failed;
+      $('doneTotal').textContent = done;
+      $('workersOnline').textContent = d.counts.workers_online ?? 0;
+      $('lastUpdated').textContent = d.generated_at ? new Date(d.generated_at).toLocaleTimeString() : 'Loading';
+    }
+
+    function applyFilter(rows, dateKey) {
+      const q = state.q.trim().toLowerCase();
+      return rows.filter(row => {
+        if (state.filter === 'active' && !row.is_active) return false;
+        if (state.filter === 'today' && !isToday(row[dateKey])) return false;
+        if (!q) return true;
+        return JSON.stringify(row).toLowerCase().includes(q);
+      });
+    }
+
+    function badge(status) {
+      return `<span class="badge ${statusClass(status)}">${status || 'unknown'}</span>`;
+    }
+
+    function producerRow(row) {
+      const imgs = (row.images || []).filter(x => x.url).slice(0, 4).map(img =>
+        `<a href="${img.url}" target="_blank" title="${img.variation_id || 'image'}"><img src="${img.url}" loading="lazy" /></a>`
+      ).join('');
+      const stuck = row.is_stuck ? `<div class="small" style="color: var(--red); font-weight: 900;">Stuck: ${fmtAge(row.run_seconds)}</div>` : '';
+      return `<article class="row">
+        <div><div class="id">Run #${row.id}</div><div class="meta">${row.task_id || '-'}</div></div>
+        <div><div class="product">${row.product_name || row.product_id}</div><div class="title">${row.instruction || 'No custom instruction'}</div><div class="meta">Count ${row.count} · ${row.worker_id || row.preferred_worker_id || 'unassigned'}</div></div>
+        <div>${badge(row.status)}${stuck}<div class="meta">${row.error || 'No error'}</div></div>
+        <div><div class="meta">Created</div><div>${fmtAge(row.age_seconds)} ago</div></div>
+        <div class="thumbs">${imgs || '<span class="small">No images yet</span>'}</div>
+        <div class="row-actions">
+          ${row.task_url ? `<a class="linkbtn" href="${row.task_url}" target="_blank">ClickUp</a>` : ''}
+          ${row.status === 'failed' ? `<button onclick="retryProducer(${row.id})">Retry</button>` : ''}
+          ${row.status === 'running' && row.is_stuck ? `<button class="danger" onclick="failProducer(${row.id})">Mark failed</button>` : ''}
+        </div>
+      </article>`;
+    }
+
+    function inspirationRow(row) {
+      return `<article class="row">
+        <div><div class="id">${row.ins_id || row.id}</div><div class="meta">${row.platform || '-'}</div></div>
+        <div><div class="product">${row.product_name || row.product_id}</div><div class="title">${row.url || ''}</div><div class="meta">Attempts ${row.attempts ?? 0} · ${row.claimed_by || 'unclaimed'}</div></div>
+        <div>${badge(row.status)}<div class="meta">${row.error_message || 'No error'}</div></div>
+        <div><div class="meta">Queued</div><div>${fmtAge(row.age_seconds)} ago</div></div>
+        <div><div class="meta">Assignment</div><div>${row.worker_assignment || 'auto'}</div></div>
+        <div class="row-actions">
+          ${row.url ? `<a class="linkbtn" href="${row.url}" target="_blank">Source</a>` : ''}
+          ${['failed', 'error'].includes(row.status) ? `<button onclick="retryInspiration('${row.id}')">Retry</button>` : ''}
+        </div>
+      </article>`;
+    }
+
+    function workersView() {
+      const rows = state.data?.workers || [];
+      return `<div class="workers">${rows.map(w => `
+        <div class="worker">
+          <div class="id">${w.worker_id}</div>
+          <div style="margin: 8px 0;">${badge(w.online ? 'running' : 'failed')} <span class="small">${w.status || '-'}</span></div>
+          <div class="small">${w.hostname || ''}</div>
+          <div class="small">Heartbeat ${fmtAge(w.heartbeat_age_seconds)} ago</div>
+          <div class="small">Jobs done ${w.jobs_completed_total || 0} · failed ${w.jobs_failed_total || 0}</div>
+        </div>`).join('')}</div>`;
+    }
+
+    function render() {
+      updateStats();
+      const content = $('content');
+      if (!state.data) {
+        content.innerHTML = '<div class="empty">Loading queue data...</div>';
+        return;
+      }
+      if (state.tab === 'workers') {
+        content.innerHTML = workersView();
+        return;
+      }
+      if (state.tab === 'producers') {
+        const rows = applyFilter(state.data.producers, 'created_at');
+        content.innerHTML = rows.length ? rows.map(producerRow).join('') : '<div class="empty">No image generation rows match this view.</div>';
+      } else {
+        const rows = applyFilter(state.data.inspiration, 'queued_at');
+        content.innerHTML = rows.length ? rows.map(inspirationRow).join('') : '<div class="empty">No inspiration rows match this view.</div>';
+      }
+    }
+
+    async function retryProducer(id) {
+      if (!confirm(`Create a fresh pending retry for producer run #${id}?`)) return;
+      await api('/api/retry/producer', { id });
+      showToast(`Retry queued for producer run #${id}`);
+      refresh();
+    }
+
+    async function failProducer(id) {
+      if (!confirm(`Mark running producer run #${id} as failed?`)) return;
+      await api('/api/fail/producer', { id });
+      showToast(`Producer run #${id} marked failed`);
+      refresh();
+    }
+
+    async function retryInspiration(id) {
+      if (!confirm('Reset this inspiration row to pending?')) return;
+      await api('/api/retry/inspiration', { id });
+      showToast('Inspiration retry queued');
+      refresh();
+    }
+
+    window.retryProducer = retryProducer;
+    window.failProducer = failProducer;
+    window.retryInspiration = retryInspiration;
+
+    document.querySelectorAll('.tab').forEach(btn => btn.addEventListener('click', () => {
+      document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
+      btn.classList.add('active');
+      state.tab = btn.dataset.tab;
+      render();
+    }));
+    document.querySelectorAll('.filter').forEach(btn => btn.addEventListener('click', () => {
+      document.querySelectorAll('.filter').forEach(x => x.classList.remove('active'));
+      btn.classList.add('active');
+      state.filter = btn.dataset.filter;
+      render();
+    }));
+    $('search').addEventListener('input', e => { state.q = e.target.value; render(); });
+    $('refresh').addEventListener('click', refresh);
+    $('auto').addEventListener('click', () => {
+      state.auto = !state.auto;
+      $('auto').textContent = `Auto refresh: ${state.auto ? 'on' : 'off'}`;
+    });
+
+    setInterval(() => { if (state.auto) refresh(); }, 15000);
+    refresh();
+  </script>
+</body>
+</html>

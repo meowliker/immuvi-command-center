@@ -1,0 +1,207 @@
+{
+  "product_id": "prod-1777624706026",
+  "product_name": "Medical",
+  "last_updated": "2026-05-21T17:51:08.582230+00:00",
+  "stats": {
+    "winner": 1,
+    "mild_winner": 0,
+    "scale": 0,
+    "complete": 0,
+    "loser": 0,
+    "killed": 0,
+    "judged_total": 1,
+    "spend_total": 0.0,
+    "revenue_total": 0.0,
+    "roi_overall": null,
+    "tasks_with_spend_data": 0,
+    "tasks_missing_spend_data": 1
+  },
+  "strategy_layer": {
+    "angles": [
+      {
+        "wins": 1,
+        "losses": 0,
+        "spend": 0.0,
+        "revenue": 0.0,
+        "spend_data_count": 0,
+        "evidence_task_ids": [
+          "86d1mbnty"
+        ],
+        "name": "Embarasing Angle",
+        "roi": null
+      }
+    ],
+    "personas": [
+      {
+        "wins": 1,
+        "losses": 0,
+        "spend": 0.0,
+        "revenue": 0.0,
+        "spend_data_count": 0,
+        "evidence_task_ids": [
+          "86d1mbnty"
+        ],
+        "name": "Mom Nursing Students 30-45",
+        "roi": null
+      }
+    ],
+    "emotions_played": [
+      {
+        "wins": 1,
+        "losses": 0,
+        "spend": 0.0,
+        "revenue": 0.0,
+        "spend_data_count": 0,
+        "evidence_task_ids": [
+          "86d1mbnty"
+        ],
+        "name": "relief",
+        "roi": null
+      }
+    ]
+  },
+  "creative_direction_layer": {
+    "creative_structures": [],
+    "production_styles": [],
+    "funnel_types": [
+      {
+        "wins": 1,
+        "losses": 0,
+        "spend": 0.0,
+        "revenue": 0.0,
+        "spend_data_count": 0,
+        "evidence_task_ids": [
+          "86d1mbnty"
+        ],
+        "name": "TOF",
+        "roi": null
+      }
+    ],
+    "hook_types": [
+      {
+        "wins": 1,
+        "losses": 0,
+        "spend": 0.0,
+        "revenue": 0.0,
+        "spend_data_count": 0,
+        "evidence_task_ids": [
+          "86d1mbnty"
+        ],
+        "name": "Pain / Problem",
+        "roi": null
+      }
+    ]
+  },
+  "copy_layer": {
+    "lingo": [
+      {
+        "phrase": "embarrassing",
+        "winners": 1
+      },
+      {
+        "phrase": "mom",
+        "winners": 1
+      },
+      {
+        "phrase": "nursing student",
+        "winners": 1
+      },
+      {
+        "phrase": "discreet",
+        "winners": 1
+      },
+      {
+        "phrase": "busy",
+        "winners": 1
+      },
+      {
+        "phrase": "private",
+        "winners": 1
+      },
+      {
+        "phrase": "relief",
+        "winners": 1
+      }
+    ]
+  },
+  "combinations_that_win": [],
+  "combinations_that_die": [],
+  "winner_briefs": [
+    {
+      "copy": {
+        "cta": null,
+        "body": "Likely centered on an embarrassing health-related problem framed through the lens of a busy mom in nursing school who wants a discreet, practical fix.",
+        "hook": null,
+        "lingo": [
+          "embarrassing",
+          "mom",
+          "nursing student",
+          "discreet",
+          "busy",
+          "private",
+          "relief"
+        ],
+        "headline": null
+      },
+      "creative": {
+        "props": [],
+        "talent": null,
+        "setting": null,
+        "lighting": null,
+        "hook_type": "Pain / Problem",
+        "composition": null,
+        "funnel_type": "TOF",
+        "text_overlay": null,
+        "visual_style": null,
+        "color_palette": null,
+        "production_style": null,
+        "creative_structure": null
+      },
+      "strategy": {
+        "emotion": "relief",
+        "promise": "A private, simple solution that helps her handle the problem without shame, disruption, or extra cognitive load.",
+        "angle_tag": "Embarasing Angle",
+        "pain_point": "Feeling embarrassed, judged, or exposed while dealing with an intimate health issue during an already demanding life stage of motherhood and nursing school.",
+        "persona_tag": "Mom Nursing Students 30-45",
+        "social_proof": "none",
+        "awareness_level": "problem-aware"
+      },
+      "production": {
+        "gaze": null,
+        "expression": null,
+        "person_count": 1,
+        "body_language": null
+      },
+      "why_it_won": "This likely won because the angle narrowed the emotional target instead of speaking generically to women. A 30-45-year-old mom in nursing school is overloaded, time-poor, and trained to understand health language, but still vulnerable to embarrassment around her own body. The ad\u2019s probable strength was that it named a shame-based pain without making the viewer feel foolish. That creates fast self-identification: she is not just dealing with a problem, she is dealing with the fear of someone noticing it while she is trying to hold together school, parenting, and adult responsibilities. The embarrassment angle also works because it pushes urgency without needing a discount or heavy product education. The viewer already wants privacy, control, and relief. If the creative felt direct and human, it would have made the product feel like a quiet fix rather than a medical lecture. The persona match matters: nursing students are skeptical enough to reject vague wellness claims, but practical enough to respond to a clear, discreet solution. The win likely came from emotional specificity, not production complexity.",
+      "task_id": "86d1mbnty",
+      "status": "winner",
+      "performance": {
+        "spend": null,
+        "revenue": null,
+        "roi": null,
+        "spend_data_complete": false
+      }
+    }
+  ],
+  "loser_briefs": [],
+  "trends": {
+    "rising": [],
+    "fading": []
+  },
+  "performance_data_hook": {
+    "available_now": [
+      "spend",
+      "revenue",
+      "roi"
+    ],
+    "reserved_for_v2": [
+      "cpa",
+      "roas",
+      "ctr",
+      "hook_rate",
+      "hold_rate",
+      "cpm",
+      "frequency"
+    ]
+  }
+}

@@ -51,6 +51,7 @@ LOG_DIR = Path.home() / ".classify-inspiration-worker-logs"
 POLL_INTERVAL_SECONDS = 60
 HEARTBEAT_INTERVAL_SECONDS = 30
 STALE_CLAIM_TIMEOUT_MINUTES = 10
+ORPHANED_PROCESSING_TIMEOUT_MINUTES = 2
 PREFERRED_WORKER_OFFLINE_GRACE_MINUTES = 2
 CLAUDE_CLI_TIMEOUT_SECONDS = 1200  # 20 min ceiling (bumped 2026-05-14 — 600s tripped on TikToks: yt-dlp + 30 frame extracts + claude classify reliably hits 10-12 min)
 PRODUCER_CLI_TIMEOUT_SECONDS = 1800  # 30 min for Codex image gen jobs
@@ -542,17 +543,25 @@ class Worker:
     # ── Stale-claim recovery ──
 
     def release_stale_claims(self):
-        """Reset queue rows claimed > 10min ago back to pending.
+        """Reset/recover queue rows that can no longer make progress.
 
         Handles the case where a worker crashed mid-job without setting status='offline'.
+        Also handles dashboard-created rows that were inserted as
+        status='processing' but never claimed by a worker.
         Runs once per polling cycle — cheap.
         """
         try:
             cutoff = _now_iso(offset_minutes=-STALE_CLAIM_TIMEOUT_MINUTES)
-            # Match any claim that hasn't completed (still claimed/classifying).
+            # Match any claim that hasn't completed (still claimed/classifying/processing).
             self.sb.update(
                 "inspiration_queue",
-                f"claimed_at=lt.{urllib.parse.quote(cutoff)}&status=in.(claimed,classifying)",
+                f"claimed_at=lt.{urllib.parse.quote(cutoff)}&status=in.(claimed,classifying,processing)",
+                {"status": "pending", "claimed_by": None, "claimed_at": None},
+            )
+            orphan_cutoff = _now_iso(offset_minutes=-ORPHANED_PROCESSING_TIMEOUT_MINUTES)
+            self.sb.update(
+                "inspiration_queue",
+                f"queued_at=lt.{urllib.parse.quote(orphan_cutoff)}&status=eq.processing&claimed_by=is.null",
                 {"status": "pending", "claimed_by": None, "claimed_at": None},
             )
         except Exception as e:
@@ -577,7 +586,7 @@ class Worker:
             return set()
 
     def claim_next_job(self):
-        """Find a pending row this worker can handle, claim it atomically.
+        """Find a queued row this worker can handle, claim it atomically.
 
         Returns the claimed row (dict) or None.
         """
@@ -590,11 +599,16 @@ class Worker:
         # PostgREST `in.(...)` filter — comma-separated, URL-encoded.
         in_list = ",".join(urllib.parse.quote(v) for v in allowed)
 
-        # Step 1: find the oldest matching pending row.
+        # Step 1: find the oldest matching claimable row. Newer dashboard
+        # code writes status='pending', but older/manual flows used
+        # status='processing' before the worker ever claimed the row. Treat
+        # unclaimed processing rows as queued work so both workers can drain
+        # that backlog.
         try:
             rows = self.sb.select(
                 "inspiration_queue",
-                f"select=*&status=eq.pending"
+                f"select=*&status=in.(pending,processing)"
+                f"&claimed_by=is.null"
                 f"&worker_assignment=in.({in_list})"
                 f"&order=queued_at.asc&limit=1"
             )
@@ -607,13 +621,13 @@ class Worker:
         if not cid:
             return None
 
-        # Step 2: optimistic claim — UPDATE WHERE id=$id AND status='pending'.
-        # If 0 rows updated, another worker won. Try next cycle.
+        # Step 2: optimistic claim — UPDATE WHERE id=$id AND status is still
+        # claimable. If 0 rows updated, another worker won. Try next cycle.
         now_iso = _now_iso()
         try:
             updated = self.sb.update(
                 "inspiration_queue",
-                f"id=eq.{cid}&status=eq.pending",
+                f"id=eq.{cid}&status=in.(pending,processing)&claimed_by=is.null",
                 {
                     "status": "claimed",
                     "claimed_by": self.worker_id,
@@ -1108,7 +1122,8 @@ class Worker:
             f"  platform:   {platform_hint}\n\n"
             f"REQUIRED WORK (mandatory — all of these must succeed before printing OK):\n\n"
             f"  1. Resolve product config from Supabase products.config: clickup_list_id, doc_id, ins_prefix.\n"
-            f"  2. Download the ad media (Playwright for Facebook Ad Library, yt-dlp for IG/TT/etc.).\n"
+            f"  2. Download the ad media (Playwright only for Facebook Ad Library; non-browser downloader chain for TikTok; yt-dlp/helper chain for IG/other video URLs).\n"
+            f"     Never try to download TikTok through a browser UI. For ads.tiktok.com Creative Center/topads links, use the skill helper's Creative Center SSR signed-MP4 resolver.\n"
             f"  3. Extract frames + audio probe via ffmpeg.\n"
             f"  4. Visually classify (ALL 8 are MANDATORY — none may be blank):\n"
             f"       hook_type, creative_structure, production_style, funnel_type,\n"
@@ -1164,18 +1179,12 @@ class Worker:
             f"  If the verification SELECT shows the row missing or fields blank, that is a FAIL.\n"
         )
 
-        # Auto-route: choose between claude and codex via env var.
-        # CLASSIFY_AGENT_PREFER=codex  → use codex (Mac Mini default, frees up
-        #                                claude pool for strategist / briefing)
-        # CLASSIFY_AGENT_PREFER=claude → use claude (historical default)
-        # Either way, build_agent_cmd() falls back to whichever is installed.
+        # Auto-route: prefer claude (the skill's native agent) but fall back
+        # to codex on machines that only have Codex installed. The
         # classify-inspiration SKILL.md auto-updates via Step 0 from Vercel,
         # so it works under either agent as long as the skill files exist
         # locally for that agent.
-        _prefer = (os.environ.get("CLASSIFY_AGENT_PREFER") or "claude").strip().lower()
-        if _prefer not in ("claude", "codex"):
-            _prefer = "claude"
-        cmd = build_agent_cmd(prompt, prefer=_prefer)
+        cmd = build_agent_cmd(prompt, prefer="claude")
         agent_label = cmd[0] if cmd[0] == "claude" else "codex"
         log(f"[{job.get('id')}] running skill on {ins_id} via {agent_label} (timeout {CLAUDE_CLI_TIMEOUT_SECONDS}s)")
         try:

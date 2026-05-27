@@ -29,6 +29,7 @@ import re
 import shutil
 import subprocess
 import sys
+import urllib.parse
 import urllib.request
 from pathlib import Path
 
@@ -76,320 +77,147 @@ def decode_unicode(s: str) -> str:
     return result
 
 
-# ── Instagram: Open Graph fallback (no login, no cookies) ────────────────────
-def fetch_instagram_og(url: str) -> dict:
-    """
-    Fetch an Instagram post URL using a bot User-Agent and parse the Open Graph
-    tags. Works for public photo posts, reels, and IGTV without any login or
-    cookies — Instagram still serves the OG metadata to crawlers like
-    facebookexternalhit even though the regular HTML now redirects to a login
-    wall for unauthenticated browsers.
+# ── TikTok: non-browser media download chain ─────────────────────────────────
+def _download_url(url: str, dest: str, referer: str = "") -> None:
+    if shutil.which("curl"):
+        cmd = [
+            "curl", "-L", "--fail", "--silent", "--show-error",
+            "--max-time", "45",
+            "-A", USER_AGENT,
+            "-o", dest,
+        ]
+        if referer:
+            cmd[7:7] = ["-e", referer]
+        r = subprocess.run(cmd + [url], capture_output=True, text=True, timeout=55)
+        size = os.path.getsize(dest) if os.path.exists(dest) else 0
+        # TikTok CDN can be painfully slow from worker networks. A timed-out
+        # partial MP4 is still useful if ffmpeg can decode the first frames.
+        if r.returncode == 0 or (r.returncode == 28 and size > 750_000):
+            return
+        raise RuntimeError((r.stderr or r.stdout or "curl download failed").strip())
 
-    Returns a dict with: image_url, video_url, caption, page_name, likes_count,
-    comments_count, raw_description, raw_title. Missing fields are empty strings.
-    Raises urllib.error.URLError / HTTPError on network failure.
-    """
-    import html as _html
-    bot_ua = "facebookexternalhit/1.1"
-    req = urllib.request.Request(url, headers={"User-Agent": bot_ua})
+    headers = {"User-Agent": USER_AGENT}
+    if referer:
+        headers["Referer"] = referer
+    req = urllib.request.Request(url, headers=headers)
+    with urllib.request.urlopen(req, timeout=120) as r, open(dest, "wb") as f:
+        f.write(r.read())
+
+
+def _tiktok_download_ytdlp(url: str, work_dir: str, cookies: bool) -> str:
+    if not shutil.which("yt-dlp"):
+        raise RuntimeError("yt-dlp not installed")
+
+    out = os.path.join(work_dir, "_tiktok.%(ext)s")
+    cmd = [
+        "yt-dlp",
+        "--quiet",
+        "--no-warnings",
+        "--no-playlist",
+        "-f",
+        "bv*[ext=mp4]+ba[ext=m4a]/b[ext=mp4]/mp4/best",
+        "-o",
+        out,
+        url,
+    ]
+    if cookies:
+        cmd[1:1] = ["--cookies-from-browser", "chrome"]
+
+    r = subprocess.run(cmd, capture_output=True, text=True, timeout=45)
+    if r.returncode != 0:
+        err = (r.stderr or r.stdout or "unknown yt-dlp failure").strip().splitlines()
+        raise RuntimeError(err[-1] if err else "unknown yt-dlp failure")
+
+    for f in sorted(os.listdir(work_dir)):
+        if f.startswith("_tiktok.") and f.lower().endswith((".mp4", ".mov", ".webm", ".m4v")):
+            p = os.path.join(work_dir, f)
+            if os.path.getsize(p) > 1000:
+                return p
+    raise RuntimeError("yt-dlp finished but no TikTok video file was written")
+
+
+def _tiktok_download_tikwm(url: str, work_dir: str) -> tuple[str, dict]:
+    api = "https://www.tikwm.com/api/?" + urllib.parse.urlencode({"url": url})
+    req = urllib.request.Request(api, headers={"User-Agent": USER_AGENT})
     with urllib.request.urlopen(req, timeout=30) as r:
-        page = r.read().decode("utf-8", "ignore")
-
-    def _og(prop: str) -> str:
-        m = re.search(
-            r'property=["\']og:' + re.escape(prop) + r'["\']\s+content=["\']([^"\']+)["\']',
-            page,
-        )
-        return _html.unescape(m.group(1)) if m else ""
-
-    image_url = _og("image")
-    video_url = _og("video") or _og("video:secure_url")
-    description = _og("description")
-    title = _og("title")
-
-    # Description format observed:
-    #   '847 likes, 6 comments - perfectmatchastro on April 14, 2026: "caption..."'
-    caption = ""
-    page_name = ""
-    likes_count = ""
-    comments_count = ""
-    m = re.match(
-        r'^([\d,]+)\s+likes?,\s+([\d,]+)\s+comments?\s+-\s+(\S+)\s+on\s+[^:]+:\s*"(.+)"[\s.]*$',
-        description, re.S,
-    )
-    if m:
-        likes_count = m.group(1).replace(",", "")
-        comments_count = m.group(2).replace(",", "")
-        page_name = m.group(3)
-        caption = m.group(4)
-    elif description:
-        m2 = re.match(r'^[^:]+:\s*"(.*)"\s*$', description, re.S)
-        caption = m2.group(1) if m2 else description
-        # Fallback username from title: 'username on Instagram: ...'
-        mt = re.match(r'^(\S+)\s+on Instagram', title)
-        if mt:
-            page_name = mt.group(1)
-
-    return {
-        "image_url": image_url,
-        "video_url": video_url,
-        "caption": caption,
-        "page_name": page_name,
-        "likes_count": likes_count,
-        "comments_count": comments_count,
-        "raw_description": description,
-        "raw_title": title,
-    }
+        payload = json.loads(r.read().decode("utf-8", "ignore"))
+    data = payload.get("data") or {}
+    media_url = data.get("play") or data.get("wmplay") or data.get("hdplay")
+    if not media_url:
+        raise RuntimeError(payload.get("msg") or "tikwm returned no playable URL")
+    if media_url.startswith("//"):
+        media_url = "https:" + media_url
+    dest = os.path.join(work_dir, "_tikwm.mp4")
+    _download_url(media_url, dest, referer="https://www.tiktok.com/")
+    if os.path.getsize(dest) <= 1000:
+        raise RuntimeError("tikwm downloaded an empty TikTok video")
+    return dest, data
 
 
-# ── Instagram: 3-method robust media download chain ──────────────────────────
-def _ig_get_duration(vp: str) -> float:
+def download_tiktok_media(url: str, work_dir: str) -> dict:
+    """
+    Download TikTok media without browser automation. Browser download flows are
+    unreliable for TikTok because the web UI blocks automation/login popups.
+
+    Chain order:
+      1. tikwm public resolver API direct mp4
+      2. yt-dlp without cookies
+      3. yt-dlp with Chrome cookies
+    """
+    os.makedirs(work_dir, exist_ok=True)
+    errors = []
+    raw_path = None
+    via = ""
+    meta = {}
+
+    for name, fn in (
+        ("tikwm", lambda: _tiktok_download_tikwm(url, work_dir)),
+        ("yt-dlp", lambda: (_tiktok_download_ytdlp(url, work_dir, False), {})),
+        ("yt-dlp-cookies", lambda: (_tiktok_download_ytdlp(url, work_dir, True), {})),
+    ):
+        try:
+            raw_path, meta = fn()
+            via = name
+            break
+        except Exception as e:
+            errors.append(f"{name}: {e}")
+
+    if not raw_path:
+        raise RuntimeError("TikTok download failed without browser: " + " | ".join(errors))
+
+    duration = 0.0
     try:
         r = subprocess.run(
-            ["ffprobe", "-v", "quiet", "-print_format", "json", "-show_streams", vp],
+            ["ffprobe", "-v", "quiet", "-print_format", "json", "-show_streams", raw_path],
             capture_output=True, text=True, timeout=15,
         )
         for s in json.loads(r.stdout).get("streams", []):
             if "duration" in s:
-                return float(s["duration"])
+                duration = float(s["duration"])
+                break
     except Exception:
         pass
-    return 0.0
 
-
-def _ig_download_gallery_dl(url: str, work_dir: str) -> tuple:
-    """
-    Method 1: gallery-dl with --cookies-from-browser. Tries chrome, firefox,
-    brave, edge, safari in order — first one with a valid Instagram session
-    wins. Returns the highest-resolution original (1080×1920 for portrait posts).
-    Raises if no browser has usable cookies or gallery-dl isn't installed.
-    """
-    if not shutil.which("gallery-dl"):
-        raise RuntimeError("gallery-dl not installed")
-
-    tmp = os.path.join(work_dir, "_gd")
-    if os.path.isdir(tmp):
-        shutil.rmtree(tmp)
-    os.makedirs(tmp, exist_ok=True)
-
-    last_err = ""
-    for browser in ("chrome", "firefox", "brave", "edge", "safari"):
-        try:
-            r = subprocess.run(
-                ["gallery-dl", "--cookies-from-browser", browser,
-                 "-d", tmp, "--no-mtime", "-q", url],
-                capture_output=True, text=True, timeout=90,
-            )
-            if r.returncode != 0:
-                last_err = r.stderr.strip().splitlines()[-1] if r.stderr else "unknown"
-                continue
-            # Find the downloaded file (gallery-dl nests it under instagram/<user>/<id>.ext)
-            for root, _, files in os.walk(tmp):
-                for f in sorted(files):
-                    if f.startswith("."):
-                        continue
-                    p = os.path.join(root, f)
-                    if os.path.getsize(p) > 500:
-                        ext = f.lower().rsplit(".", 1)[-1]
-                        kind = "video" if ext in ("mp4", "mov", "webm", "m4v") else "image"
-                        return p, kind
-        except Exception as e:
-            last_err = str(e)
-            continue
-    raise RuntimeError(f"gallery-dl: no browser had usable Instagram cookies ({last_err})")
-
-
-def _ig_download_snapinsta(url: str, work_dir: str) -> tuple:
-    """
-    Method 2: Drive https://snapinsta.to/en2 in Playwright. Snapinsta is
-    protected by Cloudflare Turnstile in "invisible" mode — the widget loads
-    when the user clicks Download and silently fails in pure-headless mode
-    (Cloudflare's risk engine flags the headless fingerprint and never issues
-    a token, causing the form submit to hang). The only reliable fix is
-    `headless=False`, which launches a real Chromium window. We position it
-    off-screen so it doesn't visually interrupt the user's workflow on
-    macOS/Linux multi-monitor setups. The full call takes ~12s.
-
-    Returns 1080×1920 original. No Instagram login required.
-    """
+    frames = extract_frames(raw_path, work_dir)
     try:
-        from playwright.sync_api import sync_playwright  # noqa: F401
-    except ImportError as e:
-        raise RuntimeError(f"playwright not installed: {e}")
+        os.remove(raw_path)
+    except OSError:
+        pass
 
-    from playwright.sync_api import sync_playwright
-    ua = ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-          "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
-
-    media_url = None
-    with sync_playwright() as p:
-        # headless=False is REQUIRED — Cloudflare Turnstile refuses to issue a
-        # token under pure headless. Off-screen positioning + small window
-        # keeps it invisible on most setups.
-        browser = p.chromium.launch(
-            headless=False,
-            args=[
-                "--disable-blink-features=AutomationControlled",
-                "--window-position=-3000,-3000",
-                "--window-size=1366,768",
-            ],
-        )
-        try:
-            ctx = browser.new_context(user_agent=ua, viewport={"width": 1366, "height": 768})
-            ctx.add_init_script(
-                "Object.defineProperty(navigator,'webdriver',{get:()=>undefined});"
-            )
-            page = ctx.new_page()
-            page.goto("https://snapinsta.to/en2", timeout=30000, wait_until="domcontentloaded")
-            input_sel = 'input[placeholder*="URL"], input[name="url"], input[type="text"]'
-            page.wait_for_selector(input_sel, timeout=15000)
-            page.fill(input_sel, url)
-            page.click('button:has-text("Download")')
-            sel = ('a:has-text("Download Photo"), a:has-text("Download Video"), '
-                   'a[download]:has(svg), a[href*="snapinsta.to"][download]')
-            page.wait_for_selector(sel, timeout=30000, state="attached")
-            media_url = page.locator(sel).first.get_attribute("href")
-        finally:
-            browser.close()
-
-    if not media_url:
-        raise RuntimeError("snapinsta: no media href found in result panel")
-
-    # Detect type from URL
-    lc = media_url.lower().split("?", 1)[0]
-    is_video = lc.endswith((".mp4", ".mov", ".webm")) or "video" in lc
-    ext = "mp4" if is_video else "jpg"
-    dest = os.path.join(work_dir, f"_snapinsta.{ext}")
-
-    req = urllib.request.Request(media_url, headers={
-        "User-Agent": ua,
-        "Referer": "https://snapinsta.to/",
-    })
-    with urllib.request.urlopen(req, timeout=120) as r, open(dest, "wb") as f:
-        f.write(r.read())
-
-    return dest, ("video" if is_video else "image")
-
-
-def _ig_download_og(url: str, work_dir: str, og=None) -> tuple:
-    """
-    Method 3: og:image / og:video via facebookexternalhit User-Agent. Always
-    works, no login, no cookies — but Instagram only serves the 640×640
-    center crop here. Use as the final fallback.
-    """
-    if og is None:
-        og = fetch_instagram_og(url)
-    img_url = og.get("image_url")
-    vid_url = og.get("video_url")
-    ua = "facebookexternalhit/1.1"
-
-    if vid_url:
-        dest = os.path.join(work_dir, "_og.mp4")
-        req = urllib.request.Request(vid_url, headers={"User-Agent": ua})
-        with urllib.request.urlopen(req, timeout=60) as r, open(dest, "wb") as f:
-            f.write(r.read())
-        return dest, "video"
-    if img_url:
-        dest = os.path.join(work_dir, "_og.jpg")
-        req = urllib.request.Request(img_url, headers={"User-Agent": ua})
-        with urllib.request.urlopen(req, timeout=30) as r, open(dest, "wb") as f:
-            f.write(r.read())
-        return dest, "image"
-    raise RuntimeError("og: no og:image or og:video on the post")
-
-
-def download_instagram_media(url: str, work_dir: str) -> dict:
-    """
-    Robust Instagram media downloader with 3-method fallback chain. Always
-    fetches OG metadata (caption, username) first since it's cheap and
-    populates the snapshot fields the classifier needs.
-
-    Chain order:
-      1. gallery-dl --cookies-from-browser   → 1080p, needs IG login somewhere
-      2. snapinsta.to via Playwright          → 1080p, no auth, but slower (~10s)
-      3. og:image via facebookexternalhit     → 640×640 crop, always works
-
-    Returns:
-      {
-        "frames":   [list of jpg paths in work_dir],
-        "duration": float seconds (0 for photos),
-        "metadata": {page_name, body_text, title, cta_text, link_url},
-        "via":      "gallery-dl" | "snapinsta" | "og",
-        "is_video": bool,
-      }
-
-    Raises RuntimeError only if all 3 methods fail (rare — method 3 is ~100%).
-    """
-    os.makedirs(work_dir, exist_ok=True)
-
-    # Always fetch OG metadata first — fast, gives caption + username regardless
-    # of which media-download method wins.
-    try:
-        og = fetch_instagram_og(url)
-    except Exception:
-        og = {}
-
-    raw_path = None
-    raw_kind = None
-    via = None
-    errors = []
-
-    for name, fn in (
-        ("gallery-dl", lambda: _ig_download_gallery_dl(url, work_dir)),
-        ("snapinsta",  lambda: _ig_download_snapinsta(url, work_dir)),
-        ("og",         lambda: _ig_download_og(url, work_dir, og)),
-    ):
-        try:
-            raw_path, raw_kind = fn()
-            if raw_path and os.path.exists(raw_path) and os.path.getsize(raw_path) > 500:
-                via = name
-                break
-            raw_path = None
-        except Exception as e:
-            errors.append(f"{name}: {e}")
-            raw_path = None
-            continue
-
-    if not raw_path:
-        raise RuntimeError("Instagram download failed: " + " | ".join(errors))
-
-    # Normalize to frame list
-    duration = 0.0
-    if raw_kind == "video":
-        duration = _ig_get_duration(raw_path)
-        # extract_frames lives later in this module; forward-reference is fine
-        # since this function is only called from outside after the module loads.
-        frames = extract_frames(raw_path, work_dir)
-        try:
-            os.remove(raw_path)
-        except OSError:
-            pass
-    else:
-        frame = os.path.join(work_dir, "frame_001.jpg")
-        if os.path.abspath(raw_path) != os.path.abspath(frame):
-            shutil.move(raw_path, frame)
-        frames = [frame]
-
-    # Clean up gallery-dl's nested temp dir if it was used
-    gd_tmp = os.path.join(work_dir, "_gd")
-    if os.path.isdir(gd_tmp):
-        try:
-            shutil.rmtree(gd_tmp)
-        except OSError:
-            pass
-
+    author = meta.get("author") or {}
+    page_name = author.get("unique_id") or author.get("nickname") or ""
     return {
-        "frames":   frames,
+        "frames": frames,
         "duration": round(duration, 1),
         "metadata": {
-            "page_name": og.get("page_name", "") or "",
-            "body_text": og.get("caption", "") or "",
-            "title":     "",
-            "cta_text":  "",
-            "link_url":  url,
+            "page_name": page_name,
+            "body_text": meta.get("title") or meta.get("desc") or "",
+            "title": meta.get("title") or "",
+            "cta_text": "",
+            "link_url": url,
         },
-        "via":      via,
-        "is_video": raw_kind == "video",
+        "via": via,
+        "is_video": True,
     }
 
 

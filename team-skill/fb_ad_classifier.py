@@ -136,6 +136,154 @@ def _tiktok_download_ytdlp(url: str, work_dir: str, cookies: bool) -> str:
     raise RuntimeError("yt-dlp finished but no TikTok video file was written")
 
 
+def _tiktok_download_creative_center(url: str, work_dir: str) -> tuple[str, dict]:
+    """
+    Resolve and download a TikTok Creative Center / Top Ads page.
+
+    URL shape: https://ads.tiktok.com/business/creativecenter/topads/<material_id>
+
+    tikwm + yt-dlp don't support this path. The page is a Next.js SSR app and
+    embeds the (watermarked) signed CDN MP4 URL inside <script id="__NEXT_DATA__">.
+
+    Networks that DNS-poison *.tiktok.com (e.g. Jio in India) still let TCP+TLS
+    through to Akamai edge IPs once we bypass DNS via curl --resolve. SNI DPI is
+    inconsistent — we try multiple edges and the first non-reset wins.
+
+    Steps:
+      1. Resolve ads.tiktok.com via public DNS (1.1.1.1 / 8.8.8.8 / 9.9.9.9).
+      2. curl --resolve <each-edge>:443:<ip> until one returns the SSR HTML.
+      3. Parse __NEXT_DATA__ → props.pageProps.data.baseDetail.videoInfo.videoUrl.
+      4. Resolve the CDN host the same way and download the .mp4.
+    """
+    import socket
+    m = re.search(r"/creativecenter/topads/(\d+)", url)
+    if not m:
+        raise RuntimeError("creative-center: no material_id in URL")
+    material_id = m.group(1)
+
+    def _public_dns(host: str) -> list:
+        """Return distinct A records via 1.1.1.1/8.8.8.8/9.9.9.9. Falls back to socket."""
+        ips = []
+        seen = set()
+        for resolver in ("1.1.1.1", "8.8.8.8", "9.9.9.9"):
+            try:
+                r = subprocess.run(
+                    ["dig", "+short", "+time=3", "+tries=1", f"@{resolver}", host],
+                    capture_output=True, text=True, timeout=6,
+                )
+                for line in r.stdout.split():
+                    line = line.strip()
+                    if re.match(r"^\d+\.\d+\.\d+\.\d+$", line) and line not in seen:
+                        ips.append(line); seen.add(line)
+            except Exception:
+                pass
+        if not ips:
+            try:
+                ips = [socket.gethostbyname(host)]
+            except Exception:
+                pass
+        return ips
+
+    def _curl_resolve(target_url: str, host: str, ip: str, dest: str = "", connect_timeout: int = 6, max_time: int = 30) -> tuple:
+        cmd = [
+            "curl", "--connect-timeout", str(connect_timeout),
+            "--max-time", str(max_time),
+            "-sS", "-L",
+            "--resolve", f"{host}:443:{ip}",
+            "-A", USER_AGENT,
+            "-H", "Accept-Language: en-US,en;q=0.9",
+            "-H", f"Referer: https://{host}/",
+        ]
+        if dest:
+            cmd += ["-o", dest]
+        cmd.append(target_url)
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=max_time + 5)
+        return r.returncode, (r.stdout if not dest else ""), r.stderr
+
+    ads_ips = _public_dns("ads.tiktok.com")
+    if not ads_ips:
+        raise RuntimeError("creative-center: could not resolve ads.tiktok.com via public DNS")
+
+    html = ""
+    last_err = ""
+    for ip in ads_ips:
+        for attempt in range(2):
+            rc, body, err = _curl_resolve(url, "ads.tiktok.com", ip, max_time=25)
+            if rc == 0 and "__NEXT_DATA__" in body and "videoInfo" in body:
+                html = body
+                break
+            last_err = err.strip().splitlines()[-1] if err else f"rc={rc}"
+        if html:
+            break
+    if not html:
+        raise RuntimeError(f"creative-center: SSR fetch failed across {len(ads_ips)} edge IPs ({last_err})")
+
+    nd = re.search(r'<script[^>]*id="__NEXT_DATA__"[^>]*>(.*?)</script>', html, re.DOTALL)
+    if not nd:
+        raise RuntimeError("creative-center: __NEXT_DATA__ script not found in SSR HTML")
+    try:
+        data = json.loads(nd.group(1))
+        bd = data["props"]["pageProps"]["data"]["baseDetail"]
+        vi = bd["videoInfo"]
+        video_urls = vi.get("videoUrl") or {}
+        mp4_url = video_urls.get("720P") or video_urls.get("540P") or (next(iter(video_urls.values())) if video_urls else "")
+        if not mp4_url:
+            raise KeyError("videoUrl empty")
+    except (KeyError, ValueError, TypeError) as e:
+        raise RuntimeError(f"creative-center: failed to extract videoUrl from __NEXT_DATA__: {e}")
+
+    cdn_host = re.match(r"https?://([^/]+)/", mp4_url)
+    if not cdn_host:
+        raise RuntimeError(f"creative-center: cannot parse host from CDN URL")
+    cdn_host = cdn_host.group(1)
+
+    dest = os.path.join(work_dir, "_creative_center.mp4")
+    cdn_ips = _public_dns(cdn_host)
+    if not cdn_ips:
+        # CDN host might resolve cleanly via system DNS (no sinkhole on CDN); try direct.
+        _download_url(mp4_url, dest, referer="https://ads.tiktok.com/")
+    else:
+        downloaded = False
+        cdn_err = ""
+        for ip in cdn_ips:
+            rc, _, err = _curl_resolve(mp4_url, cdn_host, ip, dest=dest, connect_timeout=5, max_time=90)
+            size = os.path.getsize(dest) if os.path.exists(dest) else 0
+            if rc == 0 and size > 100_000:
+                downloaded = True
+                break
+            cdn_err = err.strip().splitlines()[-1] if err else f"rc={rc} size={size}"
+        if not downloaded:
+            raise RuntimeError(f"creative-center: CDN download failed across {len(cdn_ips)} IPs ({cdn_err})")
+
+    if os.path.getsize(dest) <= 1000:
+        raise RuntimeError("creative-center: downloaded empty MP4")
+
+    # Build tikwm-shaped meta so the rest of download_tiktok_media works unchanged.
+    meta = {
+        "id": material_id,
+        "title": bd.get("adTitle") or "",
+        "desc": bd.get("adTitle") or "",
+        "duration": int(vi.get("duration") or 0),
+        "author": {
+            "unique_id": bd.get("brandName") or "",
+            "nickname": bd.get("brandName") or "",
+        },
+        "_creative_center": {
+            "material_id": material_id,
+            "industry_key": bd.get("industryKey"),
+            "objective_key": bd.get("objectiveKey"),
+            "country_codes": bd.get("countryCode"),
+            "landing_page": bd.get("landingPage"),
+            "ctr": bd.get("ctr"),
+            "like": bd.get("like"),
+            "share": bd.get("share"),
+            "keyword_list": bd.get("keywordList"),
+            "watermarked": True,
+        },
+    }
+    return dest, meta
+
+
 def _tiktok_download_tikwm(url: str, work_dir: str) -> tuple[str, dict]:
     api = "https://www.tikwm.com/api/?" + urllib.parse.urlencode({"url": url})
     req = urllib.request.Request(api, headers={"User-Agent": USER_AGENT})
@@ -160,7 +308,10 @@ def download_tiktok_media(url: str, work_dir: str) -> dict:
     unreliable for TikTok because the web UI blocks automation/login popups.
 
     Chain order:
-      1. tikwm public resolver API direct mp4
+      0. ads.tiktok.com/business/creativecenter/topads/<id> → SSR __NEXT_DATA__ +
+         Akamai-edge --resolve (the only path that works for Creative Center URLs;
+         tikwm/yt-dlp don't support that route)
+      1. tikwm public resolver API direct mp4 (regular tiktok.com/@user/video/<id>)
       2. yt-dlp without cookies
       3. yt-dlp with Chrome cookies
     """
@@ -170,11 +321,20 @@ def download_tiktok_media(url: str, work_dir: str) -> dict:
     via = ""
     meta = {}
 
-    for name, fn in (
-        ("tikwm", lambda: _tiktok_download_tikwm(url, work_dir)),
-        ("yt-dlp", lambda: (_tiktok_download_ytdlp(url, work_dir, False), {})),
-        ("yt-dlp-cookies", lambda: (_tiktok_download_ytdlp(url, work_dir, True), {})),
-    ):
+    is_creative_center = "ads.tiktok.com/business/creativecenter/topads" in url
+
+    if is_creative_center:
+        chain = (
+            ("creative-center", lambda: _tiktok_download_creative_center(url, work_dir)),
+        )
+    else:
+        chain = (
+            ("tikwm", lambda: _tiktok_download_tikwm(url, work_dir)),
+            ("yt-dlp", lambda: (_tiktok_download_ytdlp(url, work_dir, False), {})),
+            ("yt-dlp-cookies", lambda: (_tiktok_download_ytdlp(url, work_dir, True), {})),
+        )
+
+    for name, fn in chain:
         try:
             raw_path, meta = fn()
             via = name

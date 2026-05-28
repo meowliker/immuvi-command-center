@@ -3405,6 +3405,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .ap-bulk-btn.danger  { background:rgba(220,38,38,0.18); border-color:rgba(220,38,38,0.45); color:#fecaca; }
 .ap-bulk-btn.ghost   { background:transparent; }
 .ap-bulk-btn:hover   { transform:translateY(-1px); }
+.ap-bulk-btn:disabled { opacity:0.45; cursor:not-allowed; transform:none; }
 
 /* ════════════════════════════════════════════════════════════════
    ACTION PLAN — PREMIUM FILTER STRIP (v2 overlay)
@@ -11832,6 +11833,7 @@ function _initRealtimeChannel(productId) {
     for (var i = 0; i < MANUAL_ACTIONS.length; i++) {
       if (MANUAL_ACTIONS[i].id === p.actionId) {
         MANUAL_ACTIONS[i]._clickupId = p.newClickupId;
+        MANUAL_ACTIONS[i].clickupTaskId = p.newClickupId;
         MANUAL_ACTIONS[i]._clickupUrl = 'https://app.clickup.com/t/' + p.newClickupId;
         MANUAL_ACTIONS[i]._clickupTaskDeleted = false;
         break;
@@ -12278,9 +12280,11 @@ var _META_FIELDS = [
   '_sourceInspirationBriefUrl', '_sourceInspoAdUrl',
   '_sourceFormatName', '_sourceFormatAdLink', '_sourceFormatAdType',
   '_fromAction', '_productionStatus', '_crossProductUses',
+  'listId', 'listName', 'clickupListId', 'clickupListName',
   'hookType', 'creativeStructure', 'productionStyle', 'creativeHypothesis',
   'uniqueName', 'description', 'dueDate',
   'dateCreated', 'taskName',
+  'storeId', 'productProfileId', 'oneScaleStoreName', 'oneScaleProductName',
   'variationChanges', 'variationAssignee', 'parentTaskName',
   'briefUrl',
   // ClickUp custom-field maps (Editor/Reviewer/Approved Date/Hook Type/etc.)
@@ -13774,6 +13778,235 @@ const CFG = {
 };
 
 // === CONSTANTS ===
+const ONESCALE_LAUNCH_BASE_URL = 'http://localhost:3000/creative-hub/launch';
+const ONESCALE_LAUNCH_CALLBACK_URL = 'https://immuvi-command-center.vercel.app/api/onescale-launch-callback';
+const ONESCALE_PRODUCT_MAPPINGS = [
+  {
+    clickupListId: '901613404413',
+    clickupListName: 'Yoga Notes India',
+    storeName: 'Naiva',
+    storeId: 'store-b1d6fbbb0af4',
+    productName: '1000+ Free Notes: Complete Yoga Blueprint 2026',
+    productProfileId: '6b763365-6a4f-4c49-ab8b-30010679af3c'
+  }
+];
+
+function getOneScaleLaunchBaseUrl() {
+  try {
+    if (typeof window !== 'undefined' && window.ONESCALE_LAUNCH_BASE_URL) {
+      return window.ONESCALE_LAUNCH_BASE_URL;
+    }
+  } catch (e) {}
+
+  try {
+    if (typeof localStorage !== 'undefined') {
+      var storedUrl = localStorage.getItem('onescale_launch_base_url');
+      if (storedUrl) return storedUrl;
+    }
+  } catch (e) {}
+
+  return 'https://one-scale-git-dev-anay-meow-likers-projects.vercel.app/creative-hub/launch';
+}
+
+function _oneScaleFirstValue() {
+  for (var i = 0; i < arguments.length; i++) {
+    var value = arguments[i];
+    if (value !== undefined && value !== null && String(value).trim() !== '') return value;
+  }
+  return '';
+}
+
+function _oneScaleTaskListId(task, sourceAd) {
+  var activeProduct = (typeof getActiveProduct === 'function') ? getActiveProduct() : null;
+  return _oneScaleFirstValue(
+    task && task.listId,
+    task && task.clickupListId,
+    sourceAd && sourceAd.listId,
+    sourceAd && sourceAd.clickupListId,
+    activeProduct && activeProduct.clickupListId
+  );
+}
+
+function _oneScaleTaskListName(task, sourceAd) {
+  var activeProduct = (typeof getActiveProduct === 'function') ? getActiveProduct() : null;
+  return _oneScaleFirstValue(
+    task && task.listName,
+    task && task.clickupListName,
+    sourceAd && sourceAd.listName,
+    sourceAd && sourceAd.clickupListName,
+    activeProduct && activeProduct.clickupListName
+  );
+}
+
+function _oneScaleMappingForTask(task, sourceAd) {
+  var listId = String(_oneScaleTaskListId(task, sourceAd) || '');
+  var listName = String(_oneScaleTaskListName(task, sourceAd) || '');
+  var mappings = (typeof ONESCALE_PRODUCT_MAPPINGS !== 'undefined' && Array.isArray(ONESCALE_PRODUCT_MAPPINGS))
+    ? ONESCALE_PRODUCT_MAPPINGS
+    : [];
+  for (var i = 0; i < mappings.length; i++) {
+    var mapping = mappings[i];
+    if (listId && String(mapping.clickupListId || '') === listId) return mapping;
+  }
+  for (var j = 0; j < mappings.length; j++) {
+    var fallback = mappings[j];
+    if (listName && String(fallback.clickupListName || '') === listName) return fallback;
+  }
+  return null;
+}
+
+function _oneScaleLaunchTaskFields(task, sourceAd, visibleTaskName) {
+  task = task || {};
+  sourceAd = sourceAd || {};
+  var mapping = _oneScaleMappingForTask(task, sourceAd);
+  var canUseSourceClickup = !!(task._virtual || task._origin === 'adopted' || (task.id && String(task.id).indexOf('va:') === 0));
+  var clickupTaskId = _oneScaleFirstValue(
+    task.clickupTaskId,
+    task._clickupId,
+    canUseSourceClickup ? sourceAd.clickupTaskId : '',
+    canUseSourceClickup ? sourceAd._clickupId : ''
+  );
+  return {
+    taskName: _oneScaleFirstValue(task.taskName, sourceAd.taskName, visibleTaskName, task.title, sourceAd.formatName, task.id, sourceAd.id),
+    clickupTaskId: clickupTaskId,
+    storeId: _oneScaleFirstValue(task.storeId, sourceAd.storeId, task.oneScaleStoreId, sourceAd.oneScaleStoreId, task._oneScaleStoreId, sourceAd._oneScaleStoreId, mapping && mapping.storeId),
+    productProfileId: _oneScaleFirstValue(task.productProfileId, sourceAd.productProfileId, task.oneScaleProductProfileId, sourceAd.oneScaleProductProfileId, task._oneScaleProductProfileId, sourceAd._oneScaleProductProfileId, mapping && mapping.productProfileId),
+    oneScaleStoreName: _oneScaleFirstValue(task.oneScaleStoreName, sourceAd.oneScaleStoreName, mapping && mapping.storeName),
+    oneScaleProductName: _oneScaleFirstValue(task.oneScaleProductName, sourceAd.oneScaleProductName, mapping && mapping.productName),
+    oneScaleMappingMissing: !mapping
+  };
+}
+
+function _oneScaleEnsureLaunchTaskFields(task, sourceAd, visibleTaskName) {
+  if (!task) return _oneScaleLaunchTaskFields(null, sourceAd, visibleTaskName);
+  var fields = _oneScaleLaunchTaskFields(task, sourceAd, visibleTaskName);
+  task.taskName = fields.taskName;
+  task.clickupTaskId = fields.clickupTaskId;
+  task.storeId = fields.storeId;
+  task.productProfileId = fields.productProfileId;
+  task.oneScaleStoreName = fields.oneScaleStoreName;
+  task.oneScaleProductName = fields.oneScaleProductName;
+  task.oneScaleMappingMissing = fields.oneScaleMappingMissing;
+  return fields;
+}
+
+function validateOneScaleLaunchTasks(tasks) {
+  tasks = Array.isArray(tasks) ? tasks : [];
+  if (!tasks.length) {
+    return { ok: false, error: 'Select at least one ready-to-launch task.' };
+  }
+
+  var clickupTaskIds = [];
+  var storeIds = {};
+  var productProfileIds = {};
+  var missing = [];
+
+  tasks.forEach(function (task) {
+    task = task || {};
+    if (task.oneScaleMappingMissing) {
+      missing.push('Missing OneScale product mapping');
+      return;
+    }
+    if (!task.storeId) {
+      missing.push('This task is not mapped to a OneScale store yet.');
+    }
+    if (!task.productProfileId) {
+      missing.push('This task is not mapped to a OneScale product yet.');
+    }
+    if (!task.clickupTaskId) {
+      missing.push('This task does not have the real ClickUp task id. Do not use the task name.');
+    }
+    if (!task.clickupTaskId || !task.storeId || !task.productProfileId) {
+      return;
+    }
+    clickupTaskIds.push(task.clickupTaskId);
+    storeIds[task.storeId] = true;
+    productProfileIds[task.productProfileId] = true;
+  });
+
+  if (missing.length) {
+    return {
+      ok: false,
+      error: missing.filter(function (message, index, list) {
+        return list.indexOf(message) === index;
+      }).join('\n')
+    };
+  }
+
+  var storeKeys = Object.keys(storeIds);
+  if (storeKeys.length > 1) {
+    return { ok: false, error: 'Selected tasks belong to different stores. Launch one store at a time.' };
+  }
+
+  var productProfileKeys = Object.keys(productProfileIds);
+  if (productProfileKeys.length > 1) {
+    return { ok: false, error: 'Selected tasks belong to different products. Launch one product at a time.' };
+  }
+
+  return {
+    ok: true,
+    storeId: storeKeys[0],
+    productProfileId: productProfileKeys[0],
+    clickupTaskIds: clickupTaskIds
+  };
+}
+
+function buildOneScaleLaunchUrl(validation, callbackUrl) {
+  validation = validation || {};
+  var baseUrl = (typeof getOneScaleLaunchBaseUrl === 'function')
+    ? getOneScaleLaunchBaseUrl()
+    : 'https://one-scale-git-dev-anay-meow-likers-projects.vercel.app/creative-hub/launch';
+  var clickupTaskIds = validation.clickupTaskIds || [];
+  try {
+    var u = new URL(baseUrl, window.location.href);
+    u.searchParams.set('storeId', validation.storeId);
+    u.searchParams.set('productProfileId', validation.productProfileId);
+    u.searchParams.set('clickupTaskIds', clickupTaskIds.join(','));
+    u.searchParams.set('source', 'immuvi');
+    u.searchParams.set('returnUrl', window.location.href);
+    if (callbackUrl) u.searchParams.set('callbackUrl', callbackUrl);
+    return u.toString();
+  } catch (e) {
+    var sep = baseUrl.indexOf('?') === -1 ? '?' : '&';
+    var params = new URLSearchParams();
+    params.set('storeId', validation.storeId || '');
+    params.set('productProfileId', validation.productProfileId || '');
+    params.set('clickupTaskIds', clickupTaskIds.join(','));
+    params.set('source', 'immuvi');
+    params.set('returnUrl', window.location.href);
+    if (callbackUrl) params.set('callbackUrl', callbackUrl);
+    return baseUrl + sep + params.toString();
+  }
+}
+
+function launchOneScaleTasks(tasks) {
+  var validation = validateOneScaleLaunchTasks(tasks);
+  if (!validation.ok) {
+    alert(validation.error || 'Cannot launch selected tasks.');
+    return false;
+  }
+  var callbackUrl = (typeof ONESCALE_LAUNCH_CALLBACK_URL !== 'undefined') ? ONESCALE_LAUNCH_CALLBACK_URL : '';
+  var url = buildOneScaleLaunchUrl(validation, callbackUrl);
+  console.log('[OneScale Launch]', url);
+  window.open(url, '_blank', 'noopener');
+  return true;
+}
+
+function launchOneScaleTask(task) {
+  return launchOneScaleTasks(task ? [task] : []);
+}
+
+function oneScaleLaunchMissingMapping(task) {
+  task = task || {};
+  return !!task.oneScaleMappingMissing || !task.storeId || !task.productProfileId || !task.clickupTaskId;
+}
+
+function oneScaleLaunchDisabledAttrs(task) {
+  if (!oneScaleLaunchMissingMapping(task)) return '';
+  var validation = validateOneScaleLaunchTasks(task ? [task] : []);
+  return ' disabled title="' + escAttr((validation && validation.error) || 'Missing OneScale launch mapping') + '"';
+}
+
 let STATUSES = ['Untested', 'Approved', 'In Production', 'Ready to Launch', 'Testing', 'Mild Winner', 'Winner', 'Loser', 'Scale', 'Complete'];
 const CREATIVE_STRUCTURES = ['UGC', 'Testimonial', 'Demo', 'Tutorial / How-To', 'Story / Narrative', 'Hook + Offer', 'Listicle', 'Static / Photo', 'Comparison', 'Interview', 'Skit / Roleplay', 'AI / Voiceover'];
 const CREATIVE_STRUCTURE_DESC = {
@@ -16134,12 +16367,17 @@ function createActionFromMatrix(adId, angleName, personaName, btnEl, _opts) {
     description: cellMeta.description || '',
     adId: adId,
     adLink: ad.adLink || '',
+    taskName: cellMeta.taskName || ad.taskName || cellMeta.uniqueName || ad.formatName || '',
+    clickupTaskId: null,
+    storeId: cellMeta.storeId || ad.storeId || '',
+    productProfileId: cellMeta.productProfileId || ad.productProfileId || '',
     _clickupId: null,
     liveStatus: ad.status || 'Untested',  // inherit status already set in the matrix
     sourceAdId: adId,
     sourceAngle: angleName,
     sourcePersona: personaName
   };
+  _oneScaleEnsureLaunchTaskFields(newAction, ad, newAction.title);
   // Stamp creation metadata for v2 (used by pulse strip + age computation).
   newAction._pushedAt = Date.now();
   newAction._pushedBy = (typeof CFG !== 'undefined' && CFG.userLabel) || (typeof _myClientId !== 'undefined' ? _myClientId : '');
@@ -16288,6 +16526,10 @@ function createVariationAction(varId, angleName, personaName) {
     description: varDesc,
     adId: varId,
     adLink: varAd.adLink || '',
+    taskName: varAd.taskName || varAd.uniqueName || varAd.formatName || (varId + ' variation'),
+    clickupTaskId: null,
+    storeId: varAd.storeId || '',
+    productProfileId: varAd.productProfileId || '',
     _clickupId: null,
     liveStatus: varAd.status || 'Untested',  // inherit status from matrix
     sourceAdId: varId,
@@ -16297,6 +16539,7 @@ function createVariationAction(varId, angleName, personaName) {
     parentTaskName: varAd.parentTaskName || null,
     _pushedAt: Date.now()
   };
+  _oneScaleEnsureLaunchTaskFields(newAction, varAd, newAction.title);
   MANUAL_ACTIONS.push(newAction);
   try { apBroadcastActionAdded(newAction, 'pushed'); } catch (e) {}
   genActions();
@@ -19766,8 +20009,9 @@ var _AP_COL_REGISTRY = {
       var cuHtml = '';
       if (act._clickupTaskDeleted) {
         cuHtml = '<button class="ap-cu-btn warn" onclick="event.stopPropagation();recreateClickUpTask(\'' + escAttr(act.id) + '\')">↻ Recreate</button>';
-      } else if (act._clickupId) {
-        cuHtml = '<a class="ap-cu-link" href="https://app.clickup.com/t/' + escAttr(act._clickupId) + '" target="_blank" rel="noopener" onclick="event.stopPropagation()">↗ ClickUp</a>';
+      } else if (act.clickupTaskId || act._clickupId) {
+        var clickupTaskId = act.clickupTaskId || act._clickupId;
+        cuHtml = '<a class="ap-cu-link" href="https://app.clickup.com/t/' + escAttr(clickupTaskId) + '" target="_blank" rel="noopener" onclick="event.stopPropagation()">↗ ClickUp</a>';
       } else if (act._cu_creating) {
         cuHtml = '<button class="ap-cu-btn loading" disabled>Creating…</button>';
       } else {
@@ -21973,17 +22217,23 @@ function setApFilterWeek(metric)  { _apTogglePulseCell('week',  metric); }
 function renderApBulkToolbar() {
   var n = Object.keys(_apState.selected).length;
   var inflight = _apState.bulkPushInFlight;
-  var visible = n > 0 || inflight;
-  if (!visible) return '<div class="ap-bulk hide"></div>';
+  var readyRows = [];
+  try { readyRows = _apSelectedReadyToLaunchCards(); } catch (e) {}
+  var disabledReason = _apBulkLaunchDisabledReason(readyRows);
+  var launchDisabled = !!disabledReason || inflight;
+  var launchTitle = inflight ? 'Bulk push is running.' : (disabledReason || 'Launch selected ready-to-launch tasks in OneScale');
   var html = '<div class="ap-bulk">';
   if (inflight) {
     html += '<span class="ap-bulk-progress">Pushing ' + _apState.bulkPushDone + ' / ' + _apState.bulkPushTotal + '…</span>';
   } else {
     html += '<span class="ap-bulk-count"><b>' + n + '</b> selected</span>';
-    html += '<button class="ap-bulk-btn primary" onclick="apBulkPushToClickUp()">+ Push to ClickUp</button>';
-    html += '<button class="ap-bulk-btn" onclick="apBulkOpenStatusMenu(event)">Change status ▾</button>';
-    html += '<button class="ap-bulk-btn danger" onclick="apBulkDelete()">Delete</button>';
-    html += '<button class="ap-bulk-btn ghost" onclick="apClearSelection()">Cancel</button>';
+    html += '<button class="ap-bulk-btn primary" ' + (launchDisabled ? 'disabled ' : '') + 'title="' + escAttr(launchTitle) + '" onclick="apBulkLaunchOneScale()">Launch Selected in OneScale</button>';
+    if (n > 0) {
+      html += '<button class="ap-bulk-btn primary" onclick="apBulkPushToClickUp()">+ Push to ClickUp</button>';
+      html += '<button class="ap-bulk-btn" onclick="apBulkOpenStatusMenu(event)">Change status ▾</button>';
+      html += '<button class="ap-bulk-btn danger" onclick="apBulkDelete()">Delete</button>';
+      html += '<button class="ap-bulk-btn ghost" onclick="apClearSelection()">Cancel</button>';
+    }
   }
   html += '</div>';
   return html;
@@ -21997,6 +22247,54 @@ function apToggleSelectAll(rows, on) {
   renderActionPlan();
 }
 function apClearSelection() { _apState.selected = {}; renderActionPlan(); }
+
+function _apSelectedReadyToLaunchCards() {
+  var selected = (_apState && _apState.selected) || {};
+  var rows = (typeof apResolveAllCards === 'function') ? apResolveAllCards() : [];
+  return rows.filter(function (r) {
+    if (!r || !r.act || !selected[r.act.id]) return false;
+    return String((r.display && r.display.status) || '').trim().toLowerCase() === 'ready to launch';
+  });
+}
+
+function _apReadyLaunchTasksFromCards(rows) {
+  rows = rows || [];
+  return rows.map(function (r) {
+    var fields = r.launch || {};
+    if ((!fields.taskName || !fields.clickupTaskId || !fields.storeId || !fields.productProfileId) &&
+        typeof _oneScaleLaunchTaskFields === 'function') {
+      fields = _oneScaleLaunchTaskFields(r.act, r.ad, r.display && r.display.title);
+    }
+    return {
+      taskName: fields.taskName || (r.display && r.display.title) || (r.act && r.act.title) || (r.act && r.act.id) || 'Task',
+      clickupTaskId: fields.clickupTaskId || '',
+      storeId: fields.storeId || '',
+      productProfileId: fields.productProfileId || '',
+      oneScaleStoreName: fields.oneScaleStoreName || '',
+      oneScaleProductName: fields.oneScaleProductName || '',
+      oneScaleMappingMissing: !!fields.oneScaleMappingMissing
+    };
+  });
+}
+
+function _apBulkLaunchDisabledReason(readyRows) {
+  if (!readyRows || !readyRows.length) return 'Select at least one ready-to-launch task.';
+  var validation = validateOneScaleLaunchTasks(_apReadyLaunchTasksFromCards(readyRows));
+  return validation.ok ? '' : (validation.error || 'Missing OneScale launch mapping');
+}
+
+function apBulkLaunchOneScale() {
+  var selectedCount = Object.keys((_apState && _apState.selected) || {}).length;
+  if (!selectedCount) {
+    var emptyValidation = validateOneScaleLaunchTasks([]);
+    alert(emptyValidation.error || 'Select at least one ready-to-launch task.');
+    return;
+  }
+
+  var rows = _apSelectedReadyToLaunchCards();
+  var tasks = _apReadyLaunchTasksFromCards(rows);
+  launchOneScaleTasks(tasks);
+}
 
 function apBulkDelete() {
   var ids = Object.keys(_apState.selected);
@@ -23274,12 +23572,17 @@ function addRecToplan(recId) {
     description: '',
     adId: null,
     adLink: '',
+    taskName: rec.title || '',
+    clickupTaskId: null,
+    storeId: rec.storeId || '',
+    productProfileId: rec.productProfileId || '',
     _clickupId: null,
     liveStatus: 'Untested',
     sourceAdId: null,
     sourceAngle: rec.angle,
     sourcePersona: rec.persona
   };
+  _oneScaleEnsureLaunchTaskFields(newAction, null, newAction.title);
   MANUAL_ACTIONS.push(newAction);
   genActions();
   rebuildProdFromManual();
@@ -25315,8 +25618,10 @@ function recreateClickUpTask(actionId) {
       // ── Scenario A: task found — re-link ──
       var newId = foundTask.id;
       act._clickupId = newId;
+      act.clickupTaskId = newId;
       act._clickupUrl = 'https://app.clickup.com/t/' + newId;
       act._clickupTaskDeleted = false;
+      _oneScaleEnsureLaunchTaskFields(act, sourceAd, act.title);
 
       if (sourceAd) {
         sourceAd._clickupId = newId;
@@ -25341,6 +25646,7 @@ function recreateClickUpTask(actionId) {
     } else {
       // ── Scenario B: task not found — clear stale link + create fresh ──
       act._clickupId = null;
+      act.clickupTaskId = null;
       act._clickupUrl = null;
       act._clickupTaskDeleted = false;
 
@@ -25385,6 +25691,7 @@ function recreateClickUpTask(actionId) {
     toast('Search failed — creating new task instead…', 'warn');
     // Fallback: clear and create
     act._clickupId = null;
+    act.clickupTaskId = null;
     act._clickupUrl = null;
     act._clickupTaskDeleted = false;
     if (sourceAd && sourceAd._clickupId === oldClickupId) {
@@ -25732,6 +26039,8 @@ function createClickUpTaskFromAction(actionId, onDone, sourceAdOverride) {
 
     // Link _clickupId on the action + log the push event.
     act._clickupId = newId;
+    act.clickupTaskId = newId;
+    _oneScaleEnsureLaunchTaskFields(act, sourceAd, act.title);
     try { apLogEvent(act, 'pushed_to_clickup', 'ClickUp task ' + newId + ' created with app-created tag + marker'); } catch (e) {}
     // Only overwrite sourceAd._clickupId if it had none before
     // (inspo ADs are fresh — tracker-format ADs already have the tracker task's ID)
@@ -27524,6 +27833,10 @@ function parseClickUpTask(t) {
     id: t.id || ('ad-' + Date.now() + '-' + Math.random().toString(36).slice(2,6)),
     _clickupId: t.id,
     _clickupUrl: t.url || '',
+    listId: (t.list && t.list.id) || t.list_id || '',
+    listName: (t.list && t.list.name) || t.list_name || '',
+    clickupListId: (t.list && t.list.id) || t.list_id || '',
+    clickupListName: (t.list && t.list.name) || t.list_name || '',
     formatName: t.name || '',
     // 2026-05-16 Phase 0: persist ClickUp tag array. Used by Bug 8 protection
     // (`app-created` marker check at lines ~25940, 25970, 26730) and by the
@@ -29067,6 +29380,10 @@ function apAdoptAdAsAction(ad, opts) {
     description: '',
     adId: ad.id,
     adLink: ad.adLink || '',
+    taskName: ad.taskName || ad.formatName || ad.id,
+    clickupTaskId: ad.clickupTaskId || ad._clickupId || null,
+    storeId: ad.storeId || '',
+    productProfileId: ad.productProfileId || '',
     _clickupId: ad._clickupId || ad.clickupTaskId || null,
     liveStatus: ad.status || 'Untested',
     sourceAdId: ad.id,
@@ -29076,6 +29393,7 @@ function apAdoptAdAsAction(ad, opts) {
     _origin: 'adopted',
     _history: []
   };
+  _oneScaleEnsureLaunchTaskFields(newAction, ad, newAction.title);
   apLogEvent(newAction, 'adopted', 'Detected ' + (opts && opts.reason ? opts.reason : 'production tag') + ' in ClickUp', 'system');
   MANUAL_ACTIONS.push(newAction);
   // Live broadcast so teammates see adopted tasks appear without waiting
@@ -29190,9 +29508,10 @@ function apResolveCard(act) {
     }
   }
   // Fallback: match by ClickUp id.
-  if (!ad && act._clickupId && typeof ADS !== 'undefined') {
+  var _actClickupIdForLookup = act._clickupId || act.clickupTaskId || '';
+  if (!ad && _actClickupIdForLookup && typeof ADS !== 'undefined') {
     for (var j = 0; j < ADS.length; j++) {
-      if (ADS[j]._clickupId === act._clickupId || ADS[j].clickupTaskId === act._clickupId) {
+      if (ADS[j]._clickupId === _actClickupIdForLookup || ADS[j].clickupTaskId === _actClickupIdForLookup) {
         ad = ADS[j]; break;
       }
     }
@@ -29580,11 +29899,19 @@ function apResolveCard(act) {
     approvedDate: cfDisplay['approved date'] || '',
     driveLink: (ad && ad.driveLink) || cfDisplay['drive link'] || '',
     adLink: (ad && ad.adLink) || act.adLink || '',
-    _clickupId: act._clickupId || (ad && ad._clickupId) || null,
-    _clickupUrl: (ad && ad._clickupUrl) || (act._clickupId ? 'https://app.clickup.com/t/' + act._clickupId : ''),
+    _clickupId: act.clickupTaskId || act._clickupId || (ad && (ad.clickupTaskId || ad._clickupId)) || null,
+    _clickupUrl: (ad && ad._clickupUrl) || ((act.clickupTaskId || act._clickupId) ? 'https://app.clickup.com/t/' + (act.clickupTaskId || act._clickupId) : ''),
     _customFields: cfDisplay,
     _customFieldsRaw: cfRaw
   };
+  var launchFields = _oneScaleEnsureLaunchTaskFields(act, ad, display.title);
+  display.taskName = launchFields.taskName;
+  display.clickupTaskId = launchFields.clickupTaskId;
+  display.storeId = launchFields.storeId;
+  display.productProfileId = launchFields.productProfileId;
+  display.oneScaleStoreName = launchFields.oneScaleStoreName;
+  display.oneScaleProductName = launchFields.oneScaleProductName;
+  display.oneScaleMappingMissing = launchFields.oneScaleMappingMissing;
 
   // Compute age + color state for the Age column.
   var age = apAgeStateForRow({
@@ -29602,7 +29929,7 @@ function apResolveCard(act) {
     _customFieldsRaw: display._customFieldsRaw
   });
 
-  return { act: act, ad: ad, display: display, source: source, age: age };
+  return { act: act, ad: ad, display: display, source: source, age: age, launch: launchFields };
 }
 
 // 2026-05-15 — Render-side "is this card adopted RIGHT NOW (vs historically)?"
@@ -29737,6 +30064,10 @@ function apResolveAllCards() {
           sourceAdId: ad.id,
           adId: ad.id,
           title: ad.formatName || ad.id,
+          taskName: ad.taskName || ad.formatName || ad.id,
+          clickupTaskId: ad.clickupTaskId || ad._clickupId || null,
+          storeId: ad.storeId || '',
+          productProfileId: ad.productProfileId || '',
           _clickupId: ad._clickupId || ad.clickupTaskId || null,
           _origin: 'auto-adopted',
           _virtual: true,
@@ -29747,6 +30078,7 @@ function apResolveAllCards() {
           format: ad.adType || '',
           liveStatus: ad.status || 'Untested'
         };
+        _oneScaleEnsureLaunchTaskFields(synAct, ad, synAct.title);
         var rv = apResolveCard(synAct);
         if (rv) {
           rv._virtual = true;
@@ -30027,6 +30359,10 @@ async function _apHealAutoAdoptedFromClickUpTag(opts) {
         sourceAdId: ad.id,
         adId: ad.id,
         _clickupId: ad._clickupId || ad.clickupTaskId || null,
+        taskName: ad.taskName || ad.formatName || ad.id,
+        clickupTaskId: ad.clickupTaskId || ad._clickupId || null,
+        storeId: ad.storeId || '',
+        productProfileId: ad.productProfileId || '',
         title: ad.formatName || ad.id,
         priority: 'medium',
         liveStatus: ad.status || 'Untested',
@@ -30038,6 +30374,7 @@ async function _apHealAutoAdoptedFromClickUpTag(opts) {
         format: ad.adType || '',
         _pushedAt: Date.now()
       };
+      _oneScaleEnsureLaunchTaskFields(newMA, ad, newMA.title);
       try {
         if (typeof SB !== 'undefined') {
           var ins = await SB.from('manual_actions').insert({
@@ -30096,8 +30433,13 @@ function _lazyPromoteVirtual(ad) {
     format: ad.adType || '',
     liveStatus: ad.status || 'Untested',
     _clickupId: ad._clickupId || ad.clickupTaskId || null,
+    taskName: ad.taskName || ad.formatName || ad.id,
+    clickupTaskId: ad.clickupTaskId || ad._clickupId || null,
+    storeId: ad.storeId || '',
+    productProfileId: ad.productProfileId || '',
     _pushedAt: nowMs
   };
+  _oneScaleEnsureLaunchTaskFields(newAct, ad, newAct.title);
   if (!isAppCreated) {
     // Legacy path — keep adopt markers for genuinely-virtual (not-app-pushed) cards.
     newAct._origin = 'auto-adopted';
@@ -41759,12 +42101,17 @@ function addCellRecToPlan(recId, angleName, personaName) {
     description: '',
     adId: null,
     adLink: '',
+    taskName: rec.title || '',
+    clickupTaskId: null,
+    storeId: rec.storeId || '',
+    productProfileId: rec.productProfileId || '',
     _clickupId: null,
     liveStatus: 'Untested',
     sourceAdId: null,
     sourceAngle: angleName,
     sourcePersona: personaName
   };
+  _oneScaleEnsureLaunchTaskFields(newAction, null, newAction.title);
   MANUAL_ACTIONS.push(newAction);
   genActions();
   rebuildProdFromManual();

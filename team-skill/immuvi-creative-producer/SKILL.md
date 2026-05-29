@@ -475,6 +475,16 @@ def download(url, work_dir):
 The producer's existing inline `urllib`/`curl` paths stay only for fully generic non-platform URLs (e.g. ClickUp's `attachments.clickup.com` CDN, plain images on a marketing site). Anything that looks like a social platform must go through the router.
 
 3. Extract the creative brief.
+   - **PRODUCT DIRECTIVES (highest priority — non-negotiable).** Two sources, both mandatory:
+     1. If the `instruction` contains a `[PRODUCT DIRECTIVES — MANDATORY …]` block, parse `OFFER TO FEATURE:` and `TALENT / FACES:` from it.
+     2. Also read the product's persistent defaults from `products.config.production` (keys `offer`, `market`) — fetch the product row via the Command Center DB / `strategist_memory` context if not already in the payload.
+     Apply BOTH to **every** variation: feature the stated offer prominently in the creative, and render people/faces matching the stated market/ethnicity (e.g. "US / American faces (not Indian)" → cast American-looking talent; never substitute another ethnicity unless the user explicitly overrides). The instruction block wins on conflict; otherwise use the saved config defaults. If neither is present, infer the offer from the ClickUp task and keep talent neutral.
+   - **FORMAT REFERENCES (the Concept Picker).** If the `instruction` contains a `[FORMAT REFERENCES …]` block, it lists N proven winner formats (and optionally the user's own pasted URL) the user hand-selected. This is the scaling-a-winner workflow:
+     - Generate **one distinct concept per reference** (N references → N concepts), not N look-alikes. Spread across the formats.
+     - For each reference, **download its `ref asset:` link** (Google Drive folder/file, or a pasted image/ad URL) via the Step 2.0 `detect_platform()` router and visually inspect it — that image defines the *format/layout/production style* to adopt for that concept.
+     - **HOLD CONSTANT** the message named in the block's `[HOLD CONSTANT …]` line (this task's winning angle + persona + promise/emotion). You are changing only the *format/execution*, never the core message.
+     - Still apply the PRODUCT DIRECTIVES (offer + faces) to every one of these concepts.
+     - If a reference asset fails to download, note it and still produce that concept from the format label + the task's strategist memory, rather than dropping it silently.
    - Product: product name, offer, constraints, and source product id.
    - Persona: audience segment and emotional trigger.
    - Angle: core promise, mechanism, objection, or pain point.
@@ -501,6 +511,7 @@ The producer's existing inline `urllib`/`curl` paths stay only for fully generic
    - Inspect each generated image before upload.
    - Reject and regenerate once if any of these fail:
      - persona does not match the task
+     - **the PRODUCT DIRECTIVES offer is not featured, or faces/talent do not match the stated market/ethnicity**
      - offer/benefit stack is weak or missing
      - typography is unreadable or visibly garbled
      - output is too generic or does not preserve the inspiration mechanic

@@ -13781,7 +13781,8 @@ const CFG = {
 const ONESCALE_LAUNCH_BASE_URL = 'http://localhost:3000/creative-hub/launch';
 const ONESCALE_PRODUCTION_LAUNCH_BASE_URL = 'https://one-scale-nine.vercel.app/creative-hub/launch';
 const ONESCALE_TESTING_LAUNCH_BASE_URL = 'https://one-scale-git-dev-anay-meow-likers-projects.vercel.app/creative-hub/launch';
-const ONESCALE_LAUNCH_CALLBACK_URL = 'https://immuvi-command-center.vercel.app/api/onescale-launch-callback';
+const ONESCALE_LAUNCH_CALLBACK_PATH = '/api/onescale-launch-callback';
+const ONESCALE_PRODUCTION_LAUNCH_CALLBACK_URL = 'https://immuvi-command-center.vercel.app/api/onescale-launch-callback';
 const ONESCALE_PRODUCT_MAPPINGS = [
   {
     clickupListId: '901613404413',
@@ -13808,6 +13809,22 @@ function getOneScaleLaunchBaseUrl() {
   } catch (e) {}
 
   return ONESCALE_PRODUCTION_LAUNCH_BASE_URL;
+}
+
+function getOneScaleLaunchCallbackUrl() {
+  try {
+    if (typeof window !== 'undefined' && window.ONESCALE_LAUNCH_CALLBACK_URL) {
+      return window.ONESCALE_LAUNCH_CALLBACK_URL;
+    }
+  } catch (e) {}
+
+  try {
+    if (typeof window !== 'undefined' && window.location && /^https?:$/i.test(window.location.protocol)) {
+      return new URL(ONESCALE_LAUNCH_CALLBACK_PATH, window.location.origin).toString();
+    }
+  } catch (e) {}
+
+  return ONESCALE_PRODUCTION_LAUNCH_CALLBACK_URL;
 }
 
 function _oneScaleFirstValue() {
@@ -13987,7 +14004,7 @@ function launchOneScaleTasks(tasks) {
     alert(validation.error || 'Cannot launch selected tasks.');
     return false;
   }
-  var callbackUrl = (typeof ONESCALE_LAUNCH_CALLBACK_URL !== 'undefined') ? ONESCALE_LAUNCH_CALLBACK_URL : '';
+  var callbackUrl = (typeof getOneScaleLaunchCallbackUrl === 'function') ? getOneScaleLaunchCallbackUrl() : '';
   var url = buildOneScaleLaunchUrl(validation, callbackUrl);
   console.log('[OneScale Launch]', url);
   window.open(url, '_blank', 'noopener');

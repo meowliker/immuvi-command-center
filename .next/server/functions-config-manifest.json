@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "functions": {
+    "/api/admin/[op]": {},
+    "/api/clickup": {},
+    "/api/inspirations": {},
+    "/api/inspirations/[insId]": {},
+    "/api/install-skill": {},
+    "/api/manual-actions/[actionId]": {},
+    "/api/products/[productId]/data": {},
+    "/install-skill.sh": {}
+  }
+}

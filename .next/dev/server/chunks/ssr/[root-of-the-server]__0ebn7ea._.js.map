@@ -1,0 +1,6 @@
+{
+  "version": 3,
+  "sources": [],
+  "sections": [
+    {"offset": {"line": 10, "column": 0}, "map": {"version":3,"sources":["file:///Users/anaytripathy/CascadeProjects/immuvi-command-center/app/page.tsx"],"sourcesContent":["export default function CommandCenterPage() {\n  return (\n    <main className=\"legacy-dashboard-host\">\n      <iframe\n        className=\"legacy-dashboard-frame\"\n        src=\"/immuvi-command-center.html\"\n        title=\"Immuvi Command Center\"\n      />\n    </main>\n  );\n}\n"],"names":["CommandCenterPage","className","src","title"],"mappings":";;;;;;AAAe,SAASA;IACtB,qBACE,8OAAC;QAAKC,WAAU;kBACd,cAAA,8OAAC;YACCA,WAAU;YACVC,KAAI;YACJC,OAAM;;;;;;;;;;;AAId"}}]
+}

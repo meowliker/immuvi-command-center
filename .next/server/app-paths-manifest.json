@@ -1,0 +1,13 @@
+{
+  "/_global-error/page": "app/_global-error/page.js",
+  "/_not-found/page": "app/_not-found/page.js",
+  "/api/admin/[op]/route": "app/api/admin/[op]/route.js",
+  "/api/clickup/route": "app/api/clickup/route.js",
+  "/api/inspirations/[insId]/route": "app/api/inspirations/[insId]/route.js",
+  "/api/inspirations/route": "app/api/inspirations/route.js",
+  "/api/install-skill/route": "app/api/install-skill/route.js",
+  "/api/manual-actions/[actionId]/route": "app/api/manual-actions/[actionId]/route.js",
+  "/api/products/[productId]/data/route": "app/api/products/[productId]/data/route.js",
+  "/install-skill.sh/route": "app/install-skill.sh/route.js",
+  "/page": "app/page.js"
+}

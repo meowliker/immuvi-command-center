@@ -1,0 +1,120 @@
+{
+  "version": 3,
+  "pages404": true,
+  "appType": "app",
+  "caseSensitive": false,
+  "basePath": "",
+  "redirects": [
+    {
+      "source": "/:path+/",
+      "destination": "/:path+",
+      "internal": true,
+      "priority": true,
+      "statusCode": 308,
+      "regex": "^(?:/((?:[^/]+?)(?:/(?:[^/]+?))*))/$"
+    }
+  ],
+  "headers": [],
+  "onMatchHeaders": [],
+  "rewrites": {
+    "beforeFiles": [],
+    "afterFiles": [],
+    "fallback": []
+  },
+  "dynamicRoutes": [
+    {
+      "page": "/api/admin/[op]",
+      "regex": "^/api/admin/([^/]+?)(?:/)?$",
+      "routeKeys": {
+        "nxtPop": "nxtPop"
+      },
+      "namedRegex": "^/api/admin/(?<nxtPop>[^/]+?)(?:/)?$"
+    },
+    {
+      "page": "/api/inspirations/[insId]",
+      "regex": "^/api/inspirations/([^/]+?)(?:/)?$",
+      "routeKeys": {
+        "nxtPinsId": "nxtPinsId"
+      },
+      "namedRegex": "^/api/inspirations/(?<nxtPinsId>[^/]+?)(?:/)?$"
+    },
+    {
+      "page": "/api/manual-actions/[actionId]",
+      "regex": "^/api/manual\\-actions/([^/]+?)(?:/)?$",
+      "routeKeys": {
+        "nxtPactionId": "nxtPactionId"
+      },
+      "namedRegex": "^/api/manual\\-actions/(?<nxtPactionId>[^/]+?)(?:/)?$"
+    },
+    {
+      "page": "/api/products/[productId]/data",
+      "regex": "^/api/products/([^/]+?)/data(?:/)?$",
+      "routeKeys": {
+        "nxtPproductId": "nxtPproductId"
+      },
+      "namedRegex": "^/api/products/(?<nxtPproductId>[^/]+?)/data(?:/)?$"
+    }
+  ],
+  "staticRoutes": [
+    {
+      "page": "/",
+      "regex": "^/(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/(?:/)?$"
+    },
+    {
+      "page": "/_global-error",
+      "regex": "^/_global\\-error(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/_global\\-error(?:/)?$"
+    },
+    {
+      "page": "/_not-found",
+      "regex": "^/_not\\-found(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/_not\\-found(?:/)?$"
+    },
+    {
+      "page": "/api/clickup",
+      "regex": "^/api/clickup(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/clickup(?:/)?$"
+    },
+    {
+      "page": "/api/inspirations",
+      "regex": "^/api/inspirations(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/inspirations(?:/)?$"
+    },
+    {
+      "page": "/api/install-skill",
+      "regex": "^/api/install\\-skill(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/install\\-skill(?:/)?$"
+    },
+    {
+      "page": "/install-skill.sh",
+      "regex": "^/install\\-skill\\.sh(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/install\\-skill\\.sh(?:/)?$"
+    }
+  ],
+  "dataRoutes": [],
+  "rsc": {
+    "header": "rsc",
+    "varyHeader": "rsc, next-router-state-tree, next-router-prefetch, next-router-segment-prefetch",
+    "prefetchHeader": "next-router-prefetch",
+    "didPostponeHeader": "x-nextjs-postponed",
+    "contentTypeHeader": "text/x-component",
+    "suffix": ".rsc",
+    "prefetchSegmentHeader": "next-router-segment-prefetch",
+    "prefetchSegmentSuffix": ".segment.rsc",
+    "prefetchSegmentDirSuffix": ".segments",
+    "clientParamParsing": false,
+    "dynamicRSCPrerender": false
+  },
+  "rewriteHeaders": {
+    "pathHeader": "x-nextjs-rewritten-path",
+    "queryHeader": "x-nextjs-rewritten-query"
+  }
+}

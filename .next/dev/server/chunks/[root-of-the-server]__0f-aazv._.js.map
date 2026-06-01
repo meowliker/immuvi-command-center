@@ -1,0 +1,6 @@
+{
+  "version": 3,
+  "sources": [],
+  "sections": [
+    {"offset": {"line": 52, "column": 0}, "map": {"version":3,"sources":["file:///Users/anaytripathy/CascadeProjects/immuvi-command-center/app/route.ts"],"sourcesContent":["import { readFile } from \"node:fs/promises\";\nimport path from \"node:path\";\n\nexport const runtime = \"nodejs\";\nexport const dynamic = \"force-dynamic\";\n\nexport async function GET() {\n  const htmlPath = path.join(process.cwd(), \"immuvi-command-center.html\");\n  const html = await readFile(htmlPath, \"utf8\");\n\n  return new Response(html, {\n    headers: {\n      \"Content-Type\": \"text/html; charset=utf-8\",\n      \"Cache-Control\": \"no-store\"\n    }\n  });\n}\n"],"names":["runtime","dynamic","GET","htmlPath","join","process","cwd","html","Response","headers"],"mappings":";;;;;;;;AAAA;AACA;;;AAEO,MAAMA,UAAU;AAChB,MAAMC,UAAU;AAEhB,eAAeC;IACpB,MAAMC,WAAW,4HAAI,CAACC,IAAI,CAACC,QAAQC,GAAG,IAAI;IAC1C,MAAMC,OAAO,MAAM,IAAA,iJAAQ,EAACJ,UAAU;IAEtC,OAAO,IAAIK,SAASD,MAAM;QACxBE,SAAS;YACP,gBAAgB;YAChB,iBAAiB;QACnB;IACF;AACF"}}]
+}

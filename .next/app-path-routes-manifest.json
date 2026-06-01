@@ -1,0 +1,13 @@
+{
+  "/_global-error/page": "/_global-error",
+  "/_not-found/page": "/_not-found",
+  "/api/admin/[op]/route": "/api/admin/[op]",
+  "/api/clickup/route": "/api/clickup",
+  "/api/inspirations/[insId]/route": "/api/inspirations/[insId]",
+  "/api/inspirations/route": "/api/inspirations",
+  "/api/install-skill/route": "/api/install-skill",
+  "/api/manual-actions/[actionId]/route": "/api/manual-actions/[actionId]",
+  "/api/products/[productId]/data/route": "/api/products/[productId]/data",
+  "/install-skill.sh/route": "/install-skill.sh",
+  "/page": "/"
+}

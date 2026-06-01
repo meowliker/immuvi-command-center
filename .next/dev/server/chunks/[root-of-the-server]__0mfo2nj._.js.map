@@ -1,0 +1,6 @@
+{
+  "version": 3,
+  "sources": [],
+  "sections": [
+    {"offset": {"line": 52, "column": 0}, "map": {"version":3,"sources":["file:///Users/anaytripathy/CascadeProjects/immuvi-command-center/app/install-skill.sh/route.ts"],"sourcesContent":["import { readFile } from \"node:fs/promises\";\nimport path from \"node:path\";\n\nexport const runtime = \"nodejs\";\nexport const dynamic = \"force-dynamic\";\n\nexport async function GET() {\n  const scriptPath = path.join(process.cwd(), \"team-skill\", \"install-skill.sh\");\n  const script = await readFile(scriptPath, \"utf8\");\n\n  return new Response(script, {\n    headers: {\n      \"Content-Type\": \"text/x-shellscript; charset=utf-8\",\n      \"Cache-Control\": \"no-store\"\n    }\n  });\n}\n"],"names":["runtime","dynamic","GET","scriptPath","join","process","cwd","script","Response","headers"],"mappings":";;;;;;;;AAAA;AACA;;;AAEO,MAAMA,UAAU;AAChB,MAAMC,UAAU;AAEhB,eAAeC;IACpB,MAAMC,aAAa,4HAAI,CAACC,IAAI,CAACC,QAAQC,GAAG,IAAI,cAAc;IAC1D,MAAMC,SAAS,MAAM,IAAA,iJAAQ,EAACJ,YAAY;IAE1C,OAAO,IAAIK,SAASD,QAAQ;QAC1BE,SAAS;YACP,gBAAgB;YAChB,iBAAiB;QACnB;IACF;AACF"}}]
+}

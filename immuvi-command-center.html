@@ -13807,7 +13807,7 @@ function getOneScaleLaunchBaseUrl() {
     }
   } catch (e) {}
 
-  return ONESCALE_TESTING_LAUNCH_BASE_URL;
+  return ONESCALE_PRODUCTION_LAUNCH_BASE_URL;
 }
 
 function _oneScaleFirstValue() {
@@ -13957,7 +13957,7 @@ function buildOneScaleLaunchUrl(validation, callbackUrl) {
   validation = validation || {};
   var baseUrl = (typeof getOneScaleLaunchBaseUrl === 'function')
     ? getOneScaleLaunchBaseUrl()
-    : ONESCALE_TESTING_LAUNCH_BASE_URL;
+    : ONESCALE_PRODUCTION_LAUNCH_BASE_URL;
   var clickupTaskIds = validation.clickupTaskIds || [];
   try {
     var u = new URL(baseUrl, window.location.href);

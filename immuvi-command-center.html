@@ -15266,9 +15266,238 @@ if (!window.__producerClickListenerAttached) {
   }, true);
 }
 
+// ── Per-product Production Directives (offer + market/faces) ──────────────
+// Persistent per-product settings the image producer auto-applies to EVERY
+// generation, so the user never has to retype "use the Free Today offer" or
+// "US faces, not Indian". Stored in products.config.production = {offer, market}.
+// `market` is free text because geo varies per product (US, India for Astro
+// Rekha IND, etc.). Read from the in-memory PRODUCTS cache; saved back to DB.
+function _prodDirectives(productId) {
+  var p = (typeof PRODUCTS !== 'undefined' && Array.isArray(PRODUCTS))
+    ? PRODUCTS.find(function (x) { return x.id === productId; }) : null;
+  var prod = (p && p.config && p.config.production) || {};
+  return { offer: prod.offer || '', market: prod.market || '' };
+}
+
+async function _saveProdDirectives(productId, offer, market) {
+  offer = (offer || '').trim();
+  market = (market || '').trim();
+  // Update in-memory cache immediately so the next modal open reflects it.
+  var p = (typeof PRODUCTS !== 'undefined' && Array.isArray(PRODUCTS))
+    ? PRODUCTS.find(function (x) { return x.id === productId; }) : null;
+  if (p) {
+    p.config = p.config || {};
+    p.config.production = Object.assign({}, p.config.production || {}, { offer: offer, market: market });
+  }
+  if (typeof SB === 'undefined' || !SB) return;
+  try {
+    // Read-merge-write so we never clobber other config keys.
+    var ex = await SB.from('products').select('config').eq('id', productId).maybeSingle();
+    var existing = (ex && ex.data && ex.data.config) || {};
+    var newCfg = Object.assign({}, existing);
+    newCfg.production = Object.assign({}, existing.production || {}, { offer: offer, market: market });
+    var res = await SB.from('products').update({ config: newCfg }).eq('id', productId);
+    if (res && res.error) console.warn('[producer] save directives failed', res.error);
+  } catch (e) { console.warn('[producer] save directives threw', e); }
+}
+
+// Compose the final instruction sent to the producer worker: a MANDATORY
+// directive block (offer + faces) followed by the user's free-text note.
+// The producer SKILL.md parses this block and applies it to every variation.
+function _composeProducerInstruction(offer, market, userInstr) {
+  offer = (offer || '').trim();
+  market = (market || '').trim();
+  userInstr = (userInstr || '').trim();
+  var lines = [];
+  if (offer || market) {
+    lines.push('[PRODUCT DIRECTIVES — MANDATORY, apply to EVERY image]');
+    if (offer)  lines.push('OFFER TO FEATURE: ' + offer);
+    if (market) lines.push('TALENT / FACES: ' + market + ' (do not use other ethnicities unless told)');
+    lines.push('[/PRODUCT DIRECTIVES]');
+  }
+  if (userInstr) {
+    if (lines.length) lines.push('');
+    lines.push(userInstr);
+  }
+  return lines.join('\n');
+}
+
+// ── Concept Picker — rank winner photo ads as suggested FORMATS ────────────
+// When scaling a winner, the strategist surfaces proven winner *formats* the
+// user can pick from. Ranking (per the approved logic):
+//   • format win-rate + evidence depth  (from strategist production_styles)
+//   • persona/market fit to the target task
+//   • recency-weighted (recent winners rank higher)
+// Same-product only for now; cross-product/competitor formats come later.
+var _conceptPick = { byId: {}, selected: {}, _why: {} };
+
+function _winnerFormatSuggestions(productId, targetAd, limit) {
+  limit = limit || 10;
+  if (typeof ADS === 'undefined' || !Array.isArray(ADS)) return [];
+  var WIN_RE = /winner|scale/i;
+  var PHOTO_RE = /static|photo|image/i;
+  // Format win-rate + why_it_won from strategist memory (already loaded for the
+  // active product). Degrades gracefully if memory isn't present yet.
+  var psWinRate = {};
+  _conceptPick._why = {};
+  try {
+    var mem = (_strategistState && _strategistState.memory && _strategistState.memory.json) || null;
+    var ps = (mem && mem.creative_direction_layer && mem.creative_direction_layer.production_styles) || [];
+    ps.forEach(function (p) {
+      var tot = (p.wins || 0) + (p.losses || 0);
+      psWinRate[String(p.name || '').toLowerCase()] = tot ? (p.wins || 0) / tot : 0;
+    });
+    var wb = (mem && mem.winner_briefs) || [];
+    wb.forEach(function (b) { if (b.task_id) _conceptPick._why[b.task_id] = b.why_it_won || ''; });
+  } catch (_) {}
+
+  var now = Date.now();
+  var targetPersona = (targetAd && targetAd.persona) || '';
+  var targetId = (targetAd && targetAd.id) || null;
+
+  var cand = ADS.filter(function (a) {
+    if (!a || a.id === targetId) return false;
+    if (!a.status || !WIN_RE.test(a.status)) return false;
+    return PHOTO_RE.test(a.adType || '') || PHOTO_RE.test(a.creativeStructure || '');
+  });
+
+  cand.forEach(function (a) {
+    var fmt = String(a.productionStyle || a.creativeStructure || '').toLowerCase();
+    var winRate = psWinRate[fmt] || 0;
+    var statusBonus = /mild/i.test(a.status) ? 0.4 : 1.0;          // full Winner/Scale > Mild
+    var personaMatch = (targetPersona && a.persona === targetPersona) ? 1 : 0;
+    var ts = Date.parse(a.lastStatusChangeAt || a.updatedAt || a.createdAt || '') || 0;
+    var ageDays = ts ? Math.max(0, (now - ts) / 86400000) : 999;
+    var recency = Math.max(0, 1 - ageDays / 120);                  // decays over ~120d
+    a.__score = 0.45 * winRate * statusBonus + 0.35 * personaMatch + 0.20 * recency;
+    a.__reasons = [];
+    if (personaMatch) a.__reasons.push('same persona');
+    if (winRate >= 0.5) a.__reasons.push('strong-win format');
+    if (recency >= 0.6) a.__reasons.push('recent');
+  });
+  cand.sort(function (x, y) { return (y.__score || 0) - (x.__score || 0); });
+
+  return cand.slice(0, limit).map(function (a) {
+    return {
+      adId: a.id,
+      clickupTaskId: a.clickupTaskId || a.id,
+      driveLink: a.driveLink || '',
+      formatLabel: a.productionStyle || a.creativeStructure || a.adType || 'Format',
+      angle: a.angle || '',
+      persona: a.persona || '',
+      status: a.status || '',
+      why: (_conceptPick._why && _conceptPick._why[a.clickupTaskId || a.id]) || '',
+      reasons: a.__reasons || []
+    };
+  });
+}
+
+// Build the selectable suggestion cards. Resets selection state each open.
+function _conceptCardsHtml(sugg) {
+  _conceptPick.byId = {};
+  _conceptPick.selected = {};
+  if (!sugg.length) {
+    return '<div style="font-size:0.8rem;color:var(--t3,#94a3b8);padding:10px 0">No proven winner formats found for this product yet — generate freeform below, or paste your own reference.</div>';
+  }
+  var html = '';
+  sugg.forEach(function (s) {
+    _conceptPick.byId[s.adId] = s;
+    var badge = /mild/i.test(s.status) ? 'Mild Winner' : (/scale/i.test(s.status) ? 'Scale' : 'Winner');
+    var reasons = (s.reasons || []).length ? '<span style="color:var(--ok,#16a34a)">· ' + esc(s.reasons.join(' · ')) + '</span>' : '';
+    var whyLine = s.why ? '<div style="font-size:0.72rem;color:var(--t3,#94a3b8);margin-top:4px;line-height:1.3;max-height:2.6em;overflow:hidden">' + esc(String(s.why).slice(0, 130)) + '</div>' : '';
+    html +=
+      '<div class="cp-card" data-id="' + escAttr(s.adId) + '" onclick="_conceptToggle(\'' + escAttr(s.adId) + '\')" ' +
+      'style="border:1.5px solid var(--b);border-radius:10px;padding:9px 11px;margin-bottom:7px;cursor:pointer;transition:all .12s;display:flex;gap:9px;align-items:flex-start">' +
+        '<input type="checkbox" class="cp-cb" tabindex="-1" style="margin-top:3px;pointer-events:none">' +
+        '<div style="flex:1;min-width:0">' +
+          '<div style="display:flex;justify-content:space-between;gap:8px;align-items:baseline">' +
+            '<span style="font-weight:600;font-size:0.86rem">' + esc(s.formatLabel) + '</span>' +
+            '<span style="font-size:0.66rem;font-weight:600;color:var(--accent,#6366f1);white-space:nowrap">🏆 ' + esc(badge) + '</span>' +
+          '</div>' +
+          '<div style="font-size:0.73rem;color:var(--t2);margin-top:2px">' + esc(s.angle || '—') + ' › ' + esc(s.persona || '—') + ' ' + reasons + '</div>' +
+          whyLine +
+        '</div>' +
+      '</div>';
+  });
+  return html;
+}
+
+// Toggle a card's selection + reflect into the count field.
+function _conceptToggle(adId) {
+  if (_conceptPick.selected[adId]) delete _conceptPick.selected[adId];
+  else _conceptPick.selected[adId] = _conceptPick.byId[adId];
+  var card = document.querySelector('.cp-card[data-id="' + (window.CSS && CSS.escape ? CSS.escape(adId) : adId) + '"]');
+  if (card) {
+    var on = !!_conceptPick.selected[adId];
+    card.style.borderColor = on ? 'var(--accent,#6366f1)' : 'var(--b)';
+    card.style.background = on ? 'var(--accent-soft,rgba(99,102,241,0.07))' : 'transparent';
+    var cb = card.querySelector('.cp-cb'); if (cb) cb.checked = on;
+  }
+  var n = Object.keys(_conceptPick.selected).length;
+  var cntEl = document.getElementById('cpCount'); if (cntEl) cntEl.textContent = String(n);
+  // Auto-sync the image count to # selected formats (one concept per format).
+  var pc = document.getElementById('producerCount');
+  if (pc && n > 0) pc.value = String(Math.min(10, n));
+}
+
+// Upload a user-provided reference image to the public producer-outputs bucket
+// so the producer worker can fetch it. Fills #conceptOwnUrl with the public URL.
+async function _conceptUploadOwn(input) {
+  var statusEl = document.getElementById('conceptOwnStatus');
+  var file = input && input.files && input.files[0];
+  if (!file) return;
+  if (!SB || !SB.storage) { if (statusEl) statusEl.textContent = '⚠ storage unavailable'; return; }
+  if (statusEl) statusEl.textContent = 'Uploading ' + file.name + '…';
+  try {
+    var safe = String(file.name).replace(/[^a-zA-Z0-9._-]/g, '_');
+    var path = 'concept-refs/' + (_producerState.modalProductId || 'p') + '/' + Date.now() + '-' + safe;
+    var up = await SB.storage.from('producer-outputs').upload(path, file, { upsert: true, contentType: file.type || 'image/jpeg' });
+    if (up.error) { if (statusEl) statusEl.textContent = '⚠ upload failed: ' + up.error.message; return; }
+    var pub = SB.storage.from('producer-outputs').getPublicUrl(path);
+    var url = (pub && pub.data && pub.data.publicUrl) || '';
+    var urlEl = document.getElementById('conceptOwnUrl');
+    if (urlEl) urlEl.value = url;
+    if (statusEl) statusEl.textContent = '✓ uploaded — will be used as a reference';
+  } catch (e) {
+    if (statusEl) statusEl.textContent = '⚠ upload error: ' + (e && e.message ? e.message : e);
+  }
+}
+
+// Build the FORMAT REFERENCES instruction block from the picker selection +
+// the user's own pasted URL. Returns '' if nothing picked (→ freeform run).
+function _composeFormatReferences(taskId) {
+  var sel = Object.keys(_conceptPick.selected || {})
+    .map(function (id) { return _conceptPick.selected[id]; })
+    .filter(Boolean);
+  var ownUrl = ((document.getElementById('conceptOwnUrl') || {}).value || '').trim();
+  if (!sel.length && !ownUrl) return '';
+  var t = (typeof ADS !== 'undefined' && Array.isArray(ADS))
+    ? ADS.find(function (a) { return a && (a.id === taskId || a.clickupTaskId === taskId); }) : null;
+  var lines = ['[FORMAT REFERENCES — generate ONE concept per reference below; each must re-express THIS task\'s winning message in that reference\'s format]'];
+  var n = 0;
+  sel.forEach(function (s) {
+    n++;
+    var bits = ['Format "' + (s.formatLabel || 'Format') + '"', 'proven winner ' + (s.clickupTaskId || s.adId)];
+    if (s.angle || s.persona) bits.push('(won as ' + (s.angle || '?') + ' / ' + (s.persona || '?') + ')');
+    if (s.driveLink) bits.push('ref asset: ' + s.driveLink);
+    lines.push(n + '. ' + bits.join(' · '));
+  });
+  if (ownUrl) { n++; lines.push(n + '. MY OWN INSPIRATION (use this format/style): ' + ownUrl); }
+  if (t) {
+    lines.push('[HOLD CONSTANT — the winning message of this task: angle "' + (t.angle || '—') + '", persona "' + (t.persona || '—') + '". Keep the promise/emotion; change only the format/execution.]');
+  }
+  lines.push('[/FORMAT REFERENCES]');
+  return lines.join('\n');
+}
+
 function _producerOpenModal(taskId, productId) {
   _producerState.modalTaskId = taskId;
   _producerState.modalProductId = productId;
+  var _pd = _prodDirectives(productId);
+  var _targetAd = (typeof ADS !== 'undefined' && Array.isArray(ADS))
+    ? ADS.find(function (a) { return a && (a.id === taskId || a.clickupTaskId === taskId); }) : null;
+  var _sugg = _winnerFormatSuggestions(productId, _targetAd, 10);
+  var _cardsHtml = _conceptCardsHtml(_sugg);
   var m = document.getElementById('producerModal');
   if (!m) {
     m = document.createElement('div');
@@ -15292,12 +15521,38 @@ function _producerOpenModal(taskId, productId) {
       'style="background:var(--card,#fff);border-radius:14px;padding:24px;' +
       'max-width:520px;width:92%;box-shadow:0 24px 64px rgba(0,0,0,0.2)">' +
         '<h3 style="margin:0 0 16px;font-size:1.1rem">🎨 Generate Ad Images</h3>' +
+        // ── Concept Picker: strategist-suggested winner formats ──
+        '<div style="margin-bottom:14px">' +
+          '<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:7px">' +
+            '<span style="font-size:0.74rem;font-weight:600;color:var(--t2);text-transform:uppercase;letter-spacing:.03em">🧠 Strategist suggests · pick formats</span>' +
+            '<span style="font-size:0.72rem;color:var(--t3,#94a3b8)"><b id="cpCount">0</b> selected</span>' +
+          '</div>' +
+          '<div style="max-height:240px;overflow-y:auto;padding-right:2px">' + _cardsHtml + '</div>' +
+          '<div style="margin-top:8px;display:flex;gap:6px;align-items:center">' +
+            '<span style="font-size:0.72rem;color:var(--t2);white-space:nowrap">＋ Your own:</span>' +
+            '<input id="conceptOwnUrl" type="text" placeholder="paste an image/ad URL (optional)" ' +
+            'style="flex:1;padding:6px 8px;border:1px solid var(--b);border-radius:8px;font-size:0.82rem;box-sizing:border-box">' +
+          '</div>' +
+        '</div>' +
         '<label style="display:block;font-size:0.78rem;color:var(--t2);' +
         'margin-bottom:6px">Instruction (optional — describe the variation)</label>' +
-        '<textarea id="producerInstruction" rows="4" ' +
+        '<textarea id="producerInstruction" rows="3" ' +
         'style="width:100%;padding:8px;border:1px solid var(--b);border-radius:8px;' +
         'font-family:inherit;font-size:0.9rem;box-sizing:border-box" ' +
         'placeholder="e.g. Same angle as winning AT-114 but with mom-to-mom UGC vibe"></textarea>' +
+        // ── Production defaults (offer + faces) — saved per product, auto-applied ──
+        '<div style="margin-top:14px;padding:12px;border:1px dashed var(--b);border-radius:10px;background:var(--bg2,#f8fafc)">' +
+          '<div style="font-size:0.74rem;font-weight:600;color:var(--t2);margin-bottom:8px;text-transform:uppercase;letter-spacing:.03em">⚙ Product defaults · auto-applied to every image</div>' +
+          '<label style="display:block;font-size:0.74rem;color:var(--t2);margin-bottom:4px">Offer to feature</label>' +
+          '<input id="producerOffer" type="text" value="' + escAttr(_pd.offer) + '" ' +
+          'placeholder="e.g. Free today — limited time" ' +
+          'style="width:100%;padding:7px 8px;border:1px solid var(--b);border-radius:8px;font-size:0.88rem;box-sizing:border-box;margin-bottom:10px">' +
+          '<label style="display:block;font-size:0.74rem;color:var(--t2);margin-bottom:4px">Talent / faces (market)</label>' +
+          '<input id="producerMarket" type="text" value="' + escAttr(_pd.market) + '" ' +
+          'placeholder="e.g. US / American faces (not Indian)" ' +
+          'style="width:100%;padding:7px 8px;border:1px solid var(--b);border-radius:8px;font-size:0.88rem;box-sizing:border-box">' +
+          '<div style="font-size:0.7rem;color:var(--t3,#94a3b8);margin-top:7px">Saved on this product &amp; reused next time — edit any time.</div>' +
+        '</div>' +
         '<div style="display:flex;gap:16px;margin-top:12px;flex-wrap:wrap">' +
           '<div>' +
             '<label style="display:block;font-size:0.78rem;color:var(--t2);margin-bottom:6px">How many images? (1-10)</label>' +
@@ -15532,7 +15787,18 @@ async function _producerSubmit() {
   var taskId = _producerState.modalTaskId;
   var productId = _producerState.modalProductId;
   if (!taskId || !productId) { alert('No task selected'); return; }
-  var instr = (document.getElementById('producerInstruction') || {}).value || '';
+  var userInstr = (document.getElementById('producerInstruction') || {}).value || '';
+  var offer  = (document.getElementById('producerOffer')  || {}).value || '';
+  var market = (document.getElementById('producerMarket') || {}).value || '';
+  // Persist the product defaults so they're remembered next time (fire-and-forget
+  // is fine, but await so the in-memory cache + DB are consistent before insert).
+  await _saveProdDirectives(productId, offer, market);
+  // ── Concept Picker: gather selected winner formats + own URL into a
+  //    FORMAT REFERENCES block the producer expands into one concept each. ──
+  var refsBlock = _composeFormatReferences(taskId);
+  // Final instruction = mandatory directive block (offer + faces) + format refs + user note.
+  var userPlusRefs = [refsBlock, userInstr.trim()].filter(Boolean).join('\n\n');
+  var instr = _composeProducerInstruction(offer, market, userPlusRefs);
   var count = parseInt((document.getElementById('producerCount') || {}).value || '5', 10);
   if (isNaN(count) || count < 1 || count > 10) count = 5;
   var prefSel = document.getElementById('producerWorkerPref');

@@ -11941,7 +11941,7 @@ function _initRealtimeChannel(productId) {
             var _dbma = st.MANUAL_ACTIONS[dai];
             if (!_dbma || !_dbma.id) continue;
             if (_recentlyDeletedMaIds.has(_dbma.id)) continue;
-            _mergedMa.push(_maById[_dbma.id] || _dbma);
+            _mergedMa.push(_maById[_dbma.id] ? _apMergeServerOneScaleLaunch(_maById[_dbma.id], _dbma) : _dbma);
           }
           // Keep local-only (pending save)
           for (var lok in _maById) { if (!st.MANUAL_ACTIONS.some(function(x){return x.id===lok;})) _mergedMa.push(_maById[lok]); }
@@ -13727,6 +13727,8 @@ function _resubscribeRealtime() {
               // Local doesn't have it — another tab/session added it. Include.
               MANUAL_ACTIONS.push(_dbAct);
               _localById[_dbAct.id] = _dbAct;
+            } else if (_dbAct.oneScaleLaunch) {
+              _apMergeServerOneScaleLaunch(_localById[_dbAct.id], _dbAct);
             } else if (_dbAct._clickupId && !_localById[_dbAct.id]._clickupId) {
               // DB has a ClickUp id we don't — merge it in so the "↗ ClickUp" link appears.
               _localById[_dbAct.id]._clickupId = _dbAct._clickupId;
@@ -21232,6 +21234,7 @@ function renderActionPlan() {
   try { _fetchCuStatuses(false); } catch (e) {}
 
   var resolved = apResolveAllCards();
+  try { _apPruneCompletedOneScaleSelections(resolved); } catch (e) {}
   var filtered = apApplyFilters(resolved);
   var pulse    = apComputePulse(resolved);
   var hygiene  = apComputeHygieneAlerts(resolved);
@@ -22266,6 +22269,43 @@ function apToggleSelectAll(rows, on) {
   renderActionPlan();
 }
 function apClearSelection() { _apState.selected = {}; renderActionPlan(); }
+
+function _apMergeServerOneScaleLaunch(localAct, dbAct) {
+  if (!localAct || !dbAct || !dbAct.oneScaleLaunch) return localAct || dbAct;
+  localAct.oneScaleLaunch = dbAct.oneScaleLaunch;
+  if (dbAct.oneScaleLaunchError) localAct.oneScaleLaunchError = dbAct.oneScaleLaunchError;
+  if (dbAct._oneScaleLaunchedAt) localAct._oneScaleLaunchedAt = dbAct._oneScaleLaunchedAt;
+  if (dbAct._statusChangedAt) localAct._statusChangedAt = dbAct._statusChangedAt;
+  if (Array.isArray(dbAct._history)) localAct._history = dbAct._history;
+  if (String((dbAct.oneScaleLaunch.status || '')).toLowerCase() === 'success') {
+    localAct.liveStatus = dbAct.liveStatus || 'Testing';
+  }
+  return localAct;
+}
+
+function _apIsCompletedOneScaleLaunchRow(row) {
+  if (!row) return false;
+  var act = row.act || row;
+  var display = row.display || {};
+  var launch = (act && act.oneScaleLaunch) || (display && display.oneScaleLaunch) || null;
+  var launchStatus = String((launch && launch.status) || '').trim().toLowerCase();
+  if (launchStatus !== 'success') return false;
+  var status = String(display.status || act.liveStatus || act.status || '').trim().toLowerCase();
+  return status === 'testing';
+}
+
+function _apPruneCompletedOneScaleSelections(rows) {
+  if (!_apState || !_apState.selected) return 0;
+  var removed = 0;
+  (rows || []).forEach(function (row) {
+    var id = row && row.act && row.act.id;
+    if (id && _apState.selected[id] && _apIsCompletedOneScaleLaunchRow(row)) {
+      delete _apState.selected[id];
+      removed++;
+    }
+  });
+  return removed;
+}
 
 function _apSelectedReadyToLaunchCards() {
   var selected = (_apState && _apState.selected) || {};

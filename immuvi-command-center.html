@@ -21311,6 +21311,7 @@ var _apState = (function () {
     },
     sort: { col: 'age', dir: -1 },  // column id + direction (1 asc, -1 desc)
     selected: {},                   // { actionId: true } for bulk operations
+    oneScalePendingLaunchSelected: {}, // selected row ids launched in this tab; cleared once status moves out of RTL
     columns: [
       'cb','source','title','origin','funnel','type','hook',
       'status','age','editor','reviewer','created','due','clickup','action','del'
@@ -22297,13 +22298,24 @@ function _apIsCompletedOneScaleLaunchRow(row) {
 function _apPruneCompletedOneScaleSelections(rows) {
   if (!_apState || !_apState.selected) return 0;
   var removed = 0;
+  var pending = _apState.oneScalePendingLaunchSelected || {};
+  var seen = {};
   (rows || []).forEach(function (row) {
     var id = row && row.act && row.act.id;
-    if (id && _apState.selected[id] && _apIsCompletedOneScaleLaunchRow(row)) {
+    if (!id) return;
+    seen[id] = true;
+    var status = String((row.display && row.display.status) || (row.act && row.act.liveStatus) || '').trim().toLowerCase();
+    var pendingCompleted = !!pending[id] && status && status !== 'ready to launch';
+    if (_apState.selected[id] && (_apIsCompletedOneScaleLaunchRow(row) || pendingCompleted)) {
       delete _apState.selected[id];
+      delete pending[id];
       removed++;
     }
   });
+  Object.keys(pending).forEach(function (id) {
+    if (!seen[id]) delete pending[id];
+  });
+  _apState.oneScalePendingLaunchSelected = pending;
   return removed;
 }
 
@@ -22352,7 +22364,12 @@ function apBulkLaunchOneScale() {
 
   var rows = _apSelectedReadyToLaunchCards();
   var tasks = _apReadyLaunchTasksFromCards(rows);
-  launchOneScaleTasks(tasks);
+  if (launchOneScaleTasks(tasks)) {
+    if (!_apState.oneScalePendingLaunchSelected) _apState.oneScalePendingLaunchSelected = {};
+    rows.forEach(function (row) {
+      if (row && row.act && row.act.id) _apState.oneScalePendingLaunchSelected[row.act.id] = true;
+    });
+  }
 }
 
 function apBulkDelete() {

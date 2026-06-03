@@ -13504,6 +13504,7 @@ const DB = {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'personas', filter: 'product_id=eq.' + productId }, onChange)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'inspirations', filter: 'product_id=eq.' + productId }, onChange)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'manual_actions', filter: 'product_id=eq.' + productId }, onChange)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'activity_events', filter: 'product_id=eq.' + productId }, onChange)
       .subscribe();
     return ch;
   },
@@ -13518,11 +13519,39 @@ window.SB = SB;
 // ── REALTIME: subscribe to changes on the active product ──
 let _activeRTChannel = null;
 let _rtMergeTimer = null;
+
+function _handleActivityEventRealtime(row) {
+  if (!row || row.source !== 'onescale' || row.event_type !== 'launched') return false;
+  window._activityEventSeen = window._activityEventSeen || {};
+  var eventKey = row.id || ((row.clickup_task_id || '') + ':' + (row.created_at || ''));
+  if (eventKey && window._activityEventSeen[eventKey]) return true;
+  if (eventKey) window._activityEventSeen[eventKey] = true;
+
+  var meta = row.metadata || {};
+  var taskName = meta.task_name || row.clickup_task_id || 'Creative';
+  var msg = taskName + ' launched in OneScale';
+
+  if (meta.ad_id && typeof _activityCache !== 'undefined') {
+    delete _activityCache[meta.ad_id];
+  }
+
+  if (typeof window.pushActivity === 'function') {
+    window.pushActivity(msg, 'ok');
+  } else if (typeof window.toast === 'function') {
+    window.toast(msg, 'ok');
+  }
+  return true;
+}
+
 function _resubscribeRealtime() {
   if (!DB.ready) return;
   if (_activeRTChannel) { DB.unsubscribe(_activeRTChannel); _activeRTChannel = null; }
   if (!activeProductId) return;
   _activeRTChannel = DB.subscribeToProduct(activeProductId, function (payload) {
+    if (payload && payload.table === 'activity_events') {
+      _handleActivityEventRealtime(payload.new);
+      return;
+    }
     // If row has deleted_at set, treat as deletion immediately (no debounce needed)
     if (payload && payload.new && payload.new.deleted_at) {
       var _deletedId = payload.new.id || (payload.new.meta && payload.new.meta.id);
@@ -39665,7 +39694,7 @@ function _mxv4FetchActivity(ad) {
       if (row.event_type === 'status_changed')   msg = 'Status: ' + (row.old_value || '?') + ' → ' + (row.new_value || '?');
       else if (row.event_type === 'renamed')     msg = 'Renamed to "' + (row.new_value || '') + '"';
       else if (row.event_type === 'created')     msg = 'Created';
-      else if (row.event_type === 'launched')    msg = 'Launched';
+      else if (row.event_type === 'launched')    msg = row.source === 'onescale' ? 'Launched in OneScale' : 'Launched';
       else if (row.event_type === 'killed')      msg = 'Killed';
       else if (row.event_type === 'scaled')      msg = 'Scaled';
       else if (row.event_type === 'winner')      msg = 'Marked Winner';
@@ -46007,6 +46036,7 @@ window._clearPendingCu = _clearPendingCu;
     renderActivityPill();
     if (_activityPanelOpen) renderActivityPanel();
   }
+  window.pushActivity = pushActivity;
 
   // Wrap toast() to divert routine ones into the activity log.
   if (typeof window.toast === 'function' && !window.toast.__actLogWrapped) {

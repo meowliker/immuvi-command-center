@@ -51,6 +51,12 @@ function compactStringArray(value) {
     : [];
 }
 
+function postgrestIn(values) {
+  return values
+    .map((value) => `"${String(value).replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`)
+    .join(',');
+}
+
 function launchMetadata(payload, status) {
   const launchedAt = payload.launchedAt || new Date().toISOString();
   const meta = {
@@ -138,6 +144,70 @@ async function updateLinkedAds(rows, clickupTaskIds) {
       last_status_change_at: nowMs,
     });
   }
+}
+
+async function findAdsByClickUpTaskIds(clickupTaskIds) {
+  const ids = compactStringArray(clickupTaskIds);
+  if (!ids.length) return [];
+  const query = `/ads?select=id,product_id,format_name,clickup_task_id&clickup_task_id=in.(${encodeURIComponent(postgrestIn(ids))})`;
+  const rows = await sbRest('GET', query);
+  return Array.isArray(rows) ? rows : [];
+}
+
+async function insertOneScaleActivityEvents(payload, clickupTaskIds, updatedRows) {
+  if (normalizeStatus(payload.status) !== 'success') return 0;
+
+  const launchedAt = payload.launchedAt || new Date().toISOString();
+  const ads = await findAdsByClickUpTaskIds(clickupTaskIds);
+  const adByClickUpId = new Map();
+  ads.forEach((ad) => {
+    if (ad && ad.clickup_task_id) adByClickUpId.set(ad.clickup_task_id, ad);
+  });
+
+  const actionByClickUpId = new Map();
+  (updatedRows || []).forEach((row) => {
+    const action = (row && row.payload) || {};
+    const clickupId = actionClickupId(action);
+    if (clickupId) actionByClickUpId.set(clickupId, row);
+  });
+
+  const events = [];
+  compactStringArray(clickupTaskIds).forEach((clickupTaskId) => {
+    const ad = adByClickUpId.get(clickupTaskId);
+    const actionRow = actionByClickUpId.get(clickupTaskId);
+    const action = (actionRow && actionRow.payload) || {};
+    const productId = (ad && ad.product_id) || (actionRow && actionRow.product_id);
+    if (!productId) return;
+
+    const taskName = (ad && ad.format_name) || action.taskName || action.title || clickupTaskId;
+    events.push({
+      product_id: productId,
+      action_id: actionRow && actionRow.id ? actionRow.id : null,
+      clickup_task_id: clickupTaskId,
+      event_type: 'launched',
+      field_name: 'status',
+      old_value: 'Ready to Launch',
+      new_value: 'Testing',
+      actor: 'OneScale',
+      source: 'onescale',
+      metadata: {
+        ad_id: ad && ad.id ? ad.id : (action.sourceAdId || action.adId || null),
+        task_name: taskName,
+        launch_id: payload.launchId,
+        store_id: payload.storeId || '',
+        product_profile_id: payload.productProfileId || '',
+        clickup_task_ids: compactStringArray(clickupTaskIds),
+        meta_campaign_id: payload.metaCampaignId || null,
+        meta_ad_set_ids: Array.isArray(payload.metaAdSetIds) ? payload.metaAdSetIds : [],
+        meta_ad_ids: Array.isArray(payload.metaAdIds) ? payload.metaAdIds : [],
+      },
+      created_at: launchedAt,
+    });
+  });
+
+  if (!events.length) return 0;
+  await sbRest('POST', '/activity_events', events);
+  return events.length;
 }
 
 async function updateClickUpTasksToTesting(clickupTaskIds) {
@@ -242,9 +312,10 @@ export default async function handler(req, res) {
 
     const updatedRows = await updateManualActionRows(matches, payload, 'success');
     await updateLinkedAds(updatedRows, clickupTaskIds);
+    const activityEvents = await insertOneScaleActivityEvents(payload, clickupTaskIds, updatedRows);
     await updateClickUpTasksToTesting(clickupTaskIds);
 
-    return res.status(200).json({ ok: true, updated: updatedRows.length });
+    return res.status(200).json({ ok: true, updated: updatedRows.length, activityEvents });
   } catch (err) {
     console.error('[OneScale Launch Callback] error:', err);
     return res.status(500).json({ ok: false, error: String((err && err.message) || err) });

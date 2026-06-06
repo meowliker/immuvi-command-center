@@ -3406,6 +3406,32 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .ap-bulk-btn.ghost   { background:transparent; }
 .ap-bulk-btn:hover   { transform:translateY(-1px); }
 .ap-bulk-btn:disabled { opacity:0.45; cursor:not-allowed; transform:none; }
+.ap-bulk-spacer { flex:1; min-width:16px; }
+.ap-bulk-search {
+  display:flex; align-items:center; gap:7px;
+  min-width:220px; max-width:360px; width:clamp(220px, 24vw, 360px);
+  padding:6px 10px;
+  border:1px solid rgba(255,255,255,0.16);
+  border-radius:9px;
+  background:rgba(255,255,255,0.08);
+  color:rgba(255,255,255,0.72);
+}
+.ap-bulk-search svg { width:14px; height:14px; flex:0 0 auto; }
+.ap-bulk-search input {
+  min-width:0; width:100%;
+  border:0; outline:0; background:transparent;
+  color:#fff; font:600 0.72rem 'Inter', system-ui, sans-serif;
+}
+.ap-bulk-search input::placeholder { color:rgba(255,255,255,0.48); }
+.ap-bulk-search:focus-within {
+  border-color:#d6ff4b;
+  box-shadow:0 0 0 2px rgba(214,255,75,0.14);
+}
+.ap-bulk-search-clear {
+  border:0; background:transparent; color:rgba(255,255,255,0.62);
+  cursor:pointer; font-size:0.9rem; line-height:1; padding:0 1px;
+}
+.ap-bulk-search-clear:hover { color:#fff; }
 
 /* ════════════════════════════════════════════════════════════════
    ACTION PLAN — PREMIUM FILTER STRIP (v2 overlay)
@@ -21623,6 +21649,7 @@ var _apState = (function () {
       funnels: [],                  // [] = all funnels
       adTypes: [],                  // [] = all types
       sources: [],                  // [] = all sources
+      taskQuery: '',                // quick search by visible task name
       hygieneOnly: false,           // toggled by hygiene banner "Show only these"
       anomaliesOnly: false,         // toggled by Anomalies chip in filterbar
       includeAdopted: true,         // 2026-05-09: auto-adopt ClickUp-only ADs into AP (toggle in filter strip)
@@ -21735,6 +21762,18 @@ function apApplyFilters(resolved) {
     if (f.funnels.length  && f.funnels.indexOf(r.display.funnelStage) === -1) return false;
     if (f.adTypes.length  && f.adTypes.indexOf(r.display.adType) === -1) return false;
     if (f.sources.length  && f.sources.indexOf(r.source.kind) === -1) return false;
+    if (f.taskQuery && String(f.taskQuery).trim()) {
+      var q = String(f.taskQuery).trim().toLowerCase();
+      var haystack = [
+        r.display && r.display.title,
+        r.display && r.display.taskName,
+        r.act && r.act.title,
+        r.act && r.act.taskName,
+        r.ad && r.ad.formatName,
+        r.ad && r.ad.taskName
+      ].filter(Boolean).join(' ').toLowerCase();
+      if (haystack.indexOf(q) === -1) return false;
+    }
     if (f.hygieneOnly && r.age.state !== 'red') return false;
     if (f.anomaliesOnly && apComputeAnomalies(r).length === 0) return false;
     if (range) {
@@ -22113,6 +22152,7 @@ function renderApFilterStrip(allResolved, filtered) {
   if (f.funnels && f.funnels.length)   _activeFilterCount += f.funnels.length;
   if (f.adTypes && f.adTypes.length)   _activeFilterCount += f.adTypes.length;
   if (f.sources && f.sources.length)   _activeFilterCount += f.sources.length;
+  if (f.taskQuery && String(f.taskQuery).trim()) _activeFilterCount++;
   if (f.datePreset && f.datePreset !== 'all') _activeFilterCount++;
   if (f.anomaliesOnly) _activeFilterCount++;
   if (f.hygieneOnly)   _activeFilterCount++;
@@ -22163,6 +22203,7 @@ function apHasActiveFilters() {
       || (f.funnels && f.funnels.length)
       || (f.adTypes && f.adTypes.length)
       || (f.sources && f.sources.length)
+      || (f.taskQuery && String(f.taskQuery).trim())
       || f.hygieneOnly
       || f.anomaliesOnly
       || (f.tileToggles && f.tileToggles.length)
@@ -22405,6 +22446,9 @@ function renderApActiveFilterChips() {
   (f.sources || []).forEach(function (s) {
     chips.push(chip('Source: ' + s, '_apClearChip("source", ' + jsArg(s) + ')'));
   });
+  if (f.taskQuery && String(f.taskQuery).trim()) {
+    chips.push(chip('Search: ' + String(f.taskQuery).trim(), '_apClearChip("taskQuery")'));
+  }
   if (f.anomaliesOnly) chips.push(chip('Anomalies only', '_apClearChip("anomaliesOnly")'));
   if (f.hygieneOnly)   chips.push(chip('Needs Attention only', '_apClearChip("hygieneOnly")'));
   (f.tileToggles || []).forEach(function (k) {
@@ -22435,6 +22479,7 @@ window._apClearChip = function (kind, value) {
   else if (kind === 'funnel') { f.funnels = (f.funnels || []).filter(function (s) { return s !== value; }); }
   else if (kind === 'adType') { f.adTypes = (f.adTypes || []).filter(function (s) { return s !== value; }); }
   else if (kind === 'source') { f.sources = (f.sources || []).filter(function (s) { return s !== value; }); }
+  else if (kind === 'taskQuery') { f.taskQuery = ''; }
   else if (kind === 'anomaliesOnly') { f.anomaliesOnly = false; }
   else if (kind === 'hygieneOnly')   { f.hygieneOnly = false; }
   else if (kind === 'tile') {
@@ -22444,7 +22489,7 @@ window._apClearChip = function (kind, value) {
   _apSaveState(); renderActionPlan();
 };
 function clearApFilters() {
-  _apState.filters = { dateMode: _apState.filters.dateMode, datePreset: 'all', dateFrom: null, dateTo: null, statuses: [], funnels: [], adTypes: [], sources: [], hygieneOnly: false, anomaliesOnly: false, tileToggles: [] };
+  _apState.filters = { dateMode: _apState.filters.dateMode, datePreset: 'all', dateFrom: null, dateTo: null, statuses: [], funnels: [], adTypes: [], sources: [], taskQuery: '', hygieneOnly: false, anomaliesOnly: false, tileToggles: [] };
   _apState.openFilter = null;
   // Also wipe any custom range applied via the Week panel picker so the
   // Pulse strip falls back to its default Mon→today.
@@ -22576,12 +22621,39 @@ function renderApBulkToolbar() {
       html += '<button class="ap-bulk-btn danger" onclick="apBulkDelete()">Delete</button>';
       html += '<button class="ap-bulk-btn ghost" onclick="apClearSelection()">Cancel</button>';
     }
+    var taskQuery = (_apState.filters && _apState.filters.taskQuery) || '';
+    html += '<span class="ap-bulk-spacer"></span>';
+    html += '<div class="ap-bulk-search" title="Search creatives by task name">' +
+              '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5L14 14"/></svg>' +
+              '<input id="apTaskSearch" type="search" value="' + escAttr(taskQuery) + '" placeholder="Search task name" autocomplete="off" oninput="setApTaskSearch(this.value)" />' +
+              (taskQuery ? '<button type="button" class="ap-bulk-search-clear" onclick="clearApTaskSearch()" title="Clear search">&times;</button>' : '') +
+            '</div>';
   }
   html += '</div>';
   return html;
 }
 
 function apUpdateBulkToolbarState() { /* state already reflected in DOM via render */ }
+function setApTaskSearch(value) {
+  _apState.filters.taskQuery = value || '';
+  _apSaveState();
+  renderActionPlan();
+  setTimeout(function () {
+    var el = document.getElementById('apTaskSearch');
+    if (el) {
+      el.focus();
+      try {
+        var len = el.value.length;
+        el.setSelectionRange(len, len);
+      } catch (e) {}
+    }
+  }, 0);
+}
+function clearApTaskSearch() {
+  _apState.filters.taskQuery = '';
+  _apSaveState();
+  renderActionPlan();
+}
 function apToggleSelect(actionId, on) { if (on) _apState.selected[actionId] = true; else delete _apState.selected[actionId]; renderActionPlan(); }
 function apToggleSelectAll(rows, on) {
   if (on) { rows.forEach(function (r) { _apState.selected[r.act.id] = true; }); }

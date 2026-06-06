@@ -21593,20 +21593,7 @@ function renderActionPlan() {
   try { html += (typeof renderApActiveFilterChips === 'function') ? renderApActiveFilterChips() : ''; } catch (e) {}
   html += renderApBulkToolbar();
 
-  var view = (_apState && _apState.view) || 'table';
-  if (view === 'pipeline') {
-    html += renderApPipelineView(filtered);
-  } else if (view === 'week') {
-    html += renderApWeekView(filtered);
-  } else if (view === 'trends') {
-    html += renderApTrendsView(resolved);
-  } else if (view === 'variations') {
-    html += (typeof window._varlabRenderApVariationsView === 'function')
-      ? window._varlabRenderApVariationsView()
-      : '<div class="varlab-ap-empty">Variations view not loaded</div>';
-  } else {
-    html += renderApTableView(filtered);
-  }
+  html += '<div id="apViewMount">' + renderApCurrentView(filtered, resolved) + '</div>';
 
   container.innerHTML = html;
 
@@ -21633,6 +21620,29 @@ function renderActionPlan() {
   // Mount column-resize handles on every <th data-col> after innerHTML lands.
   if (typeof _apMountColumnHandlers === 'function') _apMountColumnHandlers();
   return;
+}
+
+function renderApCurrentView(filtered, resolved) {
+  var view = (_apState && _apState.view) || 'table';
+  if (view === 'pipeline') return renderApPipelineView(filtered);
+  if (view === 'week') return renderApWeekView(filtered);
+  if (view === 'trends') return renderApTrendsView(resolved);
+  if (view === 'variations') {
+    return (typeof window._varlabRenderApVariationsView === 'function')
+      ? window._varlabRenderApVariationsView()
+      : '<div class="varlab-ap-empty">Variations view not loaded</div>';
+  }
+  return renderApTableView(filtered);
+}
+
+function refreshApSearchResultsOnly() {
+  var mount = document.getElementById('apViewMount');
+  if (!mount) { renderActionPlan(); return; }
+  var resolved = apResolveAllCards();
+  try { _apPruneCompletedOneScaleSelections(resolved); } catch (e) {}
+  var filtered = apApplyFilters(resolved);
+  mount.innerHTML = renderApCurrentView(filtered, resolved);
+  if (typeof _apMountColumnHandlers === 'function') _apMountColumnHandlers();
 }
 
 // ════════════════════════════════════════════════════════════════════
@@ -22152,7 +22162,6 @@ function renderApFilterStrip(allResolved, filtered) {
   if (f.funnels && f.funnels.length)   _activeFilterCount += f.funnels.length;
   if (f.adTypes && f.adTypes.length)   _activeFilterCount += f.adTypes.length;
   if (f.sources && f.sources.length)   _activeFilterCount += f.sources.length;
-  if (f.taskQuery && String(f.taskQuery).trim()) _activeFilterCount++;
   if (f.datePreset && f.datePreset !== 'all') _activeFilterCount++;
   if (f.anomaliesOnly) _activeFilterCount++;
   if (f.hygieneOnly)   _activeFilterCount++;
@@ -22203,7 +22212,6 @@ function apHasActiveFilters() {
       || (f.funnels && f.funnels.length)
       || (f.adTypes && f.adTypes.length)
       || (f.sources && f.sources.length)
-      || (f.taskQuery && String(f.taskQuery).trim())
       || f.hygieneOnly
       || f.anomaliesOnly
       || (f.tileToggles && f.tileToggles.length)
@@ -22446,9 +22454,6 @@ function renderApActiveFilterChips() {
   (f.sources || []).forEach(function (s) {
     chips.push(chip('Source: ' + s, '_apClearChip("source", ' + jsArg(s) + ')'));
   });
-  if (f.taskQuery && String(f.taskQuery).trim()) {
-    chips.push(chip('Search: ' + String(f.taskQuery).trim(), '_apClearChip("taskQuery")'));
-  }
   if (f.anomaliesOnly) chips.push(chip('Anomalies only', '_apClearChip("anomaliesOnly")'));
   if (f.hygieneOnly)   chips.push(chip('Needs Attention only', '_apClearChip("hygieneOnly")'));
   (f.tileToggles || []).forEach(function (k) {
@@ -22479,7 +22484,6 @@ window._apClearChip = function (kind, value) {
   else if (kind === 'funnel') { f.funnels = (f.funnels || []).filter(function (s) { return s !== value; }); }
   else if (kind === 'adType') { f.adTypes = (f.adTypes || []).filter(function (s) { return s !== value; }); }
   else if (kind === 'source') { f.sources = (f.sources || []).filter(function (s) { return s !== value; }); }
-  else if (kind === 'taskQuery') { f.taskQuery = ''; }
   else if (kind === 'anomaliesOnly') { f.anomaliesOnly = false; }
   else if (kind === 'hygieneOnly')   { f.hygieneOnly = false; }
   else if (kind === 'tile') {
@@ -22489,7 +22493,7 @@ window._apClearChip = function (kind, value) {
   _apSaveState(); renderActionPlan();
 };
 function clearApFilters() {
-  _apState.filters = { dateMode: _apState.filters.dateMode, datePreset: 'all', dateFrom: null, dateTo: null, statuses: [], funnels: [], adTypes: [], sources: [], taskQuery: '', hygieneOnly: false, anomaliesOnly: false, tileToggles: [] };
+  _apState.filters = { dateMode: _apState.filters.dateMode, datePreset: 'all', dateFrom: null, dateTo: null, statuses: [], funnels: [], adTypes: [], sources: [], taskQuery: _apState.filters.taskQuery || '', hygieneOnly: false, anomaliesOnly: false, tileToggles: [] };
   _apState.openFilter = null;
   // Also wipe any custom range applied via the Week panel picker so the
   // Pulse strip falls back to its default Mon→today.
@@ -22626,7 +22630,7 @@ function renderApBulkToolbar() {
     html += '<div class="ap-bulk-search" title="Search creatives by task name">' +
               '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5L14 14"/></svg>' +
               '<input id="apTaskSearch" type="search" value="' + escAttr(taskQuery) + '" placeholder="Search task name" autocomplete="off" oninput="setApTaskSearch(this.value)" />' +
-              (taskQuery ? '<button type="button" class="ap-bulk-search-clear" onclick="clearApTaskSearch()" title="Clear search">&times;</button>' : '') +
+              '<button id="apTaskSearchClear" type="button" class="ap-bulk-search-clear" onclick="clearApTaskSearch()" title="Clear search" style="' + (taskQuery ? '' : 'display:none') + '">&times;</button>' +
             '</div>';
   }
   html += '</div>';
@@ -22634,25 +22638,28 @@ function renderApBulkToolbar() {
 }
 
 function apUpdateBulkToolbarState() { /* state already reflected in DOM via render */ }
+var _apTaskSearchTimer = null;
 function setApTaskSearch(value) {
   _apState.filters.taskQuery = value || '';
   _apSaveState();
-  renderActionPlan();
-  setTimeout(function () {
-    var el = document.getElementById('apTaskSearch');
-    if (el) {
-      el.focus();
-      try {
-        var len = el.value.length;
-        el.setSelectionRange(len, len);
-      } catch (e) {}
-    }
-  }, 0);
+  var clearBtn = document.getElementById('apTaskSearchClear');
+  if (clearBtn) clearBtn.style.display = _apState.filters.taskQuery ? '' : 'none';
+  if (_apTaskSearchTimer) clearTimeout(_apTaskSearchTimer);
+  _apTaskSearchTimer = setTimeout(function () {
+    _apTaskSearchTimer = null;
+    refreshApSearchResultsOnly();
+  }, 160);
 }
 function clearApTaskSearch() {
   _apState.filters.taskQuery = '';
   _apSaveState();
-  renderActionPlan();
+  var el = document.getElementById('apTaskSearch');
+  if (el) el.value = '';
+  if (_apTaskSearchTimer) {
+    clearTimeout(_apTaskSearchTimer);
+    _apTaskSearchTimer = null;
+  }
+  refreshApSearchResultsOnly();
 }
 function apToggleSelect(actionId, on) { if (on) _apState.selected[actionId] = true; else delete _apState.selected[actionId]; renderActionPlan(); }
 function apToggleSelectAll(rows, on) {

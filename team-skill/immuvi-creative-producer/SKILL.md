@@ -485,6 +485,21 @@ The producer's existing inline `urllib`/`curl` paths stay only for fully generic
      - **HOLD CONSTANT** the message named in the block's `[HOLD CONSTANT …]` line (this task's winning angle + persona + promise/emotion). You are changing only the *format/execution*, never the core message.
      - Still apply the PRODUCT DIRECTIVES (offer + faces) to every one of these concepts.
      - If a reference asset fails to download, note it and still produce that concept from the format label + the task's strategist memory, rather than dropping it silently.
+   - **REFERENCE FIDELITY CONTRACT (mandatory for every concept with a reference image).** The output must preserve the reference's format anatomy, not just its broad theme. Before generating, write a compact `reference_anatomy` note with:
+     - `subject_type`: person / object / product / environment, plus age/role when visible.
+     - `subject_presence`: whether the reference has a human subject, how prominent they are, pose, mood, and where they sit in frame.
+     - `setting`: indoor/outdoor, location type, background depth, weather/light, and emotional tone.
+     - `composition`: crop, camera distance, focal hierarchy, negative space, and where the subject sits.
+     - `overlay_system`: lower-third/banner/card/text placement, size, colors, and how much of the canvas it occupies.
+     - `copy_density`: short news caption vs long ad copy, number of lines, and headline style.
+     - `product_presence`: whether a product/mockup/packshot appears in the reference.
+   - **Hard fidelity rules:**
+     - If the reference contains a human subject, the generated image must contain a comparable human subject. Do not replace a child/person with only a backpack, desk, worksheet, empty classroom, or product shot.
+     - If the reference is a candid photo with a compact news lower-third, do not turn it into a polished product poster with a large white copy block.
+     - If the reference does not show a product mockup/packshot, do not add a product mockup/packshot unless the user explicitly asks for one.
+     - Preserve the same major layout proportions: photo area vs overlay area, banner height, headline compactness, and subject placement.
+     - Preserve the same emotional mechanic. For example, a lone child on a bench + breaking-news lower-third should become a similar candid child/student scene + compact breaking-news lower-third, adapted to the new offer/message.
+     - Product/offer adaptation happens inside the reference format. It must not overpower or replace the reference format.
    - Product: product name, offer, constraints, and source product id.
    - Persona: audience segment and emotional trigger.
    - Angle: core promise, mechanism, objection, or pain point.
@@ -504,8 +519,10 @@ The producer's existing inline `urllib`/`curl` paths stay only for fully generic
    - If your native image tool is unavailable or errors out, mark the run `failed` with a clear error message — do NOT silently fall back to Pillow, ASCII art, static graphics, or any non-AI renderer. Honest failure is better than fake images.
    - Generate creative variations that keep the same concept and visual logic as the inspiration but are rebuilt for our product, brand, angle, persona, and offer.
    - Do not copy the inspiration pixel-for-pixel. Preserve the winning mechanic, composition logic, and emotional structure while changing product, branding, claims, text, and details to fit the ClickUp brief.
+   - The image prompt for each variation must include the `reference_anatomy` constraints explicitly. Do not rely on a vague phrase like "similar to the reference."
+   - When a reference uses a news/lower-third format, keep the lower-third compact and news-like. Use short, readable headline text. Do not create giant poster copy blocks unless the reference itself has one.
    - Keep product facts, claims, and compliance-safe language grounded in the task and Creative Strategist memory.
-   - For each output, record: variation id, prompt, source inspiration file/link, product, angle, persona, aspect ratio, generated file path, and any upload URL.
+   - For each output, record: variation id, prompt, source inspiration file/link, product, angle, persona, aspect ratio, generated file path, reference_anatomy, and any upload URL.
 
 5. Quality gate before upload.
    - Inspect each generated image before upload.
@@ -515,6 +532,10 @@ The producer's existing inline `urllib`/`curl` paths stay only for fully generic
      - offer/benefit stack is weak or missing
      - typography is unreadable or visibly garbled
      - output is too generic or does not preserve the inspiration mechanic
+     - output preserves only the theme but not the reference anatomy
+     - reference has a human subject but output replaces the person with objects or an empty room
+     - reference has no product packshot but output adds a packshot/product mockup
+     - reference has a compact lower-third but output becomes a long-copy product poster
      - product/brand adaptation is missing
      - image has awkward anatomy, broken layout, or text crowding
    - Prefer fewer strong outputs over uploading weak variations.

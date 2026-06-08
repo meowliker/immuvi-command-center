@@ -914,7 +914,7 @@ class Worker:
                 "8. Build a structured creative brief before image generation.\n"
                 "9. Use Creative Strategist data to reuse winning elements and avoid losing combos.\n"
                 "10. Generate the requested number of standalone image files using your native image generation at high quality (same as Codex chat — do not hard-code a specific model name). Generate one variation per native image call. Never count a merged grid/contact sheet as a final output.\n"
-                "11. Preserve reference anatomy, not just theme: if the reference has a human subject, include a comparable human subject; if it has a compact news lower-third, keep it compact; if it has no product mockup, do not add a product mockup unless explicitly requested.\n"
+                "11. Preserve reference anatomy, not just theme: if the reference has a human subject, include a comparable human subject; if it has a compact news lower-third, keep the same compact structure. For BREAKING NEWS references, use only photo + thin red/blue BREAKING NEWS band + one white headline strip; no green CTA bar, product mockup, oversized poster headline, or large white copy block.\n"
                 "12. If a native image call errors or returns no output, retry with a materially simpler prompt under 900 characters, then one final ultra-simple prompt under 550 characters. Do not repeat the same failed prompt. Do not use any fallback renderer.\n"
                 "13. Quality gate each image before upload — persona match, offer/benefit clarity, readable typography, reference-anatomy match, mechanic match, brand fit, not generic.\n"
                 "14. Regenerate once if quality gate fails, using a simpler prompt that fixes the specific failed criterion.\n"

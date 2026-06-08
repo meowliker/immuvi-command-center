@@ -496,6 +496,12 @@ The producer's existing inline `urllib`/`curl` paths stay only for fully generic
    - **Hard fidelity rules:**
      - If the reference contains a human subject, the generated image must contain a comparable human subject. Do not replace a child/person with only a backpack, desk, worksheet, empty classroom, or product shot.
      - If the reference is a candid photo with a compact news lower-third, do not turn it into a polished product poster with a large white copy block.
+     - For compact breaking-news references, copy the overlay anatomy tightly:
+       - photo remains the dominant canvas, roughly the top 70-80% of the image
+       - the red/blue `BREAKING NEWS` strip is a thin lower-third band, roughly 8-12% of canvas height, placed over the lower edge of the photo
+       - the headline is one white rectangular strip below the news band, roughly 10-16% of canvas height
+       - headline text is 1-2 lines max, black uppercase, compact, and does not become a giant poster headline
+       - no extra CTA/footer ribbon, no green offer bar, no product packshot/mockup, no separate product-poster section unless the reference has one
      - If the reference does not show a product mockup/packshot, do not add a product mockup/packshot unless the user explicitly asks for one.
      - Preserve the same major layout proportions: photo area vs overlay area, banner height, headline compactness, and subject placement.
      - Preserve the same emotional mechanic. For example, a lone child on a bench + breaking-news lower-third should become a similar candid child/student scene + compact breaking-news lower-third, adapted to the new offer/message.
@@ -522,6 +528,7 @@ The producer's existing inline `urllib`/`curl` paths stay only for fully generic
    - Do not copy the inspiration pixel-for-pixel. Preserve the winning mechanic, composition logic, and emotional structure while changing product, branding, claims, text, and details to fit the ClickUp brief.
    - The image prompt for each variation must include the `reference_anatomy` constraints explicitly. Do not rely on a vague phrase like "similar to the reference."
    - When a reference uses a news/lower-third format, keep the lower-third compact and news-like. Use short, readable headline text. Do not create giant poster copy blocks unless the reference itself has one.
+   - For `BREAKING NEWS` style references, the final image must have only: (1) photo background/subject, (2) small red/blue `BREAKING NEWS` band, and (3) one white headline strip. Do not add a product CTA ribbon, green offer bar, product mockup, or large poster copy area.
    - Keep product facts, claims, and compliance-safe language grounded in the task and Creative Strategist memory.
    - For each output, record: variation id, prompt, source inspiration file/link, product, angle, persona, aspect ratio, generated file path, reference_anatomy, and any upload URL.
    - **Native generation recovery protocol.** If a native image call errors or produces no image file:
@@ -530,7 +537,7 @@ The producer's existing inline `urllib`/`curl` paths stay only for fully generic
      3. Do not repeat the same failed prompt. Each retry must be materially simpler than the previous prompt.
      4. If all native attempts fail, PATCH `producer_runs.status='failed'` with an error that includes: `native_generation_failed`, variation id, reference_anatomy, first prompt, simplified prompt, final prompt, and the native error/no-output reason.
      5. Still do not use Pillow, SVG, HTML canvas, screenshots, static mockups, or any non-native fallback image renderer.
-   - For news-style references, the simplified retry prompt should be shaped like: "Square candid documentary photo of [required human subject] in [matching setting/composition]. Add compact red/blue BREAKING NEWS lower-third occupying lower quarter only. One short black headline below. No product mockup. Preserve reference mood."
+   - For news-style references, the simplified retry prompt should be shaped like: "Square candid documentary photo of [required human subject] in [matching setting/composition]. Photo fills top 75%. Add thin red/blue BREAKING NEWS band over lower photo edge. Add one white headline strip below with 1-2 black uppercase lines. No CTA bar, no product mockup, no poster layout."
 
 5. Quality gate before upload.
    - Inspect each generated image before upload.
@@ -544,6 +551,7 @@ The producer's existing inline `urllib`/`curl` paths stay only for fully generic
      - reference has a human subject but output replaces the person with objects or an empty room
      - reference has no product packshot but output adds a packshot/product mockup
      - reference has a compact lower-third but output becomes a long-copy product poster
+     - breaking-news output adds a green CTA/footer ribbon or oversized white poster text block
      - product/brand adaptation is missing
      - image has awkward anatomy, broken layout, or text crowding
    - Prefer fewer strong outputs over uploading weak variations.

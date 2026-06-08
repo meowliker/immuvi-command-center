@@ -513,6 +513,7 @@ The producer's existing inline `urllib`/`curl` paths stay only for fully generic
    - Use your **native image generation capability** — the same one used in the Codex chat. Do NOT specify or hard-code a particular image model name (no "gpt-image-2", no "dalle", no model strings). Just call your native image tool and let the runtime pick whatever it has.
    - Request quality: `high`.
    - Generate, save, upload, and record **each variation as its own standalone image file**. Do NOT upload contact sheets, 2x2 grids, merged review boards, collages, or any file containing multiple ad variations. If the native image tool returns a grid/contact sheet, split it into individual final image files before upload, and only mark the split individual files as outputs.
+   - Generate **one variation per native image call**. Do not ask the native image tool for a batch/grid of multiple ad variations in one prompt.
    - Do NOT write Python code that calls any external image API, do NOT use the `openai` library, do NOT fall back to Pillow or any programmatic graphic renderer.
    - Match the inspiration image aspect ratio. Pick the closest supported size.
    - If the inspiration image is unavailable, use 1024x1024.
@@ -523,6 +524,13 @@ The producer's existing inline `urllib`/`curl` paths stay only for fully generic
    - When a reference uses a news/lower-third format, keep the lower-third compact and news-like. Use short, readable headline text. Do not create giant poster copy blocks unless the reference itself has one.
    - Keep product facts, claims, and compliance-safe language grounded in the task and Creative Strategist memory.
    - For each output, record: variation id, prompt, source inspiration file/link, product, angle, persona, aspect ratio, generated file path, reference_anatomy, and any upload URL.
+   - **Native generation recovery protocol.** If a native image call errors or produces no image file:
+     1. Retry once with a simplified prompt under 900 characters. Keep only: aspect ratio, subject/person requirement, setting, compact overlay format, offer/headline, and "no product mockup unless reference has one."
+     2. If that still fails, make one final ultra-simple native call under 550 characters. Use a photo-first prompt with only one short lower-third headline; avoid long typography instructions, multiple text blocks, product stacks, and complex UI layout.
+     3. Do not repeat the same failed prompt. Each retry must be materially simpler than the previous prompt.
+     4. If all native attempts fail, PATCH `producer_runs.status='failed'` with an error that includes: `native_generation_failed`, variation id, reference_anatomy, first prompt, simplified prompt, final prompt, and the native error/no-output reason.
+     5. Still do not use Pillow, SVG, HTML canvas, screenshots, static mockups, or any non-native fallback image renderer.
+   - For news-style references, the simplified retry prompt should be shaped like: "Square candid documentary photo of [required human subject] in [matching setting/composition]. Add compact red/blue BREAKING NEWS lower-third occupying lower quarter only. One short black headline below. No product mockup. Preserve reference mood."
 
 5. Quality gate before upload.
    - Inspect each generated image before upload.

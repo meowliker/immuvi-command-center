@@ -31,7 +31,8 @@ def _request(method: str, url: str, service_key: str,
 
 
 def pop_pending_run(supabase_url: str, service_key: str,
-                    worker_id: str) -> Optional[dict]:
+                    worker_id: str,
+                    require_preferred_worker: bool = False) -> Optional[dict]:
     """Find the oldest pending producer_runs row this worker is allowed to claim.
 
     Honors `preferred_worker_id`:
@@ -39,7 +40,22 @@ def pop_pending_run(supabase_url: str, service_key: str,
       - matches my worker_id → I can claim
       - other worker_id → I skip UNLESS the preferred worker hasn't heartbeated
         for >5 min (stale). In that case any worker can claim it as fallback.
+    When `require_preferred_worker` is true, only rows explicitly assigned to
+    this worker are returned. This lets a dev worker test producer changes
+    without accidentally claiming production/unassigned generation jobs.
     """
+    if require_preferred_worker:
+        qs = urllib.parse.urlencode({
+            "status": "eq.pending",
+            "preferred_worker_id": f"eq.{worker_id}",
+            "select": "*",
+            "order":  "created_at.asc",
+            "limit":  "1",
+        })
+        url = f"{supabase_url}/rest/v1/producer_runs?{qs}"
+        rows = _request("GET", url, service_key) or []
+        return rows[0] if rows else None
+
     # Stage 1: rows with no preferred worker, OR explicitly preferring this worker.
     qs1 = urllib.parse.urlencode({
         "status": "eq.pending",

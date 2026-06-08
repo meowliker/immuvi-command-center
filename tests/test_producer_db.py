@@ -32,6 +32,23 @@ def test_pop_pending_run_returns_none_when_empty():
                                   worker_id="w-1") is None
 
 
+def test_pop_pending_run_strict_mode_requires_preferred_worker():
+    rows = [{"id": 8, "task_id": "ck-dev", "product_id": "prod-dev",
+             "status": "pending", "preferred_worker_id": "dev-worker"}]
+    with patch("tools.producer.db.urllib.request.urlopen") as m:
+        m.return_value = _mock_resp(rows)
+        out = db.pop_pending_run(
+            supabase_url="https://x.supabase.co",
+            service_key="k",
+            worker_id="dev-worker",
+            require_preferred_worker=True,
+        )
+    assert out["id"] == 8
+    req = m.call_args[0][0]
+    assert "preferred_worker_id=eq.dev-worker" in req.full_url
+    assert "preferred_worker_id.is.null" not in req.full_url
+
+
 def test_claim_run_flips_pending_to_running():
     out_rows = [{"id": 7, "status": "running", "worker_id": "w-1"}]
     with patch("tools.producer.db.urllib.request.urlopen") as m:

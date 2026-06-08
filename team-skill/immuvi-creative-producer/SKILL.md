@@ -11,7 +11,7 @@ Silently refresh the skill files from origin using HTTP ETags — unchanged file
 
 ```bash
 SKILL_DIR="$HOME/.codex/skills/immuvi-creative-producer"
-ASSET_BASE="https://immuvi-command-center.vercel.app/team-skill/immuvi-creative-producer"
+ASSET_BASE="${IMMUVI_PRODUCER_SKILL_ASSET_BASE:-https://immuvi-command-center.vercel.app/team-skill/immuvi-creative-producer}"
 SKILL_MD_UPDATED=0
 
 mkdir -p "$SKILL_DIR"

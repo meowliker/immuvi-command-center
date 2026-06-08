@@ -61,6 +61,7 @@ PRODUCER_CLI_TIMEOUT_SECONDS = 1800  # 30 min for Codex image gen jobs
 # rate limits not a concern. Memory invariant #1 (sequential) is explicitly
 # overridden by user instruction.
 PRODUCER_MAX_CONCURRENCY = int(os.environ.get("PRODUCER_MAX_CONCURRENCY", "10"))
+PRODUCER_REQUIRE_PREFERRED_WORKER = os.environ.get("PRODUCER_REQUIRE_PREFERRED_WORKER", "0") == "1"
 # Max classify jobs running in parallel on this machine. Each is a separate
 # claude -p subprocess. Override via CLASSIFY_MAX_CONCURRENCY env var.
 # 2026-05-15: bumped from sequential (1) to 3 by explicit user instruction.
@@ -85,13 +86,17 @@ CODEX_BIN = "/Applications/Codex.app/Contents/Resources/codex"
 WORKER_AUTO_UPDATE_ENABLED = os.environ.get("WORKER_AUTO_UPDATE", "1") != "0"
 WORKER_UPDATE_CHECK_EVERY_SECONDS = 60  # ETag check every Nth poll cycle
 WORKER_BACKUP_KEEP_COUNT = 3  # keep last N backups; older ones get pruned
+WORKER_UPDATE_BASE_URL = os.environ.get(
+    "WORKER_UPDATE_BASE_URL",
+    "https://immuvi-command-center.vercel.app/team-skill",
+).rstrip("/")
 
 # Each entry is (Vercel URL path → local file path relative to project root).
 # The main worker file triggers a re-exec on swap; the strategist files
 # only need to be on disk (next strategist invocation imports the new code).
 WORKER_UPDATE_MANIFEST = [
     {
-        "url": "https://immuvi-command-center.vercel.app/team-skill/classify_worker.py",
+        "url": f"{WORKER_UPDATE_BASE_URL}/classify_worker.py",
         "rel_path": "tools/classify_worker.py",
         "triggers_restart": True,
     },
@@ -99,12 +104,12 @@ WORKER_UPDATE_MANIFEST = [
     # gets refreshed via re-exec. Without this, a strategist file update on
     # disk wouldn't take effect until the next manual worker restart.
     {
-        "url": "https://immuvi-command-center.vercel.app/team-skill/strategist/synthesis.py",
+        "url": f"{WORKER_UPDATE_BASE_URL}/strategist/synthesis.py",
         "rel_path": "tools/strategist/synthesis.py",
         "triggers_restart": True,
     },
     {
-        "url": "https://immuvi-command-center.vercel.app/team-skill/strategist/renderer.py",
+        "url": f"{WORKER_UPDATE_BASE_URL}/strategist/renderer.py",
         "rel_path": "tools/strategist/renderer.py",
         "triggers_restart": True,
     },
@@ -1770,6 +1775,7 @@ class Worker:
                                 supabase_url=os.environ["SUPABASE_URL"],
                                 service_key=os.environ["SUPABASE_SERVICE_ROLE_KEY"],
                                 worker_id=self.worker_id,
+                                require_preferred_worker=PRODUCER_REQUIRE_PREFERRED_WORKER,
                             )
                             if prod_run is None:
                                 break

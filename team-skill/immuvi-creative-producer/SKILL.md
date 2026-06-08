@@ -501,6 +501,7 @@ The producer's existing inline `urllib`/`curl` paths stay only for fully generic
        - the red/blue `BREAKING NEWS` strip is a thin lower-third band, roughly 8-12% of canvas height, placed over the lower edge of the photo
        - the headline is one white rectangular strip below the news band, roughly 10-16% of canvas height
        - headline text is 1-2 lines max, black uppercase, compact, and does not become a giant poster headline
+       - if the offer must be mentioned, fold it into the same 1-2 line headline strip; never create a separate CTA button or footer
        - no extra CTA/footer ribbon, no green offer bar, no product packshot/mockup, no separate product-poster section unless the reference has one
      - If the reference does not show a product mockup/packshot, do not add a product mockup/packshot unless the user explicitly asks for one.
      - Preserve the same major layout proportions: photo area vs overlay area, banner height, headline compactness, and subject placement.
@@ -528,7 +529,7 @@ The producer's existing inline `urllib`/`curl` paths stay only for fully generic
    - Do not copy the inspiration pixel-for-pixel. Preserve the winning mechanic, composition logic, and emotional structure while changing product, branding, claims, text, and details to fit the ClickUp brief.
    - The image prompt for each variation must include the `reference_anatomy` constraints explicitly. Do not rely on a vague phrase like "similar to the reference."
    - When a reference uses a news/lower-third format, keep the lower-third compact and news-like. Use short, readable headline text. Do not create giant poster copy blocks unless the reference itself has one.
-   - For `BREAKING NEWS` style references, the final image must have only: (1) photo background/subject, (2) small red/blue `BREAKING NEWS` band, and (3) one white headline strip. Do not add a product CTA ribbon, green offer bar, product mockup, or large poster copy area.
+   - For `BREAKING NEWS` style references, the final image must have only: (1) photo background/subject, (2) small red/blue `BREAKING NEWS` band, and (3) one white headline strip. Do not add a product CTA ribbon, green offer bar, product mockup, or large poster copy area. The white headline strip must look like the reference: compact, rectangular, close to the bottom of the news band, 1-2 text lines, no separate offer button.
    - Keep product facts, claims, and compliance-safe language grounded in the task and Creative Strategist memory.
    - For each output, record: variation id, prompt, source inspiration file/link, product, angle, persona, aspect ratio, generated file path, reference_anatomy, and any upload URL.
    - **Native generation recovery protocol.** If a native image call errors or produces no image file:
@@ -552,11 +553,16 @@ The producer's existing inline `urllib`/`curl` paths stay only for fully generic
      - reference has no product packshot but output adds a packshot/product mockup
      - reference has a compact lower-third but output becomes a long-copy product poster
      - breaking-news output adds a green CTA/footer ribbon or oversized white poster text block
+     - breaking-news output puts `FREE TODAY` or any offer in a separate button/bar instead of inside the single white headline strip
      - product/brand adaptation is missing
      - image has awkward anatomy, broken layout, or text crowding
    - Prefer fewer strong outputs over uploading weak variations.
 
 6. Upload and update systems.
+   - Upload exactly one ClickUp attachment per final accepted variation.
+   - Before upload, verify each final local image file exists, is non-empty, and opens as an image.
+   - Use final-only filenames shaped like `RUN<producer_run_id>_V<variation_number>_final.<ext>`.
+   - Do not upload native no-output placeholders, failed retry artifacts, temporary drafts, rejected quality-gate images, metadata files, prompt files, screenshots of the UI, or duplicate copies of the same final image.
    - Upload the creative files to the ClickUp task as attachments or through the available Immuvi upload path.
    - Add a concise ClickUp comment with the generated variation notes and links.
    - Update the task status to `Ready to Launch` only after outputs are generated and attached successfully.

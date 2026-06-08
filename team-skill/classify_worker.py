@@ -894,7 +894,8 @@ class Worker:
                 "Generate the images using your native image generation capability — the same one you use in the Codex chat. Do not specify or hard-code a particular image model name; use whatever native image tool is available.\n"
                 "Use image quality: high.\n"
                 "Use image size/aspect ratio: match the inspiration image unless the task specifies another size. Do NOT hard-code 1024x1536. If inspiration dimensions are unavailable, fall back to the task/platform default, then 4:5 for static social ads.\n\n"
-                "Output requirement: each variation must be generated/saved/uploaded as its own standalone image file. Do NOT create or upload contact sheets, 2x2 grids, merged review boards, collages, or multi-variation images. If the native image tool returns a grid, split it into separate final files before upload and mark only the individual files as outputs.\n\n"
+                "Output requirement: each variation must be generated/saved/uploaded as its own standalone final image file. Do NOT create or upload contact sheets, 2x2 grids, merged review boards, collages, multi-variation images, no-output placeholders, failed retry artifacts, rejected drafts, metadata files, prompt files, or duplicate copies. Final upload filenames must include "
+                f"RUN{run_id}_V##_final. If the native image tool returns a grid, split it into separate final files before upload and mark only the individual final files as outputs.\n\n"
                 "Run producer job:\n"
                 f"- task_id: {prod_run['task_id']}\n"
                 f"- product_id: {prod_run['product_id']}\n"
@@ -914,11 +915,11 @@ class Worker:
                 "8. Build a structured creative brief before image generation.\n"
                 "9. Use Creative Strategist data to reuse winning elements and avoid losing combos.\n"
                 "10. Generate the requested number of standalone image files using your native image generation at high quality (same as Codex chat — do not hard-code a specific model name). Generate one variation per native image call. Never count a merged grid/contact sheet as a final output.\n"
-                "11. Preserve reference anatomy, not just theme: if the reference has a human subject, include a comparable human subject; if it has a compact news lower-third, keep the same compact structure. For BREAKING NEWS references, use only photo + thin red/blue BREAKING NEWS band + one white headline strip; no green CTA bar, product mockup, oversized poster headline, or large white copy block.\n"
+                "11. Preserve reference anatomy, not just theme: if the reference has a human subject, include a comparable human subject; if it has a compact news lower-third, keep the same compact structure. For BREAKING NEWS references, use only photo + thin red/blue BREAKING NEWS band + one compact white headline strip; no green CTA bar, product mockup, oversized poster headline, large white copy block, or separate FREE TODAY button. If the offer must appear, fold it into the same 1-2 line white headline strip.\n"
                 "12. If a native image call errors or returns no output, retry with a materially simpler prompt under 900 characters, then one final ultra-simple prompt under 550 characters. Do not repeat the same failed prompt. Do not use any fallback renderer.\n"
-                "13. Quality gate each image before upload — persona match, offer/benefit clarity, readable typography, reference-anatomy match, mechanic match, brand fit, not generic.\n"
+                "13. Quality gate each image before upload — persona match, offer/benefit clarity, readable typography, reference-anatomy match, mechanic match, brand fit, not generic. For BREAKING NEWS references, reject any image with a separate CTA/footer/button or a bottom poster block instead of one compact headline strip.\n"
                 "14. Regenerate once if quality gate fails, using a simpler prompt that fixes the specific failed criterion.\n"
-                "15. Upload final images to ClickUp.\n"
+                f"15. Upload only final accepted images to ClickUp, exactly one attachment per accepted variation, with filenames containing RUN{run_id}_V##_final. Verify the local file exists, is non-empty, and opens as an image before upload.\n"
                 "16. Add ClickUp comment with summary and output links.\n"
                 "17. Set ClickUp task status to Ready to Launch only after upload succeeds.\n"
                 "18. PATCH producer_runs row "
@@ -1029,10 +1030,12 @@ class Worker:
                         _task_data = json.loads(_tr.read().decode())
                     _attachments = _task_data.get("attachments") or []
                     _tag = f"RUN{run_id}"
-                    _matched = [
-                        a for a in _attachments
-                        if _tag in (a.get("title") or a.get("url") or "")
-                    ]
+                    _matched = []
+                    for a in _attachments:
+                        _haystack = (a.get("title") or "") + " " + (a.get("url") or "")
+                        if _tag not in _haystack or "_final" not in _haystack:
+                            continue
+                        _matched.append(a)
                     _expected = prod_run.get("count", 1)
                     if len(_matched) >= _expected:
                         _outputs = [

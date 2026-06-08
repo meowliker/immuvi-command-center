@@ -475,15 +475,15 @@ def download(url, work_dir):
 The producer's existing inline `urllib`/`curl` paths stay only for fully generic non-platform URLs (e.g. ClickUp's `attachments.clickup.com` CDN, plain images on a marketing site). Anything that looks like a social platform must go through the router.
 
 3. Extract the creative brief.
-   - **PRODUCT DIRECTIVES (highest priority — non-negotiable).** Two sources, both mandatory:
+   - **PRODUCT DIRECTIVES (mandatory, but format-constrained).** Two sources, both mandatory:
      1. If the `instruction` contains a `[PRODUCT DIRECTIVES — MANDATORY …]` block, parse `OFFER TO FEATURE:` and `TALENT / FACES:` from it.
      2. Also read the product's persistent defaults from `products.config.production` (keys `offer`, `market`) — fetch the product row via the Command Center DB / `strategist_memory` context if not already in the payload.
-     Apply BOTH to **every** variation: feature the stated offer prominently in the creative, and render people/faces matching the stated market/ethnicity (e.g. "US / American faces (not Indian)" → cast American-looking talent; never substitute another ethnicity unless the user explicitly overrides). The instruction block wins on conflict; otherwise use the saved config defaults. If neither is present, infer the offer from the ClickUp task and keep talent neutral.
+     Apply BOTH to **every** variation, but never let offer/CTA treatment break the reference format anatomy. Render people/faces matching the stated market/ethnicity (e.g. "US / American faces (not Indian)" → cast American-looking talent; never substitute another ethnicity unless the user explicitly overrides). Feature the stated offer only if it fits inside the chosen reference format. For compact news/lower-third references, the offer may be omitted or reduced to a short phrase inside the single headline strip; do not create an extra CTA/button/footer to satisfy offer prominence. The instruction block wins on product/faces conflict, while reference anatomy wins on layout/format conflict. If neither is present, infer the offer from the ClickUp task and keep talent neutral.
    - **FORMAT REFERENCES (the Concept Picker).** If the `instruction` contains a `[FORMAT REFERENCES …]` block, it lists N proven winner formats (and optionally the user's own pasted URL) the user hand-selected. This is the scaling-a-winner workflow:
      - Generate **one distinct concept per reference** (N references → N concepts), not N look-alikes. Spread across the formats.
      - For each reference, **download its `ref asset:` link** (Google Drive folder/file, or a pasted image/ad URL) via the Step 2.0 `detect_platform()` router and visually inspect it — that image defines the *format/layout/production style* to adopt for that concept.
      - **HOLD CONSTANT** the message named in the block's `[HOLD CONSTANT …]` line (this task's winning angle + persona + promise/emotion). You are changing only the *format/execution*, never the core message.
-     - Still apply the PRODUCT DIRECTIVES (offer + faces) to every one of these concepts.
+     - Still apply the PRODUCT DIRECTIVES (offer + faces) to every one of these concepts, but reference anatomy wins if the offer would require adding a layout element that the reference does not have.
      - If a reference asset fails to download, note it and still produce that concept from the format label + the task's strategist memory, rather than dropping it silently.
    - **REFERENCE FIDELITY CONTRACT (mandatory for every concept with a reference image).** The output must preserve the reference's format anatomy, not just its broad theme. Before generating, write a compact `reference_anatomy` note with:
      - `subject_type`: person / object / product / environment, plus age/role when visible.
@@ -494,15 +494,15 @@ The producer's existing inline `urllib`/`curl` paths stay only for fully generic
      - `copy_density`: short news caption vs long ad copy, number of lines, and headline style.
      - `product_presence`: whether a product/mockup/packshot appears in the reference.
    - **Hard fidelity rules:**
-     - If the reference contains a human subject, the generated image must contain a comparable human subject. Do not replace a child/person with only a backpack, desk, worksheet, empty classroom, or product shot.
-     - If the reference is a candid photo with a compact news lower-third, do not turn it into a polished product poster with a large white copy block.
+     - If the reference contains a human subject, the generated image must contain a comparable visible human subject in a similar scale/role/pose region. Do not replace a child/person with only a backpack, chair, desk, worksheet, empty hallway/classroom, playground, or product shot.
+     - If the reference is a candid photo with a compact news lower-third, do not turn it into a polished product poster with a large white copy block or any offer section.
      - For compact breaking-news references, copy the overlay anatomy tightly:
        - photo remains the dominant canvas, roughly the top 70-80% of the image
        - the red/blue `BREAKING NEWS` strip is a thin lower-third band, roughly 8-12% of canvas height, placed over the lower edge of the photo
        - the headline is one white rectangular strip below the news band, roughly 10-16% of canvas height
        - headline text is 1-2 lines max, black uppercase, compact, and does not become a giant poster headline
-       - if the offer must be mentioned, fold it into the same 1-2 line headline strip; never create a separate CTA button or footer
-       - no extra CTA/footer ribbon, no green offer bar, no product packshot/mockup, no separate product-poster section unless the reference has one
+       - if the offer must be mentioned, fold it into the same 1-2 line headline strip; otherwise omit the offer
+       - no extra CTA/footer ribbon, no green/red offer bar, no `FREE TODAY` button, no icon/product label row, no product packshot/mockup, no separate product-poster section unless the reference has one
      - If the reference does not show a product mockup/packshot, do not add a product mockup/packshot unless the user explicitly asks for one.
      - Preserve the same major layout proportions: photo area vs overlay area, banner height, headline compactness, and subject placement.
      - Preserve the same emotional mechanic. For example, a lone child on a bench + breaking-news lower-third should become a similar candid child/student scene + compact breaking-news lower-third, adapted to the new offer/message.
@@ -529,7 +529,7 @@ The producer's existing inline `urllib`/`curl` paths stay only for fully generic
    - Do not copy the inspiration pixel-for-pixel. Preserve the winning mechanic, composition logic, and emotional structure while changing product, branding, claims, text, and details to fit the ClickUp brief.
    - The image prompt for each variation must include the `reference_anatomy` constraints explicitly. Do not rely on a vague phrase like "similar to the reference."
    - When a reference uses a news/lower-third format, keep the lower-third compact and news-like. Use short, readable headline text. Do not create giant poster copy blocks unless the reference itself has one.
-   - For `BREAKING NEWS` style references, the final image must have only: (1) photo background/subject, (2) small red/blue `BREAKING NEWS` band, and (3) one white headline strip. Do not add a product CTA ribbon, green offer bar, product mockup, or large poster copy area. The white headline strip must look like the reference: compact, rectangular, close to the bottom of the news band, 1-2 text lines, no separate offer button.
+   - For `BREAKING NEWS` style references, the final image must have only: (1) photo background/subject, (2) small red/blue `BREAKING NEWS` band, and (3) one white headline strip. Do not add a product CTA ribbon, green/red offer bar, product mockup, icon/product label row, or large poster copy area. The white headline strip must look like the reference: compact, rectangular, close to the bottom of the news band, 1-2 text lines, no separate offer button. If the native image output contains any fourth visual section below the white headline strip, reject it.
    - Keep product facts, claims, and compliance-safe language grounded in the task and Creative Strategist memory.
    - For each output, record: variation id, prompt, source inspiration file/link, product, angle, persona, aspect ratio, generated file path, reference_anatomy, and any upload URL.
    - **Native generation recovery protocol.** If a native image call errors or produces no image file:
@@ -544,19 +544,21 @@ The producer's existing inline `urllib`/`curl` paths stay only for fully generic
    - Inspect each generated image before upload.
    - Reject and regenerate once if any of these fail:
      - persona does not match the task
-     - **the PRODUCT DIRECTIVES offer is not featured, or faces/talent do not match the stated market/ethnicity**
+     - faces/talent do not match the PRODUCT DIRECTIVES stated market/ethnicity
+     - the PRODUCT DIRECTIVES offer is not featured, except when the reference format is a compact news/lower-third layout where adding the offer would create a non-reference CTA/footer/button
      - offer/benefit stack is weak or missing
      - typography is unreadable or visibly garbled
      - output is too generic or does not preserve the inspiration mechanic
      - output preserves only the theme but not the reference anatomy
-     - reference has a human subject but output replaces the person with objects or an empty room
+     - reference has a human subject but output replaces the person with objects, an empty room, a backpack, a chair, a hallway, or a playground
      - reference has no product packshot but output adds a packshot/product mockup
      - reference has a compact lower-third but output becomes a long-copy product poster
      - breaking-news output adds a green CTA/footer ribbon or oversized white poster text block
-     - breaking-news output puts `FREE TODAY` or any offer in a separate button/bar instead of inside the single white headline strip
+     - breaking-news output puts `FREE TODAY` or any offer in a separate button/bar/row instead of inside the single white headline strip
+     - breaking-news output has more than three visual sections: photo, news band, white headline strip
      - product/brand adaptation is missing
      - image has awkward anatomy, broken layout, or text crowding
-   - Prefer fewer strong outputs over uploading weak variations.
+   - Prefer fewer strong outputs over uploading weak variations. If no generated image passes the reference-anatomy quality gate after the allowed retry, mark the run failed instead of uploading a weak/non-matching image.
 
 6. Upload and update systems.
    - Upload exactly one ClickUp attachment per final accepted variation.

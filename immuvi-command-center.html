@@ -3392,7 +3392,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   display:flex; align-items:center; gap:8px;
   background:#0E0E10; color:#fff; border-radius:12px;
   padding:10px 14px; margin-bottom:10px; font-size:0.76rem;
-  position:sticky; top:calc(var(--hdr-h, 60px) + 42px); z-index:48;
+  position:sticky; top:calc(var(--hdr-h, 60px) + var(--tabs-h, 52px) + 6px); z-index:48;
   box-shadow:0 10px 24px rgba(14,14,16,0.16);
 }
 .ap-bulk.hide { display:none; }
@@ -3412,19 +3412,19 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .ap-bulk-check {
   display:inline-flex; align-items:center; gap:7px;
   height:31px; padding:0 10px; border-radius:8px;
-  border:1px solid rgba(255,255,255,0.15);
-  background:rgba(255,255,255,0.08);
+  border:0;
+  background:transparent;
   color:rgba(255,255,255,0.82);
   font-size:0.72rem; font-weight:600;
   white-space:nowrap; cursor:pointer; user-select:none;
 }
-.ap-bulk-check:hover { background:rgba(255,255,255,0.12); }
+.ap-bulk-check:hover { background:rgba(255,255,255,0.08); }
 .ap-bulk-check input {
   width:14px; height:14px; margin:0;
   accent-color:#d6ff4b;
 }
 .ap-bulk-check.is-on {
-  color:#fff; border-color:rgba(214,255,75,0.48);
+  color:#fff;
   background:rgba(214,255,75,0.14);
 }
 .ap-bulk-search {
@@ -22647,10 +22647,6 @@ function renderApBulkToolbar() {
     var selectedOnly = !!(_apState.filters && _apState.filters.selectedOnly);
     html += '<span class="ap-bulk-count"><b>' + n + '</b> selected</span>';
     html += '<button class="ap-bulk-btn primary" ' + (launchDisabled ? 'disabled ' : '') + 'title="' + escAttr(launchTitle) + '" onclick="apBulkLaunchOneScale()">Launch Selected in OneScale</button>';
-    html += '<label class="ap-bulk-check' + (selectedOnly ? ' is-on' : '') + '" title="Show only the tasks currently selected in this list">' +
-              '<input type="checkbox" ' + (selectedOnly ? 'checked ' : '') + 'onchange="setApSelectedOnly(this.checked)">' +
-              '<span>Show Selected</span>' +
-            '</label>';
     if (n > 0) {
       html += '<button class="ap-bulk-btn primary" onclick="apBulkPushToClickUp()">+ Push to ClickUp</button>';
       html += '<button class="ap-bulk-btn" onclick="apBulkOpenStatusMenu(event)">Change status ▾</button>';
@@ -22659,6 +22655,10 @@ function renderApBulkToolbar() {
     }
     var taskQuery = (_apState.filters && _apState.filters.taskQuery) || '';
     html += '<span class="ap-bulk-spacer"></span>';
+    html += '<label class="ap-bulk-check' + (selectedOnly ? ' is-on' : '') + '" title="Show only the tasks currently selected in this list">' +
+              '<input type="checkbox" ' + (selectedOnly ? 'checked ' : '') + 'onchange="setApSelectedOnly(this.checked)">' +
+              '<span>Show Selected</span>' +
+            '</label>';
     html += '<div class="ap-bulk-search" title="Search creatives by task name">' +
               '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5L14 14"/></svg>' +
               '<input id="apTaskSearch" type="search" value="' + escAttr(taskQuery) + '" placeholder="Search task name" autocomplete="off" oninput="setApTaskSearch(this.value)" />' +
@@ -32563,18 +32563,23 @@ document.addEventListener('visibilitychange', function () {
 });
 
 // ─────────────────────────────────────────────────────────────────────────
-// Sticky-nav header-height sync. The tabs-wrap is `position: sticky;
-// top: var(--hdr-h)` so it parks RIGHT under the real header. We measure
-// the header on load + resize + when its content mutates (presence dots,
-// API key input wrap, sync-bar appearing). Without this, when the header
-// renders taller than the static fallback, the tabs slide behind it.
+// Sticky-nav chrome-height sync. The tabs-wrap is `position: sticky;
+// top: var(--hdr-h)` so it parks RIGHT under the real header. The Action
+// Plan bulk bar sits under both sticky pieces, so it also reads --tabs-h.
+// Measure on load + resize + dynamic content changes.
 // ─────────────────────────────────────────────────────────────────────────
 function _syncHeaderHeightVar() {
   try {
     var h = document.querySelector('header.hdr');
-    if (!h) return;
-    var px = Math.round(h.getBoundingClientRect().height);
-    if (px > 0) document.documentElement.style.setProperty('--hdr-h', px + 'px');
+    if (h) {
+      var px = Math.round(h.getBoundingClientRect().height);
+      if (px > 0) document.documentElement.style.setProperty('--hdr-h', px + 'px');
+    }
+    var t = document.querySelector('.tabs-wrap');
+    if (t) {
+      var tx = Math.round(t.getBoundingClientRect().height);
+      if (tx > 0) document.documentElement.style.setProperty('--tabs-h', tx + 'px');
+    }
   } catch (_) {}
 }
 window.addEventListener('resize', _syncHeaderHeightVar);
@@ -32584,6 +32589,8 @@ try {
   if (typeof ResizeObserver !== 'undefined') {
     var _hdrEl = document.querySelector('header.hdr');
     if (_hdrEl) new ResizeObserver(_syncHeaderHeightVar).observe(_hdrEl);
+    var _tabsEl = document.querySelector('.tabs-wrap');
+    if (_tabsEl) new ResizeObserver(_syncHeaderHeightVar).observe(_tabsEl);
   }
 } catch (_) {}
 

@@ -3392,6 +3392,8 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   display:flex; align-items:center; gap:8px;
   background:#0E0E10; color:#fff; border-radius:12px;
   padding:10px 14px; margin-bottom:10px; font-size:0.76rem;
+  position:sticky; top:calc(var(--hdr-h, 60px) + 42px); z-index:48;
+  box-shadow:0 10px 24px rgba(14,14,16,0.16);
 }
 .ap-bulk.hide { display:none; }
 .ap-bulk-count b { color:#d6ff4b; font-family:'JetBrains Mono',monospace; }
@@ -3407,6 +3409,24 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .ap-bulk-btn:hover   { transform:translateY(-1px); }
 .ap-bulk-btn:disabled { opacity:0.45; cursor:not-allowed; transform:none; }
 .ap-bulk-spacer { flex:1; min-width:16px; }
+.ap-bulk-check {
+  display:inline-flex; align-items:center; gap:7px;
+  height:31px; padding:0 10px; border-radius:8px;
+  border:1px solid rgba(255,255,255,0.15);
+  background:rgba(255,255,255,0.08);
+  color:rgba(255,255,255,0.82);
+  font-size:0.72rem; font-weight:600;
+  white-space:nowrap; cursor:pointer; user-select:none;
+}
+.ap-bulk-check:hover { background:rgba(255,255,255,0.12); }
+.ap-bulk-check input {
+  width:14px; height:14px; margin:0;
+  accent-color:#d6ff4b;
+}
+.ap-bulk-check.is-on {
+  color:#fff; border-color:rgba(214,255,75,0.48);
+  background:rgba(214,255,75,0.14);
+}
 .ap-bulk-search {
   display:flex; align-items:center; gap:7px;
   min-width:220px; max-width:360px; width:clamp(220px, 24vw, 360px);
@@ -21660,6 +21680,7 @@ var _apState = (function () {
       adTypes: [],                  // [] = all types
       sources: [],                  // [] = all sources
       taskQuery: '',                // quick search by visible task name
+      selectedOnly: false,          // show only rows checked for bulk work
       hygieneOnly: false,           // toggled by hygiene banner "Show only these"
       anomaliesOnly: false,         // toggled by Anomalies chip in filterbar
       includeAdopted: true,         // 2026-05-09: auto-adopt ClickUp-only ADs into AP (toggle in filter strip)
@@ -21760,6 +21781,7 @@ function apApplyFilters(resolved) {
     // Dismiss filter — soft-hide cards the user has cleared from their own AP.
     // Bypassed when "Show hidden" toggle is ON.
     if (!f.showDismissed && r.ad && r.ad.id && typeof _apIsDismissed === 'function' && _apIsDismissed(r.ad.id)) return false;
+    if (f.selectedOnly && !(_apState.selected && _apState.selected[r.act.id])) return false;
     if (f.statuses.length) {
       // Case-insensitive match — saved selections may have legacy casing.
       var _rsLc = String(r.display.status || '').toLowerCase();
@@ -22164,6 +22186,7 @@ function renderApFilterStrip(allResolved, filtered) {
   if (f.sources && f.sources.length)   _activeFilterCount += f.sources.length;
   if (f.datePreset && f.datePreset !== 'all') _activeFilterCount++;
   if (f.anomaliesOnly) _activeFilterCount++;
+  if (f.selectedOnly)  _activeFilterCount++;
   if (f.hygieneOnly)   _activeFilterCount++;
   if (Array.isArray(f.tileToggles) && f.tileToggles.length) _activeFilterCount += f.tileToggles.length;
   html += '<button class="ap-clear-filters' + (hasFilters ? ' hot' : ' disabled') + '"' +
@@ -22212,6 +22235,7 @@ function apHasActiveFilters() {
       || (f.funnels && f.funnels.length)
       || (f.adTypes && f.adTypes.length)
       || (f.sources && f.sources.length)
+      || f.selectedOnly
       || f.hygieneOnly
       || f.anomaliesOnly
       || (f.tileToggles && f.tileToggles.length)
@@ -22455,6 +22479,7 @@ function renderApActiveFilterChips() {
     chips.push(chip('Source: ' + s, '_apClearChip("source", ' + jsArg(s) + ')'));
   });
   if (f.anomaliesOnly) chips.push(chip('Anomalies only', '_apClearChip("anomaliesOnly")'));
+  if (f.selectedOnly)  chips.push(chip('Selected only', '_apClearChip("selectedOnly")'));
   if (f.hygieneOnly)   chips.push(chip('Needs Attention only', '_apClearChip("hygieneOnly")'));
   (f.tileToggles || []).forEach(function (k) {
     var parts = k.split(':');
@@ -22485,6 +22510,7 @@ window._apClearChip = function (kind, value) {
   else if (kind === 'adType') { f.adTypes = (f.adTypes || []).filter(function (s) { return s !== value; }); }
   else if (kind === 'source') { f.sources = (f.sources || []).filter(function (s) { return s !== value; }); }
   else if (kind === 'anomaliesOnly') { f.anomaliesOnly = false; }
+  else if (kind === 'selectedOnly')  { f.selectedOnly = false; }
   else if (kind === 'hygieneOnly')   { f.hygieneOnly = false; }
   else if (kind === 'tile') {
     f.tileToggles = (f.tileToggles || []).filter(function (k) { return k !== value; });
@@ -22493,7 +22519,7 @@ window._apClearChip = function (kind, value) {
   _apSaveState(); renderActionPlan();
 };
 function clearApFilters() {
-  _apState.filters = { dateMode: _apState.filters.dateMode, datePreset: 'all', dateFrom: null, dateTo: null, statuses: [], funnels: [], adTypes: [], sources: [], taskQuery: _apState.filters.taskQuery || '', hygieneOnly: false, anomaliesOnly: false, tileToggles: [] };
+  _apState.filters = { dateMode: _apState.filters.dateMode, datePreset: 'all', dateFrom: null, dateTo: null, statuses: [], funnels: [], adTypes: [], sources: [], taskQuery: _apState.filters.taskQuery || '', selectedOnly: false, hygieneOnly: false, anomaliesOnly: false, tileToggles: [] };
   _apState.openFilter = null;
   // Also wipe any custom range applied via the Week panel picker so the
   // Pulse strip falls back to its default Mon→today.
@@ -22501,6 +22527,7 @@ function clearApFilters() {
   _apSaveState(); renderActionPlan();
 }
 function setApView(v)                { _apState.view = v; _apSaveState(); renderActionPlan(); }
+function setApSelectedOnly(on)       { _apState.filters.selectedOnly = !!on; _apSaveState(); renderActionPlan(); }
 function setApHygieneOnly(on)        { _apState.filters.hygieneOnly = !!on; _apSaveState(); renderActionPlan(); }
 function setApAnomaliesOnly(on)      { _apState.filters.anomaliesOnly = !!on; _apSaveState(); renderActionPlan(); }
 
@@ -22617,8 +22644,13 @@ function renderApBulkToolbar() {
   if (inflight) {
     html += '<span class="ap-bulk-progress">Pushing ' + _apState.bulkPushDone + ' / ' + _apState.bulkPushTotal + '…</span>';
   } else {
+    var selectedOnly = !!(_apState.filters && _apState.filters.selectedOnly);
     html += '<span class="ap-bulk-count"><b>' + n + '</b> selected</span>';
     html += '<button class="ap-bulk-btn primary" ' + (launchDisabled ? 'disabled ' : '') + 'title="' + escAttr(launchTitle) + '" onclick="apBulkLaunchOneScale()">Launch Selected in OneScale</button>';
+    html += '<label class="ap-bulk-check' + (selectedOnly ? ' is-on' : '') + '" title="Show only the tasks currently selected in this list">' +
+              '<input type="checkbox" ' + (selectedOnly ? 'checked ' : '') + 'onchange="setApSelectedOnly(this.checked)">' +
+              '<span>Show Selected</span>' +
+            '</label>';
     if (n > 0) {
       html += '<button class="ap-bulk-btn primary" onclick="apBulkPushToClickUp()">+ Push to ClickUp</button>';
       html += '<button class="ap-bulk-btn" onclick="apBulkOpenStatusMenu(event)">Change status ▾</button>';
@@ -22664,10 +22696,19 @@ function clearApTaskSearch() {
 function apToggleSelect(actionId, on) { if (on) _apState.selected[actionId] = true; else delete _apState.selected[actionId]; renderActionPlan(); }
 function apToggleSelectAll(rows, on) {
   if (on) { rows.forEach(function (r) { _apState.selected[r.act.id] = true; }); }
-  else { _apState.selected = {}; }
+  else {
+    _apState.selected = {};
+    if (_apState.filters) _apState.filters.selectedOnly = false;
+    _apSaveState();
+  }
   renderActionPlan();
 }
-function apClearSelection() { _apState.selected = {}; renderActionPlan(); }
+function apClearSelection() {
+  _apState.selected = {};
+  if (_apState.filters) _apState.filters.selectedOnly = false;
+  _apSaveState();
+  renderActionPlan();
+}
 
 function _apMergeServerOneScaleLaunch(localAct, dbAct) {
   if (!localAct || !dbAct || !dbAct.oneScaleLaunch) return localAct || dbAct;
@@ -22714,6 +22755,10 @@ function _apPruneCompletedOneScaleSelections(rows) {
     if (!seen[id]) delete pending[id];
   });
   _apState.oneScalePendingLaunchSelected = pending;
+  if (removed && _apState.filters && _apState.filters.selectedOnly && !Object.keys(_apState.selected).length) {
+    _apState.filters.selectedOnly = false;
+    _apSaveState();
+  }
   return removed;
 }
 
@@ -22776,6 +22821,8 @@ function apBulkDelete() {
   if (!confirm('Delete ' + ids.length + ' card' + (ids.length > 1 ? 's' : '') + ' from the Action Plan? (ClickUp tasks will not be affected.)')) return;
   ids.forEach(function (id) { try { deleteManualAction(id); } catch (e) {} });
   _apState.selected = {};
+  if (_apState.filters) _apState.filters.selectedOnly = false;
+  _apSaveState();
   renderActionPlan();
 }
 function apBulkOpenStatusMenu(ev) {
@@ -22878,6 +22925,8 @@ function apBulkApplyStatus(newStatus) {
       if (done + failed === total) {
         // Final tally — clear selection + close progress toast, fire summary
         _apState.selected = {};
+        if (_apState.filters) _apState.filters.selectedOnly = false;
+        _apSaveState();
         renderActionPlan();
         if (progressToast && typeof progressToast.close === 'function') {
           try { progressToast.close(); } catch (e) {}
@@ -22907,6 +22956,8 @@ function apBulkPushToClickUp() {
     if (idx >= ids.length) {
       _apState.bulkPushInFlight = false;
       _apState.selected = {};
+      if (_apState.filters) _apState.filters.selectedOnly = false;
+      _apSaveState();
       renderActionPlan();
       toast('Bulk push complete: ' + ids.length, 'ok');
       return;

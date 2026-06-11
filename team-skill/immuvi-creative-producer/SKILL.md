@@ -485,7 +485,7 @@ The producer's existing inline `urllib`/`curl` paths stay only for fully generic
      - **HOLD CONSTANT** the message named in the block's `[HOLD CONSTANT …]` line (this task's winning angle + persona + promise/emotion). You are changing only the *format/execution*, never the core message.
      - Still apply the PRODUCT DIRECTIVES (offer + faces) to every one of these concepts, but reference anatomy wins if the offer would require adding a layout element that the reference does not have.
      - If a reference asset fails to download, note it and still produce that concept from the format label + the task's strategist memory, rather than dropping it silently.
-   - **REFERENCE FIDELITY CONTRACT (mandatory for every concept with a reference image).** The output must preserve the reference's format anatomy, not just its broad theme. Before generating, complete a measured reference pass. If exact pixels are unavailable, estimate percentages visually and label them as estimated. Write a compact `reference_anatomy`, `reference_layout_spec`, and `text_scale_map` with:
+   - **REFERENCE FIDELITY CONTRACT (mandatory for every concept with a reference image).** The output must preserve the reference's format anatomy, not just its broad theme. Before generating, write a compact `reference_anatomy` note with:
      - `subject_type`: person / object / product / environment, plus age/role when visible.
      - `subject_presence`: whether the reference has a human subject, how prominent they are, pose, mood, and where they sit in frame.
      - `setting`: indoor/outdoor, location type, background depth, weather/light, and emotional tone.
@@ -493,14 +493,9 @@ The producer's existing inline `urllib`/`curl` paths stay only for fully generic
      - `overlay_system`: lower-third/banner/card/text placement, size, colors, and how much of the canvas it occupies.
      - `copy_density`: short news caption vs long ad copy, number of lines, and headline style.
      - `product_presence`: whether a product/mockup/packshot appears in the reference.
-     - `reference_layout_spec`: canvas dimensions/aspect ratio; visual section count and order; each section's approximate x/y/w/h as percentages of canvas; photo area percentage; banner/lower-third/headline strip heights; margins and padding.
-     - `text_scale_map`: each text block's approximate x/y/w/h as percentages of canvas; line count; casing; alignment; weight/style; font-size-to-canvas-height ratio; font-size-to-section-height ratio; and whether the text is compact, medium, or poster-scale.
-     - `forbidden_additions`: CTA/product/offer/button/packshot/footer elements absent from the reference and therefore forbidden unless the user explicitly asks for them.
    - **Hard fidelity rules:**
      - If the reference contains a human subject, the generated image must contain a comparable visible human subject in a similar scale/role/pose region. Do not replace a child/person with only a backpack, chair, desk, worksheet, empty hallway/classroom, playground, or product shot.
      - If the reference is a candid photo with a compact news lower-third, do not turn it into a polished product poster with a large white copy block or any offer section.
-     - Text scale is part of the reference anatomy. Match each text block's measured bounding box, line count, alignment, casing, margin, padding, and approximate font-size ratio. Do not enlarge text just because the offer or headline feels important.
-     - If the reference has compact overlay text, generated text must remain compact. Do not convert compact reference copy into a poster headline, oversized offer block, or large stacked typography.
      - For compact breaking-news references, copy the overlay anatomy tightly:
        - photo remains the dominant canvas, roughly the top 70-80% of the image
        - the red/blue `BREAKING NEWS` strip is a thin lower-third band, roughly 8-12% of canvas height, placed over the lower edge of the photo
@@ -510,7 +505,6 @@ The producer's existing inline `urllib`/`curl` paths stay only for fully generic
        - no extra CTA/footer ribbon, no green/red offer bar, no `FREE TODAY` button, no icon/product label row, no product packshot/mockup, no separate product-poster section unless the reference has one
      - If the reference does not show a product mockup/packshot, do not add a product mockup/packshot unless the user explicitly asks for one.
      - Preserve the same major layout proportions: photo area vs overlay area, banner height, headline compactness, and subject placement.
-     - Preserve section order and section proportions. Reject the output if a major section's height/width drifts more than about 15% from the measured reference spec, or if the text block height grows more than about 20-25% beyond the reference text scale.
      - Preserve the same emotional mechanic. For example, a lone child on a bench + breaking-news lower-third should become a similar candid child/student scene + compact breaking-news lower-third, adapted to the new offer/message.
      - Product/offer adaptation happens inside the reference format. It must not overpower or replace the reference format.
    - Product: product name, offer, constraints, and source product id.
@@ -533,7 +527,7 @@ The producer's existing inline `urllib`/`curl` paths stay only for fully generic
    - If your native image tool is unavailable or errors out, mark the run `failed` with a clear error message — do NOT silently fall back to Pillow, ASCII art, static graphics, or any non-AI renderer. Honest failure is better than fake images.
    - Generate creative variations that keep the same concept and visual logic as the inspiration but are rebuilt for our product, brand, angle, persona, and offer.
    - Do not copy the inspiration pixel-for-pixel. Preserve the winning mechanic, composition logic, and emotional structure while changing product, branding, claims, text, and details to fit the ClickUp brief.
-   - The image prompt for each variation must include the `reference_anatomy`, `reference_layout_spec`, and `text_scale_map` constraints explicitly. It must say to match text sizes and overlay bounding boxes to the reference, and not to upscale compact text into poster headlines. Do not rely on a vague phrase like "similar to the reference."
+   - The image prompt for each variation must include the `reference_anatomy` constraints explicitly. Do not rely on a vague phrase like "similar to the reference."
    - When a reference uses a news/lower-third format, keep the lower-third compact and news-like. Use short, readable headline text. Do not create giant poster copy blocks unless the reference itself has one.
    - For `BREAKING NEWS` style references, the final image must have only: (1) photo background/subject, (2) small red/blue `BREAKING NEWS` band, and (3) one white headline strip. Do not add a product CTA ribbon, green/red offer bar, product mockup, icon/product label row, or large poster copy area. The white headline strip must look like the reference: compact, rectangular, close to the bottom of the news band, 1-2 text lines, no separate offer button. If the native image output contains any fourth visual section below the white headline strip, reject it.
    - Keep product facts, claims, and compliance-safe language grounded in the task and Creative Strategist memory.
@@ -556,9 +550,6 @@ The producer's existing inline `urllib`/`curl` paths stay only for fully generic
      - typography is unreadable or visibly garbled
      - output is too generic or does not preserve the inspiration mechanic
      - output preserves only the theme but not the reference anatomy
-     - reference analysis is incomplete, uncertain, or missing the measured `reference_layout_spec` / `text_scale_map`
-     - section order or section bounding boxes materially drift from the measured reference layout
-     - any major text block is materially larger/smaller than the reference, grows more than about 20-25% taller than the mapped text box, changes line count, changes alignment/casing, or uses noticeably different padding/margins
      - reference has a human subject but output replaces the person with objects, an empty room, a backpack, a chair, a hallway, or a playground
      - reference has no product packshot but output adds a packshot/product mockup
      - reference has a compact lower-third but output becomes a long-copy product poster

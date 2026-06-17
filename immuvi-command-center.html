@@ -15365,28 +15365,49 @@ if (!window.__producerClickListenerAttached) {
   }, true);
 }
 
-// ── Per-product Production Directives (offer + market/faces) ──────────────
+// ── Per-product Production Directives (offer + market/faces/name lock) ─────
 // Persistent per-product settings the image producer auto-applies to EVERY
-// generation, so the user never has to retype "use the Free Today offer" or
-// "US faces, not Indian". Stored in products.config.production = {offer, market}.
+// generation, so the user never has to retype "use the Free Today offer",
+// "US faces, not Indian", or "the product name is exactly NCLEX".
+// Stored in products.config.production.
 // `market` is free text because geo varies per product (US, India for Astro
 // Rekha IND, etc.). Read from the in-memory PRODUCTS cache; saved back to DB.
-function _prodDirectives(productId) {
-  var p = (typeof PRODUCTS !== 'undefined' && Array.isArray(PRODUCTS))
+function _producerProductRecord(productId) {
+  return (typeof PRODUCTS !== 'undefined' && Array.isArray(PRODUCTS))
     ? PRODUCTS.find(function (x) { return x.id === productId; }) : null;
-  var prod = (p && p.config && p.config.production) || {};
-  return { offer: prod.offer || '', market: prod.market || '' };
 }
 
-async function _saveProdDirectives(productId, offer, market) {
+function _producerDefaultProductName(productId) {
+  var p = _producerProductRecord(productId);
+  return (p && (p.name || p.id)) || productId || '';
+}
+
+function _prodDirectives(productId) {
+  var p = _producerProductRecord(productId);
+  var prod = (p && p.config && p.config.production) || {};
+  return {
+    offer: prod.offer || '',
+    market: prod.market || '',
+    productName: prod.product_name || prod.productName || _producerDefaultProductName(productId),
+    forbiddenAliases: prod.forbidden_aliases || prod.forbiddenAliases || ''
+  };
+}
+
+async function _saveProdDirectives(productId, offer, market, productName, forbiddenAliases) {
   offer = (offer || '').trim();
   market = (market || '').trim();
+  productName = (productName || '').trim();
+  forbiddenAliases = (forbiddenAliases || '').trim();
   // Update in-memory cache immediately so the next modal open reflects it.
-  var p = (typeof PRODUCTS !== 'undefined' && Array.isArray(PRODUCTS))
-    ? PRODUCTS.find(function (x) { return x.id === productId; }) : null;
+  var p = _producerProductRecord(productId);
   if (p) {
     p.config = p.config || {};
-    p.config.production = Object.assign({}, p.config.production || {}, { offer: offer, market: market });
+    p.config.production = Object.assign({}, p.config.production || {}, {
+      offer: offer,
+      market: market,
+      product_name: productName,
+      forbidden_aliases: forbiddenAliases
+    });
   }
   if (typeof SB === 'undefined' || !SB) return;
   try {
@@ -15394,7 +15415,12 @@ async function _saveProdDirectives(productId, offer, market) {
     var ex = await SB.from('products').select('config').eq('id', productId).maybeSingle();
     var existing = (ex && ex.data && ex.data.config) || {};
     var newCfg = Object.assign({}, existing);
-    newCfg.production = Object.assign({}, existing.production || {}, { offer: offer, market: market });
+    newCfg.production = Object.assign({}, existing.production || {}, {
+      offer: offer,
+      market: market,
+      product_name: productName,
+      forbidden_aliases: forbiddenAliases
+    });
     var res = await SB.from('products').update({ config: newCfg }).eq('id', productId);
     if (res && res.error) console.warn('[producer] save directives failed', res.error);
   } catch (e) { console.warn('[producer] save directives threw', e); }
@@ -15403,17 +15429,29 @@ async function _saveProdDirectives(productId, offer, market) {
 // Compose the final instruction sent to the producer worker: a MANDATORY
 // directive block (offer + faces) followed by the user's free-text note.
 // The producer SKILL.md parses this block and applies it to every variation.
-function _composeProducerInstruction(offer, market, userInstr) {
+function _composeProducerInstruction(offer, market, productName, forbiddenAliases, userInstr) {
   offer = (offer || '').trim();
   market = (market || '').trim();
+  productName = (productName || '').trim();
+  forbiddenAliases = (forbiddenAliases || '').trim();
   userInstr = (userInstr || '').trim();
   var lines = [];
-  if (offer || market) {
+  if (offer || market || productName || forbiddenAliases) {
     lines.push('[PRODUCT DIRECTIVES — MANDATORY, apply to EVERY image]');
+    if (productName) lines.push('CANONICAL PRODUCT NAME: ' + productName);
+    if (forbiddenAliases) lines.push('FORBIDDEN PRODUCT ALIASES / INVENTED NAMES: ' + forbiddenAliases);
     if (offer)  lines.push('OFFER TO FEATURE: ' + offer);
     if (market) lines.push('TALENT / FACES: ' + market + ' (do not use other ethnicities unless told)');
+    lines.push('PRODUCT NAME RULE: Product/offer names may add descriptive words only when anchored by the canonical product name. Good: "NCLEX Study Notes", "NCLEX Bundle", "NCLEX Guide". Bad: "CRAM KIT", "Study Plan", "Shortcut", or any name that does not clearly say what product is being sold.');
     lines.push('[/PRODUCT DIRECTIVES]');
   }
+  lines.push('[REFERENCE LAYOUT QA — MANDATORY BEFORE UPLOAD]');
+  lines.push('Match the reference image orientation and aspect ratio. A vertical reference must not become horizontal; a square reference must stay square.');
+  lines.push('Preserve the reference layout zones: logo/header placement, main headline block, body/comment/text block, product/mockup/photo area, CTA/signature, and empty-space balance.');
+  lines.push('Keep text alignment and hierarchy close to the reference: same left/center/right alignment, similar line count, similar font-size proportions, and balanced padding.');
+  lines.push('Do not invent awkward headline line breaks or title-case sentence words incorrectly. Example: keep "is" lowercase when it is inside a sentence unless the approved copy says "Is".');
+  lines.push('Reject/regenerate any output whose format is unrelated to the reference, whose product name drifts, whose text alignment/size clearly differs, or whose aspect ratio differs.');
+  lines.push('[/REFERENCE LAYOUT QA]');
   if (userInstr) {
     if (lines.length) lines.push('');
     lines.push(userInstr);
@@ -15649,6 +15687,14 @@ function _producerOpenModal(taskId, productId) {
           '<label style="display:block;font-size:0.74rem;color:var(--t2);margin-bottom:4px">Talent / faces (market)</label>' +
           '<input id="producerMarket" type="text" value="' + escAttr(_pd.market) + '" ' +
           'placeholder="e.g. US / American faces (not Indian)" ' +
+          'style="width:100%;padding:7px 8px;border:1px solid var(--b);border-radius:8px;font-size:0.88rem;box-sizing:border-box;margin-bottom:10px">' +
+          '<label style="display:block;font-size:0.74rem;color:var(--t2);margin-bottom:4px">Exact product name</label>' +
+          '<input id="producerProductName" type="text" value="' + escAttr(_pd.productName) + '" ' +
+          'placeholder="e.g. NCLEX" ' +
+          'style="width:100%;padding:7px 8px;border:1px solid var(--b);border-radius:8px;font-size:0.88rem;box-sizing:border-box;margin-bottom:10px">' +
+          '<label style="display:block;font-size:0.74rem;color:var(--t2);margin-bottom:4px">Forbidden generated names</label>' +
+          '<input id="producerForbiddenAliases" type="text" value="' + escAttr(_pd.forbiddenAliases) + '" ' +
+          'placeholder="e.g. cram kit, cram bundle, generic study plan, shortcut" ' +
           'style="width:100%;padding:7px 8px;border:1px solid var(--b);border-radius:8px;font-size:0.88rem;box-sizing:border-box">' +
           '<div style="font-size:0.7rem;color:var(--t3,#94a3b8);margin-top:7px">Saved on this product &amp; reused next time — edit any time.</div>' +
         '</div>' +
@@ -15889,15 +15935,17 @@ async function _producerSubmit() {
   var userInstr = (document.getElementById('producerInstruction') || {}).value || '';
   var offer  = (document.getElementById('producerOffer')  || {}).value || '';
   var market = (document.getElementById('producerMarket') || {}).value || '';
+  var productName = (document.getElementById('producerProductName') || {}).value || _producerDefaultProductName(productId);
+  var forbiddenAliases = (document.getElementById('producerForbiddenAliases') || {}).value || '';
   // Persist the product defaults so they're remembered next time (fire-and-forget
   // is fine, but await so the in-memory cache + DB are consistent before insert).
-  await _saveProdDirectives(productId, offer, market);
+  await _saveProdDirectives(productId, offer, market, productName, forbiddenAliases);
   // ── Concept Picker: gather selected winner formats + own URL into a
   //    FORMAT REFERENCES block the producer expands into one concept each. ──
   var refsBlock = _composeFormatReferences(taskId);
   // Final instruction = mandatory directive block (offer + faces) + format refs + user note.
   var userPlusRefs = [refsBlock, userInstr.trim()].filter(Boolean).join('\n\n');
-  var instr = _composeProducerInstruction(offer, market, userPlusRefs);
+  var instr = _composeProducerInstruction(offer, market, productName, forbiddenAliases, userPlusRefs);
   var count = parseInt((document.getElementById('producerCount') || {}).value || '5', 10);
   if (isNaN(count) || count < 1 || count > 10) count = 5;
   var prefSel = document.getElementById('producerWorkerPref');

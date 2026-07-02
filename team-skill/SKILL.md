@@ -230,7 +230,7 @@ import asyncio, json, os, re, shutil, subprocess, sys, urllib.request
 
 _SKILL_DIR = os.path.expanduser('~/.claude/skills/classify-inspiration')
 if _SKILL_DIR not in sys.path: sys.path.insert(0, _SKILL_DIR)
-from fb_ad_classifier import fetch_ad_snapshot, download_tiktok_media, download_video, extract_frames, extract_ad_id, decode_unicode, USER_AGENT, OUTPUT_BASE
+from fb_ad_classifier import fetch_ad_snapshot, download_instagram_media, download_tiktok_media, download_video, extract_frames, extract_ad_id, decode_unicode, USER_AGENT, OUTPUT_BASE
 
 def detect_platform(url):
     u = url.lower()
@@ -303,6 +303,17 @@ try:
             duration = get_duration(vp)
             frames = extract_frames(vp, work_dir)
             os.remove(vp)
+    elif platform == "instagram":
+        # Instagram public media uses the shared robust chain:
+        # gallery-dl with browser cookies -> snapinsta via off-screen Playwright
+        # -> Open Graph media fallback. This keeps photo posts from being
+        # classified against cropped/partial previews when better media is
+        # available on the worker.
+        ig = download_instagram_media(url, work_dir)
+        snapshot = ig["metadata"]
+        frames = ig["frames"]
+        duration = ig["duration"]
+        print(f"[instagram] downloaded via {ig['via']} ({len(frames)} frame(s))", file=sys.stderr)
     elif platform == "tiktok":
         # Do not use browser automation for TikTok downloads. TikTok's web UI
         # commonly blocks automated/browser-save flows behind login or bot

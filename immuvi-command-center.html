@@ -16807,6 +16807,9 @@ function createActionFromMatrix(adId, angleName, personaName, btnEl, _opts) {
   }
   var cellAdKey = adId + '||' + angleName + '||' + personaName;
   var cellMeta = MATRIX_CELL_META[cellAdKey] || {};
+  if (typeof _seedCuMirrorsFromTypedFields === 'function') {
+    _seedCuMirrorsFromTypedFields(ad);
+  }
   var actionId = 'manual-' + Date.now();
   var newAction = {
     id: actionId,
@@ -23502,9 +23505,9 @@ function renderApDrawerStrategistBody(card) {
   html += '<div class="ap-dr-prov-row"><span class="kind c-' + ({inspo:'lime',tracker:'sky',variation:'violet',blank:'amber',manual:'stone',adopted:'rose'})[src.kind] + '">' + esc(src.kind) + '</span>';
   html += '<span class="ap-dr-prov-label">' + (src.refUrl ? '<a href="' + escAttr(src.refUrl) + '" target="_blank" rel="noopener">' + esc(src.label) + ' ↗</a>' : esc(src.label)) + '</span>';
   html += '</div>';
-  if (act.sourceAngle && act.sourcePersona) {
+  if (d.angle && d.persona) {
     html += '<div class="ap-dr-prov-row"><span class="kind c-stone">cell</span>';
-    html += '<span class="ap-dr-prov-label"><a href="#" onclick="event.preventDefault();apJumpToMatrixCell(\'' + escJs(act.sourceAngle) + '\',\'' + escJs(act.sourcePersona) + '\')">' + esc(act.sourceAngle) + ' × ' + esc(act.sourcePersona) + '</a></span>';
+    html += '<span class="ap-dr-prov-label"><a href="#" onclick="event.preventDefault();apJumpToMatrixCell(\'' + escJs(d.angle) + '\',\'' + escJs(d.persona) + '\')">' + esc(d.angle) + ' × ' + esc(d.persona) + '</a></span>';
     html += '</div>';
   }
   if (act._clickupId) {
@@ -25981,6 +25984,41 @@ function _cleanDescriptionUrl(url) {
   return url.replace(/[)\]}>.,;]+$/g, '').trim();
 }
 
+function _cleanDescriptionFieldValue(value) {
+  value = String(value == null ? '' : value).trim();
+  if (!value || value === '—' || value === '-') return '';
+  return value
+    .replace(/<br\s*\/?>/gi, ' ')
+    .replace(/\s+/g, ' ')
+    .replace(/^[`*_~\s]+|[`*_~\s]+$/g, '')
+    .replace(/[)\]}>.,;]+$/g, '')
+    .trim();
+}
+
+function _extractDescriptionFieldValue(desc, labels) {
+  var text = (typeof _normalizeClickUpDescriptionForReuse === 'function')
+    ? _normalizeClickUpDescriptionForReuse(desc || '')
+    : String(desc || '');
+  if (!text) return '';
+  labels = Array.isArray(labels) ? labels : [labels];
+  for (var i = 0; i < labels.length; i++) {
+    var label = String(labels[i] || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    var tableRx = new RegExp('\\|\\s*' + label + '\\s*\\|\\s*([^|\\n]+)', 'i');
+    var tableMatch = text.match(tableRx);
+    if (tableMatch) {
+      var tableVal = _cleanDescriptionFieldValue(tableMatch[1]);
+      if (tableVal) return tableVal;
+    }
+    var lineRx = new RegExp('(?:^|\\n)\\s*(?:[-*]\\s*)?' + label + '\\s*:?\\s*([^\\n|]+)', 'i');
+    var lineMatch = text.match(lineRx);
+    if (lineMatch) {
+      var lineVal = _cleanDescriptionFieldValue(lineMatch[1]);
+      if (lineVal) return lineVal;
+    }
+  }
+  return '';
+}
+
 function _extractUrlForDescriptionLabels(desc, labels) {
   var text = _normalizeClickUpDescriptionForReuse(desc);
   if (!text) return '';
@@ -26265,11 +26303,39 @@ function _seedCuRawFromTypedFields(ad) {
   _setText('creative hypothesis', ad.creativeHypothesis);
   _setText('notes', ad.notes);
 
-  // Angle Tag — workspace stores this as plain text (dropdown variant doesn't
-  // accept API writes reliably here). Mirror angle name as the tag value.
+  // Angle/Persona Tag — workspace stores these as plain text (dropdown variant
+  // doesn't accept API writes reliably here). Mirror cell names as tag values.
   _setText('angle tag', ad.angle);
+  _setText('persona tag', ad.persona);
 
   return seed;
+}
+
+function _seedCuDisplayFromTypedFields(ad) {
+  if (!ad) return {};
+  var seed = {};
+  function _setDisplay(lcName, val) {
+    if (val == null || val === '') return;
+    seed[lcName] = String(val);
+  }
+  _setDisplay('angle tag', ad.angle);
+  _setDisplay('persona tag', ad.persona);
+  _setDisplay('hook type', ad.hookType);
+  _setDisplay('creative structure', ad.creativeStructure);
+  _setDisplay('production style', ad.productionStyle);
+  _setDisplay('creative usp', ad.creativeUSP);
+  _setDisplay('creative hypothesis', ad.creativeHypothesis);
+  _setDisplay('notes', ad.notes);
+  return seed;
+}
+
+function _seedCuMirrorsFromTypedFields(ad) {
+  if (!ad) return ad;
+  var displaySeed = (typeof _seedCuDisplayFromTypedFields === 'function') ? _seedCuDisplayFromTypedFields(ad) : {};
+  var rawSeed = (typeof _seedCuRawFromTypedFields === 'function') ? _seedCuRawFromTypedFields(ad) : {};
+  ad._customFields = Object.assign({}, ad._customFields || {}, displaySeed);
+  ad._customFieldsRaw = Object.assign({}, ad._customFieldsRaw || {}, rawSeed);
+  return ad;
 }
 
 // Per-card: create a single action plan task in ClickUp
@@ -26840,8 +26906,8 @@ function createClickUpTaskFromAction(actionId, onDone, sourceAdOverride) {
     if (sourceAd || clickUpProductName) {
       var pushProxy = { _clickupId: newId, id: (sourceAd && sourceAd.id) || act.sourceAdId || act.adId || act.id };
       var fieldsToSync = [
-        ['angle',            act.angle       || (sourceAd && sourceAd.angle)],
-        ['persona',          act.persona     || (sourceAd && sourceAd.persona)],
+        ['angle',            act.angle       || act.sourceAngle   || (sourceAd && sourceAd.angle)],
+        ['persona',          act.persona     || act.sourcePersona || (sourceAd && sourceAd.persona)],
         ['funnelStage',      act.funnelStage || (sourceAd && sourceAd.funnelStage)],
         ['adType',           sourceAd && sourceAd.adType],
         ['hookType',         sourceAd && sourceAd.hookType],
@@ -28441,6 +28507,14 @@ function parseClickUpTask(t) {
     : '';
   if (!adLink && typeof _sourceAdUrlForDescription === 'function') {
     adLink = _sourceAdUrlForDescription({ description: desc });
+  }
+  if ((!angle || !persona) && typeof _extractDescriptionFieldValue === 'function') {
+    if (!angle) {
+      angle = _normalizeTaxonomyName(_extractDescriptionFieldValue(desc, ['Angle', 'Angle Tag', 'Ad Angle']));
+    }
+    if (!persona) {
+      persona = _normalizeTaxonomyName(_extractDescriptionFieldValue(desc, ['Persona', 'Persona Tag', 'Target Persona', 'Audience']));
+    }
   }
 
   // Fallback: parse "Angle × Persona" pattern from task name
@@ -30257,6 +30331,44 @@ function _apParseInspoLinksFromDesc(desc) {
   return out;
 }
 
+function _apResolveCellIdentity(act, ad) {
+  act = act || {};
+  ad = ad || null;
+  var cfDisplay = (ad && ad._customFields) || act._customFields || {};
+  var desc = (act && act.description) || (ad && ad.description) || '';
+  var angle = (ad && ad.angle) || act.angle || act.sourceAngle ||
+              cfDisplay['angle tag'] || cfDisplay['angle'] || cfDisplay['ad angle'] ||
+              ((typeof _extractDescriptionFieldValue === 'function')
+                ? _extractDescriptionFieldValue(desc, ['Angle', 'Angle Tag', 'Ad Angle'])
+                : '');
+  var persona = (ad && ad.persona) || act.persona || act.sourcePersona ||
+                cfDisplay['persona tag'] || cfDisplay['persona'] || cfDisplay['target persona'] || cfDisplay['audience'] ||
+                ((typeof _extractDescriptionFieldValue === 'function')
+                  ? _extractDescriptionFieldValue(desc, ['Persona', 'Persona Tag', 'Target Persona', 'Audience'])
+                  : '');
+  angle = (typeof _normalizeTaxonomyName === 'function') ? _normalizeTaxonomyName(angle) : String(angle || '').trim();
+  persona = (typeof _normalizeTaxonomyName === 'function') ? _normalizeTaxonomyName(persona) : String(persona || '').trim();
+
+  // Opportunistically heal local state so drawer, provenance, and Open Matrix
+  // all agree during this session. Durable recovery comes from ClickUp parse
+  // and future task creation seeding both Angle Tag and Persona Tag.
+  if (ad) {
+    if (angle && !ad.angle) ad.angle = angle;
+    if (persona && !ad.persona) ad.persona = persona;
+    if (!ad._customFields) ad._customFields = {};
+    if (angle && !ad._customFields['angle tag']) ad._customFields['angle tag'] = angle;
+    if (persona && !ad._customFields['persona tag']) ad._customFields['persona tag'] = persona;
+  }
+  if (act) {
+    if (angle && !act.sourceAngle) act.sourceAngle = angle;
+    if (persona && !act.sourcePersona) act.sourcePersona = persona;
+    if (angle && !act.angle) act.angle = angle;
+    if (persona && !act.persona) act.persona = persona;
+  }
+
+  return { angle: angle || '', persona: persona || '' };
+}
+
 function apResolveCard(act) {
   if (!act) return null;
   // Locate the source AD using all known link fields, in priority order.
@@ -30610,6 +30722,9 @@ function apResolveCard(act) {
   // the AD is gone.
   var cfDisplay = (ad && ad._customFields) || {};
   var cfRaw     = (ad && ad._customFieldsRaw) || {};
+  var cellIdentity = _apResolveCellIdentity(act, ad);
+  cfDisplay = (ad && ad._customFields) || act._customFields || cfDisplay || {};
+  cfRaw     = (ad && ad._customFieldsRaw) || cfRaw || {};
 
   // Live status — prefer ad.status (kept in sync with ClickUp via 3-way
   // sync). act.liveStatus is only the snapshot at push moment.
@@ -30630,8 +30745,8 @@ function apResolveCard(act) {
 
   var display = {
     title:        (ad && ad.formatName) || act.title || act.id,
-    angle:        (ad && ad.angle) || act.angle || act.sourceAngle || '',
-    persona:      (ad && ad.persona) || act.persona || act.sourcePersona || '',
+    angle:        cellIdentity.angle,
+    persona:      cellIdentity.persona,
     funnelStage:  (ad && ad.funnelStage) || act.funnelStage || '',
     adType:       (ad && ad.adType) || act.format || '',
     hookType:     (ad && ad.hookType) || cfDisplay['hook type'] || '',
@@ -41158,9 +41273,10 @@ async function executeMxv4Add(angleName, personaName) {
         createdAt:          Date.now(),
         _localNew:          true
       };
-      // Bug 5 fix: seed _customFieldsRaw so a fresh inspo-spawned AD pushes
-      // to ClickUp with all classified fields populated (not just the legacy 5).
-      newAd._customFieldsRaw = _seedCuRawFromTypedFields(newAd);
+      // Bug 5/20 fix: seed both display + raw custom-field mirrors so the AP
+      // table shows Angle/Persona immediately and ClickUp push still has raw
+      // values ready for field sync.
+      _seedCuMirrorsFromTypedFields(newAd);
       ADS.push(newAd);
       CELL_CREATIVE_ASSIGNMENTS[cellKey].push(newId);
       // Stamp per-cell unique name so the cell label is right immediately.
@@ -41238,6 +41354,11 @@ async function executeMxv4Add(angleName, personaName) {
       });
       Object.keys(_cloneSeed).forEach(function (k) { _merged[k] = _cloneSeed[k]; });
       prodAd._customFieldsRaw = _merged;
+      prodAd._customFields = Object.assign(
+        {},
+        parent && parent._customFields ? parent._customFields : {},
+        _seedCuDisplayFromTypedFields(prodAd)
+      );
       // Defensive: ensure native task fields don't drag parent values either.
       prodAd.assignees = [];
       prodAd.dueDate = '';
@@ -41317,10 +41438,8 @@ function executeMxv4Blank(angleName, personaName) {
     createdAt: Date.now(),
     _localNew: true,
   };
-  // Bug 5 fix: seed _customFieldsRaw so blank-brief tasks still carry Angle Tag
-  // and Creative Hypothesis to ClickUp (other typed fields are empty here, so
-  // the seed will mostly contain just those two).
-  newAd._customFieldsRaw = _seedCuRawFromTypedFields(newAd);
+  // Bug 5/20 fix: seed display + raw custom-field mirrors immediately.
+  _seedCuMirrorsFromTypedFields(newAd);
   ADS.push(newAd);
   var cellKey = angleName + '||' + personaName;
   if (!CELL_CREATIVE_ASSIGNMENTS[cellKey]) CELL_CREATIVE_ASSIGNMENTS[cellKey] = [];
@@ -42377,10 +42496,9 @@ function addInspoToCell(insId, angleName, personaName) {
     _localNew: true
   };
 
-  // Bug 5 fix: seed _customFieldsRaw so Pass 2 of createClickUpTaskFromAction
-  // can populate Hook Type / Creative Structure / Production Style / Creative
-  // USP / Notes / Angle Tag on the new ClickUp task.
-  newAd._customFieldsRaw = _seedCuRawFromTypedFields(newAd);
+  // Bug 5/20 fix: seed display + raw mirrors so the AP custom-field columns
+  // show Angle/Persona immediately while ClickUp field sync still has raw data.
+  _seedCuMirrorsFromTypedFields(newAd);
 
   ADS.push(newAd);
   // Bug 7: also wire into CELL_CREATIVE_ASSIGNMENTS immediately so the

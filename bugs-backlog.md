@@ -955,6 +955,77 @@ This was the same class of bug as Bug 5 / Bug 10: field data was available, but 
 ### Pushed
 Pushed to `main` for production deployment on 2026-07-02 after explicit user approval.
 
+---
+
+## Bug 21 — Classify-inspiration skill was missing Bug 14's shared Instagram downloader
+**Status:** ✅ done — fixed 2026-07-02
+**Reported:** 2026-07-02 during backlog regression audit
+**Surface:** `team-skill/fb_ad_classifier.py` + `team-skill/SKILL.md` Instagram classification path
+
+### Symptom
+- The backlog said Bug 14 shipped a shared `download_instagram_media()` helper in `fb_ad_classifier.py` with the `gallery-dl → snapinsta → og:image` fallback chain.
+- The producer skill contained an inline Instagram fallback chain, but the classify-inspiration helper and pipeline script did not expose or call the shared downloader.
+- As a result, classifier-side Instagram photo posts could still miss the robust full-media path documented in Bug 14.
+
+### Root cause
+Bug 14's producer-side instructions and classifier-side helper drifted apart.
+`team-skill/immuvi-creative-producer/SKILL.md` had the 3-method chain, while `team-skill/fb_ad_classifier.py` only had the older Open Graph helper and `team-skill/SKILL.md` did not route Instagram URLs through a shared downloader.
+
+### Fix
+1. Added `download_instagram_media(url, work_dir)` to `team-skill/fb_ad_classifier.py`.
+2. Added helper methods for the documented fallback chain:
+   - `_ig_download_gallery_dl()`
+   - `_ig_download_snapinsta()`
+   - `_ig_download_og()`
+   - `_ig_get_duration()`
+3. Reused `fetch_instagram_og()` for metadata and the final fallback.
+4. Updated the classify-inspiration pipeline script in `team-skill/SKILL.md` to import and call `download_instagram_media()` for Instagram URLs.
+
+### Verified
+- `team-skill/fb_ad_classifier.py` compiles with `python3 -m py_compile`.
+- Static checks confirm `download_instagram_media`, `gallery-dl`, `snapinsta`, and Open Graph fallback are present in the helper.
+- Static checks confirm `team-skill/SKILL.md` imports `download_instagram_media` and routes `platform == "instagram"` through it.
+- `immuvi-command-center.html` script still parses cleanly.
+- `git diff --check` passed.
+
+### Pushed
+Pushed to `main` for production deployment on 2026-07-02 after explicit user approval.
+
+---
+
+## Bug 20 — Inspiration-assigned tasks wait for ClickUp before Angle/Persona columns fill
+**Status:** ✅ done — fixed 2026-07-02 (pushed to production)
+**Reported:** 2026-07-02
+**Surface:** Inspirations → place/add to matrix → Push to Action Plan → Action Plan custom-field columns `Angle Tag` / `Persona Tag`
+
+### Symptom
+- When a task was assigned from an Immuvi inspiration, the Action Plan row could show empty or delayed `Angle Tag` / `Persona Tag` values until ClickUp sync fetched the task back.
+- This was wrong because the inspiration placement flow already knows the target Angle and Persona at creation time.
+
+### Root cause
+Inspiration spawn paths created ADs with top-level `ad.angle` / `ad.persona`, and the ClickUp push path eventually wrote `Angle Tag` / `Persona Tag`.
+But the Action Plan custom-field columns render from the local `_customFields` mirror.
+Fresh inspiration-spawned ADs only seeded `_customFieldsRaw`, not `_customFields`, so the UI waited for the next ClickUp import to rebuild the display mirror.
+
+This is related to Bug 19 but earlier in the lifecycle: Bug 19 made the drawer recover missing cell identity; this bug makes the row columns correct immediately when the task is created from an Immuvi inspiration.
+
+### Fix
+1. Added `_seedCuDisplayFromTypedFields(ad)` to build the local display custom-field mirror from typed AD fields.
+2. Added `_seedCuMirrorsFromTypedFields(ad)` to seed both `_customFields` and `_customFieldsRaw` together.
+3. Updated inspiration spawn, tracker-clone spawn, blank-brief spawn, and generic matrix → Action Plan push paths to seed local mirrors before rendering.
+4. `apResolveCard` now refreshes its custom-field display reference after `_apResolveCellIdentity` heals missing Angle/Persona mirrors.
+
+### Verified
+- `immuvi-command-center.html` script parses cleanly via Node `new Function()` extraction.
+- Targeted static checks confirm immediate display-mirror seeding for MXv4 inspiration spawn, legacy `addInspoToCell`, blank-brief spawn, tracker-clone spawn, and existing matrix → Action Plan push.
+- Regression checks confirm Bug 10's `Untested` status map stays clean, Bug 19 description/cell identity recovery stays present, and ClickUp post-create field sync still falls back to `sourceAngle/sourcePersona`.
+- `git diff --check` passed.
+
+### Pushed
+Pushed to `main` for production deployment on 2026-07-02 after explicit user approval.
+
+---
+
 ## Bug 16 — Script-bank table turns into `[table-embed:...]` text in production task descriptions
 **Status:** ✅ done — fixed 2026-07-02 (pushed to production)
 **Reported:** 2026-07-02
@@ -1050,3 +1121,41 @@ Changed the `saveEditCreative()` map to use `Untested -> untested`, matching the
 - Static audit confirms no remaining `Untested -> to do` custom ClickUp status map in `immuvi-command-center.html`.
 - `immuvi-command-center.html` script parses cleanly via Node `new Function()` extraction.
 - `git diff --check` passed.
+
+---
+
+## Bug 19 — Action Plan drawer sometimes hides Angle × Persona under the task title
+**Status:** ✅ done — fixed 2026-07-02 (pushed to production)
+**Reported:** 2026-07-02
+**Surface:** Action Plan → task detail drawer header / Provenance cell row / Open in Matrix button
+
+### Symptom
+- The task detail drawer should show the task's matrix cell directly under the task name, e.g. `Stress Sleep And Hormone Relief × Women Seeking Natural Remedies`.
+- Some tasks showed a blank/`— × —` cell line, or had no usable cell context for the drawer/provenance actions, even though the task belonged to a real Angle × Persona cell.
+
+### Root cause
+The drawer read Angle/Persona only from `display.angle/persona` and `act.sourceAngle/sourcePersona`.
+For synced/adopted ClickUp tasks, those values can be missing if the task was hydrated from ClickUp before the local action carried a cell snapshot.
+The same data could still exist in other shapes:
+1. ClickUp custom fields `Angle Tag` / `Persona Tag`.
+2. Top-level parsed AD fields.
+3. The creative-brief markdown table inside the task description.
+4. `act.angle/persona` on older/manual action rows.
+
+A second gap made future misses more likely: `_seedCuRawFromTypedFields` seeded `Angle Tag` but not `Persona Tag`, and post-create field sync preferred `act.angle/persona` without falling back to `sourceAngle/sourcePersona`.
+
+### Fix
+1. Added a reusable description-field extractor that reads normal markdown tables and normalized ClickUp table embeds.
+2. `parseClickUpTask` now backfills missing Angle/Persona from the task description table when custom fields are empty.
+3. `_seedCuRawFromTypedFields` now seeds both `Angle Tag` and `Persona Tag`.
+4. ClickUp post-create field sync now falls back to `act.sourceAngle/sourcePersona` before source AD values.
+5. Added `_apResolveCellIdentity(act, ad)` so Action Plan cards resolve cell identity from action snapshots, AD fields, custom-field mirrors, and description tables in one place.
+6. The drawer provenance cell row now uses the resolved display Angle/Persona, not only the older `act.sourceAngle/sourcePersona` fields.
+
+### Verified
+- `immuvi-command-center.html` script parses cleanly via Node `new Function()` extraction.
+- Targeted static checks confirm description-table recovery, Persona Tag seeding, sourceAngle/sourcePersona post-create fallback, canonical drawer identity resolution, and resolved display cell provenance.
+- `git diff --check` passed.
+
+### Pushed
+Pushed to `main` for production deployment on 2026-07-02 after explicit user approval.

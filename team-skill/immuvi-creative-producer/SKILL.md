@@ -11,7 +11,7 @@ Silently refresh the skill files from origin using HTTP ETags — unchanged file
 
 ```bash
 SKILL_DIR="$HOME/.codex/skills/immuvi-creative-producer"
-ASSET_BASE="https://immuvi-command-center.vercel.app/team-skill/immuvi-creative-producer"
+ASSET_BASE="${IMMUVI_PRODUCER_SKILL_ASSET_BASE:-https://immuvi-command-center.vercel.app/team-skill/immuvi-creative-producer}"
 SKILL_MD_UPDATED=0
 
 mkdir -p "$SKILL_DIR"
@@ -85,6 +85,7 @@ Use reasoning effort: medium.
 Generate images using your native image generation capability (same as Codex chat). Do NOT hard-code a specific model name.
 Use image quality: high.
 Use image size/aspect ratio: match the inspiration image unless the task specifies another size.
+Use exact product anchoring: every product/offer name must clearly include the canonical product name from PRODUCT DIRECTIVES.
 
 Run producer job:
 - task_id: <ClickUp task id>
@@ -475,16 +476,59 @@ def download(url, work_dir):
 The producer's existing inline `urllib`/`curl` paths stay only for fully generic non-platform URLs (e.g. ClickUp's `attachments.clickup.com` CDN, plain images on a marketing site). Anything that looks like a social platform must go through the router.
 
 3. Extract the creative brief.
-   - **PRODUCT DIRECTIVES (highest priority — non-negotiable).** Two sources, both mandatory:
-     1. If the `instruction` contains a `[PRODUCT DIRECTIVES — MANDATORY …]` block, parse `OFFER TO FEATURE:` and `TALENT / FACES:` from it.
-     2. Also read the product's persistent defaults from `products.config.production` (keys `offer`, `market`) — fetch the product row via the Command Center DB / `strategist_memory` context if not already in the payload.
-     Apply BOTH to **every** variation: feature the stated offer prominently in the creative, and render people/faces matching the stated market/ethnicity (e.g. "US / American faces (not Indian)" → cast American-looking talent; never substitute another ethnicity unless the user explicitly overrides). The instruction block wins on conflict; otherwise use the saved config defaults. If neither is present, infer the offer from the ClickUp task and keep talent neutral.
+   - **PRODUCT DIRECTIVES (mandatory, but format-constrained).** Two sources, both mandatory:
+     1. If the `instruction` contains a `[PRODUCT DIRECTIVES — MANDATORY …]` block, parse `CANONICAL PRODUCT NAME:`, `FORBIDDEN PRODUCT ALIASES / INVENTED NAMES:`, `OFFER TO FEATURE:`, and `TALENT / FACES:` from it.
+     2. Also read the product's persistent defaults from `products.config.production` (keys `offer`, `market`, `product_name`, `forbidden_aliases`) — fetch the product row via the Command Center DB / `strategist_memory` context if not already in the payload.
+     Apply BOTH to **every** variation; the canonical product name and offer are mandatory and must be visibly featured when relevant. Product/offer names may add descriptive words only when anchored by the canonical product name, e.g. `NCLEX Study Notes`, `NCLEX Bundle`, or `NCLEX Guide`. Never substitute orphan/generic names such as "cram kit", "cram bundle", "study plan", "shortcut", "workbook", "bundle", or similar when they do not include the canonical product name. Never let offer/CTA treatment break the reference format anatomy. Render people/faces matching the stated market/ethnicity (e.g. "US / American faces (not Indian)" -> cast American-looking talent; never substitute another ethnicity unless the user explicitly overrides). For compact news/lower-third references, keep the main headline about the angle/persona and render the offer as a small attached CTA tag/badge that belongs to the existing overlay system. Do not omit the offer, do not hide it inside the headline sentence, and do not create a large new footer/poster section to satisfy offer prominence. The instruction block wins on product/faces conflict, while reference anatomy wins on layout/format conflict. If neither is present, infer the offer from the ClickUp task and keep talent neutral.
+   - **REFERENCE LAYOUT QA block.** If the `instruction` contains a `[REFERENCE LAYOUT QA — MANDATORY BEFORE UPLOAD]` block, treat every line inside it as a hard quality gate. In particular:
+     - Match the reference orientation and aspect ratio. A vertical reference must not become horizontal; a square reference must remain square.
+     - Preserve the reference's layout zones: logo/header placement, main headline block, body/comment/text block, product/mockup/photo area, CTA/signature, and empty-space balance.
+     - Preserve text alignment and hierarchy: same left/center/right alignment, similar line count, similar font-size proportions, similar padding.
+     - Do not invent awkward headline line breaks, large gaps, or wrong casing. Sentence words such as "is" must stay lowercase unless the approved copy explicitly capitalizes them.
+     - Reject/regenerate if the output is unrelated to the reference format, uses a forbidden product alias, changes aspect ratio, or clearly changes text size/alignment.
    - **FORMAT REFERENCES (the Concept Picker).** If the `instruction` contains a `[FORMAT REFERENCES …]` block, it lists N proven winner formats (and optionally the user's own pasted URL) the user hand-selected. This is the scaling-a-winner workflow:
      - Generate **one distinct concept per reference** (N references → N concepts), not N look-alikes. Spread across the formats.
      - For each reference, **download its `ref asset:` link** (Google Drive folder/file, or a pasted image/ad URL) via the Step 2.0 `detect_platform()` router and visually inspect it — that image defines the *format/layout/production style* to adopt for that concept.
      - **HOLD CONSTANT** the message named in the block's `[HOLD CONSTANT …]` line (this task's winning angle + persona + promise/emotion). You are changing only the *format/execution*, never the core message.
-     - Still apply the PRODUCT DIRECTIVES (offer + faces) to every one of these concepts.
+     - Still apply the PRODUCT DIRECTIVES (offer + faces) to every one of these concepts. If the reference does not have an offer area, add the smallest format-compatible offer treatment, such as a compact attached CTA tag, without creating a new footer/poster section.
      - If a reference asset fails to download, note it and still produce that concept from the format label + the task's strategist memory, rather than dropping it silently.
+   - **REFERENCE FIDELITY CONTRACT (mandatory for every concept with a reference image).** The output must preserve the reference's format anatomy, not just its broad theme. Before generating, visually inspect the inspiration and write a compact `reference_anatomy` note with:
+     - `subject_type`: person / object / product / environment, plus age/role when visible.
+     - `subject_presence`: whether the reference has a human subject, how prominent they are, pose, mood, and where they sit in frame.
+     - `setting`: indoor/outdoor, location type, background depth, weather/light, and emotional tone.
+     - `composition`: crop, camera distance, focal hierarchy, negative space, and where the subject sits.
+     - `overlay_system`: lower-third/banner/card/text placement, size, colors, and how much of the canvas it occupies.
+     - `copy_density`: short news caption vs long ad copy, number of lines, and headline style.
+     - `product_presence`: whether a product/mockup/packshot appears in the reference.
+     - `edge_alignment`: whether overlays touch the canvas edge or sit inset; preserve this exactly.
+     - `text_alignment`: left/center/right alignment, line count, and padding balance inside each text box.
+     - `text_size_hierarchy`: approximate relative size of logo, headline, subhead/body, CTA/signature, and whether text is compact or oversized.
+     - `canvas_orientation` and `aspect_ratio`: reference width × height and closest supported target size.
+     - `layout_zones`: top/middle/bottom regions and which visual/text elements occupy each.
+     - `variation_1_lock`: the exact subject, setting, pose, camera angle, crop, emotional mood, and overlay geometry that Variation 1 must copy before other variations explore new executions.
+   - **Hard fidelity rules:**
+     - If the reference contains a human subject, the generated image must contain a comparable visible human subject in a similar scale/role/pose region. Do not replace a child/person with only a backpack, chair, desk, worksheet, empty hallway/classroom, playground, or product shot.
+     - Variation 1 is the reference-faithful version. It must keep the same setting, subject type, pose, camera angle, crop, overlay positions, overlay edge alignment, and text alignment as the inspiration while swapping only the task message/product/offer.
+     - Variations 2+ may explore new settings/executions, but each must still preserve the selected reference's core mechanic and overlay rules.
+     - If the reference is a candid photo with a compact news lower-third, do not turn it into a polished product poster with a large white copy block or large offer section.
+     - For compact breaking-news references, copy the overlay anatomy tightly:
+       - the image remains one full-bleed candid photo; the banner and headline are overlays on top of the photo, not separate bottom poster sections
+       - the red/blue `BREAKING NEWS` strip is a compact slanted lower-third overlay, placed around 68-76% down the canvas, starting flush at the left edge if the reference starts flush
+       - the red/blue strip should cover only about 50-65% of canvas width and 7-10% of canvas height; do not make it a full-width TV-news bar
+       - the red `BREAKING` box must be wide enough for BREAKING and the blue `NEWS` box must be only wide enough for NEWS, with balanced side padding; do not squeeze BREAKING or give NEWS a large empty box
+       - the diagonal join belongs between the words, never through the letters
+       - the headline is one compact white rectangular strip directly below the news band, starting flush at the left edge if the reference starts flush, about 75-90% of canvas width and 8-12% of canvas height
+       - headline text is 1-2 lines max, black uppercase, compact, left-aligned when the reference is left-aligned, vertically centered with balanced top/bottom padding, and does not become a giant poster headline
+       - visible photo should remain below/around the white headline strip; do not create a large blank white bottom panel
+       - if an offer is specified, show it as a small separate CTA tag/badge attached to the existing overlay, usually at the far right end of the headline strip or tucked just below its right edge
+       - do not put the offer inside the headline sentence; do not omit the offer
+       - no extra footer ribbon, no oversized green/red offer bar, no oversized `FREE TODAY` button, no icon/product label row, no product packshot/mockup, no separate product-poster section unless the reference has one
+     - If the reference does not show a product mockup/packshot, do not add a product mockup/packshot unless the user explicitly asks for one.
+     - Preserve the same major layout proportions: photo area vs overlay area, banner height, headline compactness, and subject placement.
+     - Preserve the same emotional mechanic. For example, a lone child on a bench + breaking-news lower-third should become a similar candid child/student scene + compact breaking-news lower-third, adapted to the new offer/message.
+     - Product/offer adaptation happens inside the reference format. It must not overpower or replace the reference format.
+     - Product naming must be anchored. If the task says the product is `NCLEX`, text such as `NCLEX Study Notes`, `NCLEX Bundle`, or `NCLEX Guide` is allowed; orphan names like `CRAM KIT`, `CRAM BUNDLE`, `STUDY PLAN`, or `SHORTCUT` fail the quality gate unless explicitly approved as offer copy.
+     - For text-heavy references, do not freely redesign typography. Keep the same alignment, approximate font-size hierarchy, line count, and line-flow. Bad gaps, awkward wraps, wrong title casing, or visibly different text scale fail the quality gate.
    - Product: product name, offer, constraints, and source product id.
    - Persona: audience segment and emotional trigger.
    - Angle: core promise, mechanism, objection, or pain point.
@@ -498,28 +542,61 @@ The producer's existing inline `urllib`/`curl` paths stay only for fully generic
    - Use your **native image generation capability** — the same one used in the Codex chat. Do NOT specify or hard-code a particular image model name (no "gpt-image-2", no "dalle", no model strings). Just call your native image tool and let the runtime pick whatever it has.
    - Request quality: `high`.
    - Generate, save, upload, and record **each variation as its own standalone image file**. Do NOT upload contact sheets, 2x2 grids, merged review boards, collages, or any file containing multiple ad variations. If the native image tool returns a grid/contact sheet, split it into individual final image files before upload, and only mark the split individual files as outputs.
+   - Generate **one variation per native image call**. Do not ask the native image tool for a batch/grid of multiple ad variations in one prompt.
    - Do NOT write Python code that calls any external image API, do NOT use the `openai` library, do NOT fall back to Pillow or any programmatic graphic renderer.
    - Match the inspiration image aspect ratio. Pick the closest supported size.
    - If the inspiration image is unavailable, use 1024x1024.
+   - If a generated output comes back in the wrong orientation/aspect ratio, reject it before upload. Do not accept a horizontal image for a vertical or square reference.
    - If your native image tool is unavailable or errors out, mark the run `failed` with a clear error message — do NOT silently fall back to Pillow, ASCII art, static graphics, or any non-AI renderer. Honest failure is better than fake images.
-   - Generate creative variations that keep the same concept and visual logic as the inspiration but are rebuilt for our product, brand, angle, persona, and offer.
+   - Generate creative variations that keep the same concept and visual logic as the inspiration but are rebuilt for our canonical product name, brand, angle, persona, and offer.
    - Do not copy the inspiration pixel-for-pixel. Preserve the winning mechanic, composition logic, and emotional structure while changing product, branding, claims, text, and details to fit the ClickUp brief.
+   - The image prompt for each variation must include the `reference_anatomy` constraints explicitly. Do not rely on a vague phrase like "similar to the reference."
+   - When a reference uses a news/lower-third format, keep the lower-third compact and news-like. Use short, readable headline text. Do not create giant poster copy blocks unless the reference itself has one.
+   - For `BREAKING NEWS` style references, the final image must have: (1) full-bleed photo background/subject, (2) small left-anchored red/blue slanted `BREAKING NEWS` overlay, (3) one compact left-anchored white headline strip overlay, and, when an offer is specified, (4) a small attached CTA tag/badge for the offer. Do not add a product CTA ribbon, oversized green/red offer bar, product mockup, icon/product label row, full-width TV banner, large poster copy area, or blank white bottom panel. The white headline strip must look like the reference: compact, rectangular, close to the bottom of the news band, 1-2 text lines, left-aligned if the reference is left-aligned, balanced padding, and no offer text inside the headline sentence. If the native image output contains any extra footer/poster section below the white headline strip, reject it.
    - Keep product facts, claims, and compliance-safe language grounded in the task and Creative Strategist memory.
-   - For each output, record: variation id, prompt, source inspiration file/link, product, angle, persona, aspect ratio, generated file path, and any upload URL.
+   - For each output, record: variation id, prompt, source inspiration file/link, product, angle, persona, aspect ratio, generated file path, reference_anatomy, and any upload URL.
+   - **Native generation recovery protocol.** If a native image call errors or produces no image file:
+     1. Retry once with a simplified prompt under 900 characters. Keep only: aspect ratio, subject/person requirement, setting, compact overlay format, offer/headline, and "no product mockup unless reference has one."
+     2. If that still fails, make one final ultra-simple native call under 550 characters. Use a photo-first prompt with only one short lower-third headline; avoid long typography instructions, multiple text blocks, product stacks, and complex UI layout.
+     3. Do not repeat the same failed prompt. Each retry must be materially simpler than the previous prompt.
+     4. If all native attempts fail, PATCH `producer_runs.status='failed'` with an error that includes: `native_generation_failed`, variation id, reference_anatomy, first prompt, simplified prompt, final prompt, and the native error/no-output reason.
+     5. Still do not use Pillow, SVG, HTML canvas, screenshots, static mockups, or any non-native fallback image renderer.
+   - For news-style references, the simplified retry prompt should be shaped like: "Square full-bleed candid documentary photo of [required human subject] in [matching setting/composition]. Add compact left-edge red/blue slanted BREAKING NEWS overlay at lower third, about 60% width; BREAKING box wider than NEWS box with balanced padding. Add one compact white headline strip directly below, left-edge, about 85% width, left-aligned 1-2 black uppercase lines. Add small attached CTA tag: [offer]. Keep photo visible under and around overlays. No full-width TV banner, large CTA bar, product mockup, blank white bottom panel, or poster layout."
 
 5. Quality gate before upload.
    - Inspect each generated image before upload.
    - Reject and regenerate once if any of these fail:
      - persona does not match the task
-     - **the PRODUCT DIRECTIVES offer is not featured, or faces/talent do not match the stated market/ethnicity**
+     - faces/talent do not match the PRODUCT DIRECTIVES stated market/ethnicity
+     - the PRODUCT DIRECTIVES offer is missing, unreadable, or hidden inside the main headline instead of shown as its own offer treatment when a separate CTA is appropriate
+     - the canonical product name is missing, misspelled, replaced by a generic adjacent name, or mixed with a forbidden alias
      - offer/benefit stack is weak or missing
      - typography is unreadable or visibly garbled
+     - text alignment, line breaks, casing, or relative text sizing clearly drift from the reference
+     - image orientation/aspect ratio does not match the reference
      - output is too generic or does not preserve the inspiration mechanic
+     - output preserves only the theme but not the reference anatomy
+     - Variation 1 changes the inspiration setting, subject pose, camera angle, overlay position, edge alignment, or text alignment
+     - reference has a human subject but output replaces the person with objects, an empty room, a backpack, a chair, a hallway, or a playground
+     - reference has no product packshot but output adds a packshot/product mockup
+     - reference has a compact lower-third but output becomes a long-copy product poster
+     - breaking-news output turns the compact left-side overlay into a full-width TV-news banner
+     - breaking-news output has a left gap when the reference overlay starts from the left edge
+     - breaking-news output center-aligns headline text when the reference uses left-aligned headline text
+     - breaking-news output squeezes the red `BREAKING` box, gives the blue `NEWS` box too much empty space, or places the diagonal join through the letters
+     - breaking-news output places the headline inside a large blank white bottom panel instead of a compact overlay on the photo
+     - breaking-news output adds a green CTA/footer ribbon or oversized white poster text block
+     - breaking-news output puts `FREE TODAY` or any offer inside the main headline sentence instead of a small attached CTA tag/badge
+     - breaking-news output creates extra footer/poster sections beyond the photo, news band, headline strip, and small attached CTA tag
      - product/brand adaptation is missing
      - image has awkward anatomy, broken layout, or text crowding
-   - Prefer fewer strong outputs over uploading weak variations.
+   - Prefer fewer strong outputs over uploading weak variations. If no generated image passes the reference-anatomy quality gate after the allowed retry, mark the run failed instead of uploading a weak/non-matching image.
 
 6. Upload and update systems.
+   - Upload exactly one ClickUp attachment per final accepted variation.
+   - Before upload, verify each final local image file exists, is non-empty, and opens as an image.
+   - Use final-only filenames shaped like `RUN<producer_run_id>_V<variation_number>_final.<ext>`.
+   - Do not upload native no-output placeholders, failed retry artifacts, temporary drafts, rejected quality-gate images, metadata files, prompt files, screenshots of the UI, or duplicate copies of the same final image.
    - Upload the creative files to the ClickUp task as attachments or through the available Immuvi upload path.
    - Add a concise ClickUp comment with the generated variation notes and links.
    - Update the task status to `Ready to Launch` only after outputs are generated and attached successfully.

@@ -61,6 +61,7 @@ PRODUCER_CLI_TIMEOUT_SECONDS = 1800  # 30 min for Codex image gen jobs
 # rate limits not a concern. Memory invariant #1 (sequential) is explicitly
 # overridden by user instruction.
 PRODUCER_MAX_CONCURRENCY = int(os.environ.get("PRODUCER_MAX_CONCURRENCY", "10"))
+PRODUCER_REQUIRE_PREFERRED_WORKER = os.environ.get("PRODUCER_REQUIRE_PREFERRED_WORKER", "0") == "1"
 # Max classify jobs running in parallel on this machine. Each is a separate
 # claude -p subprocess. Override via CLASSIFY_MAX_CONCURRENCY env var.
 # 2026-05-15: bumped from sequential (1) to 3 by explicit user instruction.
@@ -85,13 +86,17 @@ CODEX_BIN = "/Applications/Codex.app/Contents/Resources/codex"
 WORKER_AUTO_UPDATE_ENABLED = os.environ.get("WORKER_AUTO_UPDATE", "1") != "0"
 WORKER_UPDATE_CHECK_EVERY_SECONDS = 60  # ETag check every Nth poll cycle
 WORKER_BACKUP_KEEP_COUNT = 3  # keep last N backups; older ones get pruned
+WORKER_UPDATE_BASE_URL = os.environ.get(
+    "WORKER_UPDATE_BASE_URL",
+    "https://immuvi-command-center.vercel.app/team-skill",
+).rstrip("/")
 
 # Each entry is (Vercel URL path → local file path relative to project root).
 # The main worker file triggers a re-exec on swap; the strategist files
 # only need to be on disk (next strategist invocation imports the new code).
 WORKER_UPDATE_MANIFEST = [
     {
-        "url": "https://immuvi-command-center.vercel.app/team-skill/classify_worker.py",
+        "url": f"{WORKER_UPDATE_BASE_URL}/classify_worker.py",
         "rel_path": "tools/classify_worker.py",
         "triggers_restart": True,
     },
@@ -99,12 +104,12 @@ WORKER_UPDATE_MANIFEST = [
     # gets refreshed via re-exec. Without this, a strategist file update on
     # disk wouldn't take effect until the next manual worker restart.
     {
-        "url": "https://immuvi-command-center.vercel.app/team-skill/strategist/synthesis.py",
+        "url": f"{WORKER_UPDATE_BASE_URL}/strategist/synthesis.py",
         "rel_path": "tools/strategist/synthesis.py",
         "triggers_restart": True,
     },
     {
-        "url": "https://immuvi-command-center.vercel.app/team-skill/strategist/renderer.py",
+        "url": f"{WORKER_UPDATE_BASE_URL}/strategist/renderer.py",
         "rel_path": "tools/strategist/renderer.py",
         "triggers_restart": True,
     },
@@ -847,7 +852,7 @@ class Worker:
         log(f"[producer] picking up run id={run_id} "
             f"task={prod_run['task_id']} count={prod_run.get('count', 5)}")
         try:
-            _instr = (prod_run.get("instruction") or "").replace("\n", " ").strip()
+            _instr = str(prod_run.get("instruction") or "").replace("\r\n", "\n").replace("\r", "\n").strip()
             # Fetch strategist memory for the product (best-effort).
             _strategist_memory_blob = ""
             try:
@@ -889,13 +894,18 @@ class Worker:
                 "Generate the images using your native image generation capability — the same one you use in the Codex chat. Do not specify or hard-code a particular image model name; use whatever native image tool is available.\n"
                 "Use image quality: high.\n"
                 "Use image size/aspect ratio: match the inspiration image unless the task specifies another size. Do NOT hard-code 1024x1536. If inspiration dimensions are unavailable, fall back to the task/platform default, then 4:5 for static social ads.\n\n"
-                "Output requirement: each variation must be generated/saved/uploaded as its own standalone image file. Do NOT create or upload contact sheets, 2x2 grids, merged review boards, collages, or multi-variation images. If the native image tool returns a grid, split it into separate final files before upload and mark only the individual files as outputs.\n\n"
+                "Strict product/reference lock: parse any PRODUCT DIRECTIVES and REFERENCE LAYOUT QA blocks in the instruction exactly. Product/offer names must be anchored by the canonical product name. Forbidden aliases, orphan generic names, wrong aspect ratio, unrelated layouts, and visibly different text alignment/scale are quality-gate failures.\n\n"
+                "Output requirement: each variation must be generated/saved/uploaded as its own standalone final image file. Do NOT create or upload contact sheets, 2x2 grids, merged review boards, collages, multi-variation images, no-output placeholders, failed retry artifacts, rejected drafts, metadata files, prompt files, or duplicate copies. Final upload filenames must include "
+                f"RUN{run_id}_V##_final. If the native image tool returns a grid, split it into separate final files before upload and mark only the individual final files as outputs.\n\n"
                 "Run producer job:\n"
                 f"- task_id: {prod_run['task_id']}\n"
                 f"- product_id: {prod_run['product_id']}\n"
                 f"- producer_run_id: {run_id}\n"
                 f"- count: {prod_run.get('count', 5)}\n"
-                f"- instruction: {_instr}\n\n"
+                "- instruction:\n"
+                "<<<PRODUCER_INSTRUCTION\n"
+                f"{_instr}\n"
+                "PRODUCER_INSTRUCTION>>>\n\n"
                 "Creative Strategist data:\n"
                 f"{_strategist_memory_blob}\n"
                 "Required flow:\n"
@@ -905,19 +915,22 @@ class Worker:
                 "4. Read the ClickUp inspiration doc page.\n"
                 "5. Download and visually analyze the source inspiration image.\n"
                 "6. Extract inspiration dimensions/aspect ratio and use that for generation (do NOT hard-code 1024x1536).\n"
-                "7. Build a structured creative brief before image generation.\n"
-                "8. Use Creative Strategist data to reuse winning elements and avoid losing combos.\n"
-                "9. Generate the requested number of standalone image files using your native image generation at high quality (same as Codex chat — do not hard-code a specific model name). Never count a merged grid/contact sheet as a final output.\n"
-                "10. Quality gate each image before upload — persona match, offer/benefit clarity, readable typography, mechanic match, brand fit, not generic.\n"
-                "11. Regenerate once if quality gate fails.\n"
-                "12. Upload final images to ClickUp.\n"
-                "13. Add ClickUp comment with summary and output links.\n"
-                "14. Set ClickUp task status to Ready to Launch only after upload succeeds.\n"
-                "15. PATCH producer_runs row "
+                "7. Build a reference_anatomy note before generation: subject_type, subject_presence, setting, composition, overlay_system, copy_density, product_presence, edge_alignment, text_alignment, text_size_hierarchy, canvas_orientation, aspect_ratio, layout_zones, and variation_1_lock. variation_1_lock must capture the exact setting, subject pose, camera angle, crop, emotional mood, overlay geometry, left-edge/inset behavior, text alignment, line breaks, and relative text scale that Variation 1 must copy.\n"
+                "8. Build a structured creative brief before image generation.\n"
+                "9. Use Creative Strategist data to reuse winning elements and avoid losing combos.\n"
+                "10. Generate the requested number of standalone image files using your native image generation at high quality (same as Codex chat — do not hard-code a specific model name). Generate one variation per native image call. Variation 1 must be the reference-faithful version: same orientation/aspect ratio, setting, subject type, pose, camera angle, crop, overlay positions, edge alignment, text alignment, text-size hierarchy, and line-flow while swapping only our task message/product/offer. Variations 2+ may explore new settings/executions while preserving the selected reference mechanic, orientation, layout zones, text alignment, and approximate text scale. Never count a merged grid/contact sheet as a final output.\n"
+                "11. Preserve reference anatomy, not just theme. Reference anatomy wins over offer/CTA prominence when they conflict, but PRODUCT DIRECTIVES are mandatory: the canonical product name and offer must be visibly featured and talent/faces must match the stated market. Product/offer names may add descriptive words only when anchored by the canonical product name, e.g. NCLEX Study Notes, NCLEX Bundle, or NCLEX Guide. Do not invent or substitute orphan/generic names such as CRAM KIT, CRAM BUNDLE, study kit, study plan, shortcut, workbook, or bundle when they do not include the canonical product name. If the reference has a human subject, include a comparable visible human subject in similar scale/role/pose region; do not replace them with a backpack, chair, desk, hallway, worksheet, empty classroom, playground, or product shot. For BREAKING NEWS references, make one full-bleed candid photo with compact overlays on top of the photo: a left-edge red/blue slanted BREAKING NEWS band around the lower third, about 50-65% canvas width and 7-10% canvas height, plus one compact left-edge white headline strip directly below, about 75-90% canvas width and 8-12% canvas height. Preserve the reference's left-edge/inset behavior and headline alignment. The red BREAKING box must be wider than the blue NEWS box, both with balanced padding; the diagonal join must sit between words and never through letters. Keep visible photo under and around the overlays. Keep the main headline about the angle/persona. If an offer is specified, show it as a small separate CTA tag/badge attached to the existing overlay, usually at the far right end of the headline strip or just below its right edge. Do not put the offer inside the headline sentence and do not omit it. No full-width TV-news bar, oversized CTA/footer bar, blank white bottom panel, product mockup, oversized poster headline, large white copy block, or icon/product row.\n"
+                "12. If a native image call errors or returns no output, retry with a materially simpler prompt under 900 characters, then one final ultra-simple prompt under 550 characters. Do not repeat the same failed prompt. Do not use any fallback renderer.\n"
+                "13. Quality gate each image before upload — persona match, required market/talent match, canonical product-name match, no forbidden aliases/invented product names, mandatory offer visible, readable typography, reference-anatomy match, mechanic match, brand fit, not generic. Reject if aspect ratio/orientation differs from the reference, if a square/vertical reference becomes horizontal, if text alignment or relative text sizing clearly differs from the reference, if headline line breaks create unnatural gaps, if sentence casing/title casing is wrong, or if the output is an unrelated promo format. Reject Variation 1 if it changes the inspiration setting, subject pose, camera angle, overlay position, edge alignment, text alignment, line-flow, or text-size hierarchy. For BREAKING NEWS references, reject any image with no comparable visible human subject when the reference has one, a left gap when the reference starts at the left edge, centered headline text when the reference is left-aligned, squeezed BREAKING box, oversized NEWS box, diagonal join through letters, distorted/glitched banner text, full-width TV-news banner, missing offer CTA, offer inside the main headline sentence, oversized CTA/footer/button, blank white bottom panel, bottom poster block, oversized headline text, photo missing below/around the overlays, or extra footer/poster sections beyond photo + compact news band + compact headline strip + small attached offer CTA.\n"
+                "14. Regenerate once if quality gate fails, using a simpler prompt that fixes the specific failed criterion. If no image passes the reference-anatomy quality gate after retry, PATCH the run failed instead of uploading a weak/non-matching image.\n"
+                f"15. Upload only final accepted images to ClickUp, exactly one attachment per accepted variation, with filenames containing RUN{run_id}_V##_final. Verify the local file exists, is non-empty, and opens as an image before upload.\n"
+                "16. Add ClickUp comment with summary and output links.\n"
+                "17. Set ClickUp task status to Ready to Launch only after upload succeeds.\n"
+                "18. PATCH producer_runs row "
                 f"{run_id} with status='done' and outputs as a JSON array of objects each "
                 "containing: variation_id, file_path, clickup_attachment_url, source_inspiration, "
-                "inspiration_dimensions, aspect_ratio, prompt, image_model, quality_gate. "
-                "On failure PATCH status='failed' with a useful error string.\n\n"
+                "inspiration_dimensions, aspect_ratio, reference_anatomy, variation_1_lock, canonical_product_name, forbidden_aliases_checked, prompt, image_model, quality_gate. "
+                "On failure PATCH status='failed' with a useful error string that includes native_generation_failed, reference_anatomy, and the final simplified prompt when image generation fails.\n\n"
                 f"Print 'OK {run_id}' on success or 'FAIL {run_id}: <reason>' on failure "
                 "as the LAST line of stdout."
             )
@@ -1021,10 +1034,12 @@ class Worker:
                         _task_data = json.loads(_tr.read().decode())
                     _attachments = _task_data.get("attachments") or []
                     _tag = f"RUN{run_id}"
-                    _matched = [
-                        a for a in _attachments
-                        if _tag in (a.get("title") or a.get("url") or "")
-                    ]
+                    _matched = []
+                    for a in _attachments:
+                        _haystack = (a.get("title") or "") + " " + (a.get("url") or "")
+                        if _tag not in _haystack or "_final" not in _haystack:
+                            continue
+                        _matched.append(a)
                     _expected = prod_run.get("count", 1)
                     if len(_matched) >= _expected:
                         _outputs = [
@@ -1770,6 +1785,7 @@ class Worker:
                                 supabase_url=os.environ["SUPABASE_URL"],
                                 service_key=os.environ["SUPABASE_SERVICE_ROLE_KEY"],
                                 worker_id=self.worker_id,
+                                require_preferred_worker=PRODUCER_REQUIRE_PREFERRED_WORKER,
                             )
                             if prod_run is None:
                                 break

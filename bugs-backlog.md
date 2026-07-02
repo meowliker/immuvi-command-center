@@ -914,3 +914,139 @@ The before/after diff on `C-INS-011`:
 
 ### Followups (not blocking)
 - Sweep older Instagram inspirations that were classified pre-2026-05-12 against the cropped image — they have empty `formatName` / `creativeUSP` / `creativeHypothesis` and would benefit from re-queueing now that the new chain is live. SQL filter would be something like `where platform='Instagram' and url like '%instagram.com/p/%' and coalesce(data->>'formatName','')=''` → reset queue rows to `pending`.
+
+---
+
+## Bug 15 — Product field missing when assigning Action Plan tasks to ClickUp
+**Status:** ✅ done — fixed 2026-07-02 (pushed to production)
+**Reported:** 2026-07-02
+**Surface:** Action Plan → "+ ClickUp" task creation → ClickUp custom field `Product`
+
+### Symptom
+- When assigning/pushing a task from the app to ClickUp, the ClickUp task could be created without the `Product` custom field filled.
+- This made the task incomplete even though the app already knew the product context from the active product, OneScale launch mapping, or source AD metadata.
+
+### Root cause
+The post-create field sync only attempted `productName` inside the `if (sourceAd)` block and used only `getActiveProduct().name`.
+That made Product fragile in three cases:
+1. If the action's source AD lookup failed or was stale, the entire field-sync block skipped.
+2. If OneScale/product-profile metadata had the better product name, it was ignored.
+3. If a cached ClickUp field map existed but did not include the Product field, the app treated the map as valid and never refetched it.
+
+This was the same class of bug as Bug 5 / Bug 10: field data was available, but the sync path trusted one object shape and one cached map too much.
+
+### Fix
+1. Added `_clickUpProductNameForTask(task, sourceAd)` as a single resolver. It prefers:
+   - `oneScaleProductName` from the action or source AD,
+   - direct `productName` / `product` / `productProfileName`,
+   - saved product production config,
+   - OneScale list mapping product name,
+   - active dashboard product name as the final fallback.
+2. `createClickUpTaskFromAction` now computes Product before task creation and runs post-create field sync when either a source AD exists OR a product name exists.
+3. The post-create proxy now targets the new ClickUp task even without a source AD, so Product can still be pushed.
+4. If Product is needed but the cached ClickUp field map lacks `productName`, the app refetches the field map before pushing fields.
+5. `_seedCuRawFromTypedFields` now seeds the `product` custom-field raw value for newly spawned ADs when ClickUp metadata is available.
+6. Field discovery now also recognizes `Product Name`, `Product Profile`, and `Product Profile Name` as aliases for the ClickUp Product field.
+
+### Verified
+- `immuvi-command-center.html` script parses cleanly via Node `new Function()` extraction.
+- Diff checked to ensure existing Bug 5 / Bug 10 behaviors remain intact: source AD field copying still runs, user fields still post-create PUT separately, and Product is now added as an extra resilient field rather than replacing the existing sync flow.
+
+### Pushed
+Pushed to `main` for production deployment on 2026-07-02 after explicit user approval.
+
+## Bug 16 — Script-bank table turns into `[table-embed:...]` text in production task descriptions
+**Status:** ✅ done — fixed 2026-07-02 (pushed to production)
+**Reported:** 2026-07-02
+**Surface:** Script Bank / ClickUp synced task → Action Plan assignment → Production Queue ClickUp task description
+
+### Symptom
+- In the script bank task, the product/creative description table looked correctly organized as a two-column `Field / Value` table.
+- After assigning the item to the production queue, the production task description showed ClickUp's internal rich-table serialization, e.g. `[table-embed:1:1 Field | 1:2 Value | ...]`.
+- The production description became clumsy and hard to read, and the creative hypothesis appeared below the leaked table text.
+
+### Root cause
+ClickUp's API can return rich description tables as a serialized plain-text token (`[table-embed:...]`).
+The app was storing that raw API string locally and the sync parser treated everything before the first separator as `creativeHypothesis`.
+So the source task's table could be cached as hypothesis/prose and then reused when building the new production task description.
+
+This repeated the same class of issue as earlier ClickUp field bugs: reusing ClickUp API shapes directly instead of normalizing them at the app boundary.
+
+### Fix
+1. Added a ClickUp description normalizer that converts `[table-embed:row:col ...]` back into a normal markdown table.
+2. Added a creative-hypothesis extractor that specifically reads the `Creative Hypothesis` section and strips table/scaffold content before caching it.
+3. `parseClickUpTask` now stores normalized descriptions locally and no longer treats the top creative brief table as hypothesis.
+4. `buildTaskDescription` sanitizes `ad.creativeHypothesis` before rendering, so old already-polluted local rows don't leak table serialization into new production tasks.
+5. Brief-row appenders now normalize the existing task description before writing it back, preventing later brief inheritance from re-saving the bad table token.
+6. Table cell values are escaped before generating markdown rows, so links or values with pipes/newlines cannot break the table layout.
+
+### Verified
+- `immuvi-command-center.html` script parses cleanly via Node `new Function()` extraction.
+- A sample matching the reported `[table-embed:...]` screenshot converts to:
+  `| Field | Value |` table rows, and extracts only `The ad was made to spark curiosity about everyday medicinal plants.` as the hypothesis.
+- `git diff --check` passed.
+
+### Pushed
+Pushed to `main` for production deployment on 2026-07-02 after explicit user approval.
+
+---
+
+## Bug 17 — Production task descriptions missing inspiration/source ad links
+**Status:** ✅ done — fixed 2026-07-02 (pushed to production)
+**Reported:** 2026-07-02
+**Surface:** Script Bank / synced ClickUp task → Action Plan assignment → Production Queue task description
+
+### Symptom
+- Some production tasks were created without the inspiration link / source ad link in the description.
+- The source URL could still exist elsewhere, such as inside the original ClickUp description table, a `Source Ad:` line, the inspiration record, or `_sourceInspoAdUrl`, but the production description only rendered from `ad.adLink`.
+
+### Root cause
+`buildTaskDescription` only added the `Inspiration Link` table row when `ad.adLink` was already populated.
+But ClickUp sync and older task paths store source URLs in several shapes:
+1. ClickUp custom field `Inspiration Link`.
+2. Normalized or raw ClickUp description table row `Inspiration Link`.
+3. Text line `Source Ad: <url>`.
+4. Inspiration metadata (`sourceUrl`) or `_sourceInspoAdUrl`.
+
+When the URL lived in any shape except `ad.adLink`, the production task was missing the link.
+
+### Fix
+1. Added `_sourceAdUrlForDescription(ad)` as the single source-link resolver.
+2. The resolver checks `ad.adLink`, `_sourceInspoAdUrl`, `_sourceAdUrl`, inspiration records, and URLs embedded in normalized ClickUp descriptions.
+3. `buildTaskDescription` now uses the resolver for the `Inspiration Link` table row, so production descriptions include the source URL even if `ad.adLink` was blank.
+4. `parseClickUpTask` now backfills `adLink` from description rows/lines when the ClickUp custom field is empty.
+5. Tracker-derived production clones now carry the source description into the synthetic description object, allowing table-only links to be recovered.
+6. `_apParseInspoLinksFromDesc` now recognizes `Source Ad`, `Inspiration Link`, `Inspo Link`, `Ad Link`, `Reference Link`, and brief-table labels after normalizing ClickUp rich-table embeds.
+
+### Verified
+- `immuvi-command-center.html` script parses cleanly via Node `new Function()` extraction.
+- A sample matching the reported table shape successfully extracts:
+  - source ad URL from `Inspiration Link`,
+  - brief doc URL from `Aryan's Brief`.
+- `git diff --check` passed.
+
+### Pushed
+Pushed to `main` for production deployment on 2026-07-02 after explicit user approval.
+
+---
+
+## Bug 18 — Edit Creative modal still mapped `Untested` to ClickUp `to do`
+**Status:** ✅ done — fixed 2026-07-02 (pushed to production)
+**Reported:** 2026-07-02
+**Surface:** Creative Tracker / Matrix → Edit Creative modal → save status back to ClickUp
+
+### Symptom
+- The Bug 10 audit found one remaining legacy status map where saving from the Edit Creative modal converted app status `Untested` into ClickUp status `to do`.
+- The workspace ClickUp list uses `untested`, so that path could silently fail or behave differently from the Action Plan and Matrix status paths.
+
+### Root cause
+Bug 10 fixed the primary Action Plan, Matrix, task-create, and unified field-save status maps, but the older `saveEditCreative()` path still had its own local `cuStatusMap`.
+That duplicate map was missed and kept the old `Untested -> to do` value.
+
+### Fix
+Changed the `saveEditCreative()` map to use `Untested -> untested`, matching the other ClickUp status sync paths.
+
+### Verified
+- Static audit confirms no remaining `Untested -> to do` custom ClickUp status map in `immuvi-command-center.html`.
+- `immuvi-command-center.html` script parses cleanly via Node `new Function()` extraction.
+- `git diff --check` passed.

@@ -14010,6 +14010,27 @@ function _oneScaleEnsureLaunchTaskFields(task, sourceAd, visibleTaskName) {
   return fields;
 }
 
+function _clickUpProductNameForTask(task, sourceAd) {
+  task = task || {};
+  sourceAd = sourceAd || {};
+  var activeProduct = (typeof getActiveProduct === 'function') ? getActiveProduct() : null;
+  var mapping = (typeof _oneScaleMappingForTask === 'function') ? _oneScaleMappingForTask(task, sourceAd) : null;
+  var cfgProduct = activeProduct && activeProduct.config && activeProduct.config.production;
+  return String(_oneScaleFirstValue(
+    task.oneScaleProductName,
+    sourceAd.oneScaleProductName,
+    task.productName,
+    sourceAd.productName,
+    task.product,
+    sourceAd.product,
+    task.productProfileName,
+    sourceAd.productProfileName,
+    cfgProduct && (cfgProduct.product_name || cfgProduct.productName),
+    mapping && mapping.productName,
+    activeProduct && activeProduct.name
+  ) || '').trim();
+}
+
 function validateOneScaleLaunchTasks(tasks) {
   tasks = Array.isArray(tasks) ? tasks : [];
   if (!tasks.length) {
@@ -25334,7 +25355,7 @@ function saveEditCreative(id) {
     if (ad.adLink !== oldAdLink && ad.adLink) taskBody.url = ad.adLink;
     if (ad.status !== oldStatus) {
       var cuStatusMap = {
-        'Untested':'to do','Approved':'approved','In Production':'in production',
+        'Untested':'untested','Approved':'approved','In Production':'in production',
         'Ready to Launch':'ready to launch','Testing':'testing',
         'Mild Winner':'mild winner','Winner':'winner',
         'Loser':'loser','Scale':'scale','Complete':'complete'
@@ -25867,6 +25888,140 @@ function applyBulkDate() {
   toast('Date updated for ' + selectedActions.size + ' actions');
 }
 
+function _markdownCell(value) {
+  return String(value == null ? '' : value)
+    .replace(/\r?\n/g, '<br>')
+    .replace(/\|/g, '\\|')
+    .trim();
+}
+
+function _clickUpTableEmbedToMarkdown(body) {
+  body = String(body || '').trim();
+  if (!body) return '';
+  var rows = {};
+  var maxRow = 0, maxCol = 0;
+  var rx = /(\d+):(\d+)\s+([\s\S]*?)(?=\s+\|\s+\d+:\d+\s+|\s+\|\s*$|$)/g;
+  var m;
+  while ((m = rx.exec(body)) !== null) {
+    var row = parseInt(m[1], 10);
+    var col = parseInt(m[2], 10);
+    var val = String(m[3] || '').replace(/\s+\|$/, '').trim();
+    if (!rows[row]) rows[row] = {};
+    rows[row][col] = val;
+    if (row > maxRow) maxRow = row;
+    if (col > maxCol) maxCol = col;
+  }
+  if (!maxRow || !maxCol) return '';
+  var out = [];
+  var header = [];
+  for (var c = 1; c <= maxCol; c++) header.push(_markdownCell((rows[1] && rows[1][c]) || (c === 1 ? 'Field' : 'Value')));
+  out.push('| ' + header.join(' | ') + ' |');
+  out.push('| ' + header.map(function(){ return '---'; }).join(' | ') + ' |');
+  for (var r = 2; r <= maxRow; r++) {
+    if (!rows[r]) continue;
+    var vals = [];
+    var hasValue = false;
+    for (var cc = 1; cc <= maxCol; cc++) {
+      var cell = rows[r][cc] || '';
+      if (String(cell).trim()) hasValue = true;
+      vals.push(_markdownCell(cell));
+    }
+    if (hasValue) out.push('| ' + vals.join(' | ') + ' |');
+  }
+  return out.join('\n');
+}
+
+function _normalizeClickUpDescriptionForReuse(desc) {
+  desc = String(desc || '');
+  if (!desc) return '';
+  return desc.replace(/\[table-embed:([\s\S]*?)\]/g, function(full, body) {
+    return _clickUpTableEmbedToMarkdown(body) || '';
+  }).trim();
+}
+
+function _stripClickUpBriefTables(desc) {
+  var text = _normalizeClickUpDescriptionForReuse(desc);
+  if (!text) return '';
+  var lines = text.split(/\r?\n/);
+  var out = [];
+  for (var i = 0; i < lines.length; i++) {
+    var line = lines[i];
+    if (/^\s*\|/.test(line)) continue;
+    if (/creative\s+brief/i.test(line)) continue;
+    out.push(line);
+  }
+  return out.join('\n').replace(/^\s*━{3,}\s*/gm, '').trim();
+}
+
+function _extractCreativeHypothesisFromTaskDescription(desc) {
+  var text = _normalizeClickUpDescriptionForReuse(desc);
+  if (!text) return '';
+  var label = text.match(/(?:🧠\s*)?Creative\s+Hypothesis\s*:?\s*/i);
+  var candidate = '';
+  if (label) {
+    var tail = text.slice(label.index + label[0].length);
+    var stop = tail.search(/\n\s*(?:━{3,}|📌\s*Inspiration Brief|🔗\s*Source Ad|📝\s*Notes|📋\s*CREATIVE BRIEF|🏆\s*Winning Video|🔁\s*Variation of)/i);
+    candidate = (stop === -1 ? tail : tail.slice(0, stop)).trim();
+  } else {
+    var stripped = _stripClickUpBriefTables(text);
+    var sepIdx = stripped.indexOf('━━━');
+    candidate = (sepIdx !== -1 ? stripped.slice(0, sepIdx) : stripped).trim();
+  }
+  candidate = _stripClickUpBriefTables(candidate)
+    .replace(/^[\s\S]*?creative\s+hypothesis\s*:\s*/i, function(m) {
+      return m.length <= 80 ? '' : m;
+    })
+    .trim();
+  return candidate;
+}
+
+function _cleanDescriptionUrl(url) {
+  url = String(url || '').trim();
+  if (!url) return '';
+  return url.replace(/[)\]}>.,;]+$/g, '').trim();
+}
+
+function _extractUrlForDescriptionLabels(desc, labels) {
+  var text = _normalizeClickUpDescriptionForReuse(desc);
+  if (!text) return '';
+  labels = Array.isArray(labels) ? labels : [labels];
+  var rxUrl = "(https?:\\/\\/[^\\s|<>\"']+)";
+  for (var i = 0; i < labels.length; i++) {
+    var label = String(labels[i] || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    var tableRx = new RegExp('\\|\\s*(?:[^|]*?\\s*)?' + label + '\\s*\\|\\s*' + rxUrl, 'i');
+    var tableMatch = text.match(tableRx);
+    if (tableMatch) return _cleanDescriptionUrl(tableMatch[1]);
+    var lineRx = new RegExp(label + '\\s*:?\\s*' + rxUrl, 'i');
+    var lineMatch = text.match(lineRx);
+    if (lineMatch) return _cleanDescriptionUrl(lineMatch[1]);
+  }
+  return '';
+}
+
+function _sourceAdUrlForDescription(ad) {
+  ad = ad || {};
+  var fromDesc = _extractUrlForDescriptionLabels(ad.description || ad._description || '', [
+    'Source Ad',
+    'Inspiration Link',
+    'Inspo Link',
+    'Ad Link',
+    'Reference Link',
+    'Reference creative'
+  ]);
+  var fromIns = '';
+  if (ad._fromInspoId && typeof INSPIRATIONS !== 'undefined' && Array.isArray(INSPIRATIONS)) {
+    var ins = INSPIRATIONS.find(function(x){ return x && x.id === ad._fromInspoId; });
+    fromIns = ins && (ins.sourceUrl || ins.source_url || ins.adLink || ins.link || '');
+  }
+  return _cleanDescriptionUrl(_oneScaleFirstValue(
+    ad.adLink,
+    ad._sourceInspoAdUrl,
+    ad._sourceAdUrl,
+    fromIns,
+    fromDesc
+  ));
+}
+
 // ── Build ClickUp task description — full table + linked sections ──
 function buildTaskDescription(ad) {
   var lines = [];
@@ -25939,12 +26094,13 @@ function buildTaskDescription(ad) {
     ['Funnel',  ad.funnelStage || '—'],
     ['Ad Type', ad.adType  || '—']
   ];
+  var _sourceAdUrlForDesc = _sourceAdUrlForDescription(ad);
   // Conditional rows — only add if value is not empty
   if (ad.hookType)          tableRows.push(['Hook Type',           ad.hookType]);
   if (ad.creativeStructure) tableRows.push(['Creative Structure',  ad.creativeStructure]);
   if (ad.productionStyle)   tableRows.push(['Production Style',    ad.productionStyle]);
   if (ad.creativeUSP)       tableRows.push(['Creative USP',        ad.creativeUSP]);
-  if (ad.adLink)            tableRows.push(['Inspiration Link',    ad.adLink]);
+  if (_sourceAdUrlForDesc)  tableRows.push(['Inspiration Link',    _sourceAdUrlForDesc]);
   if (ad.driveLink)         tableRows.push(['Drive Link',          ad.driveLink]);
 
   // Build markdown table
@@ -25954,15 +26110,16 @@ function buildTaskDescription(ad) {
   lines.push('| Field | Value |');
   lines.push('|---|---|');
   for (var i = 0; i < tableRows.length; i++) {
-    lines.push('| ' + tableRows[i][0] + ' | ' + tableRows[i][1] + ' |');
+    lines.push('| ' + _markdownCell(tableRows[i][0]) + ' | ' + _markdownCell(tableRows[i][1]) + ' |');
   }
   lines.push('');
 
   // Creative Hypothesis — skip when winner-seeded (parent's hypothesis is noise)
-  if (!isWinnerSeeded && ad.creativeHypothesis && ad.creativeHypothesis.trim()) {
+  var _creativeHypothesisForDesc = _extractCreativeHypothesisFromTaskDescription(ad.creativeHypothesis || '');
+  if (!isWinnerSeeded && _creativeHypothesisForDesc) {
     lines.push('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
     lines.push('🧠 Creative Hypothesis');
-    lines.push(ad.creativeHypothesis.trim());
+    lines.push(_creativeHypothesisForDesc);
     lines.push('');
   }
 
@@ -26101,6 +26258,7 @@ function _seedCuRawFromTypedFields(ad) {
   _setDropdown('hook type', ad.hookType);
   _setDropdown('creative structure', ad.creativeStructure);
   _setDropdown('production style', ad.productionStyle);
+  _setDropdown('product', (typeof _clickUpProductNameForTask === 'function') ? _clickUpProductNameForTask(ad, ad) : (ad.oneScaleProductName || ad.productName || ''));
 
   // Text fields
   _setText('creative usp', ad.creativeUSP);
@@ -26395,6 +26553,11 @@ function createClickUpTaskFromAction(actionId, onDone, sourceAdOverride) {
     }
   }
 
+  _oneScaleEnsureLaunchTaskFields(act, sourceAd, act.title);
+  var clickUpProductName = (typeof _clickUpProductNameForTask === 'function')
+    ? _clickUpProductNameForTask(act, sourceAd)
+    : ((getActiveProduct() && getActiveProduct().name) || '');
+
   // Save source AD's existing ClickUp ID BEFORE anything overwrites it
   // (for tracker-format tasks this is the parent task's ID — used for linking + description)
   var prevSourceClickupId = sourceAd ? (sourceAd._clickupId || null) : null;
@@ -26423,8 +26586,9 @@ function createClickUpTaskFromAction(actionId, onDone, sourceAdOverride) {
       productionStyle:    sourceAd.productionStyle,
       creativeUSP:        sourceAd.creativeUSP,
       creativeHypothesis: sourceAd.creativeHypothesis,
-      adLink:             sourceAd.adLink || (_srcFmt && _srcFmt.adLink) || '',
+      adLink:             sourceAd.adLink || (typeof _sourceAdUrlForDescription === 'function' ? _sourceAdUrlForDescription(sourceAd) : '') || (_srcFmt && (_srcFmt.adLink || (typeof _sourceAdUrlForDescription === 'function' ? _sourceAdUrlForDescription(_srcFmt) : ''))) || '',
       driveLink:          '',     // production clone has no Drive Link yet (team fills after shooting)
+      description:        sourceAd.description || sourceAd._description || '',
       _inspirationDriveLink: sourceAd._sourceFormatDriveLink || (_srcFmt && _srcFmt.driveLink) || '',
       _fromInspoId:       sourceAd._fromInspoId || null,
       _fromTrackerAdId:   sourceAd._fromTrackerAdId || null,
@@ -26673,24 +26837,24 @@ function createClickUpTaskFromAction(actionId, onDone, sourceAdOverride) {
     // not to the tracker-format AD's existing ClickUp task.
     // For angle/persona/funnelStage: prefer act values (from the matrix cell) over sourceAd
     // since the action was created for a specific cell that may differ from sourceAd's stored values.
-    if (sourceAd) {
-      var pushProxy = { _clickupId: newId, id: sourceAd.id };
+    if (sourceAd || clickUpProductName) {
+      var pushProxy = { _clickupId: newId, id: (sourceAd && sourceAd.id) || act.sourceAdId || act.adId || act.id };
       var fieldsToSync = [
-        ['angle',            act.angle            || sourceAd.angle],
-        ['persona',          act.persona          || sourceAd.persona],
-        ['funnelStage',      act.funnelStage      || sourceAd.funnelStage],
-        ['adType',           sourceAd.adType],
-        ['hookType',         sourceAd.hookType],
-        ['creativeStructure',sourceAd.creativeStructure],
-        ['productionStyle',  sourceAd.productionStyle],
-        ['adLink',           sourceAd.adLink],
-        ['productName',      (getActiveProduct() && getActiveProduct().name) || '']
+        ['angle',            act.angle       || (sourceAd && sourceAd.angle)],
+        ['persona',          act.persona     || (sourceAd && sourceAd.persona)],
+        ['funnelStage',      act.funnelStage || (sourceAd && sourceAd.funnelStage)],
+        ['adType',           sourceAd && sourceAd.adType],
+        ['hookType',         sourceAd && sourceAd.hookType],
+        ['creativeStructure',sourceAd && sourceAd.creativeStructure],
+        ['productionStyle',  sourceAd && sourceAd.productionStyle],
+        ['adLink',           (sourceAd && sourceAd.adLink) || act.adLink],
+        ['productName',      clickUpProductName]
       ];
 
-      console.log('[fieldSync] newId:', newId, '| sourceAd:', sourceAd.id, '| values:', {
+      console.log('[fieldSync] newId:', newId, '| sourceAd:', sourceAd && sourceAd.id, '| values:', {
         angle: fieldsToSync[0][1], persona: fieldsToSync[1][1],
         funnelStage: fieldsToSync[2][1], adType: fieldsToSync[3][1],
-        hookType: fieldsToSync[4][1]
+        hookType: fieldsToSync[4][1], productName: fieldsToSync[8][1]
       });
 
       var doFieldPushes = function() {
@@ -26710,10 +26874,11 @@ function createClickUpTaskFromAction(actionId, onDone, sourceAdOverride) {
       };
 
       var existingMap = getActiveFieldMap();
-      if (existingMap && Object.keys(existingMap).length > 0) {
+      var needsProductMapRefresh = !!(clickUpProductName && existingMap && !existingMap.productName);
+      if (existingMap && Object.keys(existingMap).length > 0 && !needsProductMapRefresh) {
         doFieldPushes();
       } else {
-        console.log('[fieldSync] No field map — fetching from ClickUp first...');
+        console.log('[fieldSync] Field map missing/stale — fetching from ClickUp first...');
         fetchAndStoreFieldMap(listId).then(function() {
           console.log('[fieldSync] Field map loaded, pushing fields...');
           doFieldPushes();
@@ -26910,7 +27075,9 @@ function createClickUpTaskFromAction(actionId, onDone, sourceAdOverride) {
               // Add Brief row to description of new task
               apiFetch('/task/' + newId)
                 .then(function(taskData) {
-                  var existingDesc = (taskData && taskData.description) || '';
+                  var existingDesc = (typeof _normalizeClickUpDescriptionForReuse === 'function')
+                    ? _normalizeClickUpDescriptionForReuse((taskData && taskData.description) || '')
+                    : ((taskData && taskData.description) || '');
                   var briefRow = '\n| 📌 Brief | ' + url + ' |';
                   if (existingDesc.indexOf(url) === -1) {
                     apiFetch('/task/' + newId, {
@@ -27339,6 +27506,9 @@ function fetchAndStoreFieldMap(listId) {
       'funnel type': 'funnelStage',
       'photo/video': 'adType',
       'product': 'productName',
+      'product name': 'productName',
+      'product profile': 'productName',
+      'product profile name': 'productName',
       'notes': 'notes_field',         // short_text — general notes field (separate from hypothesis)
       // Inspiration Link field (various possible names)
       'inspiration link': 'adLink',
@@ -28263,21 +28433,14 @@ function parseClickUpTask(t) {
   var variationNum = getFieldValue(['variation number', 'variationnumber', 'variation #', 'variation']);
 
   // Creative Hypothesis: stored at start of description before the ━━━ separator
-  var creativeHypothesis = '';
-  var desc = t.description || '';
-  if (desc) {
-    var sepIdx = desc.indexOf('━━━');
-    if (sepIdx !== -1) {
-      creativeHypothesis = desc.slice(0, sepIdx).trim();
-    } else {
-      // If no separator, whole description is the hypothesis
-      creativeHypothesis = desc.trim();
-    }
-    // Strip "🧠 Creative Hypothesis: " label prefix if present (exact match on our push format)
-    creativeHypothesis = creativeHypothesis.replace(/^[\s\S]*?creative\s+hypothesis\s*:\s*/i, function(m) {
-      // Only strip if the label is in the first 80 chars (guard against hypothesis text matching)
-      return m.length <= 80 ? '' : m;
-    }).trim();
+  var desc = (typeof _normalizeClickUpDescriptionForReuse === 'function')
+    ? _normalizeClickUpDescriptionForReuse(t.description || '')
+    : (t.description || '');
+  var creativeHypothesis = (typeof _extractCreativeHypothesisFromTaskDescription === 'function')
+    ? _extractCreativeHypothesisFromTaskDescription(desc)
+    : '';
+  if (!adLink && typeof _sourceAdUrlForDescription === 'function') {
+    adLink = _sourceAdUrlForDescription({ description: desc });
   }
 
   // Fallback: parse "Angle × Persona" pattern from task name
@@ -28436,7 +28599,7 @@ function parseClickUpTask(t) {
     // rows whose _fromInspoId / _sourceFormatId is stale. Without this,
     // synced ADs land locally with description='' and the parser has
     // nothing to work with.
-    description: t.description || '',
+    description: desc || '',
     // Canonical native assignees list — survives Supabase round-trip via
     // _META_FIELDS so write-path can build add/rem diffs without re-parsing
     // from _customFieldsRaw.
@@ -30075,11 +30238,22 @@ function apRunLegacyBackfill() {
 function _apParseInspoLinksFromDesc(desc) {
   var out = { briefUrl: null, adUrl: null };
   if (!desc || typeof desc !== 'string') return out;
+  if (typeof _normalizeClickUpDescriptionForReuse === 'function') {
+    desc = _normalizeClickUpDescriptionForReuse(desc);
+  }
   var rxUrl = '(https?:\\/\\/[^\\s|<>"\']+)';
-  var b = desc.match(new RegExp('Inspiration Brief\\s*:\\s*' + rxUrl, 'i'));
-  if (b) out.briefUrl = b[1];
-  var a = desc.match(new RegExp('Source Ad\\s*:\\s*' + rxUrl, 'i'));
-  if (a) out.adUrl = a[1];
+  if (typeof _extractUrlForDescriptionLabels === 'function') {
+    out.briefUrl = _extractUrlForDescriptionLabels(desc, ['Inspiration Brief', 'Brief', "Aryan's Brief", 'Winner Brief']) || null;
+  } else {
+    var b = desc.match(new RegExp('Inspiration Brief\\s*:\\s*' + rxUrl, 'i'));
+    if (b) out.briefUrl = b[1];
+  }
+  if (typeof _extractUrlForDescriptionLabels === 'function') {
+    out.adUrl = _extractUrlForDescriptionLabels(desc, ['Source Ad', 'Inspiration Link', 'Inspo Link', 'Ad Link', 'Reference Link', 'Reference creative']) || null;
+  } else {
+    var a = desc.match(new RegExp('Source Ad\\s*:\\s*' + rxUrl, 'i'));
+    if (a) out.adUrl = a[1];
+  }
   return out;
 }
 
@@ -35376,7 +35550,9 @@ async function _mxv3PollBriefAndPatchDescription(parentAdId, driveFileId, newAdI
       if (ad && ad._clickupId) {
         try {
           var tr = await apiFetch('/task/' + encodeURIComponent(ad._clickupId));
-          var existingDesc = (tr && tr.description) || '';
+          var existingDesc = (typeof _normalizeClickUpDescriptionForReuse === 'function')
+            ? _normalizeClickUpDescriptionForReuse((tr && tr.description) || '')
+            : ((tr && tr.description) || '');
           if (existingDesc.indexOf(docUrl) === -1) {
             var newDesc = existingDesc + '\n| 📌 Winner Brief | ' + docUrl + ' |';
             await apiFetch('/task/' + encodeURIComponent(ad._clickupId), {

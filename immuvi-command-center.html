@@ -10420,6 +10420,7 @@ body:not(.booting) #__bootLoader {
         <option value="">All Statuses</option>
         <option value="Untested">Untested</option>
         <option value="Approved">Approved</option>
+        <option value="Assigned">Assigned</option>
         <option value="In Production">In Production</option>
         <option value="Ready to Launch">Ready to Launch</option>
         <option value="Testing">Testing</option>
@@ -14148,7 +14149,7 @@ function oneScaleLaunchDisabledAttrs(task) {
   return ' disabled title="' + escAttr((validation && validation.error) || 'Missing OneScale launch mapping') + '"';
 }
 
-let STATUSES = ['Untested', 'Approved', 'In Production', 'Ready to Launch', 'Testing', 'Mild Winner', 'Winner', 'Loser', 'Scale', 'Complete'];
+let STATUSES = ['Untested', 'Approved', 'Assigned', 'In Production', 'Ready to Launch', 'Testing', 'Mild Winner', 'Winner', 'Loser', 'Scale', 'Complete'];
 const CREATIVE_STRUCTURES = ['UGC', 'Testimonial', 'Demo', 'Tutorial / How-To', 'Story / Narrative', 'Hook + Offer', 'Listicle', 'Static / Photo', 'Comparison', 'Interview', 'Skit / Roleplay', 'AI / Voiceover'];
 const CREATIVE_STRUCTURE_DESC = {
   'UGC': 'Real person, phone-shot, authentic feel',
@@ -14194,6 +14195,7 @@ const PRODUCTION_STYLE_DESC = {
 const STATUS_CLS = {
   'Untested': 'notstart',
   'Approved': 'inprog',
+  'Assigned': 'inprog',
   'In Production': 'ready',
   'Ready to Launch': 'test',
   'Testing': 'test',
@@ -14625,6 +14627,7 @@ function classify(status) {
   var map = {
     'untested':        { cls: 'notstart',  lbl: 'Untested' },
     'approved':        { cls: 'inprog',    lbl: 'Approved' },
+    'assigned':        { cls: 'inprog',    lbl: 'Assigned' },
     'in-production':   { cls: 'ready',     lbl: 'In Production' },
     'ready-to-launch': { cls: 'test',      lbl: 'Ready to Launch' },
     'testing':         { cls: 'test',      lbl: 'Testing' },
@@ -19915,6 +19918,7 @@ function _apStatusVariant(status) {
   var s = String(status || '').toLowerCase();
   if (s === 'untested')          return { cls:'ap-stat-untested', label:'Untested' };
   if (s === 'approved')          return { cls:'ap-stat-approved', label:'Approved' };
+  if (s === 'assigned')          return { cls:'ap-stat-approved', label:'Assigned' };
   if (s === 'in production')     return { cls:'ap-stat-inprod',   label:'In Production' };
   if (s === 'ready to launch')   return { cls:'ap-stat-ready',    label:'Ready to Launch' };
   if (s === 'testing')           return { cls:'ap-stat-testing',  label:'Testing' };
@@ -23894,6 +23898,7 @@ function _renderActionPlan_LEGACY() {
       html += '<select class="ap-status-sel ' + statusCls + '" onchange="updateManualActionStatus(\'' + escAttr(act.id) + '\', this.value)">';
       html += '<option value="Untested"' + (act.liveStatus === 'Untested' ? ' selected' : '') + '>Untested</option>';
       html += '<option value="Approved"' + (act.liveStatus === 'Approved' ? ' selected' : '') + '>Approved</option>';
+      html += '<option value="Assigned"' + (act.liveStatus === 'Assigned' ? ' selected' : '') + '>Assigned</option>';
       html += '<option value="In Production"' + (act.liveStatus === 'In Production' ? ' selected' : '') + '>In Production</option>';
       html += '<option value="Ready to Launch"' + (act.liveStatus === 'Ready to Launch' ? ' selected' : '') + '>Ready to Launch</option>';
       html += '<option value="Testing"' + (act.liveStatus === 'Testing' ? ' selected' : '') + '>Testing</option>';
@@ -24065,6 +24070,7 @@ function updateManualActionStatus(id, newStatus) {
     var cuStatusMap = {
       'Untested':       'untested',
       'Approved':       'approved',
+      'Assigned':       'assigned',
       'In Production':  'in production',
       'Ready to Launch':'ready to launch',
       'Testing':        'testing',
@@ -25358,7 +25364,7 @@ function saveEditCreative(id) {
     if (ad.adLink !== oldAdLink && ad.adLink) taskBody.url = ad.adLink;
     if (ad.status !== oldStatus) {
       var cuStatusMap = {
-        'Untested':'untested','Approved':'approved','In Production':'in production',
+        'Untested':'untested','Approved':'approved','Assigned':'assigned','In Production':'in production',
         'Ready to Launch':'ready to launch','Testing':'testing',
         'Mild Winner':'mild winner','Winner':'winner',
         'Loser':'loser','Scale':'scale','Complete':'complete'
@@ -26060,6 +26066,68 @@ function _sourceAdUrlForDescription(ad) {
   ));
 }
 
+function _hydrateAdFromDescriptionFields(ad) {
+  if (!ad) return ad;
+  var desc = ad.description || ad._description || '';
+  if (!desc) return ad;
+
+  function fill(prop, labels) {
+    if (ad[prop] != null && String(ad[prop]).trim()) return;
+    var v = _extractDescriptionFieldValue(desc, labels);
+    if (v) ad[prop] = v;
+  }
+
+  fill('angle', ['Angle', 'Angle Tag', 'Ad Angle']);
+  fill('persona', ['Persona', 'Persona Tag', 'Target Persona', 'Audience']);
+  fill('funnelStage', ['Funnel', 'Funnel Type', 'Funnel Stage']);
+  fill('adType', ['Ad Type', 'Photo/Video', 'Type']);
+  fill('hookType', ['Hook Type', 'Hook']);
+  fill('creativeStructure', ['Creative Structure', 'Structure', 'Creative Format']);
+  fill('productionStyle', ['Production Style', 'Production Type', 'Style']);
+  fill('creativeUSP', ['Creative USP', 'USP', 'Unique Selling Point']);
+  fill('notes', ['Notes']);
+  fill('driveLink', ['Drive Link', 'Google Drive', 'Google Drive Link', 'GDrive', 'Production Link']);
+  fill('productName', ['Product', 'Product Name', 'Product Profile', 'Product Profile Name']);
+
+  if (!ad.adLink) {
+    var sourceUrl = _sourceAdUrlForDescription(ad);
+    if (sourceUrl) ad.adLink = sourceUrl;
+  }
+  if (!ad.creativeHypothesis && typeof _extractCreativeHypothesisFromTaskDescription === 'function') {
+    var hyp = _extractCreativeHypothesisFromTaskDescription(desc);
+    if (hyp) ad.creativeHypothesis = hyp;
+  }
+  if (typeof _seedCuMirrorsFromTypedFields === 'function') {
+    _seedCuMirrorsFromTypedFields(ad);
+  }
+  return ad;
+}
+
+function _clickUpStatusNameForCreate(desired, fallback) {
+  var wanted = String(desired || fallback || '').trim();
+  if (!wanted) return '';
+  if (typeof CLICKUP_STATUSES !== 'undefined' && Array.isArray(CLICKUP_STATUSES)) {
+    var lower = wanted.toLowerCase();
+    for (var i = 0; i < CLICKUP_STATUSES.length; i++) {
+      var statusName = String((CLICKUP_STATUSES[i] && CLICKUP_STATUSES[i].status) || '').trim();
+      if (statusName && statusName.toLowerCase() === lower) return statusName;
+    }
+  }
+  return wanted;
+}
+
+function _isScriptBankApprovalPush(act, sourceAd, prod) {
+  var status = String((act && act.liveStatus) || (sourceAd && sourceAd.status) || '').trim().toLowerCase();
+  var listName = String((prod && prod.clickupListName) || '').toLowerCase();
+  var prodName = String((prod && prod.name) || '').toLowerCase();
+  var sourceType = String((sourceAd && (sourceAd.taskType || sourceAd.sourceType || sourceAd.origin || sourceAd._origin)) || '').toLowerCase();
+  return status === 'approved' && (
+    /script\s*bank/.test(listName) ||
+    /script\s*bank/.test(prodName) ||
+    /script\s*bank/.test(sourceType)
+  );
+}
+
 // ── Build ClickUp task description — full table + linked sections ──
 function buildTaskDescription(ad) {
   var lines = [];
@@ -26619,6 +26687,10 @@ function createClickUpTaskFromAction(actionId, onDone, sourceAdOverride) {
     }
   }
 
+  if (sourceAd && typeof _hydrateAdFromDescriptionFields === 'function') {
+    _hydrateAdFromDescriptionFields(sourceAd);
+  }
+
   _oneScaleEnsureLaunchTaskFields(act, sourceAd, act.title);
   var clickUpProductName = (typeof _clickUpProductNameForTask === 'function')
     ? _clickUpProductNameForTask(act, sourceAd)
@@ -26694,11 +26766,11 @@ function createClickUpTaskFromAction(actionId, onDone, sourceAdOverride) {
   // resolved through CFG.fields. Kept for backward compatibility with
   // pre-existing field-id configs.
   var customFields = buildFieldsPayload({
-    angle:      act.angle || '',
-    persona:    act.persona || '',
-    funnelStage: act.funnelStage || '',
+    angle:      act.angle || act.sourceAngle || (sourceAd && sourceAd.angle) || '',
+    persona:    act.persona || act.sourcePersona || (sourceAd && sourceAd.persona) || '',
+    funnelStage: act.funnelStage || (sourceAd && sourceAd.funnelStage) || '',
     adType:     (sourceAd && sourceAd.adType) || '',
-    adLink:     (sourceAd && sourceAd.adLink) || ''
+    adLink:     (sourceAd && (sourceAd.adLink || (typeof _sourceAdUrlForDescription === 'function' ? _sourceAdUrlForDescription(sourceAd) : ''))) || act.adLink || ''
   });
 
   // Pass 2: extend with EVERY ClickUp custom field the source AD has set
@@ -26824,6 +26896,7 @@ function createClickUpTaskFromAction(actionId, onDone, sourceAdOverride) {
   var _cuStatusMap = {
     'Untested':       'untested',
     'Approved':       'approved',
+    'Assigned':       'assigned',
     'In Production':  'in production',
     'Ready to Launch':'ready to launch',
     'Testing':        'testing',
@@ -26836,7 +26909,16 @@ function createClickUpTaskFromAction(actionId, onDone, sourceAdOverride) {
   // Bug 5 fix: if the action's liveStatus isn't set or doesn't map, fall back
   // to 'untested' (NOT 'to do') so brand-new ClickUp tasks always land in the
   // right starting status per workspace convention.
-  var _initCuStatus = _cuStatusMap[act.liveStatus] || 'untested';
+  var _liveStatusKey = Object.keys(_cuStatusMap).find(function(k) {
+    return k.toLowerCase() === String(act.liveStatus || '').trim().toLowerCase();
+  });
+  var _desiredCuStatus = _liveStatusKey ? _cuStatusMap[_liveStatusKey] : 'untested';
+  if (typeof _isScriptBankApprovalPush === 'function' && _isScriptBankApprovalPush(act, sourceAd, activeProd)) {
+    _desiredCuStatus = 'Assigned';
+  }
+  var _initCuStatus = (typeof _clickUpStatusNameForCreate === 'function')
+    ? _clickUpStatusNameForCreate(_desiredCuStatus, _desiredCuStatus)
+    : _desiredCuStatus;
   createPayload.status = _initCuStatus;
 
   apiCreateTask(listId, createPayload)
@@ -26913,14 +26995,20 @@ function createClickUpTaskFromAction(actionId, onDone, sourceAdOverride) {
         ['hookType',         sourceAd && sourceAd.hookType],
         ['creativeStructure',sourceAd && sourceAd.creativeStructure],
         ['productionStyle',  sourceAd && sourceAd.productionStyle],
-        ['adLink',           (sourceAd && sourceAd.adLink) || act.adLink],
+        ['creativeUSP',      sourceAd && sourceAd.creativeUSP],
+        ['adLink',           (sourceAd && (sourceAd.adLink || (typeof _sourceAdUrlForDescription === 'function' ? _sourceAdUrlForDescription(sourceAd) : ''))) || act.adLink],
+        ['driveLink',        sourceAd && sourceAd.driveLink],
+        ['notes_field',      sourceAd && sourceAd.notes],
         ['productName',      clickUpProductName]
       ];
 
       console.log('[fieldSync] newId:', newId, '| sourceAd:', sourceAd && sourceAd.id, '| values:', {
         angle: fieldsToSync[0][1], persona: fieldsToSync[1][1],
         funnelStage: fieldsToSync[2][1], adType: fieldsToSync[3][1],
-        hookType: fieldsToSync[4][1], productName: fieldsToSync[8][1]
+        hookType: fieldsToSync[4][1],
+        creativeStructure: fieldsToSync[5][1],
+        productionStyle: fieldsToSync[6][1],
+        productName: clickUpProductName
       });
 
       var doFieldPushes = function() {
@@ -27459,11 +27547,12 @@ function apiFetch(path, opts) {
 }
 
 function apiCreateTask(listId, taskPayload) {
-  // taskPayload: { name, description, due_date, priority, custom_fields, tags, assignees }
+  // taskPayload: { name, description, due_date, priority, custom_fields, tags, assignees, status }
   var body = { name: taskPayload.name || taskPayload };
   if (taskPayload.description) body.description = taskPayload.description;
   if (taskPayload.due_date)    body.due_date = taskPayload.due_date;
   if (taskPayload.priority)    body.priority  = taskPayload.priority;
+  if (taskPayload.status)      body.status    = taskPayload.status;
   if (taskPayload.custom_fields && taskPayload.custom_fields.length > 0) {
     body.custom_fields = taskPayload.custom_fields;
   }
@@ -27565,6 +27654,8 @@ function fetchAndStoreFieldMap(listId) {
       'creative structure': 'creativeStructure',
       'hook type': 'hookType',
       'production style': 'productionStyle',
+      'creative usp': 'creativeUSP',
+      'usp': 'creativeUSP',
       'angle tag': 'angle',           // short_text — primary sync field
       'persona tag': 'persona',       // short_text — primary sync field
       'angle': 'angle_dropdown',      // drop_down — secondary (matched when option exists)
@@ -27653,6 +27744,16 @@ function syncClickUp() {
   }
 
   var listId = activeProd.clickupListId;
+  var linkMismatch = (typeof _clickUpListProductMismatch === 'function')
+    ? _clickUpListProductMismatch(activeProd, listId, activeProd.clickupListName)
+    : null;
+  if (linkMismatch) {
+    toast(linkMismatch, 'err', 8000);
+    var mismatchLbl = document.getElementById('statusLbl');
+    if (mismatchLbl) mismatchLbl.textContent = 'List mismatch';
+    return;
+  }
+
   showLoading('Syncing ' + activeProd.name + ' from ClickUp...');
   var dot = document.getElementById('statusDot');
   var lbl = document.getElementById('statusLbl');
@@ -28984,6 +29085,7 @@ function saveAdFieldUnified(adId, kind, fieldKey, value) {
       var _cuStatusMap = {
         'Untested':       'untested',
         'Approved':       'approved',
+        'Assigned':       'assigned',
         'In Production':  'in production',
         'Ready to Launch':'ready to launch',
         'Testing':        'testing',
@@ -29186,6 +29288,7 @@ function mapClickUpStatus(s) {
   if (lower === 'in production' || lower === 'in progress') return 'In Production';
   if (lower === 'ready to launch' || lower === 'ready') return 'Ready to Launch';
   if (lower === 'approved') return 'Approved';
+  if (lower === 'assigned') return 'Assigned';
   if (lower === 'loser' || lower === 'closed') return 'Loser';
   return 'Untested';
 }
@@ -32056,12 +32159,25 @@ async function saveProductClickUpLink(productId, listId, listName) {
   var targetProd = null;
   for (var i = 0; i < PRODUCTS.length; i++) {
     if (PRODUCTS[i].id === productId) {
-      PRODUCTS[i].clickupListId = (listId || '').trim();
-      PRODUCTS[i].clickupListName = (listName || '').trim();
       targetProd = PRODUCTS[i];
       break;
     }
   }
+  if (!targetProd) {
+    toast('Product not found', 'err');
+    return;
+  }
+  var cleanListId = (listId || '').trim();
+  var cleanListName = (listName || '').trim();
+  var mismatch = (typeof _clickUpListProductMismatch === 'function')
+    ? _clickUpListProductMismatch(targetProd, cleanListId, cleanListName)
+    : null;
+  if (mismatch) {
+    toast(mismatch, 'err', 8000);
+    return;
+  }
+  targetProd.clickupListId = cleanListId;
+  targetProd.clickupListName = cleanListName;
   if (targetProd) {
     try { await DB.upsertProduct(targetProd); } catch (e) { console.error('[SB] saveProductClickUpLink', e); }
   }
@@ -32740,6 +32856,57 @@ function getActiveProduct() {
   for (var i = 0; i < PRODUCTS.length; i++) {
     if (PRODUCTS[i].id === activeProductId) return PRODUCTS[i];
   }
+  return null;
+}
+
+function _normProductListName(value) {
+  return String(value || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function _clickUpListProductMismatch(prod, listId, listName) {
+  if (!prod || !listId) return null;
+  var activeName = _normProductListName(prod.name);
+  var linkedName = _normProductListName(listName || prod.clickupListName || '');
+  var duplicateOwners = [];
+  var namedOwners = [];
+
+  for (var i = 0; i < PRODUCTS.length; i++) {
+    var other = PRODUCTS[i];
+    if (!other || other.id === prod.id) continue;
+    var otherName = _normProductListName(other.name);
+    if (other.clickupListId && String(other.clickupListId) === String(listId)) {
+      duplicateOwners.push(other);
+    }
+    if (linkedName && otherName && (linkedName.indexOf(otherName) !== -1 || otherName.indexOf(linkedName) !== -1)) {
+      namedOwners.push(other);
+    }
+  }
+
+  // Accept loose parent/child names, e.g. product "Canva" using list
+  // "Canva Income Mastery". Reject ADHD -> Canva Income Mastery.
+  var listMentionsActive = !!(activeName && linkedName &&
+    (linkedName.indexOf(activeName) !== -1 || activeName.indexOf(linkedName) !== -1));
+  if (listMentionsActive) return null;
+
+  if (namedOwners.length) {
+    return 'This ClickUp list looks like "' + (namedOwners[0].name || 'another product') +
+      '", not "' + (prod.name || 'this product') + '". Link the correct list before syncing.';
+  }
+
+  if (duplicateOwners.length && !linkedName) {
+    return 'This ClickUp list is already linked to "' + (duplicateOwners[0].name || 'another product') +
+      '". Link a product-specific list before syncing.';
+  }
+
+  if (duplicateOwners.length && linkedName && !listMentionsActive) {
+    return 'This ClickUp list is also linked to "' + (duplicateOwners[0].name || 'another product') +
+      '" and its name does not match "' + (prod.name || 'this product') + '". Link the correct list before syncing.';
+  }
+
   return null;
 }
 
@@ -33572,6 +33739,7 @@ function changeAdStatusFromMatrix(adId, angleName, personaName, newStatus) {
     var cuStatusMap = {
       'Untested':       'untested',
       'Approved':       'approved',
+      'Assigned':       'assigned',
       'In Production':  'in production',
       'Ready to Launch':'ready to launch',
       'Testing':        'testing',

@@ -1159,3 +1159,66 @@ A second gap made future misses more likely: `_seedCuRawFromTypedFields` seeded 
 
 ### Pushed
 Pushed to `main` for production deployment on 2026-07-02 after explicit user approval.
+
+---
+
+## Bug 22 — Wrong ClickUp list made Canva tasks appear inside ADHD
+**Status:** ✅ done — fixed 2026-07-03 (local only, not pushed)
+**Reported:** 2026-07-03
+**Surface:** Product selector → ADHD → Action Plan / ClickUp sync
+
+### Symptom
+- While ADHD was selected, the Action Plan showed Canva tasks such as `CA-...` and `CI-...`.
+- The rows were persisted under the ADHD product, so they continued to appear even after normal reloads.
+
+### Root cause
+The ADHD product was accidentally linked to the ClickUp list named `Canva Income Mastery`.
+Because ClickUp sync trusts the active product's configured list, syncing ADHD imported Canva tasks into ADHD-scoped `ads` and `manual_actions` rows.
+
+This is the same family as the previous product/field sync bugs: the app accepted a cross-product ClickUp configuration without validating that the selected list actually belonged to the active product.
+
+### Fix
+1. Added a ClickUp list/product mismatch guard that compares the active product name with the linked ClickUp list name and with other products already using the same list.
+2. `syncClickUp()` now blocks before fetching tasks when the active product is linked to a list that looks like another product.
+3. `saveProductClickUpLink()` now rejects mismatched links before saving them, so the bad configuration cannot be reintroduced from Product Profiles.
+4. Cleaned the existing ADHD data pollution in Supabase:
+   - deleted 48 Canva-prefixed `ads` rows,
+   - deleted 53 related `manual_actions` rows,
+   - pruned 17 matrix-cell assignment references to the deleted rows,
+   - unlinked ADHD from the Canva ClickUp list through the sanctioned `unlink_product_clickup` RPC.
+
+### Verified
+- ADHD product config now has no ClickUp list linked.
+- Canva and Canva Income Mastery still retain their Canva ClickUp list config.
+- ADHD now has 0 `CA-`, `CI-`, `CIM-`, or `CM-` prefixed `ads` / Action Plan rows.
+- Static checks confirm the mismatch guard runs before `fetchAllTasks()` and before saving a product ClickUp link.
+
+---
+
+## Bug 23 — Script Bank approvals created production tasks with default status and empty fields
+**Status:** ✅ done — fixed 2026-07-03 (local only, not pushed)
+**Reported:** 2026-07-03
+**Surface:** Script Bank → approve task → production ClickUp task
+
+### Symptom
+- Approving a Script Bank task created a production task in ClickUp with status `to assign` instead of `Assigned`.
+- The generated ClickUp description contained the Script Bank brief/table data, but the actual ClickUp fields were blank.
+
+### Root cause
+The production-task create path built the description from the source task, but custom fields were populated only from top-level AD fields and `_customFieldsRaw`.
+Script Bank source tasks can carry the correct data inside the ClickUp description table while those top-level/mirror fields are empty.
+
+The same create path also stripped `status` from the initial create payload and only mapped `Approved` to `approved`, so Script Bank approval pushes could fall back to the ClickUp list default status.
+
+### Fix
+1. Added a description-field hydration step before production task creation so Angle, Persona, Funnel, Ad Type, Hook Type, Creative Structure, Production Style, USP, Product, Drive Link, Notes, and Inspiration Link are recovered from the Script Bank description table.
+2. Seeded ClickUp custom-field mirrors from those recovered values before building the create payload.
+3. Expanded create-time and post-create field sync to use source fallbacks and push Product, Creative USP, Drive Link, Notes, and source ad link.
+4. Forwarded `status` through `apiCreateTask()` and made Script Bank approval pushes create/update ClickUp tasks as `Assigned`.
+5. Added `Assigned` to local status parsing and status-save maps so subsequent syncs preserve it instead of collapsing it to `Untested`.
+
+### Verified
+- `immuvi-command-center.html` script parses cleanly via Node `new Function()` extraction.
+- `git diff --check` passed.
+- Static checks confirm the Script Bank hydration helper runs before task description/custom-field creation, `apiCreateTask()` forwards status, Script Bank approvals map to `Assigned`, duplicate ClickUp status maps include `Assigned`, and ClickUp `assigned` status parses back as local `Assigned`.
+- Static backlog-regression checks confirm the product/list mismatch guard, source-ad link resolver, Action Plan drawer cell resolver, and `Untested -> untested` status convention remain present.

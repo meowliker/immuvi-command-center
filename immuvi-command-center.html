@@ -17093,6 +17093,11 @@ function openModal(title, bodyHtml, footHtml) {
 
 function closeModal() {
   document.getElementById('modalOverlay').classList.remove('on');
+  if (typeof _cleanStaleModalResolve === 'function') {
+    var resolver = _cleanStaleModalResolve;
+    _cleanStaleModalResolve = null;
+    resolver(false);
+  }
 }
 
 // ── STAT POPUP (creatives & detail panels) ──────────────────────────────────
@@ -32340,7 +32345,60 @@ function _clickUpTaskTaxonomyForCleanup(task) {
   return out;
 }
 
-async function _pruneTaxonomyAfterStaleCleanup(productId, staleAds, liveTasks) {
+function _cleanStaleListHtml(items, emptyText) {
+  items = Array.isArray(items) ? items.filter(Boolean) : [];
+  if (!items.length) return '<div style="color:var(--t3);font-size:0.78rem">' + esc(emptyText || 'None') + '</div>';
+  return '<ul style="margin:6px 0 0 18px;padding:0;color:var(--t1);font-size:0.82rem;line-height:1.55">' +
+    items.map(function(item) { return '<li>' + esc(item) + '</li>'; }).join('') +
+    '</ul>';
+}
+
+var _cleanStaleModalResolve = null;
+function _resolveCleanStaleModal(value) {
+  var resolver = _cleanStaleModalResolve;
+  _cleanStaleModalResolve = null;
+  closeModal();
+  if (resolver) resolver(value);
+}
+
+function _showCleanStaleModal(title, bodyHtml, confirmLabel, opts) {
+  opts = opts || {};
+  return new Promise(function(resolve) {
+    _cleanStaleModalResolve = resolve;
+    var dangerCls = opts.danger ? 'btn-del' : 'btn-primary';
+    var foot = '<button class="btn-ghost btn-sm" onclick="_resolveCleanStaleModal(false)">Cancel</button>' +
+      '<button class="' + dangerCls + ' btn-sm" onclick="_resolveCleanStaleModal(true)">' + esc(confirmLabel || 'OK') + '</button>';
+    openModal(title, bodyHtml, foot);
+  });
+}
+
+function _showCleanStaleInfoModal(title, bodyHtml) {
+  return new Promise(function(resolve) {
+    _cleanStaleModalResolve = function(value) { resolve(value); };
+    var foot = '<button class="btn-primary btn-sm" onclick="_resolveCleanStaleModal(true)">OK</button>';
+    openModal(title, bodyHtml, foot);
+  });
+}
+
+function _showCleanStaleTypedConfirm(title, bodyHtml, expectedText) {
+  return new Promise(function(resolve) {
+    _cleanStaleModalResolve = resolve;
+    var inputId = 'cleanStaleTypedConfirm';
+    var escapedExpected = escAttr(expectedText || '');
+    var body = bodyHtml +
+      '<div style="margin-top:14px"><label style="font-size:0.72rem;font-weight:800;color:var(--t2);text-transform:uppercase;letter-spacing:.08em">Type to confirm</label>' +
+      '<input class="f-inp" id="' + inputId + '" placeholder="' + escapedExpected + '" style="margin-top:6px"></div>';
+    var foot = '<button class="btn-ghost btn-sm" onclick="_resolveCleanStaleModal(false)">Cancel</button>' +
+      '<button class="btn-del btn-sm" onclick="(function(){var el=document.getElementById(\'' + inputId + '\'); if(el && el.value === \'' + escapedExpected + '\'){_resolveCleanStaleModal(true)}else{toast(\'Type ' + escapedExpected + ' exactly to continue\', \'warn\', 3000)}})()">Continue</button>';
+    openModal(title, body, foot);
+    setTimeout(function() {
+      var input = document.getElementById(inputId);
+      if (input) input.focus();
+    }, 60);
+  });
+}
+
+function _taxonomyPrunePlanForStaleCleanup(staleAds, liveTasks) {
   var staleAngles = {};
   var stalePersonas = {};
   (staleAds || []).forEach(function(ad) {
@@ -32350,7 +32408,7 @@ async function _pruneTaxonomyAfterStaleCleanup(productId, staleAds, liveTasks) {
     if (p) stalePersonas[p.toLowerCase().trim()] = p;
   });
   if (!Object.keys(staleAngles).length && !Object.keys(stalePersonas).length) {
-    return { angles: [], personas: [] };
+    return { angles: [], personas: [], angleIds: [], personaIds: [] };
   }
 
   var remainingAngles = {};
@@ -32370,12 +32428,45 @@ async function _pruneTaxonomyAfterStaleCleanup(productId, staleAds, liveTasks) {
 
   var removedAngles = [];
   var removedAngleIds = [];
-  ANGLES = (ANGLES || []).filter(function(a) {
+  (ANGLES || []).forEach(function(a) {
     var name = _normalizeTaxonomyName((a && a.name) || '');
     var key = name.toLowerCase().trim();
     if (key && staleAngles[key] && !remainingAngles[key]) {
       removedAngles.push(name);
       if (a.id) removedAngleIds.push(a.id);
+    }
+  });
+
+  var removedPersonas = [];
+  var removedPersonaIds = [];
+  (PERSONAS || []).forEach(function(p) {
+    var name = _normalizeTaxonomyName((p && p.name) || '');
+    var key = name.toLowerCase().trim();
+    if (key && stalePersonas[key] && !remainingPersonas[key]) {
+      removedPersonas.push(name);
+      if (p.id) removedPersonaIds.push(p.id);
+    }
+  });
+
+  return {
+    angles: removedAngles,
+    personas: removedPersonas,
+    angleIds: removedAngleIds,
+    personaIds: removedPersonaIds
+  };
+}
+
+async function _pruneTaxonomyAfterStaleCleanup(productId, staleAds, liveTasks) {
+  var plan = _taxonomyPrunePlanForStaleCleanup(staleAds, liveTasks);
+  var removedAngles = [];
+  var removedAngleIds = plan.angleIds || [];
+  var removedAngleSetByName = {};
+  (plan.angles || []).forEach(function(n) { removedAngleSetByName[String(n || '').toLowerCase().trim()] = true; });
+  ANGLES = (ANGLES || []).filter(function(a) {
+    var name = _normalizeTaxonomyName((a && a.name) || '');
+    var key = name.toLowerCase().trim();
+    if (key && removedAngleSetByName[key]) {
+      removedAngles.push(name);
       if (typeof _rememberTaxonomyDeletion === 'function') _rememberTaxonomyDeletion('angle', productId, name);
       return false;
     }
@@ -32383,13 +32474,14 @@ async function _pruneTaxonomyAfterStaleCleanup(productId, staleAds, liveTasks) {
   });
 
   var removedPersonas = [];
-  var removedPersonaIds = [];
+  var removedPersonaIds = plan.personaIds || [];
+  var removedPersonaSetByName = {};
+  (plan.personas || []).forEach(function(n) { removedPersonaSetByName[String(n || '').toLowerCase().trim()] = true; });
   PERSONAS = (PERSONAS || []).filter(function(p) {
     var name = _normalizeTaxonomyName((p && p.name) || '');
     var key = name.toLowerCase().trim();
-    if (key && stalePersonas[key] && !remainingPersonas[key]) {
+    if (key && removedPersonaSetByName[key]) {
       removedPersonas.push(name);
-      if (p.id) removedPersonaIds.push(p.id);
       if (typeof _rememberTaxonomyDeletion === 'function') _rememberTaxonomyDeletion('persona', productId, name);
       return false;
     }
@@ -32466,24 +32558,23 @@ async function cleanStaleAds(productId) {
   // cleaned up via this tool — user should delete the product or manually
   // soft-delete.
   if (liveTasks.length === 0) {
-    var emptyMsg = 'Cleanup aborted: ClickUp returned 0 tasks from "' +
-      (prod.clickupListName || prod.clickupListId) + '".\n\n' +
-      'This is usually a transient API error or rate limit — running cleanup ' +
-      'with 0 fetched tasks would delete ALL imported ads.\n\n' +
-      'Try again in 30 seconds, or click Sync Now first to verify the list is reachable.';
-    alert(emptyMsg);
+    await _showCleanStaleInfoModal('Cleanup Aborted',
+      '<p style="font-size:0.86rem;color:var(--t1);margin:0 0 10px">ClickUp returned <strong>0 tasks</strong> from <strong>' + esc(prod.clickupListName || prod.clickupListId) + '</strong>.</p>' +
+      '<p style="font-size:0.78rem;color:var(--t2);line-height:1.55;margin:0">This is usually a transient API error or rate limit. Running cleanup with 0 fetched tasks would delete all imported ads. Try again in 30 seconds, or click Sync Now first to verify the list is reachable.</p>'
+    );
     return;
   }
 
   // Guard 2: warn if fetched count is suspiciously low vs. product's last
   // recorded synced count. Could mean partial fetch (only first 100 returned).
   if (prod.lastSyncedCount && liveTasks.length < prod.lastSyncedCount * 0.5) {
-    var lowFetchMsg = 'Warning: ClickUp returned ' + liveTasks.length +
-      ' tasks, but last successful sync had ' + prod.lastSyncedCount + ' tasks.\n\n' +
-      'This might be a partial fetch (rate limit or pagination cutoff). Running ' +
-      'cleanup with incomplete data could delete valid ads.\n\n' +
-      'Continue anyway? (Recommended: cancel and run Sync Now first.)';
-    if (!confirm(lowFetchMsg)) return;
+    var lowFetchOk = await _showCleanStaleModal('Low ClickUp Fetch Count',
+      '<p style="font-size:0.86rem;color:var(--t1);margin:0 0 10px">ClickUp returned <strong>' + liveTasks.length + '</strong> tasks, but the last successful sync had <strong>' + prod.lastSyncedCount + '</strong>.</p>' +
+      '<p style="font-size:0.78rem;color:var(--t2);line-height:1.55;margin:0">This might be a partial fetch, rate limit, or pagination issue. Running cleanup with incomplete data could delete valid ads. Recommended path: cancel and run Sync Now first.</p>',
+      'Continue Anyway',
+      { danger: true }
+    );
+    if (!lowFetchOk) return;
   }
 
   // 2. Identify stale ads in current product
@@ -32563,16 +32654,13 @@ async function cleanStaleAds(productId) {
   if (totalImported > 0) {
     var stalePct = stale.length / totalImported;
     if (stalePct > 0.80) {
-      var dangerMsg = '⚠ DANGER: ' + Math.round(stalePct * 100) + '% of your imported ads (' +
-        stale.length + ' of ' + totalImported + ') would be deleted.\n\n' +
-        'This is unusual. It usually means:\n' +
-        '• ClickUp fetch returned partial / wrong list data\n' +
-        '• Your linked list ID is incorrect\n' +
-        '• The list was recently swapped\n\n' +
-        'Strongly recommended: cancel, click Sync Now, verify the task count, then try again.\n\n' +
-        'If you\'re SURE this is intentional, type "I AM SURE" exactly (case-sensitive) to continue:';
-      var confirmTyped = prompt(dangerMsg);
-      if (confirmTyped !== 'I AM SURE') {
+      var dangerOk = await _showCleanStaleTypedConfirm('High-Risk Cleanup',
+        '<p style="font-size:0.9rem;color:var(--lose);font-weight:800;margin:0 0 10px">' + Math.round(stalePct * 100) + '% of imported ads would be removed (' + stale.length + ' of ' + totalImported + ')</p>' +
+        '<p style="font-size:0.78rem;color:var(--t2);line-height:1.55;margin:0 0 10px">This is unusual. It usually means ClickUp returned partial/wrong list data, the linked list ID is incorrect, or the list was recently swapped.</p>' +
+        '<p style="font-size:0.78rem;color:var(--t2);line-height:1.55;margin:0">Strongly recommended: cancel, click Sync Now, verify the task count, then try again.</p>',
+        'I AM SURE'
+      );
+      if (!dangerOk) {
         toast('Cleanup aborted — safer path: re-sync and retry', 'warn', 5000);
         return;
       }
@@ -32580,22 +32668,35 @@ async function cleanStaleAds(productId) {
   }
 
   // 3. Show confirm with summary + sample names
-  var sample = stale.slice(0, 5).map(function (a) { return '• ' + (a.formatName || a.id); }).join('\n');
-  var more = stale.length > 5 ? '\n• …and ' + (stale.length - 5) + ' more' : '';
-  var msg = 'Remove ' + stale.length + ' stale ads from "' + (prod.name || '') + '"?\n\n' +
-            'These ads were imported from a previous ClickUp list link and are no longer in "' +
-            (prod.clickupListName || prod.clickupListId) + '".\n\n' +
-            'KEEPING (won\'t delete):\n' +
-            '• ' + protectedCount.variation + ' winner variations\n' +
-            '• ' + protectedCount.newFind + ' manual New Find ads\n' +
-            '• ' + protectedCount.localOnly + ' local-only ads (no ClickUp link)\n' +
-            '• ' + protectedCount.inList + ' ads currently in the list\n' +
-            '• ' + protectedCount.hasAction + ' ads referenced by an Action Plan row\n' +
-            '• ' + protectedCount.inCell + ' ads assigned to a matrix cell\n' +
-            '• ' + protectedCount.recent + ' ads created in the last 5 min\n\n' +
-            'REMOVING (preview, first 5):\n' + sample + more + '\n\n' +
-            'This soft-deletes them locally. The ClickUp tasks themselves are NOT touched.';
-  if (!confirm(msg)) return;
+  var taxonomyPlan = _taxonomyPrunePlanForStaleCleanup(stale, liveTasks);
+  var sampleItems = stale.slice(0, 8).map(function(a) {
+    var bits = [];
+    if (a.angle) bits.push('Angle: ' + a.angle);
+    if (a.persona) bits.push('Persona: ' + a.persona);
+    return '<div style="padding:8px 0;border-bottom:1px solid var(--b)">' +
+      '<div style="font-weight:700;color:var(--t1);font-size:0.84rem">' + esc(a.formatName || a.id) + '</div>' +
+      (bits.length ? '<div style="color:var(--t3);font-size:0.72rem;margin-top:2px">' + esc(bits.join(' · ')) + '</div>' : '') +
+    '</div>';
+  }).join('');
+  var taskMore = stale.length > 8 ? '<div style="color:var(--t3);font-size:0.76rem;padding-top:8px">...and ' + (stale.length - 8) + ' more stale ads</div>' : '';
+  var angleMore = taxonomyPlan.angles.length > 12 ? ['...and ' + (taxonomyPlan.angles.length - 12) + ' more'] : [];
+  var personaMore = taxonomyPlan.personas.length > 12 ? ['...and ' + (taxonomyPlan.personas.length - 12) + ' more'] : [];
+  var confirmBody =
+    '<p style="font-size:0.86rem;color:var(--t1);line-height:1.5;margin:0 0 12px">Remove <strong>' + stale.length + '</strong> stale ads from <strong>' + esc(prod.name || '') + '</strong>? These were imported from a previous ClickUp list and are no longer in <strong>' + esc(prod.clickupListName || prod.clickupListId) + '</strong>.</p>' +
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:12px 0">' +
+      '<div style="background:var(--el);border:1px solid var(--b);border-radius:8px;padding:10px"><div style="font-size:0.68rem;text-transform:uppercase;letter-spacing:.08em;color:var(--t3);font-weight:800">Stale angles to remove</div>' + _cleanStaleListHtml(taxonomyPlan.angles.slice(0, 12).concat(angleMore), 'No angle rows will be removed') + '</div>' +
+      '<div style="background:var(--el);border:1px solid var(--b);border-radius:8px;padding:10px"><div style="font-size:0.68rem;text-transform:uppercase;letter-spacing:.08em;color:var(--t3);font-weight:800">Stale personas to remove</div>' + _cleanStaleListHtml(taxonomyPlan.personas.slice(0, 12).concat(personaMore), 'No persona rows will be removed') + '</div>' +
+    '</div>' +
+    '<div style="background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.18);border-radius:8px;padding:10px;margin:12px 0">' +
+      '<div style="font-size:0.68rem;text-transform:uppercase;letter-spacing:.08em;color:var(--lose);font-weight:900;margin-bottom:6px">Removing stale ads</div>' +
+      sampleItems + taskMore +
+    '</div>' +
+    '<div style="background:var(--surface);border:1px solid var(--b);border-radius:8px;padding:10px;color:var(--t2);font-size:0.76rem;line-height:1.5">' +
+      '<strong>Keeping:</strong> ' + protectedCount.variation + ' winner variations, ' + protectedCount.newFind + ' New Find ads, ' + protectedCount.localOnly + ' local-only ads, ' + protectedCount.inList + ' current-list ads, ' + protectedCount.hasAction + ' action-linked ads, ' + protectedCount.inCell + ' matrix-cell ads, and ' + protectedCount.recent + ' recent ads.<br>' +
+      'This soft-deletes local Immuvi rows only. ClickUp tasks are not deleted.' +
+    '</div>';
+  var confirmedCleanup = await _showCleanStaleModal('Clean Stale Items', confirmBody, 'Remove Stale Items', { danger: true });
+  if (!confirmedCleanup) return;
 
   // 4. Bulk soft-delete + tombstone
   showLoading('Removing ' + stale.length + ' stale ads…');

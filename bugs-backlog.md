@@ -1278,3 +1278,33 @@ Because auto-discovered taxonomy is stored separately in `angles`, `personas`, a
 - `git diff --check` passed.
 - Static checks confirm `cleanStaleAds()` now calls the taxonomy prune after stale ADS removal, prunes stale-only Angle/Persona rows, preserves taxonomy still used by remaining ads or live ClickUp tasks, removes stale names from `ANGLE_PERSONAS`, tombstones deleted taxonomy names, prunes empty cell assignments, and persists the cleaned state immediately.
 - Static regression check confirms the Bug 24 lowercase `assigned` status path and the `Untested -> untested` convention remain intact.
+
+---
+
+## Bug 26 — Clean stale confirmation did not show Angle/Persona names and used browser alerts
+**Status:** ✅ done — fixed 2026-07-04 (local only, not pushed)
+**Reported:** 2026-07-04
+**Surface:** Product Profile → Clean stale confirmation
+
+### Symptom
+- The Clean stale confirmation only previewed stale task names.
+- It did not show which stale Angle and Persona names would be removed.
+- The flow used browser-native `alert`, `confirm`, and `prompt` popups, which were cramped and hard to read.
+
+### Root cause
+The stale cleanup confirmation was built as a plain text native browser dialog.
+Even after Bug 25 added taxonomy pruning, the UI did not preview the taxonomy prune plan before the user confirmed.
+
+### Fix
+1. Replaced Clean stale browser dialogs with the app's modal popup.
+2. Added a dry-run taxonomy prune plan so the modal can show stale Angle and Persona names before deletion.
+3. The modal now previews stale ads with their Angle and Persona values.
+4. The zero-task safety warning, low-fetch warning, high-risk typed confirmation, and final cleanup confirmation all use app modals.
+5. Closing the modal with Cancel, X, or overlay now safely resolves as cancel.
+
+### Verified
+- `immuvi-command-center.html` script parses cleanly via Node `new Function()` extraction.
+- `git diff --check` passed.
+- Static checks confirm the Clean stale flow uses app modals for zero-task, low-fetch, high-risk typed confirmation, and final confirmation states.
+- Static checks confirm the final confirmation shows stale Angle names, stale Persona names, and stale ad previews with each ad's Angle/Persona values.
+- Static regression checks confirm Bug 25 taxonomy pruning still runs after stale ADS removal, Bug 24 lowercase `assigned` status handling remains present, and no `Untested -> to do` map was reintroduced.

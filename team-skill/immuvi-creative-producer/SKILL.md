@@ -505,6 +505,7 @@ The producer's existing inline `urllib`/`curl` paths stay only for fully generic
      - `text_size_hierarchy`: approximate relative size of logo, headline, subhead/body, CTA/signature, and whether text is compact or oversized.
      - `canvas_orientation` and `aspect_ratio`: reference width × height and closest supported target size.
      - `layout_zones`: top/middle/bottom regions and which visual/text elements occupy each.
+     - `commercial_elements`: every visible offer badge, discount badge, CTA button, logo, product mark, decorative icon, underline, footer, and packshot in the reference. If an element is not present in the reference or task brief, do not invent it.
      - `variation_1_lock`: the exact subject, setting, pose, camera angle, crop, emotional mood, and overlay geometry that Variation 1 must copy before other variations explore new executions.
    - **Hard fidelity rules:**
      - If the reference contains a human subject, the generated image must contain a comparable visible human subject in a similar scale/role/pose region. Do not replace a child/person with only a backpack, chair, desk, worksheet, empty hallway/classroom, playground, or product shot.
@@ -524,6 +525,9 @@ The producer's existing inline `urllib`/`curl` paths stay only for fully generic
        - do not put the offer inside the headline sentence; do not omit the offer
        - no extra footer ribbon, no oversized green/red offer bar, no oversized `FREE TODAY` button, no icon/product label row, no product packshot/mockup, no separate product-poster section unless the reference has one
      - If the reference does not show a product mockup/packshot, do not add a product mockup/packshot unless the user explicitly asks for one.
+     - If the reference does not show a discount badge, offer sticker, premium seal, decorative astrology crest, large logo treatment, underline flourish, or footer promo area, do not add one unless the task brief explicitly requires it. Mandatory offers must use the closest matching existing CTA/offer area in the reference, not a new promo block.
+     - Preserve the reference's visual hierarchy and production finish. A raw/minimal story-style reference must stay raw/minimal; do not upgrade it into a polished poster, premium brand template, glossy city/airport ad, or high-contrast redesign. Match relative scale: if the reference has a small logo, muted title, compact centered list, and small CTA, Variation 1 must keep those proportions.
+     - Preserve exact CTA intent and wording when the reference/task provides it. Do not change `TAKE TEST` into `CHECK YOUR MATCH`, `TAKE KUNDALI TEST`, or another adjacent CTA unless the task explicitly requests that copy.
      - Preserve the same major layout proportions: photo area vs overlay area, banner height, headline compactness, and subject placement.
      - Preserve the same emotional mechanic. For example, a lone child on a bench + breaking-news lower-third should become a similar candid child/student scene + compact breaking-news lower-third, adapted to the new offer/message.
      - Product/offer adaptation happens inside the reference format. It must not overpower or replace the reference format.
@@ -551,6 +555,7 @@ The producer's existing inline `urllib`/`curl` paths stay only for fully generic
    - Generate creative variations that keep the same concept and visual logic as the inspiration but are rebuilt for our canonical product name, brand, angle, persona, and offer.
    - Do not copy the inspiration pixel-for-pixel. Preserve the winning mechanic, composition logic, and emotional structure while changing product, branding, claims, text, and details to fit the ClickUp brief.
    - The image prompt for each variation must include the `reference_anatomy` constraints explicitly. Do not rely on a vague phrase like "similar to the reference."
+   - Generate and upload in strict sequence. Create V01 first and make it the closest reference-faithful output. Only after V01 passes QA, create V02, then V03, etc. Filenames, ClickUp attachments, and `producer_runs.outputs[].variation_id` must use the same sequence; never reorder by upload time, attachment order, visual preference, or newest-first UI order.
    - When a reference uses a news/lower-third format, keep the lower-third compact and news-like. Use short, readable headline text. Do not create giant poster copy blocks unless the reference itself has one.
    - For `BREAKING NEWS` style references, the final image must have: (1) full-bleed photo background/subject, (2) small left-anchored red/blue slanted `BREAKING NEWS` overlay, (3) one compact left-anchored white headline strip overlay, and, when an offer is specified, (4) a small attached CTA tag/badge for the offer. Do not add a product CTA ribbon, oversized green/red offer bar, product mockup, icon/product label row, full-width TV banner, large poster copy area, or blank white bottom panel. The white headline strip must look like the reference: compact, rectangular, close to the bottom of the news band, 1-2 text lines, left-aligned if the reference is left-aligned, balanced padding, and no offer text inside the headline sentence. If the native image output contains any extra footer/poster section below the white headline strip, reject it.
    - Keep product facts, claims, and compliance-safe language grounded in the task and Creative Strategist memory.
@@ -570,12 +575,15 @@ The producer's existing inline `urllib`/`curl` paths stay only for fully generic
      - faces/talent do not match the PRODUCT DIRECTIVES stated market/ethnicity
      - the PRODUCT DIRECTIVES offer is missing, unreadable, or hidden inside the main headline instead of shown as its own offer treatment when a separate CTA is appropriate
      - the canonical product name is missing, misspelled, replaced by a generic adjacent name, or mixed with a forbidden alias
-     - offer/benefit stack is weak or missing
+     - required offer/benefit is missing when the task explicitly requires it, or it is shown by inventing a new badge/footer/offer stack instead of using the reference's existing CTA/offer area
      - typography is unreadable or visibly garbled
      - text alignment, line breaks, casing, or relative text sizing clearly drift from the reference
      - image orientation/aspect ratio does not match the reference
      - output is too generic or does not preserve the inspiration mechanic
      - output preserves only the theme but not the reference anatomy
+     - output redesigns the reference into a different ad template, including over-branding, brighter/larger typography, a polished poster finish, new discount/offer badges, new decorative icons, new footer sections, or a different CTA/button treatment not present in the reference/task
+     - Variation 1 changes the reference's relative hierarchy, such as turning a small muted title into a huge high-contrast headline, turning a compact low-contrast list into a large bold list, enlarging a small CTA, or replacing a hazy/raw background with a glossy city/airport/product-poster scene
+     - CTA wording or offer treatment changes from the reference/task without explicit instruction
      - Variation 1 changes the inspiration setting, subject pose, camera angle, overlay position, edge alignment, or text alignment
      - reference has a human subject but output replaces the person with objects, an empty room, a backpack, a chair, a hallway, or a playground
      - reference has no product packshot but output adds a packshot/product mockup

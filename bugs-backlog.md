@@ -1222,3 +1222,59 @@ The same create path also stripped `status` from the initial create payload and 
 - `git diff --check` passed.
 - Static checks confirm the Script Bank hydration helper runs before task description/custom-field creation, `apiCreateTask()` forwards status, Script Bank approvals map to `Assigned`, duplicate ClickUp status maps include `Assigned`, and ClickUp `assigned` status parses back as local `Assigned`.
 - Static backlog-regression checks confirm the product/list mismatch guard, source-ad link resolver, Action Plan drawer cell resolver, and `Untested -> untested` status convention remain present.
+
+---
+
+## Bug 24 — Script Bank approval status still fell back to ClickUp `to assign`
+**Status:** ✅ done — fixed 2026-07-04 (local only, not pushed)
+**Reported:** 2026-07-04
+**Surface:** Script Bank → approve task → production ClickUp task status
+
+### Symptom
+- Script Bank-approved tasks still landed in ClickUp as the default `to assign` status instead of `assigned`.
+
+### Root cause
+Bug 23 fixed the create path only when the active target product/list looked like Script Bank.
+In the real flow, the target can be the production queue while the source task carries the Script Bank list identity in `sourceAd.clickupListName` / `sourceAd.listName`.
+That meant the Script Bank override did not fire, so the create path still tried to create/update the task as `approved`.
+
+There was a second edge: when ClickUp statuses were not loaded yet, the fallback status value was `Assigned` with a capital A. The workspace status is lowercase `assigned`, so ClickUp could reject/ignore the update and leave the task in the list default `to assign`.
+
+### Fix
+1. Broadened Script Bank detection to check both the active target list and the source task's ClickUp list name.
+2. Changed Script Bank approval create status to ClickUp's lowercase `assigned` API value.
+3. Added post-create status fallback retries so ClickUp status updates try safe casing variants instead of silently leaving the task at the default status.
+
+### Verified
+- `immuvi-command-center.html` script parses cleanly via Node `new Function()` extraction.
+- `git diff --check` passed.
+- Static checks confirm Script Bank detection now reads source task list names, the override sends lowercase `assigned`, post-create status updates use fallback casing retries, `apiCreateTask()` still forwards status, and ClickUp `assigned` still parses back as local `Assigned`.
+- Static regression check confirms no `Untested -> to do` status map was reintroduced.
+
+---
+
+## Bug 25 — Clean stale removed stale ads but left wrong-product angles/personas
+**Status:** ✅ done — fixed 2026-07-04 (local only, not pushed)
+**Reported:** 2026-07-04
+**Surface:** Product Profile → Clean stale
+
+### Symptom
+- `Clean stale` removed stale imported tasks/ads from the active product, but stale Angle and Persona rows from the old/wrong ClickUp list remained.
+- The product could still show taxonomy from another product even after the stale ads were cleaned.
+
+### Root cause
+`cleanStaleAds()` only soft-deleted stale ads and pruned cell assignment references.
+It did not inspect whether the deleted stale ads were the only remaining source for their angle/persona names.
+Because auto-discovered taxonomy is stored separately in `angles`, `personas`, and `ANGLE_PERSONAS`, those rows survived even when all related stale ads were gone.
+
+### Fix
+1. Added a stale-cleanup taxonomy prune that collects angle/persona names from the stale ads being removed.
+2. After stale ads are removed, it deletes only those angle/persona rows that are no longer used by remaining local ads or current live ClickUp-list tasks, including live tasks whose taxonomy is only present in the description table.
+3. It also removes those names from `ANGLE_PERSONAS`, purges orphaned matrix keys, tombstones deleted taxonomy names to prevent rediscovery, and persists the cleaned state immediately.
+4. The cleanup toast now reports how many stale angles/personas were pruned along with the stale ads.
+
+### Verified
+- `immuvi-command-center.html` script parses cleanly via Node `new Function()` extraction.
+- `git diff --check` passed.
+- Static checks confirm `cleanStaleAds()` now calls the taxonomy prune after stale ADS removal, prunes stale-only Angle/Persona rows, preserves taxonomy still used by remaining ads or live ClickUp tasks, removes stale names from `ANGLE_PERSONAS`, tombstones deleted taxonomy names, prunes empty cell assignments, and persists the cleaned state immediately.
+- Static regression check confirms the Bug 24 lowercase `assigned` status path and the `Untested -> untested` convention remain intact.

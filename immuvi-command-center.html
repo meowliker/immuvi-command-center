@@ -26116,9 +26116,43 @@ function _clickUpStatusNameForCreate(desired, fallback) {
   return wanted;
 }
 
+function _clickUpStatusCandidates(status) {
+  var wanted = String(status || '').trim();
+  if (!wanted) return [];
+  var lower = wanted.toLowerCase();
+  var candidates = [wanted];
+  if (lower && candidates.indexOf(lower) === -1) candidates.push(lower);
+  var title = lower.replace(/\b([a-z])/g, function(_, c) { return c.toUpperCase(); });
+  if (title && candidates.indexOf(title) === -1) candidates.push(title);
+  if (lower === 'assigned') {
+    ['assigned', 'Assigned'].forEach(function(v) {
+      if (candidates.indexOf(v) === -1) candidates.push(v);
+    });
+  }
+  return candidates;
+}
+
+function _updateTaskStatusWithFallback(taskId, status) {
+  var candidates = _clickUpStatusCandidates(status);
+  if (!taskId || !candidates.length) return Promise.resolve(null);
+  function tryAt(idx) {
+    var candidate = candidates[idx];
+    return apiUpdateTask(taskId, { status: candidate }).catch(function(err) {
+      if (idx + 1 >= candidates.length) throw err;
+      console.warn('[ClickUp] status update failed for "' + candidate + '"; trying "' + candidates[idx + 1] + '"', err);
+      return tryAt(idx + 1);
+    });
+  }
+  return tryAt(0);
+}
+
 function _isScriptBankApprovalPush(act, sourceAd, prod) {
   var status = String((act && act.liveStatus) || (sourceAd && sourceAd.status) || '').trim().toLowerCase();
-  var listName = String((prod && prod.clickupListName) || '').toLowerCase();
+  var listName = [
+    prod && prod.clickupListName,
+    sourceAd && sourceAd.clickupListName,
+    sourceAd && sourceAd.listName
+  ].filter(Boolean).join(' ').toLowerCase();
   var prodName = String((prod && prod.name) || '').toLowerCase();
   var sourceType = String((sourceAd && (sourceAd.taskType || sourceAd.sourceType || sourceAd.origin || sourceAd._origin)) || '').toLowerCase();
   return status === 'approved' && (
@@ -26914,7 +26948,7 @@ function createClickUpTaskFromAction(actionId, onDone, sourceAdOverride) {
   });
   var _desiredCuStatus = _liveStatusKey ? _cuStatusMap[_liveStatusKey] : 'untested';
   if (typeof _isScriptBankApprovalPush === 'function' && _isScriptBankApprovalPush(act, sourceAd, activeProd)) {
-    _desiredCuStatus = 'Assigned';
+    _desiredCuStatus = 'assigned';
   }
   var _initCuStatus = (typeof _clickUpStatusNameForCreate === 'function')
     ? _clickUpStatusNameForCreate(_desiredCuStatus, _desiredCuStatus)
@@ -26930,7 +26964,10 @@ function createClickUpTaskFromAction(actionId, onDone, sourceAdOverride) {
     // Always do a separate status PUT after creation — ClickUp ignores the
     // `status` field in the POST body for many list configurations.
     if (_initCuStatus) {
-      apiUpdateTask(newId, { status: _initCuStatus }).catch(function(e) {
+      var statusUpdate = (typeof _updateTaskStatusWithFallback === 'function')
+        ? _updateTaskStatusWithFallback(newId, _initCuStatus)
+        : apiUpdateTask(newId, { status: _initCuStatus });
+      statusUpdate.catch(function(e) {
         console.warn('[ClickUp] post-create status update failed:', e);
       });
     }
@@ -32267,6 +32304,127 @@ async function confirmDeleteProduct(productId) {
 // Soft-deletes + tombstones the rest via the same pattern used by
 // deleteAdEverywhere (memory: feedback_ad_delete_invariants.md — soft-delete
 // is authoritative + deleted_ads tombstone for cross-tab safety).
+function _clickUpTaskTaxonomyForCleanup(task) {
+  var out = { angle: '', persona: '' };
+  var cfByName = {};
+  (task && task.custom_fields || []).forEach(function(f) {
+    if (f && f.name) cfByName[String(f.name).toLowerCase().trim()] = f;
+  });
+  function getField(names) {
+    for (var ni = 0; ni < names.length; ni++) {
+      var f = cfByName[String(names[ni]).toLowerCase()];
+      if (!f || f.value == null || f.value === '') continue;
+      if ((f.type === 'drop_down' || f.type === 'labels') && f.type_config && f.type_config.options) {
+        var opts = f.type_config.options || [];
+        var val = typeof f.value === 'number' ? f.value : parseInt(f.value, 10);
+        if (!isNaN(val)) {
+          for (var oi = 0; oi < opts.length; oi++) {
+            if (opts[oi].orderindex === val) return opts[oi].name || '';
+          }
+          if (opts[val]) return opts[val].name || '';
+        }
+      }
+      return String(f.value || '');
+    }
+    return '';
+  }
+  out.angle = _normalizeTaxonomyName(getField(['angle tag', 'angle', 'angles', 'ad angle']) || '');
+  out.persona = _normalizeTaxonomyName(getField(['persona tag', 'persona', 'personas', 'target persona', 'audience']) || '');
+  if ((!out.angle || !out.persona) && typeof _extractDescriptionFieldValue === 'function') {
+    var desc = (typeof _normalizeClickUpDescriptionForReuse === 'function')
+      ? _normalizeClickUpDescriptionForReuse((task && task.description) || '')
+      : ((task && task.description) || '');
+    if (!out.angle) out.angle = _normalizeTaxonomyName(_extractDescriptionFieldValue(desc, ['Angle', 'Angle Tag', 'Ad Angle']) || '');
+    if (!out.persona) out.persona = _normalizeTaxonomyName(_extractDescriptionFieldValue(desc, ['Persona', 'Persona Tag', 'Target Persona', 'Audience']) || '');
+  }
+  return out;
+}
+
+async function _pruneTaxonomyAfterStaleCleanup(productId, staleAds, liveTasks) {
+  var staleAngles = {};
+  var stalePersonas = {};
+  (staleAds || []).forEach(function(ad) {
+    var a = _normalizeTaxonomyName((ad && ad.angle) || '');
+    var p = _normalizeTaxonomyName((ad && ad.persona) || '');
+    if (a) staleAngles[a.toLowerCase().trim()] = a;
+    if (p) stalePersonas[p.toLowerCase().trim()] = p;
+  });
+  if (!Object.keys(staleAngles).length && !Object.keys(stalePersonas).length) {
+    return { angles: [], personas: [] };
+  }
+
+  var remainingAngles = {};
+  var remainingPersonas = {};
+  (ADS || []).forEach(function(ad) {
+    if (!ad || ad.deleted_at || ad.deletedAt) return;
+    var a = _normalizeTaxonomyName((ad.angle || '').trim());
+    var p = _normalizeTaxonomyName((ad.persona || '').trim());
+    if (a) remainingAngles[a.toLowerCase()] = true;
+    if (p) remainingPersonas[p.toLowerCase()] = true;
+  });
+  (liveTasks || []).forEach(function(task) {
+    var tx = _clickUpTaskTaxonomyForCleanup(task);
+    if (tx.angle) remainingAngles[tx.angle.toLowerCase().trim()] = true;
+    if (tx.persona) remainingPersonas[tx.persona.toLowerCase().trim()] = true;
+  });
+
+  var removedAngles = [];
+  var removedAngleIds = [];
+  ANGLES = (ANGLES || []).filter(function(a) {
+    var name = _normalizeTaxonomyName((a && a.name) || '');
+    var key = name.toLowerCase().trim();
+    if (key && staleAngles[key] && !remainingAngles[key]) {
+      removedAngles.push(name);
+      if (a.id) removedAngleIds.push(a.id);
+      if (typeof _rememberTaxonomyDeletion === 'function') _rememberTaxonomyDeletion('angle', productId, name);
+      return false;
+    }
+    return true;
+  });
+
+  var removedPersonas = [];
+  var removedPersonaIds = [];
+  PERSONAS = (PERSONAS || []).filter(function(p) {
+    var name = _normalizeTaxonomyName((p && p.name) || '');
+    var key = name.toLowerCase().trim();
+    if (key && stalePersonas[key] && !remainingPersonas[key]) {
+      removedPersonas.push(name);
+      if (p.id) removedPersonaIds.push(p.id);
+      if (typeof _rememberTaxonomyDeletion === 'function') _rememberTaxonomyDeletion('persona', productId, name);
+      return false;
+    }
+    return true;
+  });
+
+  if (removedAngles.length || removedPersonas.length) {
+    var removedAngleSet = {};
+    var removedPersonaSet = {};
+    removedAngles.forEach(function(n) { removedAngleSet[n.toLowerCase().trim()] = true; });
+    removedPersonas.forEach(function(n) { removedPersonaSet[n.toLowerCase().trim()] = true; });
+
+    Object.keys(ANGLE_PERSONAS || {}).forEach(function(angleName) {
+      if (removedAngleSet[String(angleName).toLowerCase().trim()]) {
+        delete ANGLE_PERSONAS[angleName];
+        return;
+      }
+      ANGLE_PERSONAS[angleName] = (ANGLE_PERSONAS[angleName] || []).filter(function(personaName) {
+        return !removedPersonaSet[String(personaName || '').toLowerCase().trim()];
+      });
+      if (!ANGLE_PERSONAS[angleName].length) delete ANGLE_PERSONAS[angleName];
+    });
+    if (typeof purgeOrphanedMatrixKeys === 'function') purgeOrphanedMatrixKeys();
+
+    try {
+      if (removedAngleIds.length) await SB.from('angles').delete().eq('product_id', productId).in('id', removedAngleIds);
+      if (removedPersonaIds.length) await SB.from('personas').delete().eq('product_id', productId).in('id', removedPersonaIds);
+    } catch (e) {
+      console.warn('[cleanStaleAds] taxonomy direct delete non-fatal error', e);
+    }
+  }
+
+  return { angles: removedAngles, personas: removedPersonas };
+}
+
 async function cleanStaleAds(productId) {
   var prod = null;
   for (var i = 0; i < PRODUCTS.length; i++) {
@@ -32493,7 +32651,14 @@ async function cleanStaleAds(productId) {
   if (typeof CELL_CREATIVE_ASSIGNMENTS !== 'undefined') {
     Object.keys(CELL_CREATIVE_ASSIGNMENTS).forEach(function (k) {
       CELL_CREATIVE_ASSIGNMENTS[k] = (CELL_CREATIVE_ASSIGNMENTS[k] || []).filter(function (id) { return !staleSet[id]; });
+      if (!CELL_CREATIVE_ASSIGNMENTS[k].length) delete CELL_CREATIVE_ASSIGNMENTS[k];
     });
+  }
+  var taxonomyPruned = { angles: [], personas: [] };
+  try {
+    taxonomyPruned = await _pruneTaxonomyAfterStaleCleanup(productId, stale, liveTasks);
+  } catch (e) {
+    console.warn('[cleanStaleAds] taxonomy prune non-fatal error', e);
   }
 
   hideLoading();
@@ -32503,7 +32668,16 @@ async function cleanStaleAds(productId) {
   if (typeof genActions === 'function') genActions();
   if (typeof renderAll === 'function') renderAll();
   renderProductProfile();
-  toast('Removed ' + stale.length + ' stale ads from ' + (prod.name || ''), 'ok', 5000);
+  if (typeof saveStateNow === 'function') saveStateNow();
+  else if (typeof saveState === 'function') saveState();
+  var taxMsg = '';
+  if (taxonomyPruned.angles.length || taxonomyPruned.personas.length) {
+    taxMsg = ' and pruned ' + taxonomyPruned.angles.length + ' stale angle' +
+      (taxonomyPruned.angles.length === 1 ? '' : 's') + ' / ' +
+      taxonomyPruned.personas.length + ' stale persona' +
+      (taxonomyPruned.personas.length === 1 ? '' : 's');
+  }
+  toast('Removed ' + stale.length + ' stale ads' + taxMsg + ' from ' + (prod.name || ''), 'ok', 5000);
 }
 
 // Wrap renderAll to auto-save after every render that involves data

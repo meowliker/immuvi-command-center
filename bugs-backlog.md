@@ -1336,3 +1336,33 @@ If wrong-product Angle/Persona rows were no longer attached to those stale ads, 
 - `git diff --check` passed.
 - Synthetic cleanup-plan check confirms wrong-product Angle/Persona rows are planned for removal, current-list taxonomy is kept, protected local taxonomy is kept, and ClickUp dropdown option IDs resolve to option names before comparison.
 - Static regression checks confirm taxonomy tombstones remain, browser-native clean-stale prompts were not reintroduced, the Bug 24 lowercase `assigned` path remains protected, and no `Untested -> to do` map was reintroduced.
+
+---
+
+## Bug 28 — Clean stale over-selected valid product taxonomy and truncated preview lists
+**Status:** ✅ done — fixed 2026-07-06 (local only, not pushed)
+**Reported:** 2026-07-06
+**Surface:** Product Profile → Clean stale confirmation
+
+### Symptom
+- The Clean stale modal showed valid Canva Angle/Persona rows as removal candidates.
+- Long cleanup previews used `...and N more`, so the user could not see the full deletion list before confirming.
+
+### Root cause
+Bug 27 made the taxonomy cleanup too broad by treating any local Angle/Persona name missing from the current ClickUp list's parsed taxonomy as removable.
+That was unsafe because legitimate product taxonomy can exist locally even when ClickUp does not currently expose that name through synced task fields.
+
+The modal also capped taxonomy and stale-ad previews, which hid some deletion candidates behind summary text.
+
+### Fix
+1. Changed taxonomy pruning back to a conservative rule: remove Angle/Persona rows only when the name comes from stale ads being removed and is not used by remaining local/current work or current ClickUp task taxonomy.
+2. Removed the broad `not present in current ClickUp list = delete` rule.
+3. Updated modal wording from wrong-product cleanup to stale-only cleanup so the preview matches the safer behavior.
+4. Removed truncation from Angle, Persona, and stale-ad preview lists so every planned deletion is visible before confirmation.
+
+### Verified
+- `immuvi-command-center.html` script parses cleanly via Node `new Function()` extraction.
+- `git diff --check` passed.
+- Synthetic cleanup-plan check confirms valid Canva taxonomy that is still used by remaining local work is kept even when it is not returned by the current ClickUp taxonomy fields.
+- Synthetic cleanup-plan check confirms stale-only health taxonomy tied only to stale ads is still planned for removal.
+- Static checks confirm the cleanup modal no longer emits `...and N more` truncation for Angle, Persona, or stale-ad preview lists, and the broad `foreignToCurrentList` deletion rule is gone.

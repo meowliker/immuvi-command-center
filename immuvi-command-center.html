@@ -32436,29 +32436,19 @@ function _taxonomyPrunePlanForStaleCleanup(staleAds, liveTasks) {
 
   var currentListAngles = {};
   var currentListPersonas = {};
-  var currentListTaskIds = {};
   (liveTasks || []).forEach(function(task) {
-    if (task && task.id) currentListTaskIds[task.id] = true;
     var tx = _clickUpTaskTaxonomyForCleanup(task);
     if (tx.angle) currentListAngles[tx.angle.toLowerCase().trim()] = true;
     if (tx.persona) currentListPersonas[tx.persona.toLowerCase().trim()] = true;
   });
-  var hasCurrentListAngles = Object.keys(currentListAngles).length > 0;
-  var hasCurrentListPersonas = Object.keys(currentListPersonas).length > 0;
-
-  var protectedLocalAngles = {};
-  var protectedLocalPersonas = {};
+  var remainingLocalAngles = {};
+  var remainingLocalPersonas = {};
   (ADS || []).forEach(function(ad) {
     if (!ad || ad.deleted_at || ad.deletedAt || staleIdSet[ad.id]) return;
-    var cuid = ad._clickupId || ad.clickupTaskId || null;
-    var origin = ad.adOrigin || ad.ad_origin || '';
-    var hasParent = !!(ad.parentAdId || ad.parent_ad_id);
-    var isLocalProtected = !cuid || currentListTaskIds[cuid] || origin === 'New Find' || origin === 'Winner Variation' || hasParent || ad._localNew;
-    if (!isLocalProtected) return;
     var a = _normalizeTaxonomyName((ad.angle || '').trim());
     var p = _normalizeTaxonomyName((ad.persona || '').trim());
-    if (a) protectedLocalAngles[a.toLowerCase().trim()] = true;
-    if (p) protectedLocalPersonas[p.toLowerCase().trim()] = true;
+    if (a) remainingLocalAngles[a.toLowerCase().trim()] = true;
+    if (p) remainingLocalPersonas[p.toLowerCase().trim()] = true;
   });
 
   var removedAngles = [];
@@ -32466,9 +32456,8 @@ function _taxonomyPrunePlanForStaleCleanup(staleAds, liveTasks) {
   (ANGLES || []).forEach(function(a) {
     var name = _normalizeTaxonomyName((a && a.name) || '');
     var key = name.toLowerCase().trim();
-    var staleOnly = key && staleAngles[key] && !currentListAngles[key] && !protectedLocalAngles[key];
-    var foreignToCurrentList = key && hasCurrentListAngles && !currentListAngles[key] && !protectedLocalAngles[key];
-    if (staleOnly || foreignToCurrentList) {
+    var staleOnly = key && staleAngles[key] && !currentListAngles[key] && !remainingLocalAngles[key];
+    if (staleOnly) {
       removedAngles.push(name);
       if (a.id) removedAngleIds.push(a.id);
     }
@@ -32479,9 +32468,8 @@ function _taxonomyPrunePlanForStaleCleanup(staleAds, liveTasks) {
   (PERSONAS || []).forEach(function(p) {
     var name = _normalizeTaxonomyName((p && p.name) || '');
     var key = name.toLowerCase().trim();
-    var staleOnly = key && stalePersonas[key] && !currentListPersonas[key] && !protectedLocalPersonas[key];
-    var foreignToCurrentList = key && hasCurrentListPersonas && !currentListPersonas[key] && !protectedLocalPersonas[key];
-    if (staleOnly || foreignToCurrentList) {
+    var staleOnly = key && stalePersonas[key] && !currentListPersonas[key] && !remainingLocalPersonas[key];
+    if (staleOnly) {
       removedPersonas.push(name);
       if (p.id) removedPersonaIds.push(p.id);
     }
@@ -32686,25 +32674,23 @@ async function cleanStaleAds(productId) {
 
   if (!stale.length) {
     if (!taxonomyPlan.angles.length && !taxonomyPlan.personas.length) {
-      toast('No stale ads or wrong-product taxonomy found — your product is clean ✓', 'ok', 5000);
+      toast('No stale ads or stale-only taxonomy found — your product is clean ✓', 'ok', 5000);
       return;
     }
-    var txAngleMoreOnly = taxonomyPlan.angles.length > 12 ? ['...and ' + (taxonomyPlan.angles.length - 12) + ' more'] : [];
-    var txPersonaMoreOnly = taxonomyPlan.personas.length > 12 ? ['...and ' + (taxonomyPlan.personas.length - 12) + ' more'] : [];
     var taxonomyOnlyBody =
-      '<p style="font-size:0.86rem;color:var(--t1);line-height:1.5;margin:0 0 12px">No stale ads were found for <strong>' + esc(prod.name || '') + '</strong>, but the product still has Angle/Persona rows that are not present in the currently linked ClickUp list <strong>' + esc(prod.clickupListName || prod.clickupListId) + '</strong>.</p>' +
-      '<p style="font-size:0.76rem;color:var(--t2);line-height:1.5;margin:0 0 12px">These look like taxonomy rows imported from another product/list. Protected local work is kept.</p>' +
+      '<p style="font-size:0.86rem;color:var(--t1);line-height:1.5;margin:0 0 12px">No stale ads were found for <strong>' + esc(prod.name || '') + '</strong>, but the product still has Angle/Persona rows that are only tied to stale cleanup data and are not used by remaining local/current work.</p>' +
+      '<p style="font-size:0.76rem;color:var(--t2);line-height:1.5;margin:0 0 12px">Current product rows are kept whenever they still appear on any remaining local ad or current ClickUp task.</p>' +
       '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:12px 0">' +
-        '<div style="background:var(--el);border:1px solid var(--b);border-radius:8px;padding:10px"><div style="font-size:0.68rem;text-transform:uppercase;letter-spacing:.08em;color:var(--t3);font-weight:800">Wrong-product angles to remove</div>' + _cleanStaleListHtml(taxonomyPlan.angles.slice(0, 12).concat(txAngleMoreOnly), 'No angle rows will be removed') + '</div>' +
-        '<div style="background:var(--el);border:1px solid var(--b);border-radius:8px;padding:10px"><div style="font-size:0.68rem;text-transform:uppercase;letter-spacing:.08em;color:var(--t3);font-weight:800">Wrong-product personas to remove</div>' + _cleanStaleListHtml(taxonomyPlan.personas.slice(0, 12).concat(txPersonaMoreOnly), 'No persona rows will be removed') + '</div>' +
+        '<div style="background:var(--el);border:1px solid var(--b);border-radius:8px;padding:10px"><div style="font-size:0.68rem;text-transform:uppercase;letter-spacing:.08em;color:var(--t3);font-weight:800">Stale-only angles to remove</div>' + _cleanStaleListHtml(taxonomyPlan.angles, 'No angle rows will be removed') + '</div>' +
+        '<div style="background:var(--el);border:1px solid var(--b);border-radius:8px;padding:10px"><div style="font-size:0.68rem;text-transform:uppercase;letter-spacing:.08em;color:var(--t3);font-weight:800">Stale-only personas to remove</div>' + _cleanStaleListHtml(taxonomyPlan.personas, 'No persona rows will be removed') + '</div>' +
       '</div>' +
       '<div style="background:var(--surface);border:1px solid var(--b);border-radius:8px;padding:10px;color:var(--t2);font-size:0.76rem;line-height:1.5">' +
         '<strong>Keeping:</strong> current-list taxonomy from ' + taxonomyPlan.currentListAngleCount + ' angle value' + (taxonomyPlan.currentListAngleCount === 1 ? '' : 's') + ' and ' + taxonomyPlan.currentListPersonaCount + ' persona value' + (taxonomyPlan.currentListPersonaCount === 1 ? '' : 's') + ', plus protected local-only/manual/winner taxonomy.<br>' +
         'This removes local Immuvi taxonomy rows only. ClickUp tasks are not deleted.' +
       '</div>';
-    var confirmedTaxonomyOnly = await _showCleanStaleModal('Clean Wrong-Product Taxonomy', taxonomyOnlyBody, 'Remove Taxonomy Rows', { danger: true });
+    var confirmedTaxonomyOnly = await _showCleanStaleModal('Clean Stale Taxonomy', taxonomyOnlyBody, 'Remove Taxonomy Rows', { danger: true });
     if (!confirmedTaxonomyOnly) return;
-    showLoading('Removing wrong-product taxonomy…');
+    showLoading('Removing stale taxonomy…');
     var taxonomyOnlyPruned = { angles: [], personas: [] };
     try {
       taxonomyOnlyPruned = await _pruneTaxonomyAfterStaleCleanup(productId, [], liveTasks);
@@ -32752,7 +32738,7 @@ async function cleanStaleAds(productId) {
   }
 
   // 3. Show confirm with summary + sample names
-  var sampleItems = stale.slice(0, 8).map(function(a) {
+  var sampleItems = stale.map(function(a) {
     var bits = [];
     if (a.angle) bits.push('Angle: ' + a.angle);
     if (a.persona) bits.push('Persona: ' + a.persona);
@@ -32761,19 +32747,16 @@ async function cleanStaleAds(productId) {
       (bits.length ? '<div style="color:var(--t3);font-size:0.72rem;margin-top:2px">' + esc(bits.join(' · ')) + '</div>' : '') +
     '</div>';
   }).join('');
-  var taskMore = stale.length > 8 ? '<div style="color:var(--t3);font-size:0.76rem;padding-top:8px">...and ' + (stale.length - 8) + ' more stale ads</div>' : '';
-  var angleMore = taxonomyPlan.angles.length > 12 ? ['...and ' + (taxonomyPlan.angles.length - 12) + ' more'] : [];
-  var personaMore = taxonomyPlan.personas.length > 12 ? ['...and ' + (taxonomyPlan.personas.length - 12) + ' more'] : [];
   var confirmBody =
     '<p style="font-size:0.86rem;color:var(--t1);line-height:1.5;margin:0 0 12px">Remove <strong>' + stale.length + '</strong> stale ads from <strong>' + esc(prod.name || '') + '</strong>? These were imported from a previous ClickUp list and are no longer in <strong>' + esc(prod.clickupListName || prod.clickupListId) + '</strong>.</p>' +
-    '<p style="font-size:0.76rem;color:var(--t2);line-height:1.5;margin:0 0 12px">Angle/Persona rows below are local names that are not present in the current linked list, unless they are protected by local-only/manual/winner work.</p>' +
+    '<p style="font-size:0.76rem;color:var(--t2);line-height:1.5;margin:0 0 12px">Angle/Persona rows below are removed only when they are tied to stale ads and are not used by remaining local/current work.</p>' +
     '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:12px 0">' +
-      '<div style="background:var(--el);border:1px solid var(--b);border-radius:8px;padding:10px"><div style="font-size:0.68rem;text-transform:uppercase;letter-spacing:.08em;color:var(--t3);font-weight:800">Wrong-product / stale angles to remove</div>' + _cleanStaleListHtml(taxonomyPlan.angles.slice(0, 12).concat(angleMore), 'No angle rows will be removed') + '</div>' +
-      '<div style="background:var(--el);border:1px solid var(--b);border-radius:8px;padding:10px"><div style="font-size:0.68rem;text-transform:uppercase;letter-spacing:.08em;color:var(--t3);font-weight:800">Wrong-product / stale personas to remove</div>' + _cleanStaleListHtml(taxonomyPlan.personas.slice(0, 12).concat(personaMore), 'No persona rows will be removed') + '</div>' +
+      '<div style="background:var(--el);border:1px solid var(--b);border-radius:8px;padding:10px"><div style="font-size:0.68rem;text-transform:uppercase;letter-spacing:.08em;color:var(--t3);font-weight:800">Stale-only angles to remove</div>' + _cleanStaleListHtml(taxonomyPlan.angles, 'No angle rows will be removed') + '</div>' +
+      '<div style="background:var(--el);border:1px solid var(--b);border-radius:8px;padding:10px"><div style="font-size:0.68rem;text-transform:uppercase;letter-spacing:.08em;color:var(--t3);font-weight:800">Stale-only personas to remove</div>' + _cleanStaleListHtml(taxonomyPlan.personas, 'No persona rows will be removed') + '</div>' +
     '</div>' +
     '<div style="background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.18);border-radius:8px;padding:10px;margin:12px 0">' +
       '<div style="font-size:0.68rem;text-transform:uppercase;letter-spacing:.08em;color:var(--lose);font-weight:900;margin-bottom:6px">Removing stale ads</div>' +
-      sampleItems + taskMore +
+      sampleItems +
     '</div>' +
     '<div style="background:var(--surface);border:1px solid var(--b);border-radius:8px;padding:10px;color:var(--t2);font-size:0.76rem;line-height:1.5">' +
       '<strong>Keeping:</strong> ' + protectedCount.variation + ' winner variations, ' + protectedCount.newFind + ' New Find ads, ' + protectedCount.localOnly + ' local-only ads, ' + protectedCount.inList + ' current-list ads, ' + protectedCount.hasAction + ' action-linked ads, ' + protectedCount.inCell + ' matrix-cell ads, and ' + protectedCount.recent + ' recent ads.<br>' +

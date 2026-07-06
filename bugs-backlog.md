@@ -1308,3 +1308,31 @@ Even after Bug 25 added taxonomy pruning, the UI did not preview the taxonomy pr
 - Static checks confirm the Clean stale flow uses app modals for zero-task, low-fetch, high-risk typed confirmation, and final confirmation states.
 - Static checks confirm the final confirmation shows stale Angle names, stale Persona names, and stale ad previews with each ad's Angle/Persona values.
 - Static regression checks confirm Bug 25 taxonomy pruning still runs after stale ADS removal, Bug 24 lowercase `assigned` status handling remains present, and no `Untested -> to do` map was reintroduced.
+
+---
+
+## Bug 27 — Clean stale did not remove product-level foreign taxonomy rows
+**Status:** ✅ done — fixed 2026-07-04 (local only, not pushed)
+**Reported:** 2026-07-04
+**Surface:** Product Profile → Clean stale
+
+### Symptom
+- The Clean stale modal could show stale ads to remove, but still show `No angle rows will be removed` and `No persona rows will be removed`.
+- Products such as Canva could keep Angle/Persona rows that belonged to other products, even after stale ads were cleaned.
+
+### Root cause
+Bug 25 only planned taxonomy removal from the stale ad rows being deleted.
+If wrong-product Angle/Persona rows were no longer attached to those stale ads, or the stale ads did not carry local angle/persona values, the cleanup plan never considered those taxonomy rows.
+
+### Fix
+1. Clean stale now derives the current product taxonomy source of truth from the currently linked ClickUp list's Angle/Persona fields.
+2. Local Angle/Persona rows that are not present in that current list are treated as wrong-product/stale taxonomy and shown in the modal before removal.
+3. Protected local work is preserved: local-only ads, New Find ads, winner/parent variations, `_localNew` rows, and local ads still connected to current-list ClickUp tasks.
+4. The cleanup parser now resolves ClickUp dropdown/label option IDs to option names before comparing taxonomy, so random option IDs are not mistaken for real Angle/Persona names.
+5. Clean stale can now run a taxonomy-only cleanup when no stale ads exist but wrong-product taxonomy rows remain.
+
+### Verified
+- `immuvi-command-center.html` script parses cleanly via Node `new Function()` extraction.
+- `git diff --check` passed.
+- Synthetic cleanup-plan check confirms wrong-product Angle/Persona rows are planned for removal, current-list taxonomy is kept, protected local taxonomy is kept, and ClickUp dropdown option IDs resolve to option names before comparison.
+- Static regression checks confirm taxonomy tombstones remain, browser-native clean-stale prompts were not reintroduced, the Bug 24 lowercase `assigned` path remains protected, and no `Untested -> to do` map was reintroduced.

@@ -32315,19 +32315,43 @@ function _clickUpTaskTaxonomyForCleanup(task) {
   (task && task.custom_fields || []).forEach(function(f) {
     if (f && f.name) cfByName[String(f.name).toLowerCase().trim()] = f;
   });
+  function resolveDropdownValue(f) {
+    var opts = (f && f.type_config && Array.isArray(f.type_config.options)) ? f.type_config.options : [];
+    if (!opts.length || f.value == null || f.value === '') return '';
+    function matchOne(v) {
+      for (var oi = 0; oi < opts.length; oi++) {
+        if (opts[oi].orderindex === v || opts[oi].id === v || opts[oi].name === v) return opts[oi].name || '';
+      }
+      var val = typeof v === 'number' ? v : parseInt(v, 10);
+      if (!isNaN(val)) {
+        for (var ni = 0; ni < opts.length; ni++) {
+          if (opts[ni].orderindex === val) return opts[ni].name || '';
+        }
+        if (opts[val]) return opts[val].name || '';
+      }
+      if (typeof v === 'string') {
+        var trimmed = v.trim();
+        for (var si = 0; si < opts.length; si++) {
+          if (String(opts[si].id || '').trim() === trimmed || String(opts[si].name || '').trim() === trimmed) {
+            return opts[si].name || '';
+          }
+        }
+      }
+      return '';
+    }
+    if (Array.isArray(f.value)) {
+      return f.value.map(matchOne).filter(Boolean).join(', ');
+    }
+    return matchOne(f.value);
+  }
   function getField(names) {
     for (var ni = 0; ni < names.length; ni++) {
       var f = cfByName[String(names[ni]).toLowerCase()];
       if (!f || f.value == null || f.value === '') continue;
       if ((f.type === 'drop_down' || f.type === 'labels') && f.type_config && f.type_config.options) {
-        var opts = f.type_config.options || [];
-        var val = typeof f.value === 'number' ? f.value : parseInt(f.value, 10);
-        if (!isNaN(val)) {
-          for (var oi = 0; oi < opts.length; oi++) {
-            if (opts[oi].orderindex === val) return opts[oi].name || '';
-          }
-          if (opts[val]) return opts[val].name || '';
-        }
+        var resolved = resolveDropdownValue(f);
+        if (resolved) return resolved;
+        continue;
       }
       return String(f.value || '');
     }
@@ -32399,31 +32423,42 @@ function _showCleanStaleTypedConfirm(title, bodyHtml, expectedText) {
 }
 
 function _taxonomyPrunePlanForStaleCleanup(staleAds, liveTasks) {
+  var staleIdSet = {};
   var staleAngles = {};
   var stalePersonas = {};
   (staleAds || []).forEach(function(ad) {
+    if (ad && ad.id) staleIdSet[ad.id] = true;
     var a = _normalizeTaxonomyName((ad && ad.angle) || '');
     var p = _normalizeTaxonomyName((ad && ad.persona) || '');
     if (a) staleAngles[a.toLowerCase().trim()] = a;
     if (p) stalePersonas[p.toLowerCase().trim()] = p;
   });
-  if (!Object.keys(staleAngles).length && !Object.keys(stalePersonas).length) {
-    return { angles: [], personas: [], angleIds: [], personaIds: [] };
-  }
 
-  var remainingAngles = {};
-  var remainingPersonas = {};
+  var currentListAngles = {};
+  var currentListPersonas = {};
+  var currentListTaskIds = {};
+  (liveTasks || []).forEach(function(task) {
+    if (task && task.id) currentListTaskIds[task.id] = true;
+    var tx = _clickUpTaskTaxonomyForCleanup(task);
+    if (tx.angle) currentListAngles[tx.angle.toLowerCase().trim()] = true;
+    if (tx.persona) currentListPersonas[tx.persona.toLowerCase().trim()] = true;
+  });
+  var hasCurrentListAngles = Object.keys(currentListAngles).length > 0;
+  var hasCurrentListPersonas = Object.keys(currentListPersonas).length > 0;
+
+  var protectedLocalAngles = {};
+  var protectedLocalPersonas = {};
   (ADS || []).forEach(function(ad) {
-    if (!ad || ad.deleted_at || ad.deletedAt) return;
+    if (!ad || ad.deleted_at || ad.deletedAt || staleIdSet[ad.id]) return;
+    var cuid = ad._clickupId || ad.clickupTaskId || null;
+    var origin = ad.adOrigin || ad.ad_origin || '';
+    var hasParent = !!(ad.parentAdId || ad.parent_ad_id);
+    var isLocalProtected = !cuid || currentListTaskIds[cuid] || origin === 'New Find' || origin === 'Winner Variation' || hasParent || ad._localNew;
+    if (!isLocalProtected) return;
     var a = _normalizeTaxonomyName((ad.angle || '').trim());
     var p = _normalizeTaxonomyName((ad.persona || '').trim());
-    if (a) remainingAngles[a.toLowerCase()] = true;
-    if (p) remainingPersonas[p.toLowerCase()] = true;
-  });
-  (liveTasks || []).forEach(function(task) {
-    var tx = _clickUpTaskTaxonomyForCleanup(task);
-    if (tx.angle) remainingAngles[tx.angle.toLowerCase().trim()] = true;
-    if (tx.persona) remainingPersonas[tx.persona.toLowerCase().trim()] = true;
+    if (a) protectedLocalAngles[a.toLowerCase().trim()] = true;
+    if (p) protectedLocalPersonas[p.toLowerCase().trim()] = true;
   });
 
   var removedAngles = [];
@@ -32431,7 +32466,9 @@ function _taxonomyPrunePlanForStaleCleanup(staleAds, liveTasks) {
   (ANGLES || []).forEach(function(a) {
     var name = _normalizeTaxonomyName((a && a.name) || '');
     var key = name.toLowerCase().trim();
-    if (key && staleAngles[key] && !remainingAngles[key]) {
+    var staleOnly = key && staleAngles[key] && !currentListAngles[key] && !protectedLocalAngles[key];
+    var foreignToCurrentList = key && hasCurrentListAngles && !currentListAngles[key] && !protectedLocalAngles[key];
+    if (staleOnly || foreignToCurrentList) {
       removedAngles.push(name);
       if (a.id) removedAngleIds.push(a.id);
     }
@@ -32442,7 +32479,9 @@ function _taxonomyPrunePlanForStaleCleanup(staleAds, liveTasks) {
   (PERSONAS || []).forEach(function(p) {
     var name = _normalizeTaxonomyName((p && p.name) || '');
     var key = name.toLowerCase().trim();
-    if (key && stalePersonas[key] && !remainingPersonas[key]) {
+    var staleOnly = key && stalePersonas[key] && !currentListPersonas[key] && !protectedLocalPersonas[key];
+    var foreignToCurrentList = key && hasCurrentListPersonas && !currentListPersonas[key] && !protectedLocalPersonas[key];
+    if (staleOnly || foreignToCurrentList) {
       removedPersonas.push(name);
       if (p.id) removedPersonaIds.push(p.id);
     }
@@ -32452,7 +32491,9 @@ function _taxonomyPrunePlanForStaleCleanup(staleAds, liveTasks) {
     angles: removedAngles,
     personas: removedPersonas,
     angleIds: removedAngleIds,
-    personaIds: removedPersonaIds
+    personaIds: removedPersonaIds,
+    currentListAngleCount: Object.keys(currentListAngles).length,
+    currentListPersonaCount: Object.keys(currentListPersonas).length
   };
 }
 
@@ -32641,8 +32682,51 @@ async function cleanStaleAds(productId) {
     stale.push(ad);
   }
 
+  var taxonomyPlan = _taxonomyPrunePlanForStaleCleanup(stale, liveTasks);
+
   if (!stale.length) {
-    toast('No stale ads found — your product is clean ✓', 'ok', 5000);
+    if (!taxonomyPlan.angles.length && !taxonomyPlan.personas.length) {
+      toast('No stale ads or wrong-product taxonomy found — your product is clean ✓', 'ok', 5000);
+      return;
+    }
+    var txAngleMoreOnly = taxonomyPlan.angles.length > 12 ? ['...and ' + (taxonomyPlan.angles.length - 12) + ' more'] : [];
+    var txPersonaMoreOnly = taxonomyPlan.personas.length > 12 ? ['...and ' + (taxonomyPlan.personas.length - 12) + ' more'] : [];
+    var taxonomyOnlyBody =
+      '<p style="font-size:0.86rem;color:var(--t1);line-height:1.5;margin:0 0 12px">No stale ads were found for <strong>' + esc(prod.name || '') + '</strong>, but the product still has Angle/Persona rows that are not present in the currently linked ClickUp list <strong>' + esc(prod.clickupListName || prod.clickupListId) + '</strong>.</p>' +
+      '<p style="font-size:0.76rem;color:var(--t2);line-height:1.5;margin:0 0 12px">These look like taxonomy rows imported from another product/list. Protected local work is kept.</p>' +
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:12px 0">' +
+        '<div style="background:var(--el);border:1px solid var(--b);border-radius:8px;padding:10px"><div style="font-size:0.68rem;text-transform:uppercase;letter-spacing:.08em;color:var(--t3);font-weight:800">Wrong-product angles to remove</div>' + _cleanStaleListHtml(taxonomyPlan.angles.slice(0, 12).concat(txAngleMoreOnly), 'No angle rows will be removed') + '</div>' +
+        '<div style="background:var(--el);border:1px solid var(--b);border-radius:8px;padding:10px"><div style="font-size:0.68rem;text-transform:uppercase;letter-spacing:.08em;color:var(--t3);font-weight:800">Wrong-product personas to remove</div>' + _cleanStaleListHtml(taxonomyPlan.personas.slice(0, 12).concat(txPersonaMoreOnly), 'No persona rows will be removed') + '</div>' +
+      '</div>' +
+      '<div style="background:var(--surface);border:1px solid var(--b);border-radius:8px;padding:10px;color:var(--t2);font-size:0.76rem;line-height:1.5">' +
+        '<strong>Keeping:</strong> current-list taxonomy from ' + taxonomyPlan.currentListAngleCount + ' angle value' + (taxonomyPlan.currentListAngleCount === 1 ? '' : 's') + ' and ' + taxonomyPlan.currentListPersonaCount + ' persona value' + (taxonomyPlan.currentListPersonaCount === 1 ? '' : 's') + ', plus protected local-only/manual/winner taxonomy.<br>' +
+        'This removes local Immuvi taxonomy rows only. ClickUp tasks are not deleted.' +
+      '</div>';
+    var confirmedTaxonomyOnly = await _showCleanStaleModal('Clean Wrong-Product Taxonomy', taxonomyOnlyBody, 'Remove Taxonomy Rows', { danger: true });
+    if (!confirmedTaxonomyOnly) return;
+    showLoading('Removing wrong-product taxonomy…');
+    var taxonomyOnlyPruned = { angles: [], personas: [] };
+    try {
+      taxonomyOnlyPruned = await _pruneTaxonomyAfterStaleCleanup(productId, [], liveTasks);
+    } catch (e) {
+      console.warn('[cleanStaleAds] taxonomy-only prune failed', e);
+      hideLoading();
+      toast('Could not clean taxonomy: ' + (e && e.message ? e.message : String(e)), 'err', 6000);
+      return;
+    }
+    hideLoading();
+    if (typeof P !== 'undefined') P = process(ADS);
+    if (typeof buildCreativeUsageIndex === 'function') buildCreativeUsageIndex();
+    if (typeof deriveWinners === 'function') deriveWinners();
+    if (typeof genActions === 'function') genActions();
+    if (typeof renderAll === 'function') renderAll();
+    renderProductProfile();
+    if (typeof saveStateNow === 'function') saveStateNow();
+    else if (typeof saveState === 'function') saveState();
+    toast('Pruned ' + taxonomyOnlyPruned.angles.length + ' angle' +
+      (taxonomyOnlyPruned.angles.length === 1 ? '' : 's') + ' / ' +
+      taxonomyOnlyPruned.personas.length + ' persona' +
+      (taxonomyOnlyPruned.personas.length === 1 ? '' : 's') + ' from ' + (prod.name || ''), 'ok', 5000);
     return;
   }
 
@@ -32668,7 +32752,6 @@ async function cleanStaleAds(productId) {
   }
 
   // 3. Show confirm with summary + sample names
-  var taxonomyPlan = _taxonomyPrunePlanForStaleCleanup(stale, liveTasks);
   var sampleItems = stale.slice(0, 8).map(function(a) {
     var bits = [];
     if (a.angle) bits.push('Angle: ' + a.angle);
@@ -32683,9 +32766,10 @@ async function cleanStaleAds(productId) {
   var personaMore = taxonomyPlan.personas.length > 12 ? ['...and ' + (taxonomyPlan.personas.length - 12) + ' more'] : [];
   var confirmBody =
     '<p style="font-size:0.86rem;color:var(--t1);line-height:1.5;margin:0 0 12px">Remove <strong>' + stale.length + '</strong> stale ads from <strong>' + esc(prod.name || '') + '</strong>? These were imported from a previous ClickUp list and are no longer in <strong>' + esc(prod.clickupListName || prod.clickupListId) + '</strong>.</p>' +
+    '<p style="font-size:0.76rem;color:var(--t2);line-height:1.5;margin:0 0 12px">Angle/Persona rows below are local names that are not present in the current linked list, unless they are protected by local-only/manual/winner work.</p>' +
     '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:12px 0">' +
-      '<div style="background:var(--el);border:1px solid var(--b);border-radius:8px;padding:10px"><div style="font-size:0.68rem;text-transform:uppercase;letter-spacing:.08em;color:var(--t3);font-weight:800">Stale angles to remove</div>' + _cleanStaleListHtml(taxonomyPlan.angles.slice(0, 12).concat(angleMore), 'No angle rows will be removed') + '</div>' +
-      '<div style="background:var(--el);border:1px solid var(--b);border-radius:8px;padding:10px"><div style="font-size:0.68rem;text-transform:uppercase;letter-spacing:.08em;color:var(--t3);font-weight:800">Stale personas to remove</div>' + _cleanStaleListHtml(taxonomyPlan.personas.slice(0, 12).concat(personaMore), 'No persona rows will be removed') + '</div>' +
+      '<div style="background:var(--el);border:1px solid var(--b);border-radius:8px;padding:10px"><div style="font-size:0.68rem;text-transform:uppercase;letter-spacing:.08em;color:var(--t3);font-weight:800">Wrong-product / stale angles to remove</div>' + _cleanStaleListHtml(taxonomyPlan.angles.slice(0, 12).concat(angleMore), 'No angle rows will be removed') + '</div>' +
+      '<div style="background:var(--el);border:1px solid var(--b);border-radius:8px;padding:10px"><div style="font-size:0.68rem;text-transform:uppercase;letter-spacing:.08em;color:var(--t3);font-weight:800">Wrong-product / stale personas to remove</div>' + _cleanStaleListHtml(taxonomyPlan.personas.slice(0, 12).concat(personaMore), 'No persona rows will be removed') + '</div>' +
     '</div>' +
     '<div style="background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.18);border-radius:8px;padding:10px;margin:12px 0">' +
       '<div style="font-size:0.68rem;text-transform:uppercase;letter-spacing:.08em;color:var(--lose);font-weight:900;margin-bottom:6px">Removing stale ads</div>' +

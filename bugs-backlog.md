@@ -1366,3 +1366,34 @@ The modal also capped taxonomy and stale-ad previews, which hid some deletion ca
 - Synthetic cleanup-plan check confirms valid Canva taxonomy that is still used by remaining local work is kept even when it is not returned by the current ClickUp taxonomy fields.
 - Synthetic cleanup-plan check confirms stale-only health taxonomy tied only to stale ads is still planned for removal.
 - Static checks confirm the cleanup modal no longer emits `...and N more` truncation for Angle, Persona, or stale-ad preview lists, and the broad `foreignToCurrentList` deletion rule is gone.
+
+---
+
+## Bug 29 — Cross-product ClickUp duplicates leaked Canva tasks/taxonomy into ADHD
+**Status:** ✅ done — fixed 2026-07-07 (local only, not pushed)
+**Reported:** 2026-07-07
+**Surface:** Product switcher → ADHD / Action Plan / Creative Tracker / Clean stale
+
+### Symptom
+- ADHD showed Canva/general creative rows in Action Plan and Creative Tracker.
+- ADHD also showed wrong-product Angle/Persona rows, such as Canva-oriented taxonomy.
+- Clean stale could still be confusing because old rows lacked reliable source-list metadata and some wrong-product rows were protected by action/cell references.
+
+### Root cause
+Bug 22 blocked the obvious bad-link/manual-sync path, but it did not protect every ClickUp fetch path and it did not quarantine existing polluted rows.
+
+Live data showed that most older `ads` rows had blank embedded `clickupListId/clickupListName`, so the app could only trust `product_id`. Several ClickUp task IDs were duplicated across products, including Canva tasks stored under ADHD. Since `loadProductData()` loaded only by `product_id`, those duplicate rows rendered as ADHD rows. Action Plan virtual adoption could also surface polluted `ADS` rows even when no clean manual action existed.
+
+### Fix
+1. Added product-boundary source stamping so ClickUp list-task fetches stamp `list_id/list_name` and imported ads persist `_syncProductId/_syncProductName` plus list identity.
+2. Added a shared ClickUp list/product guard to manual sync, live poll, and Clean stale so mismatched product/list links cannot fetch or clean against the wrong list.
+3. Added a conservative product-boundary quarantine pass during product load, manual sync, live poll, and Clean stale. It detects active `ads` rows whose ClickUp task ID also exists under another product and whose product signals better match that other product, or whose saved list identity belongs to another product.
+4. Quarantined rows are hidden from Creative Tracker, Action Plan virtual/adopted cards, tab counts, angle/persona stats, tracker filters, matrix auto-assignment, and derived status calculations without being hard-deleted during normal load.
+5. Clean stale now treats confirmed quarantined rows as removable even when they are action-linked, and removes linked `manual_actions` rows during the confirmed cleanup so wrong-product Action Plan rows do not survive after their stale ad is removed.
+6. Product switches reset the quarantine map so one product's hidden rows cannot temporarily affect another product while cached data renders.
+
+### Verified
+- `immuvi-command-center.html` script parses cleanly via Node `new Function()` extraction.
+- Static checks confirm product-boundary quarantine is wired into product load, manual sync, live poll, Clean stale, Creative Tracker, Action Plan resolution, tab counts, taxonomy stats, tracker filters, and matrix auto-assignment.
+- Static checks confirm `syncClickUp()`, `pollFullSync()`, and `cleanStaleAds()` all call the shared ClickUp list/product guard before fetching.
+- Static regression checks confirm Clean stale still uses modal confirmation, Bug 24 lowercase `assigned` status handling remains present, and no `Untested -> to do` status map was reintroduced.

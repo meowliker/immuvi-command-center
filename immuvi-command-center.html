@@ -12319,6 +12319,7 @@ function _looksLikeClickUpTaskId(id) {
 var _META_FIELDS = [
   'taskType', 'sourceFormatId', 'sourceFormatDriveLink', '_sourceFormatDriveLink',
   '_fromInspoId', '_sourceAdId', '_sourceProductId', '_sourceClickupId',
+  '_syncProductId', '_syncProductName',
   '_sourceInsId', '_sourceInspoUrl', '_inspirationDriveLink',
   // Inspo-origin recovery cache: brief URL = ClickUp doc page that holds
   // the editor brief; ad URL = the original source ad creative URL. Stamped
@@ -12968,7 +12969,7 @@ const DB = {
         });
       }
     });
-    return {
+    const state = {
       ANGLES: (angles.data || []).map(function (a) { return { id: a.id, name: a.name, status: a.status, sourceLink: a.source_link || '', notes: a.notes || '', createdAt: a.created_at ? new Date(a.created_at).getTime() : null, archivedAt: a.archived_at ? new Date(a.archived_at).getTime() : null }; }),
       PERSONAS: (personas.data || []).map(function (p) { return { id: p.id, name: p.name, status: p.status, sourceLink: p.source_link || '', notes: p.notes || '', archivedAt: p.archived_at ? new Date(p.archived_at).getTime() : null }; }),
       ADS: (ads.data || []).map(_rowToAd),
@@ -12978,6 +12979,12 @@ const DB = {
       PROD: [], // derived from ads, no dedicated table
       ANGLE_PERSONAS: anglePersonasFromCells // hydrated from matrix_cells rows
     };
+    try {
+      await _applyProductBoundaryQuarantine(productId, state);
+    } catch (e) {
+      console.warn('[product-boundary] quarantine check failed; loading unfiltered state', e);
+    }
+    return state;
   },
 
   // Full-sync write of an entire product's state (used by saveState, debounced).
@@ -16594,6 +16601,7 @@ function buildCreativeUsageIndex() {
   var personaNames = PERSONAS.map(function(p){ return p.name; });
 
   ADS.forEach(function(ad) {
+    if (_isBoundaryQuarantinedAd(ad)) return;
     if (!ad.angle || !ad.persona) return;
     // Must match a known angle AND persona
     if (angleNames.indexOf(ad.angle) === -1) return;
@@ -17140,6 +17148,7 @@ function showCreativesPopup(evt, filterType, filterVal) {
   evt.stopPropagation();
   var triggerEl = evt.target.closest('.tr-stat-pill') || evt.target;
   var ads = ADS.filter(function(a) {
+    if (_isBoundaryQuarantinedAd(a)) return false;
     if (a.parentAdId || a.trackerRefId) return false;
     return filterType === 'angle' ? a.angle === filterVal : a.persona === filterVal;
   });
@@ -17188,7 +17197,7 @@ function showPersonaDetailPopup(evt, personaName) {
   var cls = per ? classify(per.status) : classify('Untested');
 
   // Calculate stats inline
-  var relAds = ADS.filter(function(a) { return a.persona === personaName && !a.parentAdId; });
+  var relAds = ADS.filter(function(a) { return !_isBoundaryQuarantinedAd(a) && a.persona === personaName && !a.parentAdId; });
   var winners = relAds.filter(function(a) { return a.status === 'Winner'; }).length;
   var winRate = relAds.length > 0 ? Math.round((winners / relAds.length) * 100) : 0;
   var angleSet = {};
@@ -17256,7 +17265,7 @@ function showAngleDetailPopup(evt, angleName) {
   var ang = ANGLES.find(function(a) { return a.name === angleName; });
   var cls = ang ? classify(ang.status) : classify('Untested');
 
-  var relAds = ADS.filter(function(a) { return a.angle === angleName && !a.parentAdId; });
+  var relAds = ADS.filter(function(a) { return !_isBoundaryQuarantinedAd(a) && a.angle === angleName && !a.parentAdId; });
   var winners = relAds.filter(function(a) { return a.status === 'Winner'; }).length;
   var winRate = relAds.length > 0 ? Math.round((winners / relAds.length) * 100) : 0;
   var personaSet = {};
@@ -17347,7 +17356,7 @@ function showPersonasForAngle(evt, angleName) {
   evt.stopPropagation();
   var triggerEl = evt.target.closest('.tr-stat-pill') || evt.target;
   var personaNameSet = {};
-  ADS.filter(function(a) { return a.angle === angleName && !a.parentAdId; }).forEach(function(a) {
+  ADS.filter(function(a) { return !_isBoundaryQuarantinedAd(a) && a.angle === angleName && !a.parentAdId; }).forEach(function(a) {
     if (a.persona) personaNameSet[a.persona] = true;
   });
   var names = Object.keys(personaNameSet);
@@ -17360,7 +17369,7 @@ function showPersonasForAngle(evt, angleName) {
       var cardId = 'pa-' + pn.replace(/[^a-zA-Z0-9]/g, '_');
       var per = PERSONAS.find(function(p) { return p.name === pn; });
       var cls = per ? classify(per.status) : classify('Untested');
-      var relAds = ADS.filter(function(a) { return a.angle === angleName && a.persona === pn && !a.parentAdId; });
+      var relAds = ADS.filter(function(a) { return !_isBoundaryQuarantinedAd(a) && a.angle === angleName && a.persona === pn && !a.parentAdId; });
       var relWins = relAds.filter(function(a) { return a.status === 'Winner'; }).length;
       var relWinRate = relAds.length > 0 ? Math.round((relWins / relAds.length) * 100) : 0;
 
@@ -17412,7 +17421,7 @@ function showAnglesForPersona(evt, personaName) {
   evt.stopPropagation();
   var triggerEl = evt.target.closest('.tr-stat-pill') || evt.target;
   var angleNameSet = {};
-  ADS.filter(function(a) { return a.persona === personaName && !a.parentAdId; }).forEach(function(a) {
+  ADS.filter(function(a) { return !_isBoundaryQuarantinedAd(a) && a.persona === personaName && !a.parentAdId; }).forEach(function(a) {
     if (a.angle) angleNameSet[a.angle] = true;
   });
   var names = Object.keys(angleNameSet);
@@ -17425,7 +17434,7 @@ function showAnglesForPersona(evt, personaName) {
       var cardId = 'ap-' + an.replace(/[^a-zA-Z0-9]/g, '_');
       var ang = ANGLES.find(function(a) { return a.name === an; });
       var cls = ang ? classify(ang.status) : classify('Untested');
-      var relAds = ADS.filter(function(a) { return a.persona === personaName && a.angle === an && !a.parentAdId; });
+      var relAds = ADS.filter(function(a) { return !_isBoundaryQuarantinedAd(a) && a.persona === personaName && a.angle === an && !a.parentAdId; });
       var relWins = relAds.filter(function(a) { return a.status === 'Winner'; }).length;
       var relWinRate = relAds.length > 0 ? Math.round((relWins / relAds.length) * 100) : 0;
 
@@ -17504,23 +17513,27 @@ function hideLoading() {
 
 function updateTabCounts() {
   var el;
+  var visibleAds = (ADS || []).filter(function(a) { return !_isBoundaryQuarantinedAd(a); });
+  var visibleActions = (MANUAL_ACTIONS || []).filter(function(a) { return !_isBoundaryQuarantinedAction(a); });
+  var visibleAngles = (ANGLES || []).filter(function(a) { return !_isBoundaryQuarantinedTaxonomy('angle', a && a.name); });
+  var visiblePersonas = (PERSONAS || []).filter(function(p) { return !_isBoundaryQuarantinedTaxonomy('persona', p && p.name); });
   el = document.getElementById('anglesCount');
-  if (el) el.innerHTML = ANGLES.length;
+  if (el) el.innerHTML = visibleAngles.length;
   el = document.getElementById('personasCount');
-  if (el) el.innerHTML = PERSONAS.length;
+  if (el) el.innerHTML = visiblePersonas.length;
   el = document.getElementById('creativesCount');
-  if (el) el.innerHTML = ADS.length;
+  if (el) el.innerHTML = visibleAds.length;
   var matrixCells = 0;
   var filledCells = {};
-  for (var i = 0; i < ADS.length; i++) {
-    if (!ADS[i].parentAdId) filledCells[ADS[i].angle + '||' + ADS[i].persona] = true;
+  for (var i = 0; i < visibleAds.length; i++) {
+    if (!visibleAds[i].parentAdId) filledCells[visibleAds[i].angle + '||' + visibleAds[i].persona] = true;
   }
   el = document.getElementById('matrixCount');
-  if (el) el.innerHTML = Object.keys(filledCells).length + '/' + (ANGLES.length * PERSONAS.length);
+  if (el) el.innerHTML = Object.keys(filledCells).length + '/' + (visibleAngles.length * visiblePersonas.length);
   el = document.getElementById('actionsCount');
-  if (el) el.innerHTML = MANUAL_ACTIONS.length;
+  if (el) el.innerHTML = visibleActions.length;
   el = document.getElementById('prodCount');
-  if (el) el.innerHTML = MANUAL_ACTIONS.length;
+  if (el) el.innerHTML = visibleActions.length;
 }
 
 // ============================================================
@@ -17529,6 +17542,7 @@ function updateTabCounts() {
 
 function process(ads) {
   if (!ads) ads = ADS;
+  ads = (ads || []).filter(function(ad) { return !_isBoundaryQuarantinedAd(ad); });
   var byCreativeStructure = {}, byHookType = {}, byProductionStyle = {};
   var result = {
     tasks: ads,
@@ -17592,9 +17606,11 @@ function deriveWinners() {
   WINNERS = [];
   for (var i = 0; i < ADS.length; i++) {
     var ad = ADS[i];
+    if (_isBoundaryQuarantinedAd(ad)) continue;
     if (ad.status === 'Winner' && !ad.parentAdId) {
       var variations = [];
       for (var j = 0; j < ADS.length; j++) {
+        if (_isBoundaryQuarantinedAd(ADS[j])) continue;
         if (ADS[j].parentAdId === ad.id) {
           variations.push(ADS[j]);
         }
@@ -18112,7 +18128,7 @@ function renderHQ() {
 function renderAngles() {
   // Build per-angle stats from ADS and PERSONAS
   function getAngleStats(angleName) {
-    var ads = ADS.filter(function(a) { return a.angle === angleName && !a.parentAdId; });
+    var ads = ADS.filter(function(a) { return !_isBoundaryQuarantinedAd(a) && a.angle === angleName && !a.parentAdId; });
     var personaSet = {};
     var winners = 0;
     for (var i = 0; i < ads.length; i++) {
@@ -18184,6 +18200,7 @@ function renderAngles() {
 
   for (var i = 0; i < ANGLES.length; i++) {
     var ang = ANGLES[i];
+    if (_isBoundaryQuarantinedTaxonomy('angle', ang && ang.name)) continue;
     var _isArchivedA = !!ang.archivedAt;
     if (_viewA === 'active'   && _isArchivedA) continue;
     if (_viewA === 'archived' && !_isArchivedA) continue;
@@ -18210,7 +18227,7 @@ function renderAngles() {
 
     // Persona name pills (clickable)
     var personaNameSet = {};
-    ADS.filter(function(a) { return a.angle === ang.name && !a.parentAdId; }).forEach(function(a) {
+    ADS.filter(function(a) { return !_isBoundaryQuarantinedAd(a) && a.angle === ang.name && !a.parentAdId; }).forEach(function(a) {
       if (a.persona) personaNameSet[a.persona] = true;
     });
     var personaNameList = Object.keys(personaNameSet);
@@ -19310,7 +19327,7 @@ function _strategistRenderHook() {
 
 function renderPersonas() {
   function getPersonaStats(personaName) {
-    var ads = ADS.filter(function(a) { return a.persona === personaName && !a.parentAdId; });
+    var ads = ADS.filter(function(a) { return !_isBoundaryQuarantinedAd(a) && a.persona === personaName && !a.parentAdId; });
     var angleSet = {};
     var winners = 0;
     for (var i = 0; i < ads.length; i++) {
@@ -19381,6 +19398,7 @@ function renderPersonas() {
 
   for (var i = 0; i < PERSONAS.length; i++) {
     var per = PERSONAS[i];
+    if (_isBoundaryQuarantinedTaxonomy('persona', per && per.name)) continue;
     // 2026-05-19 — apply archive view filter
     var _isArchived = !!per.archivedAt;
     if (_view === 'active'   && _isArchived) continue;
@@ -19408,7 +19426,7 @@ function renderPersonas() {
 
     // Angle name pills (clickable → show angle detail or filter)
     var angleNameSet = {};
-    ADS.filter(function(a) { return a.persona === per.name && !a.parentAdId; }).forEach(function(a) {
+    ADS.filter(function(a) { return !_isBoundaryQuarantinedAd(a) && a.persona === per.name && !a.parentAdId; }).forEach(function(a) {
       if (a.angle) angleNameSet[a.angle] = true;
     });
     var angleNameList = Object.keys(angleNameSet);
@@ -19465,6 +19483,7 @@ function renderCreatives() {
   var filtered = [];
   for (var i = 0; i < ADS.length; i++) {
     var ad = ADS[i];
+    if (_isBoundaryQuarantinedAd(ad)) continue;
     // Include variations that have parentAdId but exclude matrix-cell tracker refs
     if (ad.trackerRefId) continue; // skip matrix-cell clones only
     if (ad.parentAdId && ad.adOrigin !== 'Winner Variation') continue; // skip non-winner variations
@@ -24303,7 +24322,7 @@ function renderProduction() {
 
 // Auto-derive angle status from the highest-priority status of its ads
 function deriveAngleStatus(angleName) {
-  var ads = ADS.filter(function(a) { return a.angle === angleName && !a.parentAdId; });
+  var ads = ADS.filter(function(a) { return !_isBoundaryQuarantinedAd(a) && a.angle === angleName && !a.parentAdId; });
   if (ads.length === 0) return 'Untested';
   var statuses = ads.map(function(a) { return a.status || 'Untested'; });
   var priority = ['Winner', 'Scale', 'Mild Winner', 'Testing', 'Ready to Launch', 'In Production', 'Approved', 'Complete', 'Loser', 'Untested'];
@@ -24315,7 +24334,7 @@ function deriveAngleStatus(angleName) {
 
 // Auto-derive persona status from the highest-priority status of its ads
 function derivePersonaStatus(personaName) {
-  var ads = ADS.filter(function(a) { return a.persona === personaName && !a.parentAdId; });
+  var ads = ADS.filter(function(a) { return !_isBoundaryQuarantinedAd(a) && a.persona === personaName && !a.parentAdId; });
   if (ads.length === 0) return 'Untested';
   var statuses = ads.map(function(a) { return a.status || 'Untested'; });
   var priority = ['Winner', 'Scale', 'Mild Winner', 'Testing', 'Ready to Launch', 'In Production', 'Approved', 'Complete', 'Loser', 'Untested'];
@@ -25560,6 +25579,7 @@ function populateFilterOptions() {
   var fAngle = document.getElementById('fAngle');
   var angHtml = '<option value="">All Angles</option>';
   for (var i = 0; i < ANGLES.length; i++) {
+    if (_isBoundaryQuarantinedTaxonomy('angle', ANGLES[i] && ANGLES[i].name)) continue;
     var sel = ANGLES[i].name === curAngle ? ' selected' : '';
     angHtml += '<option value="' + escAttr(ANGLES[i].name) + '"' + sel + '>' + esc(ANGLES[i].name) + '</option>';
   }
@@ -25569,6 +25589,7 @@ function populateFilterOptions() {
   var fPersona = document.getElementById('fPersona');
   var perHtml = '<option value="">All Personas</option>';
   for (var i = 0; i < PERSONAS.length; i++) {
+    if (_isBoundaryQuarantinedTaxonomy('persona', PERSONAS[i] && PERSONAS[i].name)) continue;
     var sel = PERSONAS[i].name === curPersona ? ' selected' : '';
     perHtml += '<option value="' + escAttr(PERSONAS[i].name) + '"' + sel + '>' + esc(PERSONAS[i].name) + '</option>';
   }
@@ -25618,6 +25639,7 @@ function populateFilterOptions() {
   var fAdType = document.getElementById('fAdType');
   var adTypeSet = {};
   for (var i = 0; i < ADS.length; i++) {
+    if (_isBoundaryQuarantinedAd(ADS[i])) continue;
     if (ADS[i].adType) adTypeSet[ADS[i].adType] = true;
   }
   var atHtml = '<option value="">All Ad Types</option>';
@@ -27786,13 +27808,7 @@ function syncClickUp() {
   }
 
   var listId = activeProd.clickupListId;
-  var linkMismatch = (typeof _clickUpListProductMismatch === 'function')
-    ? _clickUpListProductMismatch(activeProd, listId, activeProd.clickupListName)
-    : null;
-  if (linkMismatch) {
-    toast(linkMismatch, 'err', 8000);
-    var mismatchLbl = document.getElementById('statusLbl');
-    if (mismatchLbl) mismatchLbl.textContent = 'List mismatch';
+  if (!_guardClickUpListForProduct(activeProd, listId, activeProd.clickupListName, 'Sync blocked')) {
     return;
   }
 
@@ -27804,16 +27820,23 @@ function syncClickUp() {
 
   // Fetch tasks (paginated — ClickUp returns max 100 per page)
   fetchAllTasks(listId)
-    .then(function(tasks) {
+    .then(async function(tasks) {
       if (!tasks || tasks.length === 0) {
         toast('No tasks found in this list', 'warn');
         hideLoading();
         if (lbl) lbl.textContent = 'List is empty';
         return;
       }
+      _stampClickUpTasksWithProductBoundary(tasks, activeProd, listId, activeProd.clickupListName);
 
       // Import tasks into ADS, ANGLES, PERSONAS
-      importTasksFromClickUp(tasks);
+      await importTasksFromClickUp(tasks);
+      await _applyProductBoundaryQuarantine(activeProductId, {
+        ADS: ADS,
+        MANUAL_ACTIONS: MANUAL_ACTIONS,
+        ANGLES: ANGLES,
+        PERSONAS: PERSONAS
+      });
 
       // Record sync time on the product
       var _syncedProd = null;
@@ -27860,6 +27883,9 @@ function fetchAllTasks(listId) {
     return apiFetch('/list/' + listId + '/task?include_closed=true&subtasks=true&page=' + page)
       .then(function(resp) {
         var tasks = (resp && resp.tasks) ? resp.tasks : [];
+        for (var ti = 0; ti < tasks.length; ti++) {
+          if (tasks[ti]) tasks[ti].list_id = tasks[ti].list_id || listId;
+        }
         allTasks = allTasks.concat(tasks);
         if (tasks.length === 100 && page < 4) {
           return fetchPage(page + 1);
@@ -28171,6 +28197,8 @@ function autoDiscoverTaxonomy(sourceAds) {
 }
 
 async function importTasksFromClickUp(tasks) {
+  var _importProduct = getActiveProduct();
+  _stampClickUpTasksWithProductBoundary(tasks, _importProduct, _productListId(_importProduct), _productListName(_importProduct));
   // Load cross-client tombstone from deleted_ads table.
   // 2026-05-05 fix: AWAIT the SELECT before processing tasks. Previously this
   // was fire-and-forget, racing with the tasks loop. If ClickUp's response
@@ -28274,7 +28302,7 @@ async function importTasksFromClickUp(tasks) {
   var seenPersonas = {};
 
   for (var i = 0; i < tasks.length; i++) {
-    var parsed = parseClickUpTask(tasks[i]);
+    var parsed = _stampAdProductBoundary(parseClickUpTask(tasks[i]), _importProduct);
     var existing = parsed._clickupId ? localByClickupId[parsed._clickupId] : null;
     var ad;
 
@@ -28291,6 +28319,7 @@ async function importTasksFromClickUp(tasks) {
           existing[fk] = freshVal;
         }
       }
+      _stampAdProductBoundary(existing, _importProduct);
       // ── taskType: one-way upgrade (format → production) ──
       // _PRESERVE_LOCAL keeps `taskType` from being blindly overwritten on
       // every sync (so an app-created production task stays production even
@@ -29391,6 +29420,8 @@ function pollFullSync() {
   // the guard inside the .then() below.
   var _startProductId = activeProductId;
   var _startListId = activeProd.clickupListId;
+  var _startListName = activeProd.clickupListName || '';
+  if (!_guardClickUpListForProduct(activeProd, _startListId, _startListName, 'Live sync blocked')) return;
 
   var dot = document.getElementById('statusDot');
   if (dot) dot.className = 'live-dot syncing';
@@ -29411,11 +29442,12 @@ function pollFullSync() {
         return;
       }
       if (!tasks || !tasks.length) { _onSyncSuccess(dot, 0, false); return; }
+      _stampClickUpTasksWithProductBoundary(tasks, activeProd, _startListId, _startListName);
 
       // Build lookup: _clickupId → freshly-parsed task
       var taskMap = {};
       for (var i = 0; i < tasks.length; i++) {
-        var parsed = parseClickUpTask(tasks[i]);
+        var parsed = _stampAdProductBoundary(parseClickUpTask(tasks[i]), activeProd);
         if (parsed._clickupId) taskMap[parsed._clickupId] = parsed;
       }
 
@@ -29697,6 +29729,7 @@ function pollFullSync() {
             continue;
           }
           var freshAd = taskMap[cuid];
+          _stampAdProductBoundary(freshAd, _importProduct);
           // ── ACTION-PLAN RECOVERY (orphan re-link) ──────────────────
           // If the fresh task's description contains our hidden marker
           // `app_action_id:<id>` AND that id matches an existing
@@ -29946,6 +29979,17 @@ function pollFullSync() {
           try { console.log('[pollFullSync] _apRepairMASourceAdIds repaired', _repaired, 'MA(s)'); } catch (e) {}
         }
       } catch (e) { console.warn('[pollFullSync] MA repair failed:', e); }
+
+      try {
+        await _applyProductBoundaryQuarantine(_startProductId, {
+          ADS: ADS,
+          MANUAL_ACTIONS: MANUAL_ACTIONS,
+          ANGLES: ANGLES,
+          PERSONAS: PERSONAS
+        });
+      } catch (e) {
+        console.warn('[pollFullSync] product-boundary quarantine failed', e);
+      }
 
       _onSyncSuccess(dot, fieldUpdates, changed);
 
@@ -31017,7 +31061,9 @@ function apResolveAllCards() {
   var maCoveredAdIds = {};
   for (var i = 0; i < MANUAL_ACTIONS.length; i++) {
     var ma = MANUAL_ACTIONS[i];
+    if (_isBoundaryQuarantinedAction(ma)) continue;
     var r = apResolveCard(ma);
+    if (r && r.ad && _isBoundaryQuarantinedAd(r.ad)) continue;
     if (r) {
       out.push(r);
       // 2026-05-20 — KL- 12991/9821 duplicate-card root-cause fix.
@@ -31047,6 +31093,7 @@ function apResolveAllCards() {
       for (var ai = 0; ai < ADS.length; ai++) {
         var ad = ADS[ai];
         if (!ad || !ad.id) continue;
+        if (_isBoundaryQuarantinedAd(ad)) continue;
         if (ad.deleted_at || ad.deletedAt) continue;
         if (maCoveredAdIds[ad.id]) continue;
         // 2026-05-19 — Layer 2 of app-created-heal: if the AD was pushed by
@@ -32005,6 +32052,7 @@ async function switchProduct(productId) {
   }
 
   activeProductId = productId;
+  PRODUCT_BOUNDARY_QUARANTINE = { ads: {}, actions: {}, angles: {}, personas: {}, reasons: {} };
   // CRITICAL: clear the guard BEFORE loadProductData completes. Any sync / save /
   // realtime merge that fires during the load window will now bail (because
   // _adsProductId !== activeProductId), preventing product-data corruption.
@@ -32561,6 +32609,7 @@ async function cleanStaleAds(productId) {
     toast('Switch to this product first', 'err');
     return;
   }
+  if (!_guardClickUpListForProduct(prod, prod.clickupListId, prod.clickupListName, 'Cleanup blocked')) return;
 
   // 1. Fetch ALL task IDs from the currently-linked list
   showLoading('Fetching ' + (prod.clickupListName || prod.clickupListId) + ' tasks…');
@@ -32574,8 +32623,19 @@ async function cleanStaleAds(productId) {
   }
   hideLoading();
   if (!liveTasks) liveTasks = [];
+  _stampClickUpTasksWithProductBoundary(liveTasks, prod, prod.clickupListId, prod.clickupListName);
   var liveTaskIds = {};
   liveTasks.forEach(function (t) { if (t && t.id) liveTaskIds[t.id] = true; });
+  try {
+    await _applyProductBoundaryQuarantine(productId, {
+      ADS: ADS,
+      MANUAL_ACTIONS: MANUAL_ACTIONS,
+      ANGLES: ANGLES,
+      PERSONAS: PERSONAS
+    });
+  } catch (e) {
+    console.warn('[cleanStaleAds] product-boundary quarantine failed', e);
+  }
 
   // ── SAFETY GUARDS ─────────────────────────────────────────────
   // The original cleanup had a silent bug: if fetchAllTasks returned an
@@ -32642,6 +32702,16 @@ async function cleanStaleAds(productId) {
     var cuid = ad._clickupId || ad.clickupTaskId || null;
     var origin = ad.adOrigin || ad.ad_origin || '';
     var hasParent = !!(ad.parentAdId || ad.parent_ad_id);
+
+    // Product-boundary quarantine is stronger than the normal user-work
+    // protections: these rows are known duplicates/wrong-list imports under
+    // the selected product. Keep the actual delete behind the confirmation
+    // modal, but do not let action/cell references make a wrong-product row
+    // immortal.
+    if (_isBoundaryQuarantinedAd(ad)) {
+      stale.push(ad);
+      continue;
+    }
 
     // Protect: local-only creations (Winner Variation, New Find, no CU link)
     if (origin === 'Winner Variation' || hasParent) { protectedCount.variation++; continue; }
@@ -32768,6 +32838,11 @@ async function cleanStaleAds(productId) {
   // 4. Bulk soft-delete + tombstone
   showLoading('Removing ' + stale.length + ' stale ads…');
   var staleIds = stale.map(function (a) { return a.id; });
+  var staleClickUpIds = {};
+  stale.forEach(function(a) {
+    var cuid = _clickupIdForAd(a);
+    if (cuid) staleClickUpIds[cuid] = true;
+  });
   var nowIso = new Date().toISOString();
   try {
     var softResp = await SB.from('ads').update({ deleted_at: nowIso }).in('id', staleIds);
@@ -32822,6 +32897,32 @@ async function cleanStaleAds(productId) {
       if (!CELL_CREATIVE_ASSIGNMENTS[k].length) delete CELL_CREATIVE_ASSIGNMENTS[k];
     });
   }
+  var removedActionIds = [];
+  var removedActionDbIds = [];
+  if (typeof MANUAL_ACTIONS !== 'undefined' && Array.isArray(MANUAL_ACTIONS)) {
+    MANUAL_ACTIONS = MANUAL_ACTIONS.filter(function(ma) {
+      if (!ma) return false;
+      var src = ma.sourceAdId || ma.adId || '';
+      var cu = _clickupIdForAction(ma);
+      var remove = (src && staleSet[src]) || (cu && staleClickUpIds[cu]);
+      if (remove) {
+        if (ma.id) removedActionIds.push(ma.id);
+        if (ma._dbId) removedActionDbIds.push(ma._dbId);
+        if (typeof _rememberManualActionDeletion === 'function' && ma.id) {
+          try { _rememberManualActionDeletion(ma.id); } catch (e) {}
+        }
+        return false;
+      }
+      return true;
+    });
+    if (removedActionDbIds.length && SB) {
+      try {
+        await SB.from('manual_actions').delete().in('id', removedActionDbIds);
+      } catch (e) {
+        console.warn('[cleanStaleAds] linked manual action delete non-fatal error', e);
+      }
+    }
+  }
   var taxonomyPruned = { angles: [], personas: [] };
   try {
     taxonomyPruned = await _pruneTaxonomyAfterStaleCleanup(productId, stale, liveTasks);
@@ -32845,7 +32946,8 @@ async function cleanStaleAds(productId) {
       taxonomyPruned.personas.length + ' stale persona' +
       (taxonomyPruned.personas.length === 1 ? '' : 's');
   }
-  toast('Removed ' + stale.length + ' stale ads' + taxMsg + ' from ' + (prod.name || ''), 'ok', 5000);
+  var actionMsg = removedActionIds.length ? ' and removed ' + removedActionIds.length + ' linked action' + (removedActionIds.length === 1 ? '' : 's') : '';
+  toast('Removed ' + stale.length + ' stale ads' + actionMsg + taxMsg + ' from ' + (prod.name || ''), 'ok', 5000);
 }
 
 // Wrap renderAll to auto-save after every render that involves data
@@ -33199,6 +33301,300 @@ function getActiveProduct() {
     if (PRODUCTS[i].id === activeProductId) return PRODUCTS[i];
   }
   return null;
+}
+
+var PRODUCT_BOUNDARY_QUARANTINE = { ads: {}, actions: {}, angles: {}, personas: {}, reasons: {} };
+
+function _productListId(prod) {
+  return prod && (prod.clickupListId || (prod.config && (prod.config.clickup_list_id || prod.config.clickupListId))) || '';
+}
+
+function _productListName(prod) {
+  return prod && (prod.clickupListName || (prod.config && (prod.config.clickup_list_name || prod.config.clickupListName))) || '';
+}
+
+function _productInsPrefix(prod) {
+  return prod && (prod.insPrefix || (prod.config && (prod.config.ins_prefix || prod.config.insPrefix))) || '';
+}
+
+function _productById(pid) {
+  for (var i = 0; i < PRODUCTS.length; i++) {
+    if (PRODUCTS[i] && PRODUCTS[i].id === pid) return PRODUCTS[i];
+  }
+  return null;
+}
+
+function _clickupIdForAd(ad) {
+  return ad && (ad._clickupId || ad.clickupTaskId || (_looksLikeClickUpTaskId(ad.id) ? ad.id : '')) || '';
+}
+
+function _clickupIdForAction(act) {
+  return act && (act._clickupId || act.clickupTaskId || act.clickupId || '') || '';
+}
+
+function _adSourceListId(ad) {
+  return ad && (ad.clickupListId || ad.listId || ad._clickupListId || ad.clickup_list_id || '') || '';
+}
+
+function _adSourceListName(ad) {
+  return ad && (ad.clickupListName || ad.listName || ad._clickupListName || ad.clickup_list_name || '') || '';
+}
+
+function _adBoundaryText(ad) {
+  if (!ad) return '';
+  var bits = [
+    ad.formatName, ad.taskName, ad.title, ad.angle, ad.persona,
+    ad.clickupListName, ad.listName, ad.description, ad.adOrigin
+  ];
+  try {
+    if (ad._customFields) bits.push(JSON.stringify(ad._customFields));
+  } catch (e) {}
+  return String(bits.filter(Boolean).join(' ')).toLowerCase();
+}
+
+function _significantProductTokens(prod) {
+  var stop = {
+    command: 1, center: 1, mastery: 1, master: 1, scripts: 1, script: 1,
+    final: 1, bundle: 1, notes: 1, note: 1, guide: 1, guides: 1,
+    product: 1, store: 1, stores: 1, creative: 1, creatives: 1
+  };
+  var raw = [
+    prod && prod.name,
+    _productListName(prod),
+    _productInsPrefix(prod)
+  ].filter(Boolean).join(' ');
+  return _normProductListName(raw).split(' ').filter(function(tok) {
+    return tok && tok.length >= 3 && !stop[tok];
+  });
+}
+
+function _productBoundaryScore(prod, ad) {
+  if (!prod || !ad) return 0;
+  var score = 0;
+  var text = _adBoundaryText(ad);
+  var listId = _adSourceListId(ad);
+  var prodListId = _productListId(prod);
+  if (listId && prodListId && String(listId) === String(prodListId)) score += 8;
+  var listName = _normProductListName(_adSourceListName(ad));
+  var prodName = _normProductListName(prod.name);
+  if (listName && prodName && (listName.indexOf(prodName) !== -1 || prodName.indexOf(listName) !== -1)) score += 4;
+  var tokens = _significantProductTokens(prod);
+  tokens.forEach(function(tok) {
+    if (text.indexOf(tok) !== -1) score += 1;
+  });
+  var prefix = String(_productInsPrefix(prod) || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  if (prefix && prefix.length >= 2) {
+    var nm = String(ad.formatName || ad.taskName || ad.title || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+    if (nm.indexOf(prefix) === 0) score += 3;
+  }
+  return score;
+}
+
+function _isBoundaryQuarantinedAd(ad) {
+  return !!(ad && (ad._productBoundaryQuarantined || (PRODUCT_BOUNDARY_QUARANTINE.ads && PRODUCT_BOUNDARY_QUARANTINE.ads[ad.id])));
+}
+
+function _isBoundaryQuarantinedAction(act) {
+  return !!(act && (act._productBoundaryQuarantined || (PRODUCT_BOUNDARY_QUARANTINE.actions && PRODUCT_BOUNDARY_QUARANTINE.actions[act.id])));
+}
+
+function _isBoundaryQuarantinedTaxonomy(kind, name) {
+  var key = String(name || '').toLowerCase().trim();
+  if (!key) return false;
+  var bucket = kind === 'persona' ? PRODUCT_BOUNDARY_QUARANTINE.personas : PRODUCT_BOUNDARY_QUARANTINE.angles;
+  return !!(bucket && bucket[key]);
+}
+
+function _stampClickUpTasksWithProductBoundary(tasks, prod, listId, listName) {
+  tasks = Array.isArray(tasks) ? tasks : [];
+  listId = listId || _productListId(prod);
+  listName = listName || _productListName(prod);
+  for (var i = 0; i < tasks.length; i++) {
+    var task = tasks[i];
+    if (!task) continue;
+    if (listId) {
+      task.list_id = task.list_id || listId;
+      if (!task.list) task.list = {};
+      task.list.id = task.list.id || listId;
+    }
+    if (listName) {
+      task.list_name = task.list_name || listName;
+      if (!task.list) task.list = {};
+      task.list.name = task.list.name || listName;
+    }
+    if (prod) {
+      task._immuviProductId = prod.id || '';
+      task._immuviProductName = prod.name || '';
+    }
+  }
+  return tasks;
+}
+
+function _stampAdProductBoundary(ad, prod) {
+  if (!ad || !prod) return ad;
+  ad._syncProductId = prod.id || activeProductId || '';
+  ad._syncProductName = prod.name || '';
+  if (!ad.clickupListId && _productListId(prod)) ad.clickupListId = _productListId(prod);
+  if (!ad.listId && ad.clickupListId) ad.listId = ad.clickupListId;
+  if (!ad.clickupListName && _productListName(prod)) ad.clickupListName = _productListName(prod);
+  if (!ad.listName && ad.clickupListName) ad.listName = ad.clickupListName;
+  return ad;
+}
+
+function _guardClickUpListForProduct(prod, listId, listName, contextLabel) {
+  if (!prod || !listId) return true;
+  var mismatch = (typeof _clickUpListProductMismatch === 'function')
+    ? _clickUpListProductMismatch(prod, listId, listName || _productListName(prod))
+    : null;
+  if (!mismatch) return true;
+  toast((contextLabel ? contextLabel + ': ' : '') + mismatch, 'err', 8000);
+  var lbl = document.getElementById('statusLbl');
+  if (lbl) lbl.textContent = 'List mismatch';
+  return false;
+}
+
+async function _queryBoundaryDuplicateAds(productId, clickupIds) {
+  if (!SB || !clickupIds || !clickupIds.length) return {};
+  var out = {};
+  var uniq = [];
+  var seen = {};
+  clickupIds.forEach(function(id) {
+    id = String(id || '').trim();
+    if (id && !seen[id]) { seen[id] = true; uniq.push(id); }
+  });
+  for (var i = 0; i < uniq.length; i += 100) {
+    var chunk = uniq.slice(i, i + 100);
+    try {
+      var res = await SB.from('ads')
+        .select('id,product_id,format_name,clickup_task_id,angle,persona,meta,deleted_at')
+        .in('clickup_task_id', chunk)
+        .is('deleted_at', null);
+      if (res && res.data) {
+        res.data.forEach(function(row) {
+          if (!row || row.product_id === productId || !row.clickup_task_id) return;
+          var ad = _rowToAd(row);
+          ad.product_id = row.product_id;
+          if (!out[row.clickup_task_id]) out[row.clickup_task_id] = [];
+          out[row.clickup_task_id].push(ad);
+        });
+      }
+    } catch (e) {
+      console.warn('[product-boundary] duplicate lookup failed', e);
+    }
+  }
+  return out;
+}
+
+async function _applyProductBoundaryQuarantine(productId, state) {
+  PRODUCT_BOUNDARY_QUARANTINE = { ads: {}, actions: {}, angles: {}, personas: {}, reasons: {} };
+  if (!state || !Array.isArray(state.ADS)) return state;
+  var prod = _productById(productId) || getActiveProduct();
+  if (!prod) return state;
+  var prodListId = _productListId(prod);
+  var ids = [];
+  state.ADS.forEach(function(ad) {
+    var cuid = _clickupIdForAd(ad);
+    if (cuid) ids.push(cuid);
+  });
+  var duplicateMap = await _queryBoundaryDuplicateAds(productId, ids);
+  var quarantinedCuIds = {};
+
+  state.ADS.forEach(function(ad) {
+    if (!ad || !ad.id) return;
+    var reason = '';
+    var listId = _adSourceListId(ad);
+    if (listId && prodListId && String(listId) !== String(prodListId)) {
+      for (var pi = 0; pi < PRODUCTS.length; pi++) {
+        var other = PRODUCTS[pi];
+        if (!other || other.id === productId) continue;
+        if (_productListId(other) && String(_productListId(other)) === String(listId)) {
+          reason = 'source list belongs to ' + (other.name || 'another product');
+          break;
+        }
+      }
+    }
+    var cuid = _clickupIdForAd(ad);
+    var conflicts = cuid ? (duplicateMap[cuid] || []) : [];
+    if (!reason && conflicts.length) {
+      var currentScore = _productBoundaryScore(prod, ad);
+      var bestOther = null;
+      var bestScore = 0;
+      for (var ci = 0; ci < conflicts.length; ci++) {
+        var owner = _productById(conflicts[ci].product_id);
+        if (!owner) continue;
+        var score = Math.max(
+          _productBoundaryScore(owner, ad),
+          _productBoundaryScore(owner, conflicts[ci])
+        );
+        if (score > bestScore) {
+          bestScore = score;
+          bestOther = owner;
+        }
+      }
+      if (bestOther && bestScore >= 1 && bestScore > currentScore) {
+        reason = 'duplicate ClickUp task appears to belong to ' + (bestOther.name || 'another product');
+      }
+    }
+    if (!reason && ad._syncProductId && ad._syncProductId !== productId) {
+      reason = 'synced for ' + (ad._syncProductName || ad._syncProductId);
+    }
+    if (reason) {
+      ad._productBoundaryQuarantined = true;
+      ad._productBoundaryReason = reason;
+      PRODUCT_BOUNDARY_QUARANTINE.ads[ad.id] = true;
+      PRODUCT_BOUNDARY_QUARANTINE.reasons[ad.id] = reason;
+      if (cuid) quarantinedCuIds[cuid] = true;
+    } else {
+      delete ad._productBoundaryQuarantined;
+      delete ad._productBoundaryReason;
+    }
+  });
+
+  var quarantinedAdIds = PRODUCT_BOUNDARY_QUARANTINE.ads;
+  var quarantinedAngleUse = {};
+  var quarantinedPersonaUse = {};
+  var liveAngleUse = {};
+  var livePersonaUse = {};
+  state.ADS.forEach(function(ad) {
+    var a = String((ad && ad.angle) || '').toLowerCase().trim();
+    var p = String((ad && ad.persona) || '').toLowerCase().trim();
+    if (_isBoundaryQuarantinedAd(ad)) {
+      if (a) quarantinedAngleUse[a] = true;
+      if (p) quarantinedPersonaUse[p] = true;
+    } else {
+      if (a) liveAngleUse[a] = true;
+      if (p) livePersonaUse[p] = true;
+    }
+  });
+
+  if (Array.isArray(state.MANUAL_ACTIONS)) {
+    state.MANUAL_ACTIONS.forEach(function(act) {
+      if (!act || !act.id) return;
+      var src = act.sourceAdId || act.adId || '';
+      var cu = _clickupIdForAction(act);
+      var q = (src && quarantinedAdIds[src]) || (cu && quarantinedCuIds[cu]);
+      if (q) {
+        act._productBoundaryQuarantined = true;
+        act._productBoundaryReason = 'linked to wrong-product ad';
+        PRODUCT_BOUNDARY_QUARANTINE.actions[act.id] = true;
+        var aa = String((act.sourceAngle || act.angle || '')).toLowerCase().trim();
+        var pp = String((act.sourcePersona || act.persona || '')).toLowerCase().trim();
+        if (aa) quarantinedAngleUse[aa] = true;
+        if (pp) quarantinedPersonaUse[pp] = true;
+      } else {
+        delete act._productBoundaryQuarantined;
+        delete act._productBoundaryReason;
+      }
+    });
+  }
+
+  Object.keys(quarantinedAngleUse).forEach(function(k) {
+    if (!liveAngleUse[k]) PRODUCT_BOUNDARY_QUARANTINE.angles[k] = true;
+  });
+  Object.keys(quarantinedPersonaUse).forEach(function(k) {
+    if (!livePersonaUse[k]) PRODUCT_BOUNDARY_QUARANTINE.personas[k] = true;
+  });
+  return state;
 }
 
 function _normProductListName(value) {

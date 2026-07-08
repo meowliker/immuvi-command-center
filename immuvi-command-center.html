@@ -16087,6 +16087,30 @@ function _dedupCellAssignment(cellKey) {
   return clean;
 }
 
+function _removeCreativeFromNonCanonicalCells(adId, targetAngle, targetPersona) {
+  if (!adId || typeof CELL_CREATIVE_ASSIGNMENTS === 'undefined' || !CELL_CREATIVE_ASSIGNMENTS) return [];
+  var targetKey = (targetAngle && targetPersona) ? (targetAngle + '||' + targetPersona) : '';
+  var changedKeys = [];
+  Object.keys(CELL_CREATIVE_ASSIGNMENTS).forEach(function(cellKey) {
+    if (cellKey === targetKey) return;
+    var arr = CELL_CREATIVE_ASSIGNMENTS[cellKey] || [];
+    if (arr.indexOf(adId) === -1) return;
+    CELL_CREATIVE_ASSIGNMENTS[cellKey] = arr.filter(function(id) { return id !== adId; });
+    if (CELL_CREATIVE_ASSIGNMENTS[cellKey].length === 0) delete CELL_CREATIVE_ASSIGNMENTS[cellKey];
+    changedKeys.push(cellKey);
+  });
+
+  Object.keys(MATRIX_CELL_META || {}).forEach(function(key) {
+    var parts = key.split('||');
+    if (parts.length !== 3 || parts[0] !== adId) return;
+    var cellKey = parts[1] + '||' + parts[2];
+    if (cellKey === targetKey) return;
+    delete MATRIX_CELL_META[key];
+    if (changedKeys.indexOf(cellKey) === -1) changedKeys.push(cellKey);
+  });
+  return changedKeys;
+}
+
 // Bug 8: heal orphaned cell-assignment ids by remapping them to the matching
 // AD's CURRENT id. Fixes the "Matrix cell empties after refresh" symptom that
 // happens when a ClickUp poll re-keys an AD's id (or when a sync delivers an
@@ -33662,26 +33686,12 @@ function updateCreativeFieldInline(adId, field, val) {
   for (var i = 0; i < ADS.length; i++) { if (ADS[i].id === adId) { ad = ADS[i]; break; } }
   if (!ad) return;
 
-  // When angle or persona changes, remove task from its OLD cell in CELL_CREATIVE_ASSIGNMENTS
-  // before the new value is set — otherwise the old entry lingers and creates a ghost cell
-  if (field === 'angle' && ad.angle && ad.angle !== val && ad.persona) {
-    var oldKey = ad.angle + '||' + ad.persona;
-    if (CELL_CREATIVE_ASSIGNMENTS[oldKey]) {
-      CELL_CREATIVE_ASSIGNMENTS[oldKey] = CELL_CREATIVE_ASSIGNMENTS[oldKey].filter(function(id) { return id !== adId; });
-      if (CELL_CREATIVE_ASSIGNMENTS[oldKey].length === 0) delete CELL_CREATIVE_ASSIGNMENTS[oldKey];
-    }
-    delete MATRIX_CELL_META[adId + '||' + ad.angle + '||' + ad.persona];
-  }
-  if (field === 'persona' && ad.persona && ad.persona !== val && ad.angle) {
-    var oldKey = ad.angle + '||' + ad.persona;
-    if (CELL_CREATIVE_ASSIGNMENTS[oldKey]) {
-      CELL_CREATIVE_ASSIGNMENTS[oldKey] = CELL_CREATIVE_ASSIGNMENTS[oldKey].filter(function(id) { return id !== adId; });
-      if (CELL_CREATIVE_ASSIGNMENTS[oldKey].length === 0) delete CELL_CREATIVE_ASSIGNMENTS[oldKey];
-    }
-    delete MATRIX_CELL_META[adId + '||' + ad.angle + '||' + ad.persona];
-  }
-
   ad[field] = val;
+
+  var movedCellKeys = [];
+  if (field === 'angle' || field === 'persona') {
+    movedCellKeys = _removeCreativeFromNonCanonicalCells(adId, ad.angle, ad.persona);
+  }
 
   // Auto-add to ANGLES/PERSONAS arrays if new value not seen before
   var addedNew = false;
@@ -33702,6 +33712,14 @@ function updateCreativeFieldInline(adId, field, val) {
   // Recalc stats + save
   P = process(ADS);
   buildCreativeUsageIndex();
+  if (movedCellKeys.length) {
+    var targetCellKey = (ad.angle && ad.persona) ? (ad.angle + '||' + ad.persona) : '';
+    if (targetCellKey && movedCellKeys.indexOf(targetCellKey) === -1) movedCellKeys.push(targetCellKey);
+    movedCellKeys.forEach(function(cellKey) {
+      if (typeof _broadcastCellAssignment === 'function') _broadcastCellAssignment(cellKey, CELL_CREATIVE_ASSIGNMENTS[cellKey] || []);
+      if (typeof _writeMatrixCellDirect === 'function') _writeMatrixCellDirect(cellKey);
+    });
+  }
   deriveWinners();
   genActions();
   saveState();

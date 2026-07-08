@@ -1397,3 +1397,32 @@ Live data showed that most older `ads` rows had blank embedded `clickupListId/cl
 - Static checks confirm product-boundary quarantine is wired into product load, manual sync, live poll, Clean stale, Creative Tracker, Action Plan resolution, tab counts, taxonomy stats, tracker filters, and matrix auto-assignment.
 - Static checks confirm `syncClickUp()`, `pollFullSync()`, and `cleanStaleAds()` all call the shared ClickUp list/product guard before fetching.
 - Static regression checks confirm Clean stale still uses modal confirmation, Bug 24 lowercase `assigned` status handling remains present, and no `Untested -> to do` status map was reintroduced.
+
+---
+
+## Bug 30 — Moved creatives stayed assigned to their old matrix cell
+**Status:** ✅ done — fixed 2026-07-08 (local only, not pushed)
+**Reported:** 2026-07-08
+**Surface:** Creative Tracker inline Angle/Persona edits → Creative Matrix cells
+
+### Symptom
+- Two `Founding Member` tasks moved to `Canva Mastery Buyers` still appeared in the old `Side-Hustle Sellers 22-45` cell.
+- The ad rows had the correct persona, but the old matrix cell still counted/rendered the same task ids.
+
+### Root cause
+Matrix placement is stored separately from the ad's canonical `angle` / `persona` fields in `matrix_cells.creative_assignments` and per-cell metadata.
+The inline move path only removed the creative from the one old cell implied by the current ad fields.
+If the creative was already present in another stale cell assignment, that extra assignment survived.
+
+The general orphan purge intentionally does not remove every mismatch between `ad.angle/persona` and cell placement because the app supports intentional per-cell production clones and manual picker flows.
+
+### Fix
+1. Added `_removeCreativeFromNonCanonicalCells(adId, targetAngle, targetPersona)` to remove a moved creative from every non-target matrix cell and clear its stale per-cell metadata.
+2. Wired the helper only into canonical Creative Tracker angle/persona edits, preserving the Add Creative picker and production-clone behavior.
+3. Broadcast and directly upsert changed matrix cells so peers and Supabase see the move cleanup quickly, then keep the normal `saveState()` snapshot as the full persistence backstop.
+
+### Verified
+- `immuvi-command-center.html` script parses cleanly via Node `new Function()` extraction.
+- `git diff --check` passed.
+- Static checks confirm the move helper is present, the inline angle/persona editor calls it, cell assignment broadcast remains available, Clean stale modal code remains present, lowercase `Assigned` status handling remains present, and no `Untested -> to do` map was introduced.
+- Live data repair confirmed `Founding Member × Canva Mastery Buyers` keeps `AD-1783077201511` / `AD-1783077282760`, while `Founding Member × Side-Hustle Sellers 22-45` now only keeps `AD-1783071530496`.

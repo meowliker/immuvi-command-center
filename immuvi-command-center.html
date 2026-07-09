@@ -16172,6 +16172,53 @@ function _syncCanonicalCellAssignmentForAd(ad, options) {
   return changedKeys;
 }
 
+function _reconcileSyncedAdsToCanonicalCells(options) {
+  options = options || {};
+  if (!Array.isArray(ADS)) return 0;
+  var assignmentCellsByAd = {};
+  Object.keys(CELL_CREATIVE_ASSIGNMENTS || {}).forEach(function(cellKey) {
+    var ids = CELL_CREATIVE_ASSIGNMENTS[cellKey];
+    if (!Array.isArray(ids)) return;
+    ids.forEach(function(adId) {
+      if (!adId) return;
+      if (!assignmentCellsByAd[adId]) assignmentCellsByAd[adId] = [];
+      assignmentCellsByAd[adId].push(cellKey);
+    });
+  });
+  var metaCellsByAd = {};
+  Object.keys(MATRIX_CELL_META || {}).forEach(function(key) {
+    var parts = key.split('||');
+    if (parts.length !== 3 || !parts[0]) return;
+    if (!metaCellsByAd[parts[0]]) metaCellsByAd[parts[0]] = [];
+    metaCellsByAd[parts[0]].push(parts[1] + '||' + parts[2]);
+  });
+  var changed = 0;
+  for (var i = 0; i < ADS.length; i++) {
+    var ad = ADS[i];
+    if (!ad || !ad.id || _isBoundaryQuarantinedAd(ad)) continue;
+    var hasClickUpIdentity = !!(ad._clickupId || ad.clickupTaskId || (_looksLikeClickUpTaskId(ad.id) && ad.adOrigin === 'ClickUp'));
+    if (!hasClickUpIdentity) continue;
+    if (!ad.angle || !ad.persona) continue;
+    var targetKey = ad.angle + '||' + ad.persona;
+    var assignmentCells = assignmentCellsByAd[ad.id] || [];
+    var needsReconcile = assignmentCells.indexOf(targetKey) === -1;
+    for (var ci = 0; !needsReconcile && ci < assignmentCells.length; ci++) {
+      if (assignmentCells[ci] !== targetKey) needsReconcile = true;
+    }
+    var metaCells = metaCellsByAd[ad.id] || [];
+    for (var mi = 0; !needsReconcile && mi < metaCells.length; mi++) {
+      if (metaCells[mi] !== targetKey) needsReconcile = true;
+    }
+    if (!needsReconcile) continue;
+    var changedKeys = _syncCanonicalCellAssignmentForAd(ad, {
+      persist: options.persist === true,
+      broadcast: options.broadcast === true
+    });
+    if (changedKeys.length) changed += changedKeys.length;
+  }
+  return changed;
+}
+
 // Bug 8: heal orphaned cell-assignment ids by remapping them to the matching
 // AD's CURRENT id. Fixes the "Matrix cell empties after refresh" symptom that
 // happens when a ClickUp poll re-keys an AD's id (or when a sync delivers an
@@ -27928,6 +27975,9 @@ function syncClickUp() {
         ANGLES: ANGLES,
         PERSONAS: PERSONAS
       });
+      if (typeof _reconcileSyncedAdsToCanonicalCells === 'function') {
+        _reconcileSyncedAdsToCanonicalCells({ persist: false, broadcast: false });
+      }
 
       // Record sync time on the product
       var _syncedProd = null;
@@ -28706,6 +28756,9 @@ async function importTasksFromClickUp(tasks) {
   }
 
   // Rebuild ANGLE_PERSONAS from ADS
+  if (typeof _reconcileSyncedAdsToCanonicalCells === 'function') {
+    _reconcileSyncedAdsToCanonicalCells({ persist: false, broadcast: false });
+  }
   initAnglePersonas();
 }
 
@@ -30097,6 +30150,14 @@ function pollFullSync() {
         });
       } catch (e) {
         console.warn('[pollFullSync] product-boundary quarantine failed', e);
+      }
+
+      if (typeof _reconcileSyncedAdsToCanonicalCells === 'function') {
+        var _canonicalCellCleanupCount = _reconcileSyncedAdsToCanonicalCells({ persist: false, broadcast: false });
+        if (_canonicalCellCleanupCount > 0) {
+          changed = true;
+          console.log('[pollFullSync] reconciled', _canonicalCellCleanupCount, 'stale synced cell assignment(s)');
+        }
       }
 
       _onSyncSuccess(dot, fieldUpdates, changed);

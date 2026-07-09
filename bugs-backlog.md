@@ -1401,7 +1401,7 @@ Live data showed that most older `ads` rows had blank embedded `clickupListId/cl
 ---
 
 ## Bug 30 — Moved creatives stayed assigned to their old matrix cell
-**Status:** ✅ done — fixed 2026-07-08 (local only, not pushed)
+**Status:** ✅ done — fixed 2026-07-08; sync hardening added 2026-07-09
 **Reported:** 2026-07-08
 **Surface:** Creative Tracker inline Angle/Persona edits → Creative Matrix cells
 
@@ -1432,9 +1432,21 @@ Follow-up fix:
 3. Wired the shared helper into Creative Tracker inline edits, Action Plan tag edits, generic custom-field saves, realtime field-update echoes, manual Sync existing-task updates, and background poll existing-task updates.
 4. For user edits, changed cells are broadcast and directly upserted. For background sync, the in-memory matrix is corrected and the normal `saveState()` flush persists the change.
 
+### Follow-up — 2026-07-09 sync canonicalization
+Some older duplicate assignments could still survive because they did not require a current angle/persona field change during the sync that loaded them.
+The per-ad mutation helper fixed future moves, but manual/background sync also needs a whole-product pass that treats ClickUp's current angle/persona as canonical for every active ClickUp-backed ad.
+
+Sync hardening:
+1. Added `_reconcileSyncedAdsToCanonicalCells(options)` to scan active ClickUp-linked ads after import/poll merges.
+2. For each synced ad, it calls `_syncCanonicalCellAssignmentForAd()` so the ad remains only in its canonical `angle × persona` cell and gets removed from stale cells.
+3. Wired the reconciliation into manual `syncClickUp()`, the end of `importTasksFromClickUp()`, and `pollFullSync()` after product-boundary quarantine.
+4. Scoped the reconciliation to ClickUp-backed ads only and skipped product-boundary quarantined rows so local-only/manual matrix work is not swept away by sync.
+5. Ran a live data repair for the existing duplicates: 23 active synced ads were cleaned, removing 25 stale cell references across 14 matrix cells.
+
 ### Verified
 - `immuvi-command-center.html` script parses cleanly via Node `new Function()` extraction.
 - `git diff --check` passed.
 - Static checks confirm the move helper is present, the inline angle/persona editor calls it, cell assignment broadcast remains available, Clean stale modal code remains present, lowercase `Assigned` status handling remains present, and no `Untested -> to do` map was introduced.
 - Live data repair confirmed `Founding Member × Canva Mastery Buyers` keeps `AD-1783077201511` / `AD-1783077282760`, while `Founding Member × Side-Hustle Sellers 22-45` now only keeps `AD-1783071530496`.
 - Follow-up live data repair confirmed `CIM-FM-01` / `AD-1783071530496` remains only in `Founding Member × Canva Mastery Buyers` after its canonical persona changed there.
+- Product-scoped live audit after the broader repair found 3,668 active ClickUp-backed ads and `0` duplicate/stale synced cell placements.

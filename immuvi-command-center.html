@@ -11647,6 +11647,20 @@ function _initRealtimeChannel(productId) {
       if (!ad._customFieldsRaw) ad._customFieldsRaw = {};
       ad._customFields[p.field] = (p.value == null ? '' : p.value);
       if (p.rawValue !== undefined) ad._customFieldsRaw[p.field] = p.rawValue;
+      var _customCanonicalChanged = false;
+      if (p.field === 'angle tag') {
+        ad.angle = p.value || '';
+        _customCanonicalChanged = true;
+        if (typeof _syncCanonicalCellAssignmentForAd === 'function') {
+          _syncCanonicalCellAssignmentForAd(ad, { persist: false, broadcast: false });
+        }
+      } else if (p.field === 'persona tag') {
+        ad.persona = p.value || '';
+        _customCanonicalChanged = true;
+        if (typeof _syncCanonicalCellAssignmentForAd === 'function') {
+          _syncCanonicalCellAssignmentForAd(ad, { persist: false, broadcast: false });
+        }
+      }
       // Editor === native assignees: when a peer changes Editor, also mirror
       // the new assignees array onto ad.assignees so subsequent pushes/diffs
       // operate on fresh data instead of stale-cached assignees. Safe no-op
@@ -11665,6 +11679,10 @@ function _initRealtimeChannel(productId) {
       // peer's change immediately.
       if (typeof renderActionPlan === 'function') {
         try { renderActionPlan(); } catch (e) {}
+      }
+      if (_customCanonicalChanged) {
+        try { if (typeof renderMatrix === 'function') renderMatrix(); } catch (e) {}
+        try { if (typeof renderCreatives === 'function') renderCreatives(); } catch (e) {}
       }
       return;
     }
@@ -11731,6 +11749,9 @@ function _initRealtimeChannel(productId) {
       }
     } else {
       ad[p.field] = p.value;
+      if ((p.field === 'angle' || p.field === 'persona') && typeof _syncCanonicalCellAssignmentForAd === 'function') {
+        _syncCanonicalCellAssignmentForAd(ad, { persist: false, broadcast: false });
+      }
     }
     // Targeted UI update for notes cell
     if (p.field === 'notes' || p.field === 'variationNotes') {
@@ -16108,6 +16129,46 @@ function _removeCreativeFromNonCanonicalCells(adId, targetAngle, targetPersona) 
     delete MATRIX_CELL_META[key];
     if (changedKeys.indexOf(cellKey) === -1) changedKeys.push(cellKey);
   });
+  return changedKeys;
+}
+
+function _syncCanonicalCellAssignmentForAd(ad, options) {
+  if (!ad || !ad.id) return [];
+  options = options || {};
+  var targetAngle = ad.angle || '';
+  var targetPersona = ad.persona || '';
+  var targetKey = (targetAngle && targetPersona) ? (targetAngle + '||' + targetPersona) : '';
+  var changedKeys = _removeCreativeFromNonCanonicalCells(ad.id, targetAngle, targetPersona);
+
+  if (targetKey) {
+    if (!CELL_CREATIVE_ASSIGNMENTS[targetKey]) CELL_CREATIVE_ASSIGNMENTS[targetKey] = [];
+    if (CELL_CREATIVE_ASSIGNMENTS[targetKey].indexOf(ad.id) === -1) {
+      CELL_CREATIVE_ASSIGNMENTS[targetKey].push(ad.id);
+      if (changedKeys.indexOf(targetKey) === -1) changedKeys.push(targetKey);
+    }
+    if (!ANGLE_PERSONAS[targetAngle]) ANGLE_PERSONAS[targetAngle] = [];
+    if (ANGLE_PERSONAS[targetAngle].indexOf(targetPersona) === -1) {
+      ANGLE_PERSONAS[targetAngle].push(targetPersona);
+    }
+
+    var cellAdKey = ad.id + '||' + targetAngle + '||' + targetPersona;
+    if (!MATRIX_CELL_META[cellAdKey]) MATRIX_CELL_META[cellAdKey] = {};
+    MATRIX_CELL_META[cellAdKey].status = ad.status || MATRIX_CELL_META[cellAdKey].status || 'Untested';
+    MATRIX_CELL_META[cellAdKey].funnelStage = ad.funnelStage || MATRIX_CELL_META[cellAdKey].funnelStage || 'TOF';
+    MATRIX_CELL_META[cellAdKey].formatName = ad.formatName || MATRIX_CELL_META[cellAdKey].formatName || '';
+    MATRIX_CELL_META[cellAdKey].hookType = ad.hookType || MATRIX_CELL_META[cellAdKey].hookType || '';
+    MATRIX_CELL_META[cellAdKey].adLink = ad.adLink || MATRIX_CELL_META[cellAdKey].adLink || '';
+    if (changedKeys.indexOf(targetKey) === -1) changedKeys.push(targetKey);
+  }
+
+  if (changedKeys.length && options.persist !== false) {
+    changedKeys.forEach(function(cellKey) {
+      if (typeof _broadcastCellAssignment === 'function' && options.broadcast !== false) {
+        _broadcastCellAssignment(cellKey, CELL_CREATIVE_ASSIGNMENTS[cellKey] || []);
+      }
+      if (typeof _writeMatrixCellDirect === 'function') _writeMatrixCellDirect(cellKey);
+    });
+  }
   return changedKeys;
 }
 
@@ -20863,10 +20924,16 @@ async function apEditAdField(adId, fieldKey, value) {
   // For 'angle tag' / 'persona tag' the AD has top-level fields (ad.angle, ad.persona).
   // For other custom fields, write into ad._customFields[lcName].
   var lc = String(fieldKey).toLowerCase();
+  var canonicalCellChanged = false;
   if (lc === 'angle tag') {
     ad.angle = value;
+    canonicalCellChanged = true;
   } else if (lc === 'persona tag') {
     ad.persona = value;
+    canonicalCellChanged = true;
+  }
+  if (canonicalCellChanged && typeof _syncCanonicalCellAssignmentForAd === 'function') {
+    _syncCanonicalCellAssignmentForAd(ad);
   }
   // Always mirror into the custom-fields cache too — the AP cell reads from there
   // and the next ClickUp sync expects this shape.
@@ -28333,6 +28400,7 @@ async function importTasksFromClickUp(tasks) {
     if (existing) {
       // Capture old formatName BEFORE overwrite so we can detect a rename
       var _prevFormatName = existing.formatName;
+      var _importCanonicalCellChanged = false;
 
       // UPDATE in-place: overwrite ClickUp-controlled fields, keep local metadata
       for (var f = 0; f < CLICKUP_FIELDS.length; f++) {
@@ -28340,8 +28408,12 @@ async function importTasksFromClickUp(tasks) {
         var freshVal = parsed[fk];
         // Only overwrite if ClickUp returned a real value (don't blank out local data)
         if (freshVal !== undefined && freshVal !== null && freshVal !== '') {
+          if ((fk === 'angle' || fk === 'persona') && existing[fk] !== freshVal) _importCanonicalCellChanged = true;
           existing[fk] = freshVal;
         }
+      }
+      if (_importCanonicalCellChanged && typeof _syncCanonicalCellAssignmentForAd === 'function') {
+        _syncCanonicalCellAssignmentForAd(existing, { persist: false, broadcast: false });
       }
       _stampAdProductBoundary(existing, _importProduct);
       // ── taskType: one-way upgrade (format → production) ──
@@ -29077,6 +29149,13 @@ function saveAdFieldUnified(adId, kind, fieldKey, value) {
 
     ad._customFields[lcName] = displayForLocal;
     ad._customFieldsRaw[lcName] = rawForLocal;
+    if (lcName === 'angle tag') {
+      ad.angle = displayForLocal || '';
+      if (typeof _syncCanonicalCellAssignmentForAd === 'function') _syncCanonicalCellAssignmentForAd(ad);
+    } else if (lcName === 'persona tag') {
+      ad.persona = displayForLocal || '';
+      if (typeof _syncCanonicalCellAssignmentForAd === 'function') _syncCanonicalCellAssignmentForAd(ad);
+    }
 
     // Native-assignees mirror: when the synthetic Editor field changes, also
     // update ad.assignees so the parse-time mirror stays consistent locally.
@@ -29562,6 +29641,7 @@ function pollFullSync() {
         var fresh = taskMap[_cuid];
         if (!fresh) continue;
         var oldFormatNameForMeta = ad.formatName;  // capture for cell-meta sync below
+        var _canonicalCellFieldChanged = false;
         // 2026-05-16 Phase 0: copy _tags from fresh CU sync onto the local ad.
         // Not added to _SYNC_DIFF_FIELDS because that loop's `freshVal !== ad[field]`
         // check always trips on array identity (false positive every sync, noisy
@@ -29615,9 +29695,13 @@ function pollFullSync() {
           if (field === 'persona' && freshVal && _p1PerTomb[String(freshVal).toLowerCase().trim()]) freshVal = '';
           if (freshVal !== undefined && freshVal !== null && freshVal !== '' && freshVal !== ad[field]) {
             ADS[i][field] = freshVal;
+            if (field === 'angle' || field === 'persona') _canonicalCellFieldChanged = true;
             changed = true;
             fieldUpdates++;
           }
+        }
+        if (_canonicalCellFieldChanged && typeof _syncCanonicalCellAssignmentForAd === 'function') {
+          _syncCanonicalCellAssignmentForAd(ad, { persist: false, broadcast: false });
         }
 
         // ── PRODUCTION TAG DIFF — detect tag_removed / tag_added events
@@ -33688,9 +33772,8 @@ function updateCreativeFieldInline(adId, field, val) {
 
   ad[field] = val;
 
-  var movedCellKeys = [];
   if (field === 'angle' || field === 'persona') {
-    movedCellKeys = _removeCreativeFromNonCanonicalCells(adId, ad.angle, ad.persona);
+    _syncCanonicalCellAssignmentForAd(ad);
   }
 
   // Auto-add to ANGLES/PERSONAS arrays if new value not seen before
@@ -33712,14 +33795,6 @@ function updateCreativeFieldInline(adId, field, val) {
   // Recalc stats + save
   P = process(ADS);
   buildCreativeUsageIndex();
-  if (movedCellKeys.length) {
-    var targetCellKey = (ad.angle && ad.persona) ? (ad.angle + '||' + ad.persona) : '';
-    if (targetCellKey && movedCellKeys.indexOf(targetCellKey) === -1) movedCellKeys.push(targetCellKey);
-    movedCellKeys.forEach(function(cellKey) {
-      if (typeof _broadcastCellAssignment === 'function') _broadcastCellAssignment(cellKey, CELL_CREATIVE_ASSIGNMENTS[cellKey] || []);
-      if (typeof _writeMatrixCellDirect === 'function') _writeMatrixCellDirect(cellKey);
-    });
-  }
   deriveWinners();
   genActions();
   saveState();

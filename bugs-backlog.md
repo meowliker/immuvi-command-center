@@ -1421,8 +1421,20 @@ The general orphan purge intentionally does not remove every mismatch between `a
 2. Wired the helper only into canonical Creative Tracker angle/persona edits, preserving the Add Creative picker and production-clone behavior.
 3. Broadcast and directly upsert changed matrix cells so peers and Supabase see the move cleanup quickly, then keep the normal `saveState()` snapshot as the full persistence backstop.
 
+### Follow-up — 2026-07-09
+`CIM-FM-01` reproduced the same duplicate-cell symptom after its persona changed through a non-Creative-Tracker path.
+The first fix only covered the Creative Tracker dropdown path.
+Action Plan custom-field edits, generic custom field saves, realtime field-update echoes, manual Sync, and background ClickUp poll could still mutate `ad.angle` / `ad.persona` directly without clearing old matrix cell assignments.
+
+Follow-up fix:
+1. Added `_syncCanonicalCellAssignmentForAd(ad, options)` as the shared invariant for canonical angle/persona changes.
+2. Kept `ad.id` in exactly its canonical `ad.angle × ad.persona` matrix cell and removed it from every other cell.
+3. Wired the shared helper into Creative Tracker inline edits, Action Plan tag edits, generic custom-field saves, realtime field-update echoes, manual Sync existing-task updates, and background poll existing-task updates.
+4. For user edits, changed cells are broadcast and directly upserted. For background sync, the in-memory matrix is corrected and the normal `saveState()` flush persists the change.
+
 ### Verified
 - `immuvi-command-center.html` script parses cleanly via Node `new Function()` extraction.
 - `git diff --check` passed.
 - Static checks confirm the move helper is present, the inline angle/persona editor calls it, cell assignment broadcast remains available, Clean stale modal code remains present, lowercase `Assigned` status handling remains present, and no `Untested -> to do` map was introduced.
 - Live data repair confirmed `Founding Member × Canva Mastery Buyers` keeps `AD-1783077201511` / `AD-1783077282760`, while `Founding Member × Side-Hustle Sellers 22-45` now only keeps `AD-1783071530496`.
+- Follow-up live data repair confirmed `CIM-FM-01` / `AD-1783071530496` remains only in `Founding Member × Canva Mastery Buyers` after its canonical persona changed there.

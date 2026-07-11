@@ -12996,7 +12996,7 @@ const DB = {
     });
     const state = {
       ANGLES: (angles.data || []).map(function (a) { return { id: a.id, name: a.name, status: a.status, sourceLink: a.source_link || '', notes: a.notes || '', createdAt: a.created_at ? new Date(a.created_at).getTime() : null, archivedAt: a.archived_at ? new Date(a.archived_at).getTime() : null }; }),
-      PERSONAS: (personas.data || []).map(function (p) { return { id: p.id, name: p.name, status: p.status, sourceLink: p.source_link || '', notes: p.notes || '', archivedAt: p.archived_at ? new Date(p.archived_at).getTime() : null }; }),
+      PERSONAS: (personas.data || []).map(function (p) { return { id: p.id, name: p.name, status: p.status, sourceLink: p.source_link || '', notes: p.notes || '', createdAt: p.created_at ? new Date(p.created_at).getTime() : null, archivedAt: p.archived_at ? new Date(p.archived_at).getTime() : null }; }),
       ADS: (ads.data || []).map(_rowToAd),
       MATRIX_CELL_META: meta,
       CELL_CREATIVE_ASSIGNMENTS: assigns,
@@ -13004,6 +13004,8 @@ const DB = {
       PROD: [], // derived from ads, no dedicated table
       ANGLE_PERSONAS: anglePersonasFromCells // hydrated from matrix_cells rows
     };
+    state.ANGLES = _dedupeTaxonomyItems(state.ANGLES, 'loaded angle');
+    state.PERSONAS = _dedupeTaxonomyItems(state.PERSONAS, 'loaded persona');
     try {
       await _applyProductBoundaryQuarantine(productId, state);
     } catch (e) {
@@ -13040,15 +13042,15 @@ const DB = {
     // from a browser tab that wasn't refreshed after an external DELETE.
     // DROP those from local state instead of upserting them back.
     const existingAngleIdSet = new Set((existingAngles.data || []).map(function(r){ return r.id; }));
-    const survivingLocalAngles = (state.ANGLES || []).filter(function(a){
+    const survivingLocalAngles = _dedupeTaxonomyItems((state.ANGLES || []).filter(function(a){
       return existingAngleIdSet.has(a.id) || a._localNew === true;
-    });
+    }), 'angle');
     const droppedAngleCount = (state.ANGLES || []).length - survivingLocalAngles.length;
     if (droppedAngleCount > 0) {
       console.log('[SB] pruned', droppedAngleCount, 'stale local angles (deleted elsewhere, not upserting back)');
       // Also reflect the pruning in live memory so the UI updates.
       if (typeof ANGLES !== 'undefined' && Array.isArray(ANGLES)) {
-        ANGLES = ANGLES.filter(function(a){ return existingAngleIdSet.has(a.id) || a._localNew === true; });
+        ANGLES = _dedupeTaxonomyItems(ANGLES.filter(function(a){ return existingAngleIdSet.has(a.id) || a._localNew === true; }), 'angle');
       }
     }
     const angleRows = survivingLocalAngles.map(function (a) {
@@ -13064,14 +13066,14 @@ const DB = {
     // ── PERSONAS ─────────────────────────────────────────────────
     // Same DB-authoritative policy as ANGLES above.
     const existingPersonaIdSet = new Set((existingPersonas.data || []).map(function(r){ return r.id; }));
-    const survivingLocalPersonas = (state.PERSONAS || []).filter(function(p){
+    const survivingLocalPersonas = _dedupeTaxonomyItems((state.PERSONAS || []).filter(function(p){
       return existingPersonaIdSet.has(p.id) || p._localNew === true;
-    });
+    }), 'persona');
     const droppedPersonaCount = (state.PERSONAS || []).length - survivingLocalPersonas.length;
     if (droppedPersonaCount > 0) {
       console.log('[SB] pruned', droppedPersonaCount, 'stale local personas (deleted elsewhere, not upserting back)');
       if (typeof PERSONAS !== 'undefined' && Array.isArray(PERSONAS)) {
-        PERSONAS = PERSONAS.filter(function(p){ return existingPersonaIdSet.has(p.id) || p._localNew === true; });
+        PERSONAS = _dedupeTaxonomyItems(PERSONAS.filter(function(p){ return existingPersonaIdSet.has(p.id) || p._localNew === true; }), 'persona');
       }
     }
     const personaRows = survivingLocalPersonas.map(function (p) {
@@ -13110,7 +13112,9 @@ const DB = {
       }
       return true;
     });
-    const adRows = _filteredStateAds.map(function (a) { return _adToRow(a, productId); });
+    const adRows = _filteredStateAds.map(function (a) {
+      return _adToRow(_canonicalizeAdTaxonomyForSave(a), productId);
+    });
     const adIds = new Set(adRows.map(function (r) { return r.id; }));
     // ──────────────────────────────────────────────────────────────────
     // 2026-05-25 — Bug 8/9 family REGRESSION GUARD
@@ -13221,18 +13225,30 @@ const DB = {
     const meta = state.MATRIX_CELL_META || {}, assigns = state.CELL_CREATIVE_ASSIGNMENTS || {};
     const cellKeys2 = new Set();
     const perAdMeta = {};
+    const cellMetaByKey = {};
+    const assignsByKey = {};
     Object.keys(meta).forEach(function (k) {
       const parts = k.split('||');
       if (parts.length === 2) {
-        cellKeys2.add(k);
+        const cellKey = _canonicalCellKey(parts[0], parts[1]);
+        cellKeys2.add(cellKey);
+        cellMetaByKey[cellKey] = Object.assign({}, cellMetaByKey[cellKey] || {}, meta[k] || {});
       } else if (parts.length === 3) {
-        const cellKey = parts[1] + '||' + parts[2];
+        const cellKey = _canonicalCellKey(parts[1], parts[2]);
         if (!perAdMeta[cellKey]) perAdMeta[cellKey] = {};
         perAdMeta[cellKey][parts[0]] = meta[k];
       }
     });
     Object.keys(assigns).forEach(function (k) {
-      if (k.split('||').length === 2) cellKeys2.add(k);
+      const parts = k.split('||');
+      if (parts.length === 2) {
+        const cellKey = _canonicalCellKey(parts[0], parts[1]);
+        cellKeys2.add(cellKey);
+        if (!assignsByKey[cellKey]) assignsByKey[cellKey] = [];
+        (assigns[k] || []).forEach(function(id) {
+          if (id && assignsByKey[cellKey].indexOf(id) === -1) assignsByKey[cellKey].push(id);
+        });
+      }
     });
 
     // ── ANGLE_PERSONAS persistence (BUG-003) ─────────────────────
@@ -13245,7 +13261,7 @@ const DB = {
     Object.keys(_ap).forEach(function (angName) {
       (_ap[angName] || []).forEach(function (perName) {
         if (!angName || !perName) return;
-        const apKey = angName + '||' + perName;
+        const apKey = _canonicalCellKey(angName, perName);
         cellKeys2.add(apKey);
       });
     });
@@ -13259,9 +13275,9 @@ const DB = {
         product_id: productId,
         angle_id: parts[0],
         persona_id: parts[1],
-        meta: { cell_key: k, meta: meta[k] || {}, per_ad: perAdMeta[k] || {} },
-        creative_assignments: assigns[k] || [],
-        action_status: (meta[k] && meta[k].status) || null
+        meta: { cell_key: k, meta: cellMetaByKey[k] || {}, per_ad: perAdMeta[k] || {} },
+        creative_assignments: assignsByKey[k] || [],
+        action_status: (cellMetaByKey[k] && cellMetaByKey[k].status) || null
       });
     });
     const cellOrphanIds = (existingCells.data || []).filter(function (r) {
@@ -14469,21 +14485,104 @@ function _taxonomyLookupKey(name) {
   return String(_normalizeTaxonomyName(name || '') || '').toLowerCase().trim();
 }
 
+function _taxonomyCreatedMs(item) {
+  if (!item) return 0;
+  var raw = item.createdAt || item.created_at || 0;
+  if (!raw) return 0;
+  var ms = typeof raw === 'number' ? raw : new Date(raw).getTime();
+  return isNaN(ms) ? 0 : ms;
+}
+
+function _preferredTaxonomyItem(next, current) {
+  if (!current) return next;
+  if (!next) return current;
+  var nextName = String(next.name || '');
+  var currentName = String(current.name || '');
+  var nextHasBullet = /^\s*[-–—•*]/.test(nextName);
+  var currentHasBullet = /^\s*[-–—•*]/.test(currentName);
+  if (nextHasBullet !== currentHasBullet) return nextHasBullet ? current : next;
+  if (!!next._localNew !== !!current._localNew) return next._localNew ? current : next;
+  var nextCreated = _taxonomyCreatedMs(next);
+  var currentCreated = _taxonomyCreatedMs(current);
+  if (nextCreated && currentCreated && nextCreated !== currentCreated) {
+    return nextCreated < currentCreated ? next : current;
+  }
+  return current;
+}
+
 function _canonicalTaxonomyName(name, items) {
   var clean = _normalizeTaxonomyName(name || '');
   var key = _taxonomyLookupKey(clean);
   if (!key) return clean;
   items = Array.isArray(items) ? items : [];
-  var fallback = '';
+  var best = null;
   for (var i = 0; i < items.length; i++) {
     var itemName = (items[i] && items[i].name) || '';
     if (_taxonomyLookupKey(itemName) === key) {
-      var normalizedItem = _normalizeTaxonomyName(itemName);
-      if (!fallback) fallback = normalizedItem;
-      if (!/^\s*[-–—•*]/.test(itemName)) return normalizedItem;
+      best = _preferredTaxonomyItem(items[i], best);
     }
   }
-  return fallback || clean;
+  return best ? _normalizeTaxonomyName(best.name || '') : clean;
+}
+
+function _dedupeTaxonomyItems(items, label) {
+  items = Array.isArray(items) ? items : [];
+  var byKey = {};
+  var order = [];
+  for (var i = 0; i < items.length; i++) {
+    var item = items[i];
+    if (!item) continue;
+    var clean = _normalizeTaxonomyName(item.name || '');
+    var key = _taxonomyLookupKey(clean);
+    if (!key) {
+      order.push(item);
+      continue;
+    }
+    var normalized = Object.assign({}, item, { name: clean });
+    if (!byKey[key]) {
+      byKey[key] = normalized;
+      order.push(normalized);
+      continue;
+    }
+    var preferred = _preferredTaxonomyItem(normalized, byKey[key]);
+    if (preferred !== byKey[key]) {
+      var idx = order.indexOf(byKey[key]);
+      if (idx >= 0) order[idx] = preferred;
+      byKey[key] = preferred;
+    }
+  }
+  var dropped = items.length - order.length;
+  if (dropped > 0 && label) {
+    console.log('[taxonomy] collapsed', dropped, 'duplicate', label, 'row(s)');
+  }
+  return order;
+}
+
+function _canonicalCellKey(angle, persona) {
+  var a = _canonicalTaxonomyName(angle || '', (typeof ANGLES !== 'undefined' ? ANGLES : []));
+  var p = _canonicalTaxonomyName(persona || '', (typeof PERSONAS !== 'undefined' ? PERSONAS : []));
+  return a + '||' + p;
+}
+
+function _canonicalizeAdTaxonomyForSave(ad) {
+  if (!ad) return ad;
+  var angle = _canonicalTaxonomyName(ad.angle || '', (typeof ANGLES !== 'undefined' ? ANGLES : []));
+  var persona = _canonicalTaxonomyName(ad.persona || '', (typeof PERSONAS !== 'undefined' ? PERSONAS : []));
+  ad.angle = angle || '';
+  ad.persona = persona || '';
+  ['_customFields', '_customFieldsRaw'].forEach(function(bucket) {
+    if (!ad[bucket] || typeof ad[bucket] !== 'object') return;
+    Object.keys(ad[bucket]).forEach(function(k) {
+      var lc = String(k || '').toLowerCase().trim();
+      if ((lc === 'angle tag' || lc === 'angle' || lc === 'ad angle') && typeof ad[bucket][k] === 'string') {
+        ad[bucket][k] = angle || '';
+      }
+      if ((lc === 'persona tag' || lc === 'persona' || lc === 'target persona' || lc === 'audience') && typeof ad[bucket][k] === 'string') {
+        ad[bucket][k] = persona || '';
+      }
+    });
+  });
+  return ad;
 }
 
 // BUG-005 — strip tombstoned angle/persona names from an ANGLE_PERSONAS
@@ -29000,10 +29099,10 @@ function parseClickUpTask(t) {
   }
   if ((!angle || !persona) && typeof _extractDescriptionFieldValue === 'function') {
     if (!angle) {
-      angle = _normalizeTaxonomyName(_extractDescriptionFieldValue(desc, ['Angle', 'Angle Tag', 'Ad Angle']));
+      angle = _canonicalTaxonomyName(_extractDescriptionFieldValue(desc, ['Angle', 'Angle Tag', 'Ad Angle']), (typeof ANGLES !== 'undefined' ? ANGLES : []));
     }
     if (!persona) {
-      persona = _normalizeTaxonomyName(_extractDescriptionFieldValue(desc, ['Persona', 'Persona Tag', 'Target Persona', 'Audience']));
+      persona = _canonicalTaxonomyName(_extractDescriptionFieldValue(desc, ['Persona', 'Persona Tag', 'Target Persona', 'Audience']), (typeof PERSONAS !== 'undefined' ? PERSONAS : []));
     }
   }
 

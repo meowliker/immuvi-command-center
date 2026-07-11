@@ -1670,3 +1670,41 @@ Archived zero-count ADHD personas were also still present as product taxonomy ro
   - Canva taxonomy count is back to `9` angles and `8` personas.
 - `immuvi-command-center.html` inline script blocks parse cleanly via Node `new Function()` extraction.
 - `git diff --check` passed.
+
+---
+
+## Bug 36 — Dash/case taxonomy duplicates came back from stale KIDS LIFE snapshots
+**Status:** ✅ fixed locally 2026-07-11; needs deploy before final repair will stick
+**Reported:** 2026-07-11
+**Surface:** KIDS LIFE SKILL Command HQ / ClickUp sync / Creative Matrix save
+
+### Symptom
+- KIDS LIFE SKILL still showed duplicate Angle rows such as:
+  - `Future Consequence` and `Future consequence`
+  - duplicate `Dysregulated kid`
+  - duplicate `wanting your child to be more independent`
+- ClickUp task `kids life - 13032` had blank `Angle`, dashed `Angle Tag`, and description text `Angle - Future consequence`, so it kept appearing under the lower-case duplicate.
+
+### Root cause
+Bug 33 fixed the main ClickUp parse and auto-discovery paths, but two holes remained:
+1. `parseClickUpTask()`'s description fallback used `_normalizeTaxonomyName()` instead of `_canonicalTaxonomyName()`, so a task with blank Angle/Angle Tag could still create `Future consequence` from the description even when `Future Consequence` already existed.
+2. `saveProductData()` persisted whatever duplicate taxonomy rows, custom-field mirrors, and matrix-cell keys were already in a browser's memory. A stale production tab rewrote the old bad snapshot after the live repair, recreating duplicate Angle rows and empty dash-prefixed matrix cells.
+
+### Fix
+1. `_canonicalTaxonomyName()` now chooses the preferred existing row for a normalized taxonomy key, preferring non-bulleted and older existing taxonomy rows.
+2. Added `_dedupeTaxonomyItems()` and wired it into product load and save so duplicate Angle/Persona rows collapse before UI use or Supabase upsert.
+3. Changed the description fallback in `parseClickUpTask()` to canonicalize against existing Angles/Personas.
+4. Added save-time AD taxonomy scrubbing so `ad.angle/ad.persona`, `_customFields`, and string-shaped `_customFieldsRaw` mirrors are written with the canonical value.
+5. Added save-time matrix-cell key canonicalization so dash-prefixed or lower-case cell keys merge into the canonical cell instead of being re-upserted.
+
+### Live investigation
+- The first repair deleted 3 duplicate Angle rows, 2 duplicate Persona rows, patched 18 ads, removed 66 empty bad matrix cells, and merged 1 active bad cell.
+- A stale/live client then rewrote the old snapshot at `2026-07-11T10:16:06Z`, recreating:
+  - `ang-auto-1783762792800-1` / `Future consequence`
+  - `ang-auto-1783762792800-2` / `Dysregulated kid`
+  - 27 empty dash-prefixed matrix cells
+  - dashed `_customFields` mirrors for `86d2pddgv`
+
+### Verified
+- `immuvi-command-center.html` inline script blocks parse cleanly via Node `new Function()` extraction.
+- `git diff --check` passed.

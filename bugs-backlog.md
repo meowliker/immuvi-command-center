@@ -1477,3 +1477,146 @@ Sync hardening:
 ### Live repair
 - Corrected malformed `C-INS-001` URL to `https://www.facebook.com/ads/library/?id=843318062124216`.
 - Requeued `C-INS-001`, `C-INS-060`, and `C-INS-061` with clean attempts/error state.
+
+---
+
+## Bug 32 — Inspiration table header/count rendered but rows were blank
+**Status:** ✅ done — fixed 2026-07-11
+**Reported:** 2026-07-11
+**Surface:** Inspirations tab table renderer
+
+### Symptom
+- Inspirations tab showed the toolbar, table header, and result count such as `56 / 56`.
+- The table body was empty, so no inspiration rows were visible even though the data had loaded.
+
+### Root cause
+Bug 31 introduced `_insQueueDisplayStatus()` so the Inspirations UI could display live queue truth (`Queued`, `Classifying`, `Failed`) instead of stale `inspirations.status`.
+That helper was accidentally declared inside `getQueuedItems()`, but `renderInspirations()` called it from outside that local scope.
+
+The result was a `ReferenceError` during row rendering: the outer chrome and count could update, then the renderer stopped before writing rows into `#insTbody`.
+
+### Fix
+1. Moved `_insQueueDisplayStatus(ins, queueByInsId)` to shared scope near the queue helpers.
+2. Kept the same queue-status behavior from Bug 31.
+3. Passed `renderInspirations()`' existing `queueByInsId` lookup into the helper so row filtering, sorting, and status badges use the same queue snapshot.
+
+### Verified
+- `immuvi-command-center.html` script blocks parse cleanly via Node `new Function()` extraction.
+- `git diff --check` passed.
+- Browser smoke test confirmed a mocked classified inspiration renders one `#insTbody tr[data-ins-id]` row and updates the result counter without `_insQueueDisplayStatus` / `ReferenceError` console errors.
+- Static check confirms Bug 31 behavior remains wired: queue rows still load into `window.INSPIRATION_QUEUE`, `Queued` / `Classifying` / `Failed` remain in the status filter, failed queue rows remain excluded from the queued counter, and the table renderer still derives visible status from queue state.
+
+---
+
+## Bug 33 — ClickUp bullet-prefixed angle values created duplicate Angle rows
+**Status:** ✅ done — fixed locally 2026-07-11
+**Reported:** 2026-07-11
+**Surface:** ClickUp sync / auto-discovered taxonomy / Angles tab
+
+### Symptom
+- KIDS LIFE SKILL Angles tab showed duplicate-looking angle rows with leading hyphens, e.g. `- Future consequence` beside `Future Consequence`.
+- The app treated the hyphenated values as new angles and auto-added them.
+
+### Root cause
+ClickUp task data contained angle values copied from list/bullet text, such as `- Future consequence`.
+
+The taxonomy normalizer only stripped trailing legacy status-badge fragments such as `⭐ Winner`; it did not strip leading list markers.
+Also, auto-discovery compared raw lowercased names, so `Future Consequence` and `- Future consequence` had different lookup keys.
+Even after stripping the dash, casing differences such as `Future consequence` vs `Future Consequence` could split exact-match stats unless the incoming value was canonicalized to the existing row's casing.
+
+### Fix
+1. `_normalizeTaxonomyName()` now strips leading bullet/list markers (`-`, en/em dash, `•`, `*`) before stripping old status badges.
+2. Added `_taxonomyLookupKey()` and `_canonicalTaxonomyName()` so incoming taxonomy values compare by normalized key and reuse the existing Angle/Persona row's casing.
+3. Wired canonicalization into ClickUp task parsing, auto-discovery, strategist recommendation approval, Action Plan inline Angle/Persona edits, generic custom-field edits, realtime custom-field updates, description hydration, and cleanup taxonomy parsing.
+
+### Live audit
+- Found 3 active KIDS LIFE SKILL ads with dash-prefixed angles:
+  - `86d2q44vg` → `- Dysregulated kid` (matches existing `Dysregulated kid`)
+  - `86d2pddgv` → `- Future consequence` (matches existing `Future Consequence`)
+  - `86d29zvud` → `- wanting your child to be more independent` (new clean candidate: `wanting your child to be more independent`)
+- Assignment audit found 4 active KIDS LIFE SKILL matrix placements currently pointing at non-canonical angle/persona cells:
+  - `86d2q44vg` is assigned under `- Dysregulated kid × - Persona 1 - Age 35-44 , F, Overwelmed MOM`; canonical target is `Dysregulated kid × Persona 1 - Age 35-44 , F, Overwelmed MOM`.
+  - `86d2pddgv` is assigned under `- Future consequence × - 35 to 44, Female, MOM`; canonical target is `Future Consequence × 35 to 44, Female, MOM`.
+  - `86d3ddhmw` is assigned under `School doesn't teach this × Mom raising kids`; canonical target is `School Doesn't Teach This × Mom raising kids`.
+  - `86d3dbw8q` is assigned under `Raising independent kids × Mom raising kids`; canonical target is `Raising Independent Kids × Mom raising kids`.
+
+### Live repair
+- Repaired KIDS LIFE SKILL Supabase data on 2026-07-11 without pushing code.
+- Updated 8 active ad rows to clean/canonical Angle and Persona values, including the `_customFields` mirrors in `ads.meta`.
+- Merged matrix cell assignments into canonical cells and removed duplicate/stale non-canonical cell rows.
+- Removed duplicate hyphenated Angle rows when a clean equivalent existed, and renamed the unique hyphenated Angle row to `wanting your child to be more independent`.
+- Removed/renamed the hyphenated Persona rows to clean names.
+- Final verification, including a delayed re-check after stale-client writeback risk:
+  - `0` bad ad taxonomy values.
+  - `0` bad Angle rows.
+  - `0` bad Persona rows.
+  - `0` bad matrix cells.
+  - `0` misassigned creatives.
+
+### Verified
+- `immuvi-command-center.html` script blocks parse cleanly via Node `new Function()` extraction.
+- `git diff --check` passed.
+- Static checks confirm taxonomy canonicalization is wired into auto-discovery, ClickUp task parsing, Action Plan inline edits, generic custom-field edits, realtime custom-field updates, and cleanup taxonomy parsing.
+- Dynamic helper check confirms:
+  - `- Future consequence` canonicalizes to existing `Future Consequence`.
+  - `— Dysregulated kid` canonicalizes to existing `Dysregulated kid`.
+  - `• wanting your child to be more independent` becomes clean `wanting your child to be more independent`.
+  - Existing status-badge cleanup still works for `Future Consequence ⭐ Winner`.
+- Follow-up helper check confirms duplicate lookup prefers the clean existing row if both `Future Consequence` and `- Future consequence` exist locally.
+- Live data verification after repair stayed clean after a 6-second delayed check.
+
+---
+
+## Bug 34 — Winner Variation and ClickUp rows rendered as duplicate creatives for the same task
+**Status:** ✅ done — fixed locally 2026-07-11
+**Reported:** 2026-07-11
+**Surface:** Creative Matrix cell modal / Creative Tracker / ClickUp sync
+
+### Symptom
+- In `KIDS LIFE SKILL`, the task `kids life - 12991/9821 (2 winner) - V16 - Production Style` showed twice in the same cell:
+  - once as a Winner Variation row (`86d2pa55v-V16`)
+  - once as a ClickUp-imported row (`86d3c637y`)
+- After the teammate changed the ClickUp task status to `Mild Winner`, both app rows reflected that same status, proving they represented the same ClickUp task.
+
+### Root cause
+Older fixes repaired duplicate `MANUAL_ACTIONS` rows and stale `sourceAdId` links, but did not collapse duplicate `ADS` rows.
+
+So when the same ClickUp task existed as both:
+- the app-created local variation id, e.g. `86d2pa55v-V16`
+- and the ClickUp task id, e.g. `86d3c637y`
+
+`pollFullSync()` updated both rows in place instead of treating them as the same creative. That let the modal/table render both origins (`Winner Variation` and `ClickUp`) for one underlying task.
+
+### Fix
+1. Added `_collapseDuplicateClickUpAds()` to group active ads by `_clickupId` / `clickupTaskId`.
+2. The collapse keeps the app-created variation row when present, preserving `Winner Variation`, parent id, variation number, Action Plan links, and matrix placement.
+3. It remaps:
+   - `CELL_CREATIVE_ASSIGNMENTS`
+   - `MATRIX_CELL_META`
+   - `MANUAL_ACTIONS.sourceAdId`
+   - `MANUAL_ACTIONS.adId`
+4. Wired the collapse into:
+   - initial load
+   - manual ClickUp import
+   - live ClickUp polling
+   - save flush boundary
+
+### Live repair
+- Repaired KIDS LIFE SKILL Supabase data on 2026-07-11 without pushing code.
+- Kept the correct Winner Variation rows:
+  - `86d2pa55v-V15` with ClickUp task `86d3c637d`
+  - `86d2pa55v-V16` with ClickUp task `86d3c637y`
+  - `86d2pa55v-V17` with ClickUp task `86d3c63e6`
+- Hard-deleted only the duplicate app rows keyed by ClickUp id:
+  - `86d3c637d`
+  - `86d3c637y`
+  - `86d3c63e6`
+- Did not soft-delete/tombstone those ClickUp ids, because they are real ClickUp tasks and must continue syncing.
+- Remapped 1 manual action and 1 matrix cell that still referenced the duplicate ClickUp-key rows.
+
+### Verified
+- Live verification after repair:
+  - `0` active duplicate ClickUp-id groups.
+  - `0` stale matrix-cell references to the removed duplicate rows.
+  - `0` stale manual-action references to the removed duplicate rows.
+  - `V16` remains visible as a single Winner Variation row with status `Mild Winner`.

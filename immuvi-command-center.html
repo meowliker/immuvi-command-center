@@ -11649,12 +11649,16 @@ function _initRealtimeChannel(productId) {
       if (p.rawValue !== undefined) ad._customFieldsRaw[p.field] = p.rawValue;
       var _customCanonicalChanged = false;
       if (p.field === 'angle tag') {
+        p.value = _canonicalTaxonomyName(p.value || '', ANGLES);
+        ad._customFields[p.field] = p.value;
         ad.angle = p.value || '';
         _customCanonicalChanged = true;
         if (typeof _syncCanonicalCellAssignmentForAd === 'function') {
           _syncCanonicalCellAssignmentForAd(ad, { persist: false, broadcast: false });
         }
       } else if (p.field === 'persona tag') {
+        p.value = _canonicalTaxonomyName(p.value || '', PERSONAS);
+        ad._customFields[p.field] = p.value;
         ad.persona = p.value || '';
         _customCanonicalChanged = true;
         if (typeof _syncCanonicalCellAssignmentForAd === 'function') {
@@ -14447,6 +14451,9 @@ function _isTaxonomyTombstoned(kind, productId, name) {
 function _normalizeTaxonomyName(name) {
   if (!name || typeof name !== 'string') return name;
   var s = name;
+  // Strip leading list/bullet markers that can leak from ClickUp descriptions
+  // or pasted custom-field values, e.g. "- Future consequence".
+  s = s.replace(/^\s*(?:[-–—•*]\s*)+/, '');
   // Strip up to 3 trailing badge fragments — handles the doubled case.
   // Match: optional space/star/emoji, followed by Winner|Scale|Loser|Killed|Mild Winner|Complete
   var BADGE_RE = /\s*(?:[⭐★*]\s*)?(?:Mild\s+Winner|Winner|Loser|Scale|Killed|Complete)\s*$/i;
@@ -14456,6 +14463,27 @@ function _normalizeTaxonomyName(name) {
     s = stripped;
   }
   return s.trim();
+}
+
+function _taxonomyLookupKey(name) {
+  return String(_normalizeTaxonomyName(name || '') || '').toLowerCase().trim();
+}
+
+function _canonicalTaxonomyName(name, items) {
+  var clean = _normalizeTaxonomyName(name || '');
+  var key = _taxonomyLookupKey(clean);
+  if (!key) return clean;
+  items = Array.isArray(items) ? items : [];
+  var fallback = '';
+  for (var i = 0; i < items.length; i++) {
+    var itemName = (items[i] && items[i].name) || '';
+    if (_taxonomyLookupKey(itemName) === key) {
+      var normalizedItem = _normalizeTaxonomyName(itemName);
+      if (!fallback) fallback = normalizedItem;
+      if (!/^\s*[-–—•*]/.test(itemName)) return normalizedItem;
+    }
+  }
+  return fallback || clean;
 }
 
 // BUG-005 — strip tombstoned angle/persona names from an ANGLE_PERSONAS
@@ -16170,6 +16198,135 @@ function _syncCanonicalCellAssignmentForAd(ad, options) {
     });
   }
   return changedKeys;
+}
+
+// Collapse duplicate AD rows that point at the same ClickUp task.
+// This is deliberately AD-layer, not AP-layer: the old KL-12991/9821 fix only
+// repaired MANUAL_ACTIONS, so the tracker/modal could still render both the
+// local Winner Variation row and the imported ClickUp row for one task.
+function _collapseDuplicateClickUpAds(options) {
+  options = options || {};
+  if (!Array.isArray(ADS) || ADS.length < 2) return 0;
+  function cuOf(ad) {
+    return (ad && (ad._clickupId || ad.clickupTaskId || (_looksLikeClickUpTaskId(ad.id) ? ad.id : ''))) || '';
+  }
+  function variationInfo(id) {
+    var s = String(id || '');
+    var m = /^(.+)-V(\d+)(?:$|-)/.exec(s);
+    return m ? { parentId: m[1], number: m[2] } : null;
+  }
+  function actionScore(ad) {
+    if (!ad || !Array.isArray(MANUAL_ACTIONS)) return 0;
+    var s = 0;
+    for (var i = 0; i < MANUAL_ACTIONS.length; i++) {
+      var ma = MANUAL_ACTIONS[i];
+      if (!ma) continue;
+      if (ma.sourceAdId === ad.id) s += 500;
+      if (ma.adId === ad.id) s += 300;
+      var cu = cuOf(ad);
+      if (cu && ma._clickupId === cu) s += 100;
+    }
+    return s;
+  }
+  function score(ad) {
+    if (!ad) return -1;
+    var s = actionScore(ad);
+    if (variationInfo(ad.id)) s += 700;
+    if (ad.id && !_looksLikeClickUpTaskId(ad.id)) s += 150;
+    if (ad.adOrigin === 'Winner Variation') s += 120;
+    if (ad.parentAdId) s += 80;
+    if (ad.sourceFormatId || ad._sourceClickupId) s += 60;
+    if (ad.taskType === 'production') s += 40;
+    if (ad.id === cuOf(ad)) s -= 50;
+    return s;
+  }
+  function copyMissing(keeper, drop) {
+    if (!keeper || !drop) return;
+    var fields = [
+      'formatName', 'status', 'adLink', 'driveLink', 'adType', 'funnelStage',
+      'angle', 'persona', 'parentAdId', 'variationNumber', 'adOrigin',
+      'taskType', 'sourceFormatId', '_sourceClickupId', '_sourceFormatId',
+      '_sourceFormatName', '_sourceFormatDriveLink', '_sourceFormatAdLink',
+      'creativeStructure', 'hookType', 'productionStyle', 'creativeHypothesis',
+      'creativeUSP', 'dueDate', '_dueDateMs', '_clickupUrl', '_clickupStatus',
+      '_tags', '_customFields', '_customFieldsRaw', 'assignees'
+    ];
+    fields.forEach(function (k) {
+      if ((keeper[k] === undefined || keeper[k] === null || keeper[k] === '') &&
+          drop[k] !== undefined && drop[k] !== null && drop[k] !== '') {
+        keeper[k] = Array.isArray(drop[k]) ? drop[k].slice() :
+          (typeof drop[k] === 'object' ? JSON.parse(JSON.stringify(drop[k])) : drop[k]);
+      }
+    });
+    var vi = variationInfo(keeper.id);
+    if (vi) {
+      if (!keeper.parentAdId) keeper.parentAdId = vi.parentId;
+      if (!keeper.variationNumber) keeper.variationNumber = vi.number;
+      if (!keeper.adOrigin || keeper.adOrigin === 'ClickUp') keeper.adOrigin = 'Winner Variation';
+    }
+    var cu = cuOf(keeper) || cuOf(drop);
+    if (cu) {
+      keeper._clickupId = cu;
+      keeper.clickupTaskId = cu;
+      if (!keeper._clickupUrl) keeper._clickupUrl = 'https://app.clickup.com/t/' + cu;
+    }
+  }
+
+  var groups = {};
+  ADS.forEach(function (ad) {
+    if (!ad || ad.deletedAt || ad.deleted_at) return;
+    var cu = cuOf(ad);
+    if (!cu) return;
+    (groups[cu] = groups[cu] || []).push(ad);
+  });
+
+  var remaps = {};
+  var dropIds = [];
+  Object.keys(groups).forEach(function (cu) {
+    var group = groups[cu];
+    if (!group || group.length < 2) return;
+    var keeper = group.slice().sort(function (a, b) { return score(b) - score(a); })[0];
+    keeper._clickupId = cu;
+    keeper.clickupTaskId = cu;
+    group.forEach(function (ad) {
+      if (!ad || ad.id === keeper.id) return;
+      copyMissing(keeper, ad);
+      remaps[ad.id] = keeper.id;
+      dropIds.push(ad.id);
+    });
+    copyMissing(keeper, group.find(function (ad) { return ad && ad.id === cu; }) || {});
+  });
+  if (!dropIds.length) return 0;
+
+  var dropSet = {};
+  dropIds.forEach(function (id) { dropSet[id] = true; });
+  ADS = ADS.filter(function (ad) { return ad && !dropSet[ad.id]; });
+
+  Object.keys(CELL_CREATIVE_ASSIGNMENTS || {}).forEach(function (cellKey) {
+    var arr = CELL_CREATIVE_ASSIGNMENTS[cellKey] || [];
+    var seen = {};
+    CELL_CREATIVE_ASSIGNMENTS[cellKey] = arr.map(function (id) { return remaps[id] || id; }).filter(function (id) {
+      if (!id || seen[id]) return false;
+      seen[id] = true;
+      return true;
+    });
+  });
+  Object.keys(MATRIX_CELL_META || {}).forEach(function (key) {
+    var parts = key.split('||');
+    if (parts.length !== 3 || !remaps[parts[0]]) return;
+    var newKey = remaps[parts[0]] + '||' + parts[1] + '||' + parts[2];
+    if (!MATRIX_CELL_META[newKey]) MATRIX_CELL_META[newKey] = MATRIX_CELL_META[key];
+    delete MATRIX_CELL_META[key];
+  });
+  if (Array.isArray(MANUAL_ACTIONS)) {
+    MANUAL_ACTIONS.forEach(function (ma) {
+      if (!ma) return;
+      if (ma.sourceAdId && remaps[ma.sourceAdId]) ma.sourceAdId = remaps[ma.sourceAdId];
+      if (ma.adId && remaps[ma.adId]) ma.adId = remaps[ma.adId];
+    });
+  }
+  if (typeof console !== 'undefined') console.log('[ad-dedup] collapsed duplicate ClickUp AD rows', remaps);
+  return dropIds.length;
 }
 
 function _reconcileSyncedAdsToCanonicalCells(options) {
@@ -19324,14 +19481,14 @@ async function _recApprove(recId) {
 
   try {
     // Step 1 — Ensure angle + persona exist locally
-    var ang = (rec.recommended_angle || '').trim();
-    var per = (rec.recommended_persona || '').trim();
+    var ang = _canonicalTaxonomyName((rec.recommended_angle || '').trim(), ANGLES);
+    var per = _canonicalTaxonomyName((rec.recommended_persona || '').trim(), PERSONAS);
 
-    if (ang && !ANGLES.find(function (a) { return a.name.toLowerCase() === ang.toLowerCase(); })) {
+    if (ang && !ANGLES.find(function (a) { return _taxonomyLookupKey(a.name) === _taxonomyLookupKey(ang); })) {
       var newAngId = 'ang-rec-' + Date.now();
       ANGLES.push({ id: newAngId, name: ang, status: 'Untested', sourceLink: '', notes: 'From strategist recommendation', _localNew: true });
     }
-    if (per && !PERSONAS.find(function (p) { return p.name.toLowerCase() === per.toLowerCase(); })) {
+    if (per && !PERSONAS.find(function (p) { return _taxonomyLookupKey(p.name) === _taxonomyLookupKey(per); })) {
       var newPerId = 'per-rec-' + Date.now();
       PERSONAS.push({ id: newPerId, name: per, status: 'Untested', sourceLink: '', notes: 'From strategist recommendation', _localNew: true });
     }
@@ -20973,9 +21130,11 @@ async function apEditAdField(adId, fieldKey, value) {
   var lc = String(fieldKey).toLowerCase();
   var canonicalCellChanged = false;
   if (lc === 'angle tag') {
+    value = _canonicalTaxonomyName(value, ANGLES);
     ad.angle = value;
     canonicalCellChanged = true;
   } else if (lc === 'persona tag') {
+    value = _canonicalTaxonomyName(value, PERSONAS);
     ad.persona = value;
     canonicalCellChanged = true;
   }
@@ -24495,7 +24654,7 @@ function updateAngleNotes(idx, text) {
 }
 
 function updateAngleName(idx, text) {
-  var newName = text.trim();
+  var newName = _canonicalTaxonomyName(text, ANGLES);
   if (!newName || newName === ANGLES[idx].name) return;
   var oldName = ANGLES[idx].name;
   ANGLES[idx].name = newName;
@@ -24594,7 +24753,7 @@ function openEditAngle(idx) {
 
 function saveEditAngle(idx) {
   var oldName = ANGLES[idx].name;
-  var newName = document.getElementById('editAngleName').value.trim() || oldName;
+  var newName = _canonicalTaxonomyName(document.getElementById('editAngleName').value, ANGLES) || oldName;
   ANGLES[idx].name = newName;
   ANGLES[idx].sourceLink = document.getElementById('editAngleLink').value.trim();
   ANGLES[idx].notes = document.getElementById('editAngleNotes').value.trim();
@@ -24636,7 +24795,7 @@ function updatePersonaNotes(idx, text) {
 }
 
 function updatePersonaName(idx, text) {
-  var newName = text.trim();
+  var newName = _canonicalTaxonomyName(text, PERSONAS);
   if (!newName || newName === PERSONAS[idx].name) return;
   var oldName = PERSONAS[idx].name;
   PERSONAS[idx].name = newName;
@@ -24856,7 +25015,7 @@ function openEditPersona(idx) {
 
 function saveEditPersona(idx) {
   var oldName = PERSONAS[idx].name;
-  var newName = document.getElementById('editPersonaName').value.trim() || oldName;
+  var newName = _canonicalTaxonomyName(document.getElementById('editPersonaName').value, PERSONAS) || oldName;
   PERSONAS[idx].name = newName;
   PERSONAS[idx].sourceLink = document.getElementById('editPersonaLink').value.trim();
   PERSONAS[idx].notes = document.getElementById('editPersonaNotes').value.trim();
@@ -26253,6 +26412,8 @@ function _hydrateAdFromDescriptionFields(ad) {
   fill('notes', ['Notes']);
   fill('driveLink', ['Drive Link', 'Google Drive', 'Google Drive Link', 'GDrive', 'Production Link']);
   fill('productName', ['Product', 'Product Name', 'Product Profile', 'Product Profile Name']);
+  if (ad.angle) ad.angle = _canonicalTaxonomyName(ad.angle, ANGLES);
+  if (ad.persona) ad.persona = _canonicalTaxonomyName(ad.persona, PERSONAS);
 
   if (!ad.adLink) {
     var sourceUrl = _sourceAdUrlForDescription(ad);
@@ -28273,11 +28434,11 @@ function autoDiscoverTaxonomy(sourceAds) {
   var existingPersonaNamesLC = {};
   for (var ai = 0; ai < ANGLES.length; ai++) {
     var aname = (ANGLES[ai] && ANGLES[ai].name) ? ANGLES[ai].name : '';
-    if (aname) existingAngleNamesLC[aname.toLowerCase().trim()] = true;
+    if (aname) existingAngleNamesLC[_taxonomyLookupKey(aname)] = true;
   }
   for (var pi = 0; pi < PERSONAS.length; pi++) {
     var pname = (PERSONAS[pi] && PERSONAS[pi].name) ? PERSONAS[pi].name : '';
-    if (pname) existingPersonaNamesLC[pname.toLowerCase().trim()] = true;
+    if (pname) existingPersonaNamesLC[_taxonomyLookupKey(pname)] = true;
   }
   // BUG-004: tombstone of names the user just deleted — DON'T re-discover.
   var _angTomb = _readTaxonomyTombstone('angle',   activeProductId);
@@ -28295,9 +28456,10 @@ function autoDiscoverTaxonomy(sourceAds) {
     // 2026-05-17 — defensive normalize. parseClickUpTask already sanitizes,
     // but ads can also come from local edits / matrix-cell ingestion that
     // bypass parseClickUpTask. Strip badge-like suffixes here too.
-    var ang = _normalizeTaxonomyName((ad.angle || '').trim());
-    if (ang && !angleSeen[ang.toLowerCase()] && !existingAngleNamesLC[ang.toLowerCase()] && !_angTomb[ang.toLowerCase().trim()]) {
-      angleSeen[ang.toLowerCase()] = true;
+    var ang = _canonicalTaxonomyName((ad.angle || '').trim(), ANGLES);
+    var angKey = _taxonomyLookupKey(ang);
+    if (ang && !angleSeen[angKey] && !existingAngleNamesLC[angKey] && !_angTomb[angKey]) {
+      angleSeen[angKey] = true;
       ANGLES.push({
         id: 'ang-auto-' + Date.now() + '-' + addedAngles.length,
         name: ang,
@@ -28308,13 +28470,14 @@ function autoDiscoverTaxonomy(sourceAds) {
         _localNew: true,
         _autoDiscovered: true
       });
-      existingAngleNamesLC[ang.toLowerCase()] = true;
+      existingAngleNamesLC[angKey] = true;
       addedAngles.push(ang);
     }
 
-    var per = _normalizeTaxonomyName((ad.persona || '').trim());
-    if (per && !personaSeen[per.toLowerCase()] && !existingPersonaNamesLC[per.toLowerCase()] && !_perTomb[per.toLowerCase().trim()]) {
-      personaSeen[per.toLowerCase()] = true;
+    var per = _canonicalTaxonomyName((ad.persona || '').trim(), PERSONAS);
+    var perKey = _taxonomyLookupKey(per);
+    if (per && !personaSeen[perKey] && !existingPersonaNamesLC[perKey] && !_perTomb[perKey]) {
+      personaSeen[perKey] = true;
       PERSONAS.push({
         id: 'per-auto-' + Date.now() + '-' + addedPersonas.length,
         name: per,
@@ -28324,7 +28487,7 @@ function autoDiscoverTaxonomy(sourceAds) {
         _localNew: true,
         _autoDiscovered: true
       });
-      existingPersonaNamesLC[per.toLowerCase()] = true;
+      existingPersonaNamesLC[perKey] = true;
       addedPersonas.push(per);
     }
   }
@@ -28656,6 +28819,12 @@ async function importTasksFromClickUp(tasks) {
   }
 
   ADS = newAds;
+  var _collapsedCuDupes = (typeof _collapseDuplicateClickUpAds === 'function')
+    ? _collapseDuplicateClickUpAds({ persist: false })
+    : 0;
+  if (_collapsedCuDupes > 0 && typeof saveState === 'function') {
+    try { saveState(); } catch (e) {}
+  }
   // 2026-05-25: hydrate _winningArtifacts onto each ad's meta from the
   // task_video_winners table. The stale ClickUp sync wipes meta on every
   // snapshot rebuild, so we re-populate from the durable winners table
@@ -28810,8 +28979,8 @@ function parseClickUpTask(t) {
   // 2026-05-17 — sanitize at the CU→memory boundary so a polluted CU value
   // ("Foo⭐ Winner") can never enter local state, get auto-discovered, or
   // upserted back as a ghost taxonomy row.
-  angle   = _normalizeTaxonomyName(angle);
-  persona = _normalizeTaxonomyName(persona);
+  angle   = _canonicalTaxonomyName(angle, (typeof ANGLES !== 'undefined' ? ANGLES : []));
+  persona = _canonicalTaxonomyName(persona, (typeof PERSONAS !== 'undefined' ? PERSONAS : []));
   var adLink   = getFieldValue(['inspiration link', 'inspo link', 'ad link', 'adlink', 'ad url', 'adurl', 'creative link', 'reference link']);
   var driveLink = getFieldValue(['drive link', 'google drive', 'gdrive', 'production link', 'google drive link', 'drive']);
   var adType = getFieldValue(['photo/video', 'ad type', 'adtype', 'format type', 'type']);
@@ -29203,9 +29372,13 @@ function saveAdFieldUnified(adId, kind, fieldKey, value) {
     ad._customFields[lcName] = displayForLocal;
     ad._customFieldsRaw[lcName] = rawForLocal;
     if (lcName === 'angle tag') {
+      displayForLocal = _canonicalTaxonomyName(displayForLocal, ANGLES);
+      ad._customFields[lcName] = displayForLocal;
       ad.angle = displayForLocal || '';
       if (typeof _syncCanonicalCellAssignmentForAd === 'function') _syncCanonicalCellAssignmentForAd(ad);
     } else if (lcName === 'persona tag') {
+      displayForLocal = _canonicalTaxonomyName(displayForLocal, PERSONAS);
+      ad._customFields[lcName] = displayForLocal;
       ad.persona = displayForLocal || '';
       if (typeof _syncCanonicalCellAssignmentForAd === 'function') _syncCanonicalCellAssignmentForAd(ad);
     }
@@ -30101,6 +30274,16 @@ function pollFullSync() {
         }
       } catch (_eHeal) { console.warn('[poll] heal-adopt pass error', _eHeal); }
 
+      try {
+        var _collapsedAdDupes = (typeof _collapseDuplicateClickUpAds === 'function')
+          ? _collapseDuplicateClickUpAds({ persist: false })
+          : 0;
+        if (_collapsedAdDupes > 0) {
+          changed = true;
+          console.log('[pollFullSync] collapsed', _collapsedAdDupes, 'duplicate AD row(s) by ClickUp id');
+        }
+      } catch (_eAdDedupe) { console.warn('[pollFullSync] AD dedup failed:', _eAdDedupe); }
+
       // ── Pass 3: sync MANUAL_ACTIONS liveStatus + title from ClickUp ──
       // External ClickUp renames now propagate to action plan task titles
       // (and the linked source ad's formatName).
@@ -30704,8 +30887,8 @@ function _apResolveCellIdentity(act, ad) {
                 ((typeof _extractDescriptionFieldValue === 'function')
                   ? _extractDescriptionFieldValue(desc, ['Persona', 'Persona Tag', 'Target Persona', 'Audience'])
                   : '');
-  angle = (typeof _normalizeTaxonomyName === 'function') ? _normalizeTaxonomyName(angle) : String(angle || '').trim();
-  persona = (typeof _normalizeTaxonomyName === 'function') ? _normalizeTaxonomyName(persona) : String(persona || '').trim();
+  angle = (typeof _canonicalTaxonomyName === 'function') ? _canonicalTaxonomyName(angle, ANGLES) : String(angle || '').trim();
+  persona = (typeof _canonicalTaxonomyName === 'function') ? _canonicalTaxonomyName(persona, PERSONAS) : String(persona || '').trim();
 
   // Opportunistically heal local state so drawer, provenance, and Open Matrix
   // all agree during this session. Durable recovery comes from ClickUp parse
@@ -32005,6 +32188,9 @@ async function _flushStateToSupabase(productIdArg) {
     console.warn('[SB] abort save: in-memory data belongs to', _adsProductId, 'but tried to save as', pid);
     return;
   }
+  if (typeof _collapseDuplicateClickUpAds === 'function') {
+    try { _collapseDuplicateClickUpAds({ persist: false }); } catch (e) {}
+  }
   _saveInFlight = true;
   try {
     await DB.saveProductData(pid, {
@@ -32127,6 +32313,9 @@ async function loadState() {
   MATRIX_CELL_META = state.MATRIX_CELL_META || {};
   CELL_CREATIVE_ASSIGNMENTS = state.CELL_CREATIVE_ASSIGNMENTS || {};
   MANUAL_ACTIONS = state.MANUAL_ACTIONS || [];
+  if (typeof _collapseDuplicateClickUpAds === 'function') {
+    try { _collapseDuplicateClickUpAds({ persist: false }); } catch (e) {}
+  }
   PRODUCTION_CLICKUP_IDS = {}; // rebuilt from ADS: { [clickupTaskId]: sourceFormatAdId }
   for (var pi = 0; pi < ADS.length; pi++) {
     var _a = ADS[pi];
@@ -32574,14 +32763,14 @@ function _clickUpTaskTaxonomyForCleanup(task) {
     }
     return '';
   }
-  out.angle = _normalizeTaxonomyName(getField(['angle tag', 'angle', 'angles', 'ad angle']) || '');
-  out.persona = _normalizeTaxonomyName(getField(['persona tag', 'persona', 'personas', 'target persona', 'audience']) || '');
+  out.angle = _canonicalTaxonomyName(getField(['angle tag', 'angle', 'angles', 'ad angle']) || '', ANGLES);
+  out.persona = _canonicalTaxonomyName(getField(['persona tag', 'persona', 'personas', 'target persona', 'audience']) || '', PERSONAS);
   if ((!out.angle || !out.persona) && typeof _extractDescriptionFieldValue === 'function') {
     var desc = (typeof _normalizeClickUpDescriptionForReuse === 'function')
       ? _normalizeClickUpDescriptionForReuse((task && task.description) || '')
       : ((task && task.description) || '');
-    if (!out.angle) out.angle = _normalizeTaxonomyName(_extractDescriptionFieldValue(desc, ['Angle', 'Angle Tag', 'Ad Angle']) || '');
-    if (!out.persona) out.persona = _normalizeTaxonomyName(_extractDescriptionFieldValue(desc, ['Persona', 'Persona Tag', 'Target Persona', 'Audience']) || '');
+    if (!out.angle) out.angle = _canonicalTaxonomyName(_extractDescriptionFieldValue(desc, ['Angle', 'Angle Tag', 'Ad Angle']) || '', ANGLES);
+    if (!out.persona) out.persona = _canonicalTaxonomyName(_extractDescriptionFieldValue(desc, ['Persona', 'Persona Tag', 'Target Persona', 'Audience']) || '', PERSONAS);
   }
   return out;
 }
@@ -33831,6 +34020,8 @@ function updateCreativeFieldInline(adId, field, val) {
   for (var i = 0; i < ADS.length; i++) { if (ADS[i].id === adId) { ad = ADS[i]; break; } }
   if (!ad) return;
 
+  if (field === 'angle') val = _canonicalTaxonomyName(val, ANGLES);
+  if (field === 'persona') val = _canonicalTaxonomyName(val, PERSONAS);
   ad[field] = val;
 
   if (field === 'angle' || field === 'persona') {
@@ -33839,12 +34030,12 @@ function updateCreativeFieldInline(adId, field, val) {
 
   // Auto-add to ANGLES/PERSONAS arrays if new value not seen before
   var addedNew = false;
-  if (field === 'angle' && val && !ANGLES.some(function(a) { return a.name === val; })) {
+  if (field === 'angle' && val && !ANGLES.some(function(a) { return _taxonomyLookupKey(a.name) === _taxonomyLookupKey(val); })) {
     _forgetTaxonomyDeletion('angle', activeProductId, val); // BUG-004
     ANGLES.push({ id: 'ang-' + Date.now(), name: val, status: 'Untested', sourceLink: '', notes: '', _localNew: true });
     addedNew = true;
   }
-  if (field === 'persona' && val && !PERSONAS.some(function(p) { return p.name === val; })) {
+  if (field === 'persona' && val && !PERSONAS.some(function(p) { return _taxonomyLookupKey(p.name) === _taxonomyLookupKey(val); })) {
     _forgetTaxonomyDeletion('persona', activeProductId, val); // BUG-004
     PERSONAS.push({ id: 'per-' + Date.now(), name: val, status: 'Untested', sourceLink: '', notes: '', _localNew: true });
     addedNew = true;

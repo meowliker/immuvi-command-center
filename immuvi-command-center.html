@@ -44269,20 +44269,26 @@ function getQueuedItems() {
   var queueRows = (window.INSPIRATION_QUEUE && Array.isArray(window.INSPIRATION_QUEUE)) ? window.INSPIRATION_QUEUE : [];
   var queueByInsId = {};
   queueRows.forEach(function (q) { if (q && q.ins_id) queueByInsId[q.ins_id] = q; });
-  function _insQueueDisplayStatus(ins) {
-    var q = ins && queueByInsId[ins.id];
-    var qs = String((q && q.status) || '').toLowerCase();
-    if (qs === 'failed') return 'Failed';
-    if (qs === 'classifying' || qs === 'claimed') return 'Classifying';
-    if (qs === 'pending' || qs === 'processing') return 'Queued';
-    if (qs === 'classified' && ins && ins.status === 'Queued') return 'Classified';
-    return (ins && ins.status) || 'Saved';
-  }
   return INSPIRATIONS.filter(function(i){
     if (!i || i.status !== 'Queued') return false;
     var q = queueByInsId[i.id];
     return !(q && q.status === 'failed');
   });
+}
+
+function _insQueueDisplayStatus(ins, queueByInsId) {
+  if (!queueByInsId) {
+    queueByInsId = {};
+    var queueRows = (window.INSPIRATION_QUEUE && Array.isArray(window.INSPIRATION_QUEUE)) ? window.INSPIRATION_QUEUE : [];
+    queueRows.forEach(function (q) { if (q && q.ins_id) queueByInsId[q.ins_id] = q; });
+  }
+  var q = ins && queueByInsId[ins.id];
+  var qs = String((q && q.status) || '').toLowerCase();
+  if (qs === 'failed') return 'Failed';
+  if (qs === 'classifying' || qs === 'claimed') return 'Classifying';
+  if (qs === 'pending' || qs === 'processing') return 'Queued';
+  if (qs === 'classified' && ins && ins.status === 'Queued') return 'Classified';
+  return (ins && ins.status) || 'Saved';
 }
 
 function updateQueueCounter() {
@@ -45110,7 +45116,7 @@ function renderInspirations() {
   var filtered = INSPIRATIONS.filter(function(ins) {
     if (platform && ins.platform !== platform) return false;
     if (format && ins.formatName !== format) return false;
-    if (status && _insQueueDisplayStatus(ins) !== status) return false;
+    if (status && _insQueueDisplayStatus(ins, queueByInsId) !== status) return false;
     if (hook && ins.hookType !== hook) return false;
     if (typeFlt && (ins.adType || '') !== typeFlt) return false;
     if (perfFlt && perfVerdicts[ins.id] !== perfFlt) return false;
@@ -45146,7 +45152,7 @@ function renderInspirations() {
         case 'production': return ins.productionStyle || '';
         case 'funnel':     return ins.funnelStage || '';
         case 'platform':   return ins.platform || '';
-        case 'status':     return _insQueueDisplayStatus(ins) || '';
+        case 'status':     return _insQueueDisplayStatus(ins, queueByInsId) || '';
         case 'created':    return ins.classifiedAt || ins.created_at || ins.queuedAt || 0;
         default:           return '';
       }
@@ -45206,7 +45212,7 @@ function renderInspirations() {
     var insId = ins.id;
     var insIdQ = '\'' + escAttr(insId) + '\'';
     var queueRow = queueByInsId[ins.id] || null;
-    var displayStatus = _insQueueDisplayStatus(ins);
+    var displayStatus = _insQueueDisplayStatus(ins, queueByInsId);
     var isFailedQueue = displayStatus === 'Failed';
     var isQueued = displayStatus === 'Queued' || displayStatus === 'Classifying';
     var queueError = (queueRow && queueRow.error_message) || '';

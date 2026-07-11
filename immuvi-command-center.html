@@ -33710,6 +33710,75 @@ function _adBoundaryText(ad) {
   return String(bits.filter(Boolean).join(' ')).toLowerCase();
 }
 
+function _adDeclaredProductName(ad) {
+  if (!ad) return '';
+  var cf = ad._customFields || {};
+  var keys = ['product', 'product name', 'product profile', 'product profile name'];
+  for (var i = 0; i < keys.length; i++) {
+    var v = cf[keys[i]];
+    if (v != null && _fieldText(v)) return _fieldText(v);
+  }
+  var wanted = {};
+  keys.forEach(function(k) { wanted[k] = true; });
+  var found = '';
+  Object.keys(cf).some(function(k) {
+    if (!wanted[String(k || '').toLowerCase().trim()]) return false;
+    var text = _fieldText(cf[k]);
+    if (text) {
+      found = text;
+      return true;
+    }
+    return false;
+  });
+  return found;
+}
+
+function _fieldText(value) {
+  if (value == null) return '';
+  if (Array.isArray(value)) {
+    for (var i = 0; i < value.length; i++) {
+      var item = _fieldText(value[i]);
+      if (item) return item;
+    }
+    return '';
+  }
+  if (typeof value === 'object') {
+    var props = ['name', 'label', 'value', 'text'];
+    for (var pi = 0; pi < props.length; pi++) {
+      if (value[props[pi]] != null) {
+        var text = _fieldText(value[props[pi]]);
+        if (text) return text;
+      }
+    }
+    return '';
+  }
+  return String(value).trim();
+}
+
+function _productNameMatchesDeclaredField(prod, declaredName) {
+  var declared = _normProductListName(declaredName);
+  if (!prod || !declared) return true;
+  var aliases = [
+    prod.name,
+    _productListName(prod),
+    prod.config && prod.config.production && prod.config.production.product_name
+  ].filter(Boolean);
+  for (var i = 0; i < aliases.length; i++) {
+    var alias = _normProductListName(aliases[i]);
+    if (!alias) continue;
+    if (alias.indexOf(declared) !== -1 || declared.indexOf(alias) !== -1) return true;
+  }
+  var declaredTokens = {};
+  declared.split(' ').forEach(function(tok) {
+    if (tok && tok.length >= 3) declaredTokens[tok] = true;
+  });
+  var activeTokens = _significantProductTokens(prod);
+  for (var ti = 0; ti < activeTokens.length; ti++) {
+    if (declaredTokens[activeTokens[ti]]) return true;
+  }
+  return false;
+}
+
 function _significantProductTokens(prod) {
   var stop = {
     command: 1, center: 1, mastery: 1, master: 1, scripts: 1, script: 1,
@@ -33895,6 +33964,10 @@ async function _applyProductBoundaryQuarantine(productId, state) {
     }
     if (!reason && ad._syncProductId && ad._syncProductId !== productId) {
       reason = 'synced for ' + (ad._syncProductName || ad._syncProductId);
+    }
+    var declaredProductName = _adDeclaredProductName(ad);
+    if (!reason && declaredProductName && !_productNameMatchesDeclaredField(prod, declaredProductName)) {
+      reason = 'ClickUp Product field is ' + declaredProductName;
     }
     if (reason) {
       ad._productBoundaryQuarantined = true;

@@ -1620,3 +1620,53 @@ So when the same ClickUp task existed as both:
   - `0` stale matrix-cell references to the removed duplicate rows.
   - `0` stale manual-action references to the removed duplicate rows.
   - `V16` remains visible as a single Winner Variation row with status `Mild Winner`.
+
+---
+
+## Bug 35 — Canva Command HQ showed angles/personas from other products
+**Status:** ✅ done locally — fixed and repaired 2026-07-11; not pushed yet
+**Reported:** 2026-07-11
+**Surface:** Command HQ coverage intelligence / ClickUp sync / Clean stale
+
+### Symptom
+- Canva Command HQ showed foreign Angle/Persona rows such as Herbal Healing Bundle, ADHD, Phonics/Nursing, and other product taxonomy.
+- The user had already run Clean stale, and the rows were not shown as stale data.
+
+### Root cause
+This was a third product-boundary leak, separate from the stale-cell and duplicate-creative bugs.
+
+The contaminated Canva rows were real `ads` rows stored under Canva's `product_id`, but their ClickUp custom field said `Product = Herbal Healing Bundle`.
+The previous guards only checked:
+1. source ClickUp list id/name,
+2. duplicate ClickUp ownership in another product,
+3. `_syncProductId` stamps.
+
+Those Herbal rows did not trip those checks, so Clean stale protected them when they still had product-local references, then the orphaned Angle/Persona master rows remained visible after the rows were removed.
+Archived zero-count ADHD personas were also still present as product taxonomy rows, so Command HQ counted/rendered them even though no active Canva creatives used them.
+
+### Fix
+1. Added ClickUp Product custom-field enforcement to `_applyProductBoundaryQuarantine()`.
+2. Added `_adDeclaredProductName()` to read `product`, `Product`, `product name`, `product profile`, and object/array-shaped custom field values.
+3. Added `_productNameMatchesDeclaredField()` so rows whose declared ClickUp Product does not match the active product/list aliases are quarantined before rendering or sync reconciliation.
+4. Kept the check conservative: valid Canva aliases such as `Canva`, `Canva Mastery`, or `Canva Mastery - Scripts` still pass.
+
+### Live repair
+- Soft-deleted 5 active Herbal Healing Bundle rows that were stored under Canva:
+  - `86d3ehkuq` / `HH-026-INS-015`
+  - `86d3ddn35` / `HH-025-INS-013`
+  - `86d3d5pbp` / `HH-024-HHH - 13605-1`
+  - `86d3d2vxj` / `HH-022-HHH - 13605-1`
+  - `86d3ehkuf` / `HH-027-INS-014`
+- Updated their `deleted_ads` tombstones with ClickUp task ids so sync will not resurrect them into Canva.
+- Deleted 6 zero-use foreign Angle rows from Canva.
+- Deleted 12 zero-use foreign Persona rows from Canva, including the archived ADHD rows and the Herbal/Phonics/Nursing rows.
+
+### Verified
+- Live verification immediately after repair and after a 7-second delayed re-check:
+  - `0` active `HH-*` rows in Canva.
+  - `0` active Canva rows whose ClickUp Product field declares a non-Canva product.
+  - `0` remaining known foreign Angle rows.
+  - `0` remaining known foreign Persona rows.
+  - Canva taxonomy count is back to `9` angles and `8` personas.
+- `immuvi-command-center.html` inline script blocks parse cleanly via Node `new Function()` extraction.
+- `git diff --check` passed.

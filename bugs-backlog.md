@@ -1450,3 +1450,30 @@ Sync hardening:
 - Live data repair confirmed `Founding Member × Canva Mastery Buyers` keeps `AD-1783077201511` / `AD-1783077282760`, while `Founding Member × Side-Hustle Sellers 22-45` now only keeps `AD-1783071530496`.
 - Follow-up live data repair confirmed `CIM-FM-01` / `AD-1783071530496` remains only in `Founding Member × Canva Mastery Buyers` after its canonical persona changed there.
 - Product-scoped live audit after the broader repair found 3,668 active ClickUp-backed ads and `0` duplicate/stale synced cell placements.
+
+---
+
+## Bug 31 — Inspiration queue rows failed but still displayed as Queued
+**Status:** ✅ done — fixed 2026-07-11
+**Reported:** 2026-07-11
+**Surface:** Inspirations queue + distributed classifier worker
+
+### Symptom
+- Canva inspirations `C-INS-001`, `C-INS-060`, and `C-INS-061` appeared stuck as `Queued` while the Mac mini worker showed `idle`.
+- Live `inspiration_queue` rows were actually `failed`, but matching `inspirations` rows still had `status: Queued`, so the table/count badge hid the real failure.
+
+### Root cause
+1. The Inspirations table rendered the persisted `inspirations.status` and did not merge the latest `inspiration_queue.status` for pending/classifying/failed rows.
+2. The pipeline refresh counted queue failures but did not populate `window.INSPIRATION_QUEUE`, so the row renderer could not reliably display queue-state truth.
+3. The classifier worker preferred Claude whenever it was installed. If Claude was logged out or returned 401 credentials errors, it did not fall back to Codex even when Codex was available.
+
+### Fix
+1. Load current `inspiration_queue` rows during `loadInspirations()` and the pipeline pulse refresh.
+2. Render queue status as the visible row status for pipeline rows: `pending/processing → Queued`, `claimed/classifying → Classifying`, `failed → Failed`.
+3. Exclude failed queue rows from the local queued counter.
+4. Added `Queued`, `Classifying`, and `Failed` to the Inspirations status filter.
+5. Added worker fallback: on agent authentication failures, retry the same classify prompt with the alternate installed agent before marking the queue attempt failed.
+
+### Live repair
+- Corrected malformed `C-INS-001` URL to `https://www.facebook.com/ads/library/?id=843318062124216`.
+- Requeued `C-INS-001`, `C-INS-060`, and `C-INS-061` with clean attempts/error state.

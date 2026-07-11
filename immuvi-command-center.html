@@ -10586,7 +10586,7 @@ body:not(.booting) #__bootLoader {
           <span class="lbl">Status</span>
           <select id="insFiltStatus" onchange="_insFltPaint();renderInspirations()">
             <option value="">All Statuses</option>
-            <option>Saved</option><option>Classified</option><option>Briefed</option><option>Live</option><option>Winner</option><option>Loser</option>
+            <option>Queued</option><option>Classifying</option><option>Failed</option><option>Saved</option><option>Classified</option><option>Briefed</option><option>Live</option><option>Winner</option><option>Loser</option>
           </select>
           <span class="caret">▾</span>
         </label>
@@ -44123,6 +44123,12 @@ async function loadInspirations() {
     try {
       var rows = await DB.listInspirations(activeProductId);
       INSPIRATIONS = rows || [];
+      try {
+        window.INSPIRATION_QUEUE = await DB.getQueue(activeProductId);
+      } catch (qe) {
+        console.warn('[SB] load inspiration queue failed', qe);
+        window.INSPIRATION_QUEUE = [];
+      }
       // Keep INS_NEXT_ID roughly in sync with highest numeric suffix we've seen
       var maxN = 0;
       for (var i = 0; i < INSPIRATIONS.length; i++) {
@@ -44260,7 +44266,23 @@ async function autoPushToBridge() {
 }
 
 function getQueuedItems() {
-  return INSPIRATIONS.filter(function(i){ return i.status === 'Queued'; });
+  var queueRows = (window.INSPIRATION_QUEUE && Array.isArray(window.INSPIRATION_QUEUE)) ? window.INSPIRATION_QUEUE : [];
+  var queueByInsId = {};
+  queueRows.forEach(function (q) { if (q && q.ins_id) queueByInsId[q.ins_id] = q; });
+  function _insQueueDisplayStatus(ins) {
+    var q = ins && queueByInsId[ins.id];
+    var qs = String((q && q.status) || '').toLowerCase();
+    if (qs === 'failed') return 'Failed';
+    if (qs === 'classifying' || qs === 'claimed') return 'Classifying';
+    if (qs === 'pending' || qs === 'processing') return 'Queued';
+    if (qs === 'classified' && ins && ins.status === 'Queued') return 'Classified';
+    return (ins && ins.status) || 'Saved';
+  }
+  return INSPIRATIONS.filter(function(i){
+    if (!i || i.status !== 'Queued') return false;
+    var q = queueByInsId[i.id];
+    return !(q && q.status === 'failed');
+  });
 }
 
 function updateQueueCounter() {
@@ -45088,7 +45110,7 @@ function renderInspirations() {
   var filtered = INSPIRATIONS.filter(function(ins) {
     if (platform && ins.platform !== platform) return false;
     if (format && ins.formatName !== format) return false;
-    if (status && ins.status !== status) return false;
+    if (status && _insQueueDisplayStatus(ins) !== status) return false;
     if (hook && ins.hookType !== hook) return false;
     if (typeFlt && (ins.adType || '') !== typeFlt) return false;
     if (perfFlt && perfVerdicts[ins.id] !== perfFlt) return false;
@@ -45124,7 +45146,7 @@ function renderInspirations() {
         case 'production': return ins.productionStyle || '';
         case 'funnel':     return ins.funnelStage || '';
         case 'platform':   return ins.platform || '';
-        case 'status':     return ins.status || '';
+        case 'status':     return _insQueueDisplayStatus(ins) || '';
         case 'created':    return ins.classifiedAt || ins.created_at || ins.queuedAt || 0;
         default:           return '';
       }
@@ -45181,9 +45203,13 @@ function renderInspirations() {
       ? '<span class="ins-reuse-pill active" title="'+escAttr(reuseTitle)+'">'+totalReuse+' product'+(totalReuse>1?'s':'')+'</span>'
       : '<span class="ins-reuse-pill" title="Not yet used">0</span>';
     var funnelColor = ins.funnelStage==='TOF'?'#6366f1':ins.funnelStage==='MOF'?'#f59e0b':'#10b981';
-    var isQueued = ins.status === 'Queued';
     var insId = ins.id;
     var insIdQ = '\'' + escAttr(insId) + '\'';
+    var queueRow = queueByInsId[ins.id] || null;
+    var displayStatus = _insQueueDisplayStatus(ins);
+    var isFailedQueue = displayStatus === 'Failed';
+    var isQueued = displayStatus === 'Queued' || displayStatus === 'Classifying';
+    var queueError = (queueRow && queueRow.error_message) || '';
 
     // Build angle select
     var angleOpts = ANGLES.map(function(a){
@@ -45243,15 +45269,15 @@ function renderInspirations() {
       '<td style="font-family:\'JetBrains Mono\',monospace;font-size:0.65rem;color:var(--t3);white-space:nowrap">'+esc(ins.id)+dupeDot+'</td>' +
       // 2. Format Name
       '<td class="ins-usp-cell">' +
-        (isQueued
-          ? '<span class="ins-usp-detail" style="color:var(--t3);font-style:italic">Pending classification...</span>' +
+        ((isQueued || isFailedQueue)
+          ? '<span class="ins-usp-detail" style="color:' + (isFailedQueue ? '#dc2626' : 'var(--t3)') + ';font-style:italic">' + (isFailedQueue ? ('Failed: ' + esc(queueError || 'worker failed')) : 'Pending classification...') + '</span>' +
             '<a href="'+escAttr(ins.sourceUrl)+'" target="_blank" class="ins-link" style="font-size:0.65rem;display:block;margin-top:2px">'+esc(ins.sourceUrl.length>50?ins.sourceUrl.substring(0,50)+'...':ins.sourceUrl)+'</a>'
           : '<span class="ins-usp-format" contenteditable="true" onblur="updateInsFormatName('+insIdQ+',this.textContent.trim())">'+esc(fmtName)+'</span>' +
             '<span class="ins-usp-detail ins-txt-clamp" contenteditable="true" placeholder="Add detail..." onblur="updateInsDetail('+insIdQ+',this.textContent.trim())" onfocus="this.classList.remove(\'ins-txt-clamp\')" onblur="this.classList.add(\'ins-txt-clamp\');updateInsDetail('+insIdQ+',this.textContent.trim())" data-tooltip="'+escAttr(fmtDetail)+'" onmouseenter="showInsTip(this)" onmouseleave="hideInsTooltip()" style="cursor:text;min-height:14px;outline:none">'+esc(fmtDetail || '')+'</span>'
         ) +
       '</td>' +
       // 3-16: show dashes for queued rows, editable fields for classified rows
-      (isQueued
+      ((isQueued || isFailedQueue)
         ? '<td>\u2014</td><td>\u2014</td><td>\u2014</td><td>\u2014</td><td>\u2014</td><td>\u2014</td><td>\u2014</td><td>\u2014</td>' +
           '<td><span class="ins-platform-badge '+platformClass(ins.platform)+'">'+esc(ins.platform||'Other')+'</span></td>' +
           '<td>\u2014</td><td>\u2014</td><td>\u2014</td><td><a href="'+escAttr(ins.sourceUrl)+'" target="_blank" class="ins-link">'+esc(srcUrlDisp)+'&#8599;</a></td><td>\u2014</td>'
@@ -45308,7 +45334,7 @@ function renderInspirations() {
       '<td style="font-family:\'JetBrains Mono\',monospace;font-size:0.68rem;color:var(--t3);white-space:nowrap">'+(ins.duration_seconds ? esc(String(ins.duration_seconds))+'s' : '\u2014')+'</td>'
       ) +
       // 17. Status
-      '<td><span class="ins-status-badge '+(ins.status||'saved').toLowerCase().replace(/\s+/g,'-')+'">'+esc(ins.status||'Saved')+'</span></td>' +
+      '<td><span class="ins-status-badge '+(displayStatus||'saved').toLowerCase().replace(/\s+/g,'-')+'" title="'+escAttr(queueError)+'">'+esc(displayStatus||'Saved')+'</span></td>' +
       // 17b. Created — new in Phase 2 v2 (sortable column)
       (function(){
         var ts = ins.classifiedAt || ins.created_at || ins.queuedAt;
@@ -45364,7 +45390,7 @@ function renderInspirations() {
       // 21. Actions
       '<td class="ins-actions">' +
         '<a href="'+escAttr(ins.sourceUrl)+'" target="_blank" class="ins-icon-btn" title="Open source">&#8599;</a>' +
-        (isQueued ? '' : '<button class="ins-icon-btn" onclick="useInspirationFormat('+insIdQ+')" title="Use this format">+</button>') +
+        ((isQueued || isFailedQueue) ? '' : '<button class="ins-icon-btn" onclick="useInspirationFormat('+insIdQ+')" title="Use this format">+</button>') +
         ((ins._needsAngleReview || ins._needsPersonaReview || (ins.status==='Classified' && (!ins.angle || !ins.persona)))
           ? '<button class="ins-icon-btn ins-map-btn" onclick="remapInspirationFields('+insIdQ+')" title="Map angle &amp; persona">🗺</button>'
           : '') +
@@ -48227,11 +48253,13 @@ window._clearPendingCu = _clearPendingCu;
       var pid = activeProductId;
 
       // Queue counts (pipeline state)
-      var [pending, classifying, failed] = await Promise.all([
+      var [pending, classifying, failed, queueRowsResp] = await Promise.all([
         SB.from('inspiration_queue').select('id', { count:'exact', head:true }).eq('product_id', pid).eq('status','pending'),
         SB.from('inspiration_queue').select('id', { count:'exact', head:true }).eq('product_id', pid).eq('status','classifying'),
-        SB.from('inspiration_queue').select('id', { count:'exact', head:true }).eq('product_id', pid).eq('status','failed')
+        SB.from('inspiration_queue').select('id', { count:'exact', head:true }).eq('product_id', pid).eq('status','failed'),
+        SB.from('inspiration_queue').select('id,ins_id,product_id,url,platform,status,error_message,queued_at,processed_at,claimed_by,claimed_at,worker_assignment,attempts').eq('product_id', pid)
       ]);
+      window.INSPIRATION_QUEUE = (queueRowsResp && queueRowsResp.data) || [];
 
       // Inspirations table: classified count + per-row created_at for windowing
       var insRows = await SB.from('inspirations').select('id, created_at').eq('product_id', pid);

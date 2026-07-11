@@ -221,6 +221,19 @@ def build_agent_cmd(prompt: str, prefer: str = "claude") -> list:
     )
 
 
+def _agent_auth_failed(output: str) -> bool:
+    """True when an installed agent exists but cannot authenticate."""
+    text = (output or "").lower()
+    return (
+        "401" in text
+        or "authentication_error" in text
+        or "invalid authentication credentials" in text
+        or "failed to authenticate" in text
+        or "not logged in" in text
+        or "login required" in text
+    )
+
+
 def _safe_run(cmd: list, timeout: int = 5) -> str:
     try:
         out = subprocess.check_output(cmd, stderr=subprocess.STDOUT, timeout=timeout)
@@ -1216,25 +1229,51 @@ class Worker:
             f"  If the verification SELECT shows the row missing or fields blank, that is a FAIL.\n"
         )
 
-        # Auto-route: prefer claude (the skill's native agent) but fall back
-        # to codex on machines that only have Codex installed. The
-        # classify-inspiration SKILL.md auto-updates via Step 0 from Vercel,
-        # so it works under either agent as long as the skill files exist
-        # locally for that agent.
-        cmd = build_agent_cmd(prompt, prefer="claude")
-        agent_label = cmd[0] if cmd[0] == "claude" else "codex"
-        log(f"[{job.get('id')}] running skill on {ins_id} via {agent_label} (timeout {CLAUDE_CLI_TIMEOUT_SECONDS}s)")
+        # Auto-route: use the configured/preferred agent first, but if that
+        # installed agent is logged out (Claude 401, stale credentials, etc.),
+        # retry once through the other installed agent before burning a queue
+        # attempt. This keeps Codex-only Mac minis and logged-out laptops from
+        # leaving rows stuck as "Queued" while the worker is otherwise alive.
+        prefer = (os.environ.get("CLASSIFY_AGENT_PREFER") or "claude").strip().lower()
+        if prefer not in ("claude", "codex"):
+            prefer = "claude"
+        attempts = [prefer, "codex" if prefer == "claude" else "claude"]
+        tried_agents = []
         try:
-            r = subprocess.run(
-                cmd,
-                capture_output=True, text=True,
-                timeout=CLAUDE_CLI_TIMEOUT_SECONDS,
-            )
+            r = None
+            cmd = None
+            agent_label = ""
+            for idx, agent_prefer in enumerate(attempts):
+                try:
+                    cmd = build_agent_cmd(prompt, prefer=agent_prefer)
+                except RuntimeError:
+                    continue
+                agent_label = cmd[0] if cmd[0] == "claude" else "codex"
+                if agent_label in tried_agents:
+                    continue
+                tried_agents.append(agent_label)
+                log(f"[{job.get('id')}] running skill on {ins_id} via {agent_label} (timeout {CLAUDE_CLI_TIMEOUT_SECONDS}s)")
+                r = subprocess.run(
+                    cmd,
+                    capture_output=True, text=True,
+                    timeout=CLAUDE_CLI_TIMEOUT_SECONDS,
+                )
+                stdout0 = (r.stdout or "").strip()
+                stderr0 = (r.stderr or "").strip()
+                combined0 = (stdout0 + "\n" + stderr0).strip()
+                if r.returncode == 0:
+                    break
+                if idx < len(attempts) - 1 and _agent_auth_failed(combined0):
+                    log(f"[{job.get('id')}] {agent_label} auth failed; retrying with alternate agent")
+                    continue
+                break
+            if r is None or cmd is None:
+                return {"success": False, "error": "no usable agent CLI found"}
             stdout = (r.stdout or "").strip()
             stderr = (r.stderr or "").strip()
             tail = stdout[-500:] if stdout else stderr[-500:]
             if r.returncode != 0:
-                return {"success": False, "error": f"claude exit {r.returncode}: {tail}"}
+                return {"success": False, "error": f"{agent_label} exit {r.returncode}: {tail}"}
             # Skill is asked to print 'OK <ins_id>' on success.
             skill_says_ok = f"OK {ins_id}" in stdout
             skill_says_fail = f"FAIL {ins_id}" in stdout
@@ -1256,9 +1295,9 @@ class Worker:
             log(f"[{job.get('id')}] skill exit 0 with no OK marker but verify passed; tail: {tail[-200:]}")
             return {"success": True, "warning": "no_ok_marker_but_verified"}
         except subprocess.TimeoutExpired:
-            return {"success": False, "error": f"claude timeout after {CLAUDE_CLI_TIMEOUT_SECONDS}s"}
+            return {"success": False, "error": f"agent timeout after {CLAUDE_CLI_TIMEOUT_SECONDS}s"}
         except FileNotFoundError:
-            return {"success": False, "error": "claude CLI not found in PATH"}
+            return {"success": False, "error": "agent CLI not found in PATH"}
         except Exception as e:
             return {"success": False, "error": f"{type(e).__name__}: {e}"}
 

@@ -1708,3 +1708,37 @@ Bug 33 fixed the main ClickUp parse and auto-discovery paths, but two holes rema
 ### Verified
 - `immuvi-command-center.html` inline script blocks parse cleanly via Node `new Function()` extraction.
 - `git diff --check` passed.
+
+---
+
+## Bug 37 — Producer worker crashed when Codex moved from Codex.app to ChatGPT.app
+**Status:** ✅ fixed locally 2026-07-13; not pushed yet
+**Reported:** 2026-07-13
+**Surface:** Producer runs / Mac worker pool
+
+### Symptom
+- Producer Run `#257` for task `86d3nevgj` (`AR-155-INS-019 - V3 - Full Remake`) failed instantly on `gp-mac-mini`.
+- Error: `worker thread crashed: [Errno 2] No such file or directory: '/Applications/Codex.app/Contents/Resources/codex'`.
+
+### Root cause
+The task name was not the issue.
+The producer worker hardcoded Codex CLI to `/Applications/Codex.app/Contents/Resources/codex`.
+Newer installs expose the same CLI under `/Applications/ChatGPT.app/Contents/Resources/codex`.
+
+`gp-mac-mini` was still enabled and allowed to claim producer jobs even though its worker registry reported `"codex": false`, so it claimed the run and crashed before image generation began.
+
+### Fix
+1. Added `_resolve_codex_bin()` to check:
+   - `CODEX_BIN` env override,
+   - `codex` on PATH,
+   - `/Applications/ChatGPT.app/Contents/Resources/codex`,
+   - `/Applications/Codex.app/Contents/Resources/codex`.
+2. Wired worker capability probing, generic agent dispatch, and producer command execution through the resolver.
+3. Changed producer execution to fail gracefully with a clear `Codex CLI not found` error if no executable exists.
+4. Added a worker-loop guard so workers without Codex do not claim producer runs.
+5. Updated setup scripts so they recognize ChatGPT.app as a valid Codex CLI install.
+
+### Verified
+- `tools/classify_worker.py` and `team-skill/classify_worker.py` compile with `python3 -m py_compile`.
+- `team-skill/setup-mac-worker.sh` and `tools/setup-mac-worker.sh` pass `bash -n`.
+- Local machine confirms Codex exists at `/Applications/ChatGPT.app/Contents/Resources/codex`.

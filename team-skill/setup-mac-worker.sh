@@ -81,10 +81,14 @@ else
 fi
 
 # Check Codex install (worker uses it for producer + as fallback)
-if [ -x "/Applications/Codex.app/Contents/Resources/codex" ]; then
-  ok "Codex.app installed"
+if command -v codex >/dev/null 2>&1; then
+  ok "Codex CLI installed ($(command -v codex))"
+elif [ -x "/Applications/ChatGPT.app/Contents/Resources/codex" ]; then
+  ok "Codex CLI installed in ChatGPT.app"
+elif [ -x "/Applications/Codex.app/Contents/Resources/codex" ]; then
+  ok "Codex CLI installed in Codex.app"
 else
-  warn "Codex.app not found at /Applications/Codex.app — producer jobs won't run on this machine"
+  warn "Codex CLI not found — producer jobs won't run on this machine unless CODEX_BIN is set"
 fi
 
 # Check Claude install (preferred for classify-inspiration / strategist)

@@ -77,8 +77,25 @@ CLASSIFY_RATE_LIMIT_COOLDOWN_SECONDS = int(os.environ.get("CLASSIFY_RATE_LIMIT_C
 MAX_ATTEMPTS_BEFORE_FAILED = 3
 AUTO_PAUSE_CHECK_INTERVAL_SECONDS = 60
 
-# Codex CLI binary (not on PATH; use absolute path).
-CODEX_BIN = "/Applications/Codex.app/Contents/Resources/codex"
+# Codex CLI binary. Older workers used Codex.app, newer installs bundle the
+# same CLI inside ChatGPT.app. Keep CODEX_BIN as an env override for machines
+# with custom installs.
+CODEX_BIN_CANDIDATES = [
+    os.environ.get("CODEX_BIN", ""),
+    shutil.which("codex") or "",
+    "/Applications/ChatGPT.app/Contents/Resources/codex",
+    "/Applications/Codex.app/Contents/Resources/codex",
+]
+
+
+def _resolve_codex_bin():
+    for path in CODEX_BIN_CANDIDATES:
+        if not path:
+            continue
+        resolved = shutil.which(path) if os.path.basename(path) == path else path
+        if resolved and os.path.exists(resolved) and os.access(resolved, os.X_OK):
+            return resolved
+    return None
 
 # ── Worker self-update (2026-05-12) ─────────────────────────
 # Polls Vercel for newer versions of worker-related files. On change:
@@ -171,8 +188,7 @@ def probe_capabilities() -> dict:
         "yt_dlp": shutil.which("yt-dlp") is not None,
         "python_version": platform.python_version(),
         "claude_code_version": _safe_run(["claude", "--version"]),
-        # Codex isn't on PATH; fall back to os.path.exists for the absolute binary.
-        "codex": shutil.which(CODEX_BIN) is not None or os.path.exists(CODEX_BIN),
+        "codex": _resolve_codex_bin() is not None,
     }
 
 
@@ -189,7 +205,7 @@ def _has_claude() -> bool:
 
 
 def _has_codex() -> bool:
-    return shutil.which(CODEX_BIN) is not None or os.path.exists(CODEX_BIN)
+    return _resolve_codex_bin() is not None
 
 
 def build_agent_cmd(prompt: str, prefer: str = "claude") -> list:
@@ -209,8 +225,14 @@ def build_agent_cmd(prompt: str, prefer: str = "claude") -> list:
     if use_claude:
         return ["claude", "-p", prompt, "--permission-mode", "bypassPermissions"]
     if use_codex:
+        codex_bin = _resolve_codex_bin()
+        if not codex_bin:
+            raise RuntimeError(
+                "Codex CLI was selected but no executable was found. Set CODEX_BIN "
+                "or install ChatGPT.app/Codex.app."
+            )
         return [
-            CODEX_BIN, "exec",
+            codex_bin, "exec",
             "--dangerously-bypass-approvals-and-sandbox",
             "-c", "shell_environment_policy.inherit=all",
             prompt,
@@ -953,8 +975,26 @@ class Worker:
             # actually change the model — only --model / -c flags do. Without
             # these, codex exec falls back to ~/.codex/config.toml defaults
             # (which had reasoning_effort=low → poor image-gen output).
+            codex_bin = _resolve_codex_bin()
+            if not codex_bin:
+                err = (
+                    "Codex CLI not found. Checked CODEX_BIN, PATH, "
+                    "/Applications/ChatGPT.app/Contents/Resources/codex, and "
+                    "/Applications/Codex.app/Contents/Resources/codex."
+                )
+                try:
+                    _finish_producer_run(
+                        supabase_url=os.environ["SUPABASE_URL"],
+                        service_key=os.environ["SUPABASE_SERVICE_ROLE_KEY"],
+                        run_id=run_id, status="failed",
+                        outputs=None, error=err,
+                    )
+                except Exception:
+                    pass
+                log(f"[producer] run {run_id} FAILED: {err}")
+                return
             cmd = [
-                CODEX_BIN, "exec",
+                codex_bin, "exec",
                 "--dangerously-bypass-approvals-and-sandbox",
                 "-c", "shell_environment_policy.inherit=all",
                 "--model", "gpt-5.5",
@@ -1836,6 +1876,9 @@ class Worker:
                             pop_pending_run as _pop_producer_run,
                             claim_run as _claim_producer_run,
                         )
+                        if not _has_codex():
+                            self._reap_producer_futures()
+                            continue
                         # Reap completed producer futures first (frees slots).
                         self._reap_producer_futures()
                         # Dispatch as many pending producer runs as we have

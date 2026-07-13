@@ -110,12 +110,14 @@ WORKER_UPDATE_BASE_URL = os.environ.get(
 ).rstrip("/")
 
 # Each entry is (Vercel URL path → local file path relative to project root).
+# Use rel_path="__self__" for the worker file so a process launched from a
+# mirrored location updates the file it is actually executing before re-exec.
 # The main worker file triggers a re-exec on swap; the strategist files
 # only need to be on disk (next strategist invocation imports the new code).
 WORKER_UPDATE_MANIFEST = [
     {
         "url": f"{WORKER_UPDATE_BASE_URL}/classify_worker.py",
-        "rel_path": "tools/classify_worker.py",
+        "rel_path": "__self__",
         "triggers_restart": True,
     },
     # Strategist modules: triggers_restart=True so Python's sys.modules cache
@@ -323,7 +325,8 @@ def _check_one_file_update(entry: dict) -> bool:
     but parameterized over (url, rel_path)."""
     url = entry["url"]
     rel = entry["rel_path"]
-    file_path = _project_root() / rel
+    file_path = _worker_self_path() if rel == "__self__" else (_project_root() / rel)
+    label = str(file_path) if rel == "__self__" else rel
     etag_path = file_path.with_name(file_path.name + ".etag")
     # Skip if the target file doesn't exist yet (avoid creating phantom dirs).
     if not file_path.exists():
@@ -349,10 +352,10 @@ def _check_one_file_update(entry: dict) -> bool:
         except urllib.error.HTTPError as e:
             if e.code == 304:
                 return False
-            log(f"[self-update] HTTP {e.code} fetching {rel} — skipping")
+            log(f"[self-update] HTTP {e.code} fetching {label} — skipping")
             return False
         except Exception as e:
-            log(f"[self-update] fetch error for {rel}: {e}")
+            log(f"[self-update] fetch error for {label}: {e}")
             return False
         if status != 200 or not body:
             return False
@@ -366,11 +369,11 @@ def _check_one_file_update(entry: dict) -> bool:
         except Exception:
             current = b""
         # Syntax-validate Python files before swapping
-        if rel.endswith(".py"):
+        if file_path.name.endswith(".py"):
             try:
                 ast.parse(body.decode("utf-8"))
             except SyntaxError as e:
-                log(f"[self-update] {rel} has syntax error — refusing to swap: {e}")
+                log(f"[self-update] {label} has syntax error — refusing to swap: {e}")
                 return False
         # Backup the current version
         try:
@@ -379,24 +382,24 @@ def _check_one_file_update(entry: dict) -> bool:
             if file_path.exists():
                 shutil.copy2(file_path, backup)
         except Exception as e:
-            log(f"[self-update] backup failed for {rel}: {e}")
+            log(f"[self-update] backup failed for {label}: {e}")
         # Atomic rename
         tmp = file_path.with_name(file_path.name + ".tmp")
         try:
             tmp.write_bytes(body)
             os.replace(tmp, file_path)
         except Exception as e:
-            log(f"[self-update] write/swap failed for {rel}: {e}")
+            log(f"[self-update] write/swap failed for {label}: {e}")
             try: tmp.unlink()
             except Exception: pass
             return False
         if new_etag:
             try: etag_path.write_text(new_etag)
             except Exception: pass
-        log(f"[self-update] downloaded new version of {rel}")
+        log(f"[self-update] downloaded new version of {label}")
         return True
     except Exception as e:
-        log(f"[self-update] unexpected error for {rel}: {e}")
+        log(f"[self-update] unexpected error for {label}: {e}")
         return False
 
 

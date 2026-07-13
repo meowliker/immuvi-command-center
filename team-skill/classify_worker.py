@@ -108,6 +108,14 @@ WORKER_UPDATE_BASE_URL = os.environ.get(
     "WORKER_UPDATE_BASE_URL",
     "https://immuvi-command-center.vercel.app/team-skill",
 ).rstrip("/")
+WORKER_UPDATE_TOOLS_BASE_URL = os.environ.get(
+    "WORKER_UPDATE_TOOLS_BASE_URL",
+    (
+        WORKER_UPDATE_BASE_URL.rsplit("/", 1)[0] + "/tools"
+        if WORKER_UPDATE_BASE_URL.endswith("/team-skill")
+        else WORKER_UPDATE_BASE_URL + "/tools"
+    ),
+).rstrip("/")
 
 # Each entry is (Vercel URL path → local file path relative to project root).
 # Use rel_path="__self__" for the worker file so a process launched from a
@@ -118,6 +126,11 @@ WORKER_UPDATE_MANIFEST = [
     {
         "url": f"{WORKER_UPDATE_BASE_URL}/classify_worker.py",
         "rel_path": "__self__",
+        "triggers_restart": True,
+    },
+    {
+        "url": f"{WORKER_UPDATE_TOOLS_BASE_URL}/producer/db.py",
+        "rel_path": "tools/producer/db.py",
         "triggers_restart": True,
     },
     # Strategist modules: triggers_restart=True so Python's sys.modules cache

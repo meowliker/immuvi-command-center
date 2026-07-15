@@ -1742,3 +1742,35 @@ Newer installs expose the same CLI under `/Applications/ChatGPT.app/Contents/Res
 - `tools/classify_worker.py` and `team-skill/classify_worker.py` compile with `python3 -m py_compile`.
 - `team-skill/setup-mac-worker.sh` and `tools/setup-mac-worker.sh` pass `bash -n`.
 - Local machine confirms Codex exists at `/Applications/ChatGPT.app/Contents/Resources/codex`.
+
+---
+
+## Bug 38 — Archived / foreign taxonomy still appeared in Creative Matrix
+**Status:** ✅ fixed locally 2026-07-15
+**Reported:** 2026-07-15
+**Surface:** Creative Matrix / Angle-Persona taxonomy / archive behavior
+
+### Symptom
+- Angles and personas from other products could still appear in the Creative Matrix.
+- Archived personas could remain visible as matrix columns.
+
+### Root cause
+The previous fixes cleaned or quarantined `angles`, `personas`, and `ads`, but the matrix still treated `ANGLE_PERSONAS` as a taxonomy source.
+`ANGLE_PERSONAS` is rebuilt from `matrix_cells`, so old assignment-only cell rows could invent persona columns even when the product's `personas` row was archived, deleted, or never belonged to that product.
+
+Live audit on 2026-07-15 confirmed the shape:
+- Canva had 61 `matrix_cells` rows whose `persona_id` did not exist in Canva's `personas` table.
+- Canva had 37 `matrix_cells` rows whose `angle_id` did not exist in Canva's `angles` table.
+- Several products had matrix cells pointing at archived personas.
+
+### Fix
+1. Added `_matrixTaxonomyAllowed()` so matrix rendering is anchored to the active product's authoritative `ANGLES` / `PERSONAS` rows.
+2. Stopped `deriveMasterPersonas()` from unioning arbitrary names out of `ANGLE_PERSONAS`.
+3. Filtered matrix rows, columns, Add Persona dropdowns, active-persona detection, and v3/v4 decision contexts through the same matrix taxonomy guard.
+4. Extended `purgeOrphanedMatrixKeys()` to scrub orphan `ANGLE_PERSONAS` links, not only `CELL_CREATIVE_ASSIGNMENTS` and `MATRIX_CELL_META`.
+5. Archive actions now force the Matrix archive toggle back to hidden so newly archived rows disappear immediately.
+6. Added the missing `archived_at` schema/migration contract for `angles` and `personas`.
+
+### Verified
+- Inline scripts compile with `new Function()` extraction check.
+- `git diff --check` passes.

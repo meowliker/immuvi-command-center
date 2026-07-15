@@ -14564,6 +14564,39 @@ function _canonicalCellKey(angle, persona) {
   return a + '||' + p;
 }
 
+function _taxonomyNameExists(items, name) {
+  var key = _taxonomyLookupKey(name || '');
+  if (!key || !Array.isArray(items)) return false;
+  for (var i = 0; i < items.length; i++) {
+    if (_taxonomyLookupKey(items[i] && items[i].name) === key) return true;
+  }
+  return false;
+}
+
+function _taxonomyArchivedByName(items, name) {
+  var key = _taxonomyLookupKey(name || '');
+  if (!key || !Array.isArray(items)) return false;
+  for (var i = 0; i < items.length; i++) {
+    if (_taxonomyLookupKey(items[i] && items[i].name) === key) return !!items[i].archivedAt;
+  }
+  return false;
+}
+
+// Matrix taxonomy must be anchored to the active product's master rows.
+// matrix_cells can contain old assignment-only rows, including rows from a
+// different product. Those rows are useful for persistence, but they must not
+// be allowed to invent visible angles/personas on their own.
+function _matrixTaxonomyAllowed(kind, name, includeArchived) {
+  var key = _taxonomyLookupKey(name || '');
+  if (!key) return false;
+  var items = kind === 'persona' ? (typeof PERSONAS !== 'undefined' ? PERSONAS : []) : (typeof ANGLES !== 'undefined' ? ANGLES : []);
+  if (!_taxonomyNameExists(items, name)) return false;
+  if (_isBoundaryQuarantinedTaxonomy(kind, name)) return false;
+  if (typeof activeProductId !== 'undefined' && activeProductId && _isTaxonomyTombstoned(kind, activeProductId, name)) return false;
+  if (!includeArchived && _taxonomyArchivedByName(items, name)) return false;
+  return true;
+}
+
 function _canonicalizeAdTaxonomyForSave(ad) {
   if (!ad) return ad;
   var angle = _canonicalTaxonomyName(ad.angle || '', (typeof ANGLES !== 'undefined' ? ANGLES : []));
@@ -16932,12 +16965,19 @@ function executeMergePersonas(losingNames, survivorName) {
 function purgeOrphanedMatrixKeys() {
   var angleNames   = ANGLES.map(function(a){ return a.name; });
   var personaNames = PERSONAS.map(function(p){ return p.name; });
+  var angleSet = {};
+  var personaSet = {};
+  angleNames.forEach(function(n){ angleSet[_taxonomyLookupKey(n)] = true; });
+  personaNames.forEach(function(n){ personaSet[_taxonomyLookupKey(n)] = true; });
   var purged = 0;
+
+  function _knownAngle(n) { return !!angleSet[_taxonomyLookupKey(n)]; }
+  function _knownPersona(n) { return !!personaSet[_taxonomyLookupKey(n)]; }
 
   // Pass 1: remove keys for deleted angles/personas
   Object.keys(CELL_CREATIVE_ASSIGNMENTS).forEach(function(key) {
     var p = key.split('||');
-    if (angleNames.indexOf(p[0]) === -1 || personaNames.indexOf(p[1]) === -1) {
+    if (!_knownAngle(p[0]) || !_knownPersona(p[1])) {
       delete CELL_CREATIVE_ASSIGNMENTS[key];
       purged++;
     }
@@ -16945,14 +16985,31 @@ function purgeOrphanedMatrixKeys() {
   Object.keys(MATRIX_CELL_META).forEach(function(key) {
     var p = key.split('||');
     if (p.length === 2) {
-      if (angleNames.indexOf(p[0]) === -1 || personaNames.indexOf(p[1]) === -1) {
+      if (!_knownAngle(p[0]) || !_knownPersona(p[1])) {
         delete MATRIX_CELL_META[key]; purged++;
       }
     } else if (p.length === 3) {
-      if (angleNames.indexOf(p[1]) === -1 || personaNames.indexOf(p[2]) === -1) {
+      if (!_knownAngle(p[1]) || !_knownPersona(p[2])) {
         delete MATRIX_CELL_META[key]; purged++;
       }
     }
+  });
+
+  // Pass 1b: scrub explicit angle-persona links loaded from matrix_cells.
+  // These links persist empty assigned cells, but old rows can outlive their
+  // product's master taxonomy and then re-create ghost columns in Matrix.
+  Object.keys(ANGLE_PERSONAS || {}).forEach(function(angleName) {
+    if (!_knownAngle(angleName)) {
+      delete ANGLE_PERSONAS[angleName];
+      purged++;
+      return;
+    }
+    var before = (ANGLE_PERSONAS[angleName] || []).length;
+    ANGLE_PERSONAS[angleName] = (ANGLE_PERSONAS[angleName] || []).filter(function(personaName) {
+      return _knownPersona(personaName);
+    });
+    purged += before - ANGLE_PERSONAS[angleName].length;
+    if (!ANGLE_PERSONAS[angleName].length) delete ANGLE_PERSONAS[angleName];
   });
 
   // Pass 2: remove deleted AD entries (ADs that no longer exist in ADS).
@@ -16994,6 +17051,8 @@ function buildCreativeUsageIndex() {
     // Must match a known angle AND persona
     if (angleNames.indexOf(ad.angle) === -1) return;
     if (personaNames.indexOf(ad.persona) === -1) return;
+    if (!_matrixTaxonomyAllowed('angle', ad.angle, true)) return;
+    if (!_matrixTaxonomyAllowed('persona', ad.persona, true)) return;
 
     var cellKey = ad.angle + '||' + ad.persona;
 
@@ -24983,6 +25042,8 @@ async function archivePersona(idx) {
       var r = await SB.from('personas').update({ archived_at: new Date(p.archivedAt).toISOString() }).eq('id', p.id);
       if (r.error) throw new Error(r.error.message);
     }
+    _archInclude.matrix = false;
+    _saveArchInclude();
     saveState();
     renderPersonas();
     if (typeof renderMatrix === 'function') renderMatrix();
@@ -25023,6 +25084,8 @@ async function archiveAngle(idx) {
       var r = await SB.from('angles').update({ archived_at: new Date(a.archivedAt).toISOString() }).eq('id', a.id);
       if (r.error) throw new Error(r.error.message);
     }
+    _archInclude.matrix = false;
+    _saveArchInclude();
     saveState();
     renderAngles();
     if (typeof renderMatrix === 'function') renderMatrix();
@@ -34693,26 +34756,23 @@ function initAnglePersonas() {
 }
 
 // ================================================
-// deriveMasterPersonas — union of all personas across all angle assignments
+// deriveMasterPersonas — authoritative matrix persona list for this product
 // ================================================
-function deriveMasterPersonas() {
+function deriveMasterPersonas(opts) {
+  opts = opts || {};
+  var includeArchived = !!opts.includeArchived;
   var seen = {};
   var list = [];
-  // Use PERSONAS order as master order
+  // Use PERSONAS order as the authoritative master order. Older builds also
+  // unioned names from ANGLE_PERSONAS, but ANGLE_PERSONAS is hydrated from
+  // matrix_cells and can contain orphan/wrong-product rows. Letting that map
+  // invent columns is what made archived/foreign personas bleed into Matrix.
   PERSONAS.forEach(function (p) {
-    if (!seen[p.name]) {
+    if (p && _matrixTaxonomyAllowed('persona', p.name, includeArchived) && !seen[_taxonomyLookupKey(p.name)]) {
+      seen[_taxonomyLookupKey(p.name)] = true;
       seen[p.name] = true;
       list.push(p.name);
     }
-  });
-  // Also pick up any persona in ANGLE_PERSONAS not in PERSONAS list
-  Object.keys(ANGLE_PERSONAS).forEach(function (ang) {
-    (ANGLE_PERSONAS[ang] || []).forEach(function (pn) {
-      if (!seen[pn]) {
-        seen[pn] = true;
-        list.push(pn);
-      }
-    });
   });
   return list;
 }
@@ -34726,9 +34786,13 @@ function deriveMasterPersonas() {
 // column so the user can drop the first creative into it. Without this,
 // the active-only filter swallows the column the moment it's created.
 // ================================================
-function isPersonaActive(personaName) {
+function isPersonaActive(personaName, opts) {
+  opts = opts || {};
+  var includeArchived = !!opts.includeArchived;
+  if (!_matrixTaxonomyAllowed('persona', personaName, includeArchived)) return false;
   for (var ai = 0; ai < ANGLES.length; ai++) {
     var aname = ANGLES[ai].name;
+    if (!_matrixTaxonomyAllowed('angle', aname, includeArchived)) continue;
     var key = aname + '||' + personaName;
     if ((CELL_CREATIVE_ASSIGNMENTS[key] || []).length > 0) return true;
     if (ANGLE_PERSONAS[aname] && ANGLE_PERSONAS[aname].indexOf(personaName) !== -1) return true;
@@ -34829,7 +34893,9 @@ function openAddPersonaPopup(angleName, btnEl) {
   // Union of PERSONAS + anything seen in ANGLE_PERSONAS so personas that exist
   // in state but haven't been pushed to PERSONAS yet still surface here instead
   // of the popup falsely claiming "All personas assigned".
-  var allPersonaNames = deriveMasterPersonas();
+  // 2026-07-15: PERSONAS is now authoritative; matrix_cells-derived names can
+  // be stale/wrong-product, so deriveMasterPersonas filters them out.
+  var allPersonaNames = deriveMasterPersonas({ includeArchived: false });
   var unassigned = allPersonaNames.filter(function (pn) { return assigned.indexOf(pn) === -1; });
 
   var html = '<div class="mx-persona-dropdown">';
@@ -35146,17 +35212,22 @@ function renderMatrix() {
   }
   var _archIncludeMatrix = (typeof _archInclude !== 'undefined' && _archInclude && _archInclude.matrix) ? true : false;
 
-  var masterPersonas = deriveMasterPersonas();
-  if (!_archIncludeMatrix) {
-    masterPersonas = masterPersonas.filter(function(pn){ return !_archivedPersonaSet[pn]; });
-  }
+  var masterPersonas = deriveMasterPersonas({ includeArchived: _archIncludeMatrix });
 
   // Split personas into active / inactive
-  var activePersonas   = masterPersonas.filter(function(pn){ return isPersonaActive(pn); });
-  var inactivePersonas = masterPersonas.filter(function(pn){ return !isPersonaActive(pn); });
+  var activePersonas   = masterPersonas.filter(function(pn){ return isPersonaActive(pn, { includeArchived: _archIncludeMatrix }); });
+  var inactivePersonas = masterPersonas.filter(function(pn){ return !isPersonaActive(pn, { includeArchived: _archIncludeMatrix }); });
 
   var visiblePersonas  = (_matrixPersonaFilter === 'all') ? masterPersonas : activePersonas;
   var colCount = visiblePersonas.length;
+
+  // Feature 2.1 — sort the iteration order based on _mxv4.angleSort. The
+  // sorter returns a copy, so the canonical ANGLES array (used by Action
+  // Plan, coverage strip, etc.) is never mutated.
+  var sortedAngles = (typeof _sortAnglesForMatrix === 'function') ? _sortAnglesForMatrix(ANGLES) : ANGLES.slice();
+  sortedAngles = sortedAngles.filter(function (a) {
+    return a && _matrixTaxonomyAllowed('angle', a.name, _archIncludeMatrix);
+  });
 
   // Build the highlight context once per render (used by every cell).
   // v4 context includes winning angles/personas + decision counts.
@@ -35174,7 +35245,7 @@ function renderMatrix() {
   html += '<div class="mx-header-bar" style="margin-bottom:14px">';
   html += '<div class="sh" style="margin:0;border:0;padding:0;font-size:0.92rem">Creative Matrix</div>';
   html += '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">';
-  html += '<span class="muted" style="font-size:0.72rem">' + ANGLES.length + ' angles &times; ' + activePersonas.length + ' active personas</span>';
+  html += '<span class="muted" style="font-size:0.72rem">' + sortedAngles.length + ' angles &times; ' + activePersonas.length + ' active personas</span>';
   if (_matrixPersonaFilter === 'active' && inactivePersonas.length > 0) {
     html += '<span class="mx-hidden-pill">' + inactivePersonas.length + ' inactive hidden</span>';
   }
@@ -35201,7 +35272,7 @@ function renderMatrix() {
   html += '<div class="mx-tg-head" style="grid-template-columns:' + gridCols + '">';
   html += '<div class="mx-tg-corner">Angle \\ Persona</div>';
   visiblePersonas.forEach(function (pn) {
-    var isActive = isPersonaActive(pn);
+    var isActive = isPersonaActive(pn, { includeArchived: _archIncludeMatrix });
     var _short = (typeof _shortenPersonaName === 'function') ? _shortenPersonaName(pn) : { full: pn, display: pn, didShorten: false };
     var phAttrs = ' data-full="' + escAttr(_short.full) + '"' + (_short.didShorten ? ' data-shortened="1"' : '');
     html += '<div class="mx-tg-ph' + (!isActive ? ' inactive' : '') + '"' + phAttrs + '>' + esc(_short.display);
@@ -35210,20 +35281,12 @@ function renderMatrix() {
   });
   html += '</div>';
 
-  // One row per angle (angles as rows on the left)
-  // Feature 2.1 — sort the iteration order based on _mxv4.angleSort. The
-  // sorter returns a copy, so the canonical ANGLES array (used by Action
-  // Plan, coverage strip, etc.) is never mutated.
-  var sortedAngles = (typeof _sortAnglesForMatrix === 'function') ? _sortAnglesForMatrix(ANGLES) : ANGLES;
-  // 2026-05-19 — drop archived angles from the row iteration unless the
-  // include-archived toggle is on.
-  if (!_archIncludeMatrix) {
-    sortedAngles = sortedAngles.filter(function (a) { return !_archivedAngleSet[a.name]; });
-  }
   var dragMode = _mxv4.angleSort === 'manual';
   sortedAngles.forEach(function (angle, ai) {
     var cls = classify(angle.status);
-    var assignedPersonas = ANGLE_PERSONAS[angle.name] || [];
+    var assignedPersonas = (ANGLE_PERSONAS[angle.name] || []).filter(function (pn) {
+      return _matrixTaxonomyAllowed('persona', pn, _archIncludeMatrix);
+    });
 
     // Coverage: how many assigned cells have at least 1 creative
     var assignedCount = assignedPersonas.length;
@@ -35280,7 +35343,7 @@ function renderMatrix() {
     // ── Persona cells ──
     visiblePersonas.forEach(function (pn) {
       var isAssigned = assignedPersonas.indexOf(pn) !== -1;
-      var isActive   = isPersonaActive(pn);
+      var isActive   = isPersonaActive(pn, { includeArchived: _archIncludeMatrix });
 
       if (!isAssigned) {
         var _assignClick = 'onclick="event.stopPropagation();assignAndExpandCell(\'' +
@@ -36313,6 +36376,8 @@ function _mxv3BuildContext() {
   Object.keys(CELL_CREATIVE_ASSIGNMENTS).forEach(function (k) {
     var parts = k.split('||');
     if (parts.length !== 2) return;
+    if (!_matrixTaxonomyAllowed('angle', parts[0], false)) return;
+    if (!_matrixTaxonomyAllowed('persona', parts[1], false)) return;
     var ids = CELL_CREATIVE_ASSIGNMENTS[k] || [];
     for (var i = 0; i < ids.length; i++) {
       var meta = MATRIX_CELL_META[ids[i] + '||' + parts[0] + '||' + parts[1]] || {};
@@ -36334,10 +36399,13 @@ function _mxv3BuildContext() {
 function renderMxv3Strip() {
   var ctx = _mxv3BuildContext();
   var totalCells = 0, filledCells = 0, winnerCells = 0, replicateOpps = 0, gapsInWinners = 0;
-  var personaList = deriveMasterPersonas();
+  var personaList = deriveMasterPersonas({ includeArchived: false });
 
   ANGLES.forEach(function (a) {
-    var assigned = ANGLE_PERSONAS[a.name] || [];
+    if (!a || !_matrixTaxonomyAllowed('angle', a.name, false)) return;
+    var assigned = (ANGLE_PERSONAS[a.name] || []).filter(function (pn) {
+      return _matrixTaxonomyAllowed('persona', pn, false);
+    });
     assigned.forEach(function (pn) {
       totalCells++;
       var st = _mxv3ClassifyCell(a.name, pn);
@@ -38843,7 +38911,10 @@ function _mxv4BuildDecisionContext() {
   var winningAngles = {}, winningPersonas = {};
   var totalCells = 0, filledCells = 0, winnerCells = 0, replicateOpps = 0, gapsInWinners = 0, killCells = 0;
   ANGLES.forEach(function (a) {
-    var assigned = ANGLE_PERSONAS[a.name] || [];
+    if (!a || !_matrixTaxonomyAllowed('angle', a.name, false)) return;
+    var assigned = (ANGLE_PERSONAS[a.name] || []).filter(function (pn) {
+      return _matrixTaxonomyAllowed('persona', pn, false);
+    });
     assigned.forEach(function (pn) {
       totalCells++;
       var st = _mxv4ClassifyCell(a.name, pn);
@@ -38859,7 +38930,10 @@ function _mxv4BuildDecisionContext() {
   });
   // Second pass: gaps in winning rows/cols
   ANGLES.forEach(function (a) {
-    var assigned = ANGLE_PERSONAS[a.name] || [];
+    if (!a || !_matrixTaxonomyAllowed('angle', a.name, false)) return;
+    var assigned = (ANGLE_PERSONAS[a.name] || []).filter(function (pn) {
+      return _matrixTaxonomyAllowed('persona', pn, false);
+    });
     assigned.forEach(function (pn) {
       var st = _mxv4ClassifyCell(a.name, pn);
       if (st.total === 0 && (winningAngles[a.name] || winningPersonas[pn])) gapsInWinners++;

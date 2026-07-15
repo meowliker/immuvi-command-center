@@ -28,6 +28,7 @@ create table if not exists public.angles (
   status text not null default 'Untested',
   source_link text,
   notes text,
+  archived_at timestamptz,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -43,6 +44,7 @@ create table if not exists public.personas (
   status text not null default 'Untested',
   source_link text,
   notes text,
+  archived_at timestamptz,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );

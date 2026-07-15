@@ -13444,7 +13444,9 @@ const DB = {
         title: r.title || blob.title || '',
         platform: r.platform || blob.platform || '',
         addedBy: r.added_by || blob.addedBy || '',
-        status: r.status || blob.status || 'saved'
+        status: r.status || blob.status || 'saved',
+        adType: blob.adType || '',
+        mediaKind: blob.mediaKind || blob.media_kind || ''
       });
     });
   },
@@ -42675,8 +42677,9 @@ function _mxv4RenderAddInspiration(angleName, personaName) {
     var disabled = !!inspoUsedInCell[inspoId];
     var checked = !!_mxv4.addSelected['inspo:' + inspoId];
     var ttl = i.formatName || i.title || i.name || i.brand || ('Inspiration ' + (idx + 1));
-    var sCls = _f7StatusCls(i.status);
-    var sLbl = i.status || 'Queued';
+    var sLbl = (typeof _insQueueDisplayStatus === 'function') ? _insQueueDisplayStatus(i) : (i.status || 'Queued');
+    var sCls = _f7StatusCls(sLbl);
+    var showType = !!i.adType && !isPendingInspirationStatus(sLbl);
     var dateStr = _f7FormatDate(i.addedAt || i.createdAt) || '—';
     var inspoLink = i.sourceUrl || i.adLink || i.link || '';
     var rowCls = 'mxv4-pkr-row' + (disabled ? ' is-disabled' : '') + (checked ? ' is-selected' : '');
@@ -42693,7 +42696,7 @@ function _mxv4RenderAddInspiration(angleName, personaName) {
             '</td>';
     html += '<td class="col-name" data-tip="' + escAttr(ttl) + '">' + esc(ttl) + (disabled ? '<span class="mxv4-pkr-already">✓ used here</span>' : '') + '</td>';
     html += '<td><span class="mxv4-pkr-pill ' + sCls + '">' + esc(sLbl) + '</span></td>';
-    html += '<td>' + (i.adType ? '<span class="mxv4-pkr-chip">' + esc(i.adType) + '</span>' : '') + '</td>';
+    html += '<td>' + (showType ? '<span class="mxv4-pkr-chip">' + esc(i.adType) + '</span>' : '—') + '</td>';
     html += '<td>' + (i.funnelStage ? '<span class="mxv4-pkr-chip">' + esc(i.funnelStage) + '</span>' : '') + '</td>';
     html += '<td>' + (i.angle ? '<span class="mxv4-pkr-chip" data-tip="' + escAttr(i.angle) + '">' + esc(i.angle) + '</span>' : '') + '</td>';
     html += '<td class="col-date">' + esc(dateStr) + '</td>';
@@ -43956,7 +43959,7 @@ function addInspoToCell(insId, angleName, personaName) {
     formatName: formatName,
     adLink: ins.sourceUrl || '',
     driveLink: '',
-    adType: ins.adType || 'Video',
+    adType: ins.adType || '',
     funnelStage: ins.funnelStage || 'TOF',
     status: 'Untested',
     angle: angleName,
@@ -44649,7 +44652,8 @@ function addToInsQueue() {
     angle: '',
     persona: '',
     funnelStage: 'TOF',
-    adType: 'Video',
+    adType: '',
+    mediaKind: '',
     status: 'Queued',
     creativeHypothesis: '',
     notes: '',
@@ -44838,7 +44842,8 @@ function _resultRowToLegacy(r) {
     duration_seconds: r.duration_seconds,
     frames_extracted: r.frames_extracted,
     clickup_doc_page_url: r.clickup_doc_page_url,
-    clickup_doc_id: r.clickup_doc_id
+    clickup_doc_id: r.clickup_doc_id,
+    mediaKind: r.media_kind || r.mediaKind || ''
   }, meta, cls);
 }
 
@@ -45253,7 +45258,8 @@ function applyClassificationResults(results, isPolling) {
     ins.creativeStructure = normalizeToOption(data.creative_structure || '', CREATIVE_STRUCTURES);
     ins.productionStyle   = normalizeToOption(data.production_style || '', PRODUCTION_STYLES);
     ins.funnelStage       = normalizeToOption(data.funnel_type || 'TOF', FUNNEL_STAGES);
-    ins.adType            = normalizeToOption(data.photo_video || data.ad_type || 'Video', AD_TYPES);
+    ins.mediaKind         = deriveInspirationMediaKind(data) || ins.mediaKind || '';
+    ins.adType            = normalizeInspirationAdType(data);
     ins.creativeHypothesis= data.creative_hypothesis || '';
     ins.notes             = data.notes || '';
     ins.bodyCopy          = data.body_text || '';
@@ -45421,6 +45427,56 @@ function normalizeToOption(value, optionsArray) {
   }
   // 4. No match — return original (will render as custom text, user can fix)
   return v;
+}
+
+function normalizeMediaKind(value) {
+  if (value === true) return 'video';
+  if (value === false) return 'image';
+  if (value === null || value === undefined) return '';
+  var v = String(value).toLowerCase().trim();
+  if (!v) return '';
+  if (v === 'photo' || v === 'image' || v === 'static' || v.indexOf('image') !== -1) return 'image';
+  if (v === 'carousel' || v === 'slideshow' || v.indexOf('carousel') !== -1) return 'carousel';
+  if (v === 'video' || v === 'reel' || v.indexOf('video') !== -1 || v.indexOf('mp4') !== -1) return 'video';
+  return '';
+}
+
+function deriveInspirationMediaKind(data) {
+  data = data || {};
+  var fromField = normalizeMediaKind(
+    data.mediaKind || data.media_kind || data.media_type ||
+    data.mediaType || data.fetched_media_kind || data.downloaded_media_kind
+  );
+  if (fromField) return fromField;
+  if (data.is_video !== undefined) {
+    var fromBool = normalizeMediaKind(data.is_video);
+    if (fromBool) return fromBool;
+  }
+  var url = String(data.source_url || data.sourceUrl || data.url || data.link_url || '').toLowerCase();
+  if (/tiktok\.com\/@[^/]+\/photo\//.test(url) || /\/photo\/\d+/.test(url)) return 'carousel';
+  if (/tiktok\.com\/@[^/]+\/video\//.test(url) || /\/video\/\d+/.test(url)) return 'video';
+  if (/instagram\.com\/reel\//.test(url) || /youtube\.com|youtu\.be/.test(url)) return 'video';
+  return '';
+}
+
+function normalizeInspirationAdType(data) {
+  data = data || {};
+  var mediaKind = deriveInspirationMediaKind(data);
+  var rawType = data.photo_video || data.ad_type || data.adType || '';
+  var normalized = normalizeToOption(rawType, AD_TYPES);
+  if (mediaKind === 'image') {
+    if (!normalized || normalized === 'Video' || normalized === 'VSL') return 'Photo';
+  } else if (mediaKind === 'carousel') {
+    if (!normalized || normalized === 'Video' || normalized === 'VSL') return 'Carousel';
+  } else if (mediaKind === 'video') {
+    if (!normalized || normalized === 'Photo' || normalized === 'Carousel') return 'Video';
+  }
+  return normalized || '';
+}
+
+function isPendingInspirationStatus(status) {
+  var s = String(status || '').toLowerCase();
+  return s === 'queued' || s === 'classifying' || s === 'pending' || s === 'processing' || s === 'failed';
 }
 
 function extractFormatName(usp) {
@@ -45685,8 +45741,8 @@ function renderInspirations() {
     }).join('');
 
     // Build ad type select
-    var adTypeOpts = AD_TYPES.map(function(t){
-      return '<option value="'+escAttr(t)+'"'+(ins.adType===t?' selected':'')+'>'+esc(t)+'</option>';
+    var adTypeOpts = [''].concat(AD_TYPES).map(function(t){
+      return '<option value="'+escAttr(t)+'"'+(ins.adType===t?' selected':'')+'>'+esc(t || '—')+'</option>';
     }).join('');
 
     // Build tags pills
@@ -45944,7 +46000,8 @@ function showAddInspirationModal() {
     angle: prompt('Angle (what promise is being made):') || '',
     persona: '',
     funnelStage: 'TOF',
-    adType: 'Video',
+    adType: '',
+    mediaKind: '',
     status: 'Saved',
     creativeHypothesis: '',
     notes: '',
@@ -46442,7 +46499,7 @@ function _doImportWins(idxs, rows) {
       creativeStructure:'',
       productionStyle:  '',
       funnelStage:      ad.funnelStage || 'TOF',
-      adType:           'Video',
+      adType:           ad.adType || '',
       angle:            ad.angle || '',
       persona:          ad.persona || '',
       creativeHypothesis: '',

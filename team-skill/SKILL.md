@@ -358,6 +358,7 @@ Read each frame with the **Read tool** (up to 6 frames). You are a senior media 
 
 | Field | Options |
 |---|---|
+| media_kind | video, image, carousel — factual downloaded media kind from pipeline output; do not infer this from marketing style |
 | photo_video | Video, Photo, Carousel, UGC, VSL, AI Style |
 | hook_type | Pain/Problem, Fear, Curiosity, Social Proof, Aspirational, Direct Offer, Controversy/Bold Claim, POV, Question, News/Trend, Pattern Interrupt |
 | creative_structure | UGC, Testimonial, Demo, Tutorial/How-To, Story/Narrative, Hook+Offer, Listicle, Static/Photo, Comparison, Interview, Skit/Roleplay, AI/Voiceover, Slideshow/Compilation |
@@ -376,6 +377,13 @@ Read each frame with the **Read tool** (up to 6 frames). You are a senior media 
 | cta_text | From cta_text metadata |
 | landing_url / link_url | From link_url metadata (write to both keys) |
 | duration_seconds | From pipeline output |
+| media_kind | From pipeline output (`media_kind` / `is_video`); used to guard against Photo/Video inversions |
+
+**Media-type guardrail:** `photo_video` must match `media_kind` for factual media:
+- `media_kind=image` → `photo_video` must be `Photo` unless the pipeline explicitly says carousel.
+- `media_kind=carousel` → `photo_video` should be `Carousel` or `Photo`, never `Video`.
+- `media_kind=video` → `photo_video` must not be `Photo` or `Carousel`.
+- Do not use `duration_seconds` alone to decide media kind; TikTok photo posts can have a duration and Instagram reels can sometimes probe as `0`.
 
 **Also build the full 7-section brief data** (same as before):
 
@@ -414,9 +422,11 @@ cat > /tmp/result_[INS_ID].json <<'JSON'
     "landing_url": "...",
     "link_url": "...",
     "ad_id": "...",
+    "media_kind": "video|image|carousel",
     "body_copy_from_frames": "..."
   },
   "classification": {
+    "media_kind": "video|image|carousel",
     "photo_video": "...",
     "hook_type": "...",
     "creative_structure": "...",
@@ -513,6 +523,7 @@ The dashboard's `applyClassificationResults` function expects these **camelCase*
 | `productionStyle` | classification.production_style |
 | `funnelStage` | classification.funnel_type |
 | `adType` | classification.photo_video |
+| `mediaKind` | classification.media_kind OR metadata.media_kind |
 | `persona` | classification.persona |
 | `angle` | classification.angle |
 | `creativeUSP` | classification.creative_usp |
@@ -552,6 +563,18 @@ brand = md.get('page_name') or md.get('brand') or ''
 body_copy = md.get('body_copy_from_frames') or md.get('body_text') or ''
 usp = cls.get('creative_usp') or ''
 format_name = usp.split(' — ')[0].strip() if ' — ' in usp else usp
+media_kind = (cls.get('media_kind') or md.get('media_kind') or result.get('media_kind') or '').lower()
+if not media_kind and result.get('is_video') is True:
+  media_kind = 'video'
+elif not media_kind and result.get('is_video') is False:
+  media_kind = 'image'
+ad_type = cls.get('photo_video') or ''
+if media_kind == 'image' and ad_type in ('', 'Video', 'VSL'):
+  ad_type = 'Photo'
+elif media_kind == 'carousel' and ad_type in ('', 'Video', 'VSL'):
+  ad_type = 'Carousel'
+elif media_kind == 'video' and ad_type in ('', 'Photo', 'Carousel'):
+  ad_type = 'Video'
 
 patch = {
   'brand': brand,
@@ -559,7 +582,8 @@ patch = {
   'creativeStructure': cls.get('creative_structure') or '',
   'productionStyle': cls.get('production_style') or '',
   'funnelStage': cls.get('funnel_type') or 'TOF',
-  'adType': cls.get('photo_video') or 'Video',
+  'adType': ad_type,
+  'mediaKind': media_kind,
   'persona': cls.get('persona') or '',
   'angle': cls.get('angle') or '',
   'creativeUSP': usp,

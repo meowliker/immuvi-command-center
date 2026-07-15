@@ -1230,10 +1230,12 @@ class Worker:
             f"  1. Resolve product config from Supabase products.config: clickup_list_id, doc_id, ins_prefix.\n"
             f"  2. Download the ad media (Playwright only for Facebook Ad Library; non-browser downloader chain for TikTok; yt-dlp/helper chain for IG/other video URLs).\n"
             f"     Never try to download TikTok through a browser UI. For ads.tiktok.com Creative Center/topads links, use the skill helper's Creative Center SSR signed-MP4 resolver.\n"
+            f"     Record factual mediaKind/media_kind from the downloaded media: video, image, or carousel.\n"
             f"  3. Extract frames + audio probe via ffmpeg.\n"
-            f"  4. Visually classify (ALL 8 are MANDATORY — none may be blank):\n"
+            f"  4. Visually classify (ALL 9 are MANDATORY — none may be blank):\n"
             f"       hook_type, creative_structure, production_style, funnel_type,\n"
-            f"       persona, angle, ad_type, brand.\n"
+            f"       persona, angle, ad_type, brand, media_kind.\n"
+            f"     media_kind is factual downloaded media, not marketing style. ad_type must agree: image=>Photo, carousel=>Carousel/Photo, video=>Video/UGC/VSL/AI Style.\n"
             f"     Plus: body_copy, creative_hypothesis, duration_seconds (best-effort).\n"
             f"  5. Build the 7-section creative brief markdown.\n"
             f"  6. Create a ClickUp Doc page in the product's Inspiration Library doc with the brief. "
@@ -1255,7 +1257,7 @@ class Worker:
             f"           - status      = 'Saved' (or 'Classified')\n"
             f"           - data        = JSONB blob with ALL of: hookType, creativeStructure, "
             f"productionStyle, funnelStage, persona, angle, adType, brand, sourceUrl, bodyCopy, "
-            f"creativeHypothesis, duration_seconds, _clickupDocPageUrl, _clickupDocId, classifiedAt, "
+            f"creativeHypothesis, duration_seconds, mediaKind, _clickupDocPageUrl, _clickupDocId, classifiedAt, "
             f"formatName, notes.\n"
             f"\n"
             f"     Use the Supabase REST API with the service-role key from $SUPABASE_SERVICE_ROLE_KEY "
@@ -1265,7 +1267,7 @@ class Worker:
             f"processed_at). The worker handles queue state.\n\n"
             f"VERIFICATION (you must pass this before printing OK):\n"
             f"  After step 7, run a SELECT against public.inspirations WHERE id='{ins_id}' "
-            f"AND product_id='{product_id}'. Confirm the row exists AND ALL EIGHT classification "
+            f"AND product_id='{product_id}'. Confirm the row exists AND ALL NINE classification "
             f"fields are non-empty in data:\n"
             f"    data->>'brand'             non-empty\n"
             f"    data->>'angle'             non-empty\n"
@@ -1275,8 +1277,11 @@ class Worker:
             f"    data->>'productionStyle'   non-empty\n"
             f"    data->>'funnelStage'       non-empty\n"
             f"    data->>'adType'            non-empty\n"
+            f"    data->>'mediaKind'         non-empty\n"
             f"  AND data->>'_clickupDocPageUrl' is non-empty.\n"
-            f"  If ANY of the nine values is null/empty, that is a hard FAIL — print "
+            f"  Also confirm data->>'adType' does not contradict data->>'mediaKind' "
+            f"(image cannot be Video/VSL; carousel cannot be Video/VSL; video cannot be Photo/Carousel).\n"
+            f"  If ANY required value is null/empty or contradictory, that is a hard FAIL — print "
             f"'FAIL {ins_id}: missing fields: <comma-list>'. The worker will retry up to "
             f"{MAX_ATTEMPTS_BEFORE_FAILED} times.\n\n"
             f"OUTPUT (the LAST line of stdout — nothing else after):\n"
@@ -1523,10 +1528,10 @@ class Worker:
         inspiration's identifier IS the `id` column (values like 'ARI-INS-001').
         Queue's `ins_id` corresponds to inspirations' `id`.
 
-        We require: row exists AND ALL 9 dashboard-critical fields are
+        We require: row exists AND ALL 10 dashboard-critical fields are
         non-empty in data:
             _clickupDocPageUrl, brand, angle, persona, creativeStructure,
-            hookType, productionStyle, funnelStage, adType.
+            hookType, productionStyle, funnelStage, adType, mediaKind.
         This matches the contract the skill prompt commits to (lines
         ~1053–1061) and the May 9 fix `bfbc474`. Previously this only
         checked 3 fields, allowing partially-filled rows to flip the queue
@@ -1558,11 +1563,22 @@ class Worker:
                 "productionStyle",
                 "funnelStage",
                 "adType",
+                "mediaKind",
             ):
                 if not data.get(k):
                     missing.append(k)
             if missing:
                 return (False, f"inspirations row exists but missing fields: {', '.join(missing)}")
+            media_kind = str(data.get("mediaKind") or "").strip().lower()
+            ad_type = str(data.get("adType") or "").strip()
+            if media_kind not in ("image", "carousel", "video"):
+                return (False, f"inspirations row has invalid mediaKind: {media_kind}")
+            if media_kind == "image" and ad_type in ("Video", "VSL"):
+                return (False, f"inspirations row mediaKind/adType mismatch: {media_kind}/{ad_type}")
+            if media_kind == "carousel" and ad_type in ("Video", "VSL"):
+                return (False, f"inspirations row mediaKind/adType mismatch: {media_kind}/{ad_type}")
+            if media_kind == "video" and ad_type in ("Photo", "Carousel"):
+                return (False, f"inspirations row mediaKind/adType mismatch: {media_kind}/{ad_type}")
             return (True, "verified")
         except Exception as e:
             return (False, f"verify query failed: {e}")

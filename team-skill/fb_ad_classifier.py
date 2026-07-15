@@ -370,12 +370,14 @@ def download_tiktok_media(url: str, work_dir: str) -> dict:
     return {
         "frames": frames,
         "duration": round(duration, 1),
+        "media_kind": "video",
         "metadata": {
             "page_name": page_name,
             "body_text": meta.get("title") or meta.get("desc") or "",
             "title": meta.get("title") or "",
             "cta_text": "",
             "link_url": url,
+            "media_kind": "video",
         },
         "via": via,
         "is_video": True,
@@ -600,12 +602,14 @@ def download_instagram_media(url: str, work_dir: str) -> dict:
     return {
         "frames": frames,
         "duration": round(duration, 1),
+        "media_kind": kind,
         "metadata": {
             "page_name": decode_unicode(og.get("page_name") or ""),
             "body_text": decode_unicode(og.get("body_text") or og.get("caption") or ""),
             "title": decode_unicode(og.get("title") or ""),
             "cta_text": "",
             "link_url": og.get("link_url") or url,
+            "media_kind": kind,
         },
         "via": via,
         "is_video": kind == "video",
@@ -752,6 +756,7 @@ def print_classification_prompt(snapshot: dict, frames: list[str]):
     print(f"  Ad ID       : {snapshot['ad_id']}")
     print(f"  Page        : {snapshot.get('page_name', '?')}")
     print(f"  Format      : {snapshot.get('display_format', '?')}")
+    print(f"  Media Kind  : {snapshot.get('media_kind', 'unknown')}")
     print(f"  Body        : {decode_unicode(snapshot.get('body_text') or '–')[:120]}")
     print(f"  Title       : {decode_unicode(snapshot.get('title') or '–')}")
     print(f"  Description : {decode_unicode(snapshot.get('link_description') or '–')}")
@@ -791,6 +796,8 @@ async def run(input_str: str):
     # Determine media type
     video_url = snapshot.get("video_hd_url") or snapshot.get("video_sd_url")
     is_video = bool(video_url)
+    snapshot["media_kind"] = "video" if is_video else ("image" if snapshot.get("image_url") else "")
+    snapshot["is_video"] = is_video
 
     print(f"      Format: {snapshot.get('display_format', '?')}")
     print(f"      Page  : {snapshot.get('page_name', '?')}")

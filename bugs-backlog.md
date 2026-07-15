@@ -1774,3 +1774,30 @@ Live audit on 2026-07-15 confirmed the shape:
 ### Verified
 - Inline scripts compile with `new Function()` extraction check.
 - `git diff --check` passes.
+
+---
+
+## Bug 39 — Inspiration Photo/Video type inverted or shown before classification
+**Status:** ✅ fixed locally 2026-07-15
+**Reported:** 2026-07-15
+**Surface:** Inspiration tab / Creative Matrix "From Inspiration" picker / classify-inspiration worker
+
+### Symptom
+- Newly added inspirations sometimes showed `Video` for photo posts or `Photo` for video posts.
+- In the Creative Matrix picker, queued inspirations could display `Video` before classification finished.
+
+### Root cause
+1. The dashboard created queued inspiration rows with `adType: 'Video'`, so any UI that rendered the raw field showed a confident but unverified type.
+2. The newer Creative Matrix inspiration picker rendered `i.adType` directly for queued/classifying rows, unlike the main Inspiration table which hides pending classification fields.
+3. The classifier contract only required a non-empty `adType`; it did not require a factual downloaded `mediaKind`, so an LLM-style `photo_video` guess could pass worker verification even when it contradicted the fetched media.
+
+### Fix
+1. Queued/manual inspiration rows now start with blank `adType` and `mediaKind`.
+2. Creative Matrix "From Inspiration" picker renders `—` for pending/failed inspiration type instead of raw defaults.
+3. Classification result mapping now derives/stores `mediaKind` and corrects obvious contradictions before saving `adType`.
+4. Downloader helper emits factual `media_kind` / `is_video` for TikTok, Instagram, and Facebook media.
+5. Worker prompt and server-side verification now require `mediaKind` and reject contradictions like `image + Video`, `carousel + Video`, or `video + Photo`.
+
+### Prevention
+- Do not infer media type from `duration_seconds` alone: TikTok photo posts can have slideshow duration, and Instagram reels can probe as `0` when metadata extraction fails.
+- Future classifiers must preserve `mediaKind` from the downloader and only use LLM classification for creative style/format labels.

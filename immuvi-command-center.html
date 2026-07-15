@@ -11420,9 +11420,48 @@ async function _adminDelete(userId, email) {
 // ── REALTIME BROADCAST CHANNEL (live sync as you type) ──────────────────────
 var _rtChannel = null;
 var _myClientId = 'client-' + Math.random().toString(36).substr(2, 9);
+var _productRealtimeStatus = 'idle';
+var _broadcastRealtimeStatus = 'idle';
+var _productsRealtimeStatus = 'idle';
+var _realtimeReconnectTimer = null;
+var _realtimeHealthInterval = null;
 // Notes cache — survives ADS array replacement (onChange merge creates new objects).
 // saveAdNotes writes here; render reads here first; cleared when DB confirms the value.
 var _notesCache = {};
+
+function _isBadRealtimeStatus(status) {
+  return status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED';
+}
+
+function _scheduleRealtimeReconnect(reason, productId, delayMs) {
+  if (!SB || !productId) return;
+  if (_realtimeReconnectTimer) clearTimeout(_realtimeReconnectTimer);
+  _realtimeReconnectTimer = setTimeout(function () {
+    _realtimeReconnectTimer = null;
+    if (!SB || productId !== activeProductId) return;
+    console.warn('[rt] reconnecting live channels:', reason);
+    try { _resubscribeRealtime(); } catch (e) { console.warn('[rt] product channel reconnect failed', e); }
+    try { _initRealtimeChannel(productId); } catch (e) { console.warn('[rt] broadcast channel reconnect failed', e); }
+  }, delayMs || 1200);
+}
+
+function _startRealtimeHealthWatchdog() {
+  if (_realtimeHealthInterval) return;
+  _realtimeHealthInterval = setInterval(function () {
+    if (!SB) return;
+    if (!_productsChannel || _isBadRealtimeStatus(_productsRealtimeStatus)) {
+      try { _initProductsRealtimeChannel(); } catch (e) { console.warn('[products-realtime] watchdog reconnect failed', e); }
+    }
+    if (!activeProductId) return;
+    if (!_activeRTChannel || _isBadRealtimeStatus(_productRealtimeStatus)) {
+      _scheduleRealtimeReconnect('product-channel-' + (_productRealtimeStatus || 'missing'), activeProductId, 250);
+      return;
+    }
+    if (!_rtChannel || _isBadRealtimeStatus(_broadcastRealtimeStatus)) {
+      _scheduleRealtimeReconnect('broadcast-channel-' + (_broadcastRealtimeStatus || 'missing'), activeProductId, 250);
+    }
+  }, 30000);
+}
 
 // ── GLOBAL PRODUCTS CHANNEL (2026-05-11) ─────────────────────────────────
 // Why a SEPARATE channel from _rtChannel: _rtChannel is per-product
@@ -11486,6 +11525,7 @@ function _productFieldsDiffer(a, b) {
 function _initProductsRealtimeChannel() {
   if (!SB) return;
   if (_productsChannel) { try { SB.removeChannel(_productsChannel); } catch(e){} _productsChannel = null; }
+  _productsRealtimeStatus = 'idle';
 
   _productsChannel = SB.channel('cc-global-products');
 
@@ -11618,15 +11658,21 @@ function _initProductsRealtimeChannel() {
   );
 
   _productsChannel.subscribe(function (status) {
-    if (status === 'SUBSCRIBED') {
-      // No periodic traffic — pure passive listen. Nothing to track.
+    _productsRealtimeStatus = status;
+    if (_isBadRealtimeStatus(status)) {
+      setTimeout(function () {
+        if (!SB) return;
+        try { _initProductsRealtimeChannel(); } catch (e) { console.warn('[products-realtime] reconnect failed', e); }
+      }, 1500);
     }
   });
 }
 
 function _initRealtimeChannel(productId) {
   if (_rtChannel) { SB.removeChannel(_rtChannel); _rtChannel = null; }
+  _broadcastRealtimeStatus = 'idle';
   if (!productId || !SB) return;
+  _startRealtimeHealthWatchdog();
 
   _rtChannel = SB.channel('cc-' + productId, {
     config: { broadcast: { self: false } }
@@ -12071,6 +12117,11 @@ function _initRealtimeChannel(productId) {
       });
 
   _rtChannel.subscribe(function(status) {
+    _broadcastRealtimeStatus = status;
+    if (_isBadRealtimeStatus(status)) {
+      _scheduleRealtimeReconnect('broadcast-channel-' + status, productId);
+      return;
+    }
     if (status === 'SUBSCRIBED') {
       _rtChannel.track({
         clientId: _myClientId,
@@ -13601,8 +13652,11 @@ const DB = {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'personas', filter: 'product_id=eq.' + productId }, onChange)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'inspirations', filter: 'product_id=eq.' + productId }, onChange)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'manual_actions', filter: 'product_id=eq.' + productId }, onChange)
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'activity_events', filter: 'product_id=eq.' + productId }, onChange)
-      .subscribe();
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'activity_events', filter: 'product_id=eq.' + productId }, onChange);
+    ch.subscribe(function(status) {
+      _productRealtimeStatus = status;
+      if (_isBadRealtimeStatus(status)) _scheduleRealtimeReconnect('product-channel-' + status, productId);
+    });
     return ch;
   },
 
@@ -13612,6 +13666,22 @@ const DB = {
 // Expose for debugging in DevTools
 window.DB = DB;
 window.SB = SB;
+window.debugLiveSync = function () {
+  return {
+    activeProductId: activeProductId || null,
+    adsProductId: (typeof _adsProductId !== 'undefined' ? _adsProductId : null),
+    productRealtimeStatus: _productRealtimeStatus,
+    broadcastRealtimeStatus: _broadcastRealtimeStatus,
+    productsRealtimeStatus: _productsRealtimeStatus,
+    autoSyncActive: _autoSyncActive,
+    autoSyncPollInFlight: _autoSyncPollInFlight,
+    lastSyncedAt: _lastSyncedAt,
+    lastSyncedAgoSec: _lastSyncedAt ? Math.floor((Date.now() - _lastSyncedAt) / 1000) : null,
+    hasProductChannel: !!_activeRTChannel,
+    hasBroadcastChannel: !!_rtChannel,
+    hasProductsChannel: !!_productsChannel
+  };
+};
 
 // ── REALTIME: subscribe to changes on the active product ──
 let _activeRTChannel = null;
@@ -13643,7 +13713,9 @@ function _handleActivityEventRealtime(row) {
 function _resubscribeRealtime() {
   if (!DB.ready) return;
   if (_activeRTChannel) { DB.unsubscribe(_activeRTChannel); _activeRTChannel = null; }
+  _productRealtimeStatus = 'idle';
   if (!activeProductId) return;
+  _startRealtimeHealthWatchdog();
   _activeRTChannel = DB.subscribeToProduct(activeProductId, function (payload) {
     if (payload && payload.table === 'activity_events') {
       _handleActivityEventRealtime(payload.new);
@@ -34615,10 +34687,23 @@ async function _initVersionBroadcast() {
   if (!SB) return;
   if (_versionWatcher.channel) return;
   try {
-    // Capture the most recent triggered_at so we only react to rows newer than now.
-    var bootRes = await SB.from('force_reloads').select('triggered_at').order('triggered_at',{ascending:false}).limit(1);
-    _versionWatcher.bootMaxForceReloadAt = (bootRes && bootRes.data && bootRes.data[0]) ?
-      bootRes.data[0].triggered_at : new Date(0).toISOString();
+    // Capture the most recent triggered_at so we only react to rows newer than
+    // this tab's first boot. On reconnect, keep the original cutoff and check
+    // whether a force-reload row arrived while the channel was down.
+    var originalCutoff = _versionWatcher.bootMaxForceReloadAt || null;
+    var bootRes = await SB.from('force_reloads')
+      .select('triggered_at,triggered_by')
+      .order('triggered_at',{ascending:false})
+      .limit(1);
+    var latestForceReload = (bootRes && bootRes.data && bootRes.data[0]) || null;
+    if (!originalCutoff) {
+      _versionWatcher.bootMaxForceReloadAt = latestForceReload ?
+        latestForceReload.triggered_at : new Date(0).toISOString();
+    } else if (latestForceReload && latestForceReload.triggered_at > originalCutoff) {
+      console.info('[version] missed force-reload detected on reconnect', latestForceReload);
+      _showVersionUpdateBanner({ forced: true, by: latestForceReload.triggered_by || null });
+      return;
+    }
 
     _versionWatcher.channel = SB.channel('immuvi-force-reloads');
     _versionWatcher.channel.on('postgres_changes',
@@ -34631,7 +34716,14 @@ async function _initVersionBroadcast() {
         console.info('[version] force-reload row received', row);
         _showVersionUpdateBanner({ forced: true, by: row.triggered_by || null });
       });
-    await _versionWatcher.channel.subscribe();
+    _versionWatcher.channel.subscribe(function(status) {
+      if (_isBadRealtimeStatus(status)) {
+        console.warn('[version] force-reload channel status', status, '— reconnecting');
+        try { SB.removeChannel(_versionWatcher.channel); } catch (_) {}
+        _versionWatcher.channel = null;
+        setTimeout(function () { _initVersionBroadcast(); }, 1500);
+      }
+    });
     console.info('[version] force-reload channel subscribed (boot cutoff: '
                  + _versionWatcher.bootMaxForceReloadAt + ')');
   } catch (e) {

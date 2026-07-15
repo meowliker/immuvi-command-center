@@ -1829,3 +1829,32 @@ Live audit on 2026-07-15 confirmed the shape:
 ### Prevention
 - Supabase realtime status and ClickUp polling status are separate. Do not treat a green realtime dot as proof that ClickUp polling is still running.
 - Any future product switch/link/unlink path must update both realtime channels and the ClickUp polling scheduler.
+
+---
+
+## Bug 41 — Supabase realtime channels silently died, so tabs stopped live-refreshing
+**Status:** ✅ fixed locally 2026-07-15
+**Reported:** 2026-07-15
+**Surface:** Cross-tab/team live updates / product profile live updates / force reload watcher
+
+### Symptom
+- Open tabs stopped updating automatically until a manual browser refresh.
+- The app could still look "Live" because ClickUp polling and Supabase realtime are separate systems.
+- A team force-reload/deploy reload could be missed by tabs whose realtime channel had silently disconnected.
+
+### Root cause
+1. Product data realtime (`DB.subscribeToProduct`) subscribed once and never handled Supabase `CHANNEL_ERROR`, `TIMED_OUT`, or `CLOSED` statuses.
+2. The broadcast/presence channel (`cc-{productId}`) had the same one-shot subscription shape.
+3. The global products channel also had no reconnect behavior.
+4. The force-reload watcher re-read the latest `force_reloads` row on reconnect, but reset its cutoff to that latest row. If the tab missed the realtime INSERT while offline, reconnecting made it ignore the missed reload forever.
+
+### Fix
+1. Added realtime status tracking for product, broadcast, and global products channels.
+2. Added reconnect scheduling and a 30s health watchdog that re-subscribes dead/missing realtime channels.
+3. Added status callbacks to Supabase channel subscriptions and reconnect on `CHANNEL_ERROR`, `TIMED_OUT`, or `CLOSED`.
+4. Fixed force-reload reconnect logic so it keeps the original boot cutoff and detects missed reload rows.
+5. Added `debugLiveSync()` for DevTools inspection of channel status and ClickUp poll state.
+
+### Prevention
+- Every new Supabase realtime channel must track subscription status and reconnect on terminal/error states.
+- Reconnect code must not reset "seen row" cutoffs before checking for missed events.

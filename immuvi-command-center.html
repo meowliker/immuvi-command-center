@@ -14376,6 +14376,10 @@ let _autoSyncInterval = null;   // 30s full diff poll
 let _syncCounterInterval = null; // 1s label counter
 let _lastSyncedAt = null;        // timestamp of last successful auto-sync
 let _autoSyncActive = false;
+let _autoSyncPollInFlight = false;
+let _lastAutoSyncKickAt = 0;
+let _lastAutoSyncWatchdogAt = 0;
+let _lastAutoSyncMetaPersistAt = 0;
 let CREATIVE_USAGE = {}; // { 'AD-001': [{angle, persona, status}], ... }
 let MATRIX_CELL_META = {}; // { 'angle||persona': { description }, 'adId||angle||persona': { status, uniqueName, description, dueDate } }
 let CELL_CREATIVE_ASSIGNMENTS = {}; // { 'angle||persona': ['AD-001', 'AD-005', ...] }
@@ -28331,7 +28335,7 @@ function syncClickUp() {
       if (dot) dot.className = 'live-dot active';
       if (lbl) lbl.textContent = 'Live · just now';
       toast('Synced ' + tasks.length + ' tasks from ClickUp', 'ok');
-      startAutoSync();
+      startAutoSync({ immediate: false, reason: 'manual-sync' });
       fetchAndStoreFieldMap(listId);
     })
     .catch(function(err) {
@@ -29899,6 +29903,7 @@ function _diffCustomFieldsRaw(local, fresh) {
 // teammate added directly in ClickUp). Silent by default — toasts only when
 // significant changes happen (new tasks or field updates).
 function pollFullSync() {
+  if (_autoSyncPollInFlight) return;
   var activeProd = getActiveProduct();
   if (!CFG.key || !activeProd || !activeProd.clickupListId) return;
   // Don't touch ADS if the in-memory data isn't aligned with the active product
@@ -29918,6 +29923,7 @@ function pollFullSync() {
 
   var dot = document.getElementById('statusDot');
   if (dot) dot.className = 'live-dot syncing';
+  _autoSyncPollInFlight = true;
 
   // Fetch ALL pages (up to 500 tasks) — same as manual Sync, so we don't miss new tasks beyond page 0
   fetchAllTasks(_startListId)
@@ -29927,14 +29933,16 @@ function pollFullSync() {
       // fetched tasks belong to a DIFFERENT product's list and must NOT be
       // merged into the current ADS (would create cross-product duplicates).
       if (activeProductId !== _startProductId) {
+        _autoSyncPollInFlight = false;
         if (dot) dot.className = 'live-dot';
         return;
       }
       if (_adsProductId !== _startProductId) {
+        _autoSyncPollInFlight = false;
         if (dot) dot.className = 'live-dot';
         return;
       }
-      if (!tasks || !tasks.length) { _onSyncSuccess(dot, 0, false); return; }
+      if (!tasks || !tasks.length) { _onSyncSuccess(dot, 0, false, 0); return; }
       _stampClickUpTasksWithProductBoundary(tasks, activeProd, _startListId, _startListName);
 
       // Build lookup: _clickupId → freshly-parsed task
@@ -30507,7 +30515,7 @@ function pollFullSync() {
         }
       }
 
-      _onSyncSuccess(dot, fieldUpdates, changed);
+      _onSyncSuccess(dot, fieldUpdates, changed, tasks.length);
 
       if (changed) {
         // Rebuild matrix if new tasks arrived OR auto-discover added new
@@ -30533,13 +30541,28 @@ function pollFullSync() {
       if (dot) dot.className = 'live-dot err';
       var lbl = document.getElementById('statusLbl');
       if (lbl) lbl.textContent = 'Sync error';
+    })
+    .finally(function() {
+      _autoSyncPollInFlight = false;
     });
 }
 
-function _onSyncSuccess(dot, changedCount, changed) {
+function _onSyncSuccess(dot, changedCount, changed, syncedCount) {
   _lastSyncedAt = Date.now();
   if (dot) dot.className = 'live-dot active';
   updateSyncLabel();
+  var activeProd = getActiveProduct();
+  if (activeProd) {
+    activeProd.lastSyncedAt = _lastSyncedAt;
+    if (typeof syncedCount === 'number') activeProd.lastSyncedCount = syncedCount;
+    try { renderProductProfile(); } catch (e) {}
+    // Persist auto-sync metadata occasionally so reload/product-profile views
+    // don't keep showing the last manual sync as stale.
+    if (DB.ready && Date.now() - _lastAutoSyncMetaPersistAt > 300000) {
+      _lastAutoSyncMetaPersistAt = Date.now();
+      DB.upsertProduct(activeProd).catch(function(e){ console.error('[SB] auto-sync meta', e); });
+    }
+  }
   // After every successful ClickUp sync, schedule a full Supabase flush so
   // the freshly-parsed _customFields / _customFieldsRaw / dueDate values
   // (Editor / Reviewer / Approved Date / Hook Type / etc.) land in the
@@ -32043,16 +32066,49 @@ function updateSyncLabel() {
   if (!lbl) return;
   if (!_lastSyncedAt) { lbl.textContent = 'Not synced'; return; }
   var sec = Math.floor((Date.now() - _lastSyncedAt) / 1000);
+  if (_autoSyncActive && sec > Math.floor(_autoSyncIntervalMs() / 1000) * 2 + 30) {
+    var now = Date.now();
+    if (now - _lastAutoSyncWatchdogAt > 60000) {
+      _lastAutoSyncWatchdogAt = now;
+      _kickAutoSync('stale-label');
+    }
+  }
   if (sec < 5)  { lbl.textContent = 'Live · just now'; return; }
   if (sec < 60) { lbl.textContent = 'Live · ' + sec + 's ago'; return; }
   lbl.textContent = 'Live · ' + Math.floor(sec / 60) + 'm ago';
 }
 
-function startAutoSync() {
+function _autoSyncIntervalMs() {
+  var hidden = (typeof document !== 'undefined' && document.hidden);
+  return hidden ? 300000 : 60000; // 5 min hidden / 60s foreground
+}
+
+function _scheduleAutoSyncInterval() {
+  if (_autoSyncInterval) { clearInterval(_autoSyncInterval); _autoSyncInterval = null; }
+  if (!_autoSyncActive) return;
+  _autoSyncInterval = setInterval(function () {
+    try { pollFullSync(); } catch (e) { console.error('[auto-sync] poll failed', e); }
+  }, _autoSyncIntervalMs());
+}
+
+function _kickAutoSync(reason, force) {
+  if (!_autoSyncActive) return;
+  var now = Date.now();
+  if (!force && now - _lastAutoSyncKickAt < 5000) return;
+  _lastAutoSyncKickAt = now;
+  setTimeout(function () {
+    if (!_autoSyncActive) return;
+    try { pollFullSync(); } catch (e) { console.error('[auto-sync] kick failed', reason, e); }
+  }, 250);
+}
+
+function startAutoSync(opts) {
+  opts = opts || {};
   // Clear any old intervals (including legacy pollLiveStatus)
   if (_pollingInterval)      { clearInterval(_pollingInterval);      _pollingInterval      = null; }
   if (_autoSyncInterval)     { clearInterval(_autoSyncInterval);     _autoSyncInterval     = null; }
   if (_syncCounterInterval)  { clearInterval(_syncCounterInterval);  _syncCounterInterval  = null; }
+  _autoSyncActive = true;
 
   // Realtime traffic budget (2026-05-06): foreground 30s → 60s, background
   // 60s → 5min. Each poll fires per-field broadcasts + a snapshot save → cascade
@@ -32062,36 +32118,27 @@ function startAutoSync() {
   // (ClickUp → dashboard) latency increases for teammates editing directly in
   // ClickUp. Manual "Sync ClickUp" button is the immediacy escape hatch — never
   // remove it. See feedback_realtime_traffic_budget.md (invariant #3).
-  function _scheduleNext() {
-    if (_autoSyncInterval) { clearInterval(_autoSyncInterval); _autoSyncInterval = null; }
-    var hidden = (typeof document !== 'undefined' && document.hidden);
-    var ms = hidden ? 300000 : 60000; // 5 min hidden / 60s foreground
-    _autoSyncInterval = setInterval(pollFullSync, ms);
-  }
-  _scheduleNext();
+  _scheduleAutoSyncInterval();
   // Re-schedule whenever visibility flips, AND fire an immediate poll on
   // foreground transition so switching back to the tab refreshes within ~1s.
   if (!window._immuviVisListenerWired) {
     window._immuviVisListenerWired = true;
     document.addEventListener('visibilitychange', function () {
       if (!_autoSyncActive) return;
-      _scheduleNext();
-      if (!document.hidden) {
-        try { pollFullSync(); } catch (e) {}
-      }
+      _scheduleAutoSyncInterval();
+      if (!document.hidden) _kickAutoSync('visible');
     });
     window.addEventListener('focus', function () {
       if (!_autoSyncActive) return;
-      try { pollFullSync(); } catch (e) {}
+      _kickAutoSync('focus');
     });
   }
   // 1s label counter — ultra-lightweight, just updates a text node
   _syncCounterInterval = setInterval(updateSyncLabel, 1000);
 
-  _autoSyncActive = true;
-
   var dot = document.getElementById('statusDot');
   if (dot) dot.className = 'live-dot active';
+  if (opts.immediate !== false) _kickAutoSync(opts.reason || 'start', !!opts.forceKick);
 }
 
 function stopAutoSync() {
@@ -32714,6 +32761,17 @@ async function switchProduct(productId) {
   _resubscribeRealtime();
   // Re-initialize broadcast channel for the new product
   _initRealtimeChannel(activeProductId);
+  _lastSyncedAt = prod.lastSyncedAt || null;
+  if (CFG.key && prod.clickupListId) {
+    var _swDot = document.getElementById('statusDot');
+    if (_swDot) _swDot.className = 'live-dot active';
+    updateSyncLabel();
+    startAutoSync({ immediate: true, reason: 'product-switch', forceKick: true });
+  } else {
+    stopAutoSync();
+    var _swLbl = document.getElementById('statusLbl');
+    if (_swLbl) _swLbl.textContent = prod.clickupListId ? 'Add API key to go live' : 'Link a ClickUp list to sync';
+  }
   // Auto-fetch field map for new product if API key is set
   if (CFG.key && prod.clickupListId && !getActiveFieldMap()) {
     fetchAndStoreFieldMap(prod.clickupListId);
@@ -32829,6 +32887,12 @@ async function unlinkProductClickUp(productId) {
     // Mirror in local state
     prod.clickupListId = '';
     prod.clickupListName = '';
+    if (productId === activeProductId) {
+      stopAutoSync();
+      _lastSyncedAt = null;
+      var _unLbl = document.getElementById('statusLbl');
+      if (_unLbl) _unLbl.textContent = 'Link a ClickUp list to sync';
+    }
     renderProductProfile();
     toast('ClickUp list disconnected', 'ok');
   } catch (e) {

@@ -1801,3 +1801,31 @@ Live audit on 2026-07-15 confirmed the shape:
 ### Prevention
 - Do not infer media type from `duration_seconds` alone: TikTok photo posts can have slideshow duration, and Instagram reels can probe as `0` when metadata extraction fails.
 - Future classifiers must preserve `mediaKind` from the downloader and only use LLM classification for creative style/format labels.
+
+---
+
+## Bug 40 — Live ClickUp auto-sync label went stale and product profile did not auto-refresh
+**Status:** ✅ fixed locally 2026-07-15
+**Reported:** 2026-07-15
+**Surface:** Header live sync indicator / Product Profiles sync metadata / ClickUp polling
+
+### Symptom
+- Header could show `Live · 281m ago`, implying realtime was connected but ClickUp auto-sync had not refreshed for hours.
+- Product Profiles could show `Last synced 4h ago` even after background auto-sync should have run.
+
+### Root cause
+1. `startAutoSync()` scheduled the first ClickUp poll for the next interval only; boot/product-switch did not force an immediate poll.
+2. Product switching re-wired Supabase realtime but did not restart/kick the ClickUp polling scheduler for the newly active product.
+3. Successful `pollFullSync()` calls updated the top label only in memory and did not update `PRODUCTS[i].lastSyncedAt/lastSyncedCount`, so the Product Profiles panel stayed pinned to the last manual sync timestamp.
+4. There was no stale-label watchdog. If browser timers were paused/throttled or the interval got out of phase, `Live · ... ago` could age indefinitely while the dot stayed active.
+
+### Fix
+1. Added overlap protection for auto polls so focus/visibility/timer kicks cannot pile up concurrent ClickUp fetches.
+2. Added a stable auto-sync scheduler plus `_kickAutoSync()` for boot, focus, visibility return, and product switch.
+3. Added a stale-label watchdog: if the label exceeds the expected polling window, it kicks a fresh poll.
+4. Successful auto polls now update active product sync metadata in memory, refresh Product Profiles, and persist metadata to Supabase on a 5-minute throttle.
+5. Active-product unlink now stops auto-sync and resets the live label.
+
+### Prevention
+- Supabase realtime status and ClickUp polling status are separate. Do not treat a green realtime dot as proof that ClickUp polling is still running.
+- Any future product switch/link/unlink path must update both realtime channels and the ClickUp polling scheduler.

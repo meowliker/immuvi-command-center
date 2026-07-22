@@ -13066,7 +13066,9 @@ const DB = {
       ADS: (ads.data || []).map(_rowToAd),
       MATRIX_CELL_META: meta,
       CELL_CREATIVE_ASSIGNMENTS: assigns,
-      MANUAL_ACTIONS: (actions.data || []).map(function (m) { return Object.assign({}, m.payload || {}, { _dbId: m.id, liveStatus: m.live_status }); }),
+      MANUAL_ACTIONS: (actions.data || []).map(function (m) {
+        return _canonicalizeManualActionTaxonomyForSave(Object.assign({}, m.payload || {}, { _dbId: m.id, liveStatus: m.live_status }));
+      }),
       PROD: [], // derived from ads, no dedicated table
       ANGLE_PERSONAS: anglePersonasFromCells // hydrated from matrix_cells rows
     };
@@ -13395,6 +13397,7 @@ const DB = {
 
       // Build final rows, stamping clientId into payload for self-echo detection
       const finalRows = _filteredStateMAs.map(function (ma) {
+        ma = _canonicalizeManualActionTaxonomyForSave(ma);
         var payload = {};
         // _dbId is internal DB row id, _clickupTaskDeleted is runtime-only flag
         // (recalculated on every sync) — never persist either to DB
@@ -14760,6 +14763,22 @@ function _canonicalizeAdTaxonomyForSave(ad) {
     });
   });
   return ad;
+}
+
+function _canonicalizeManualActionTaxonomyForSave(ma) {
+  if (!ma) return ma;
+  var out = Object.assign({}, ma);
+  var angle = _canonicalTaxonomyName(out.angle || out.sourceAngle || '', (typeof ANGLES !== 'undefined' ? ANGLES : []));
+  var persona = _canonicalTaxonomyName(out.persona || out.sourcePersona || '', (typeof PERSONAS !== 'undefined' ? PERSONAS : []));
+  if (angle) {
+    if (out.angle) out.angle = angle;
+    if (out.sourceAngle) out.sourceAngle = angle;
+  }
+  if (persona) {
+    if (out.persona) out.persona = persona;
+    if (out.sourcePersona) out.sourcePersona = persona;
+  }
+  return out;
 }
 
 // BUG-005 — strip tombstoned angle/persona names from an ANGLE_PERSONAS
@@ -32410,6 +32429,7 @@ function _writeManualActionRowDirect(ma) {
   if (typeof DB === 'undefined' || !DB.ready) return Promise.resolve({ ok: false, reason: 'db-not-ready' });
   if (!activeProductId) return Promise.resolve({ ok: false, reason: 'no-product' });
   try {
+    ma = _canonicalizeManualActionTaxonomyForSave(ma);
     var payload = {};
     var skipKeys = { '_dbId': true, '_clickupTaskDeleted': true };
     for (var k in ma) { if (!skipKeys[k]) payload[k] = ma[k]; }
@@ -48590,29 +48610,55 @@ window._clearPendingCu = _clearPendingCu;
   // missing here, the corresponding edit won't trigger a re-render until
   // some other mutation kicks in. Err toward including more.
   var _lastFp = {};
+  function _stableJson(value) {
+    if (value == null) return '';
+    if (typeof value !== 'object') return String(value);
+    try {
+      if (Array.isArray(value)) return '[' + value.map(_stableJson).join(',') + ']';
+      var keys = Object.keys(value).sort();
+      return '{' + keys.map(function (k) { return JSON.stringify(k) + ':' + _stableJson(value[k]); }).join(',') + '}';
+    } catch (e) {
+      try { return JSON.stringify(value); } catch (_) { return ''; }
+    }
+  }
   function _adsCoreFp() {
     if (typeof ADS === 'undefined' || !Array.isArray(ADS)) return '';
-    var s = ADS.length + '|';
+    var rows = [];
     for (var i = 0; i < ADS.length; i++) {
       var a = ADS[i]; if (!a) continue;
-      s += (a.id||'') + ',' + (a.angle||'') + ',' + (a.persona||'') + ',' + (a.status||'') + ',' +
+      rows.push((a.id||'') + ',' + (a.angle||'') + ',' + (a.persona||'') + ',' + (a.status||'') + ',' +
            (a.formatName||'') + ',' + (a.taskType||'') + ',' + (a.adType||'') + ',' +
            (a.funnelStage||'') + ',' + (a._clickupId||'') + ',' + (a.parentAdId||'') + ',' +
            (a.sourceFormatId||'') + ',' + (a.hookType||'') + ',' + (a.creativeStructure||'') + ',' +
            (a.productionStyle||'') + ',' + (a.dueDate||'') + ',' + (a.adLink||'') + ',' +
-           (a.driveLink||'') + ',' + (a.lastStatusChangeAt||'') + ',' + (a._localNew?'N':'') + ';';
+           (a.driveLink||'') + ',' + (a.lastStatusChangeAt||'') + ',' + (a._localNew?'N':'') + ';');
     }
-    return s;
+    rows.sort();
+    return ADS.length + '|' + rows.join('');
   }
   function _matrixFp() {
     var s = (typeof ANGLES !== 'undefined' ? ANGLES.length : 0) + ':' +
             (typeof PERSONAS !== 'undefined' ? PERSONAS.length : 0) + ':' + _adsCoreFp() + '#';
-    if (typeof ANGLES !== 'undefined') for (var i=0;i<ANGLES.length;i++) s += (ANGLES[i].id||'') + ',' + (ANGLES[i].name||'') + ';';
+    if (typeof ANGLES !== 'undefined') {
+      var angleRows = [];
+      for (var i=0;i<ANGLES.length;i++) {
+        angleRows.push((ANGLES[i].name||'') + ',' + (ANGLES[i].id||'') + ',' + (ANGLES[i].status||'') + ',' + (ANGLES[i].archivedAt||'') + ';');
+      }
+      angleRows.sort();
+      s += angleRows.join('');
+    }
     s += '#';
-    if (typeof PERSONAS !== 'undefined') for (var j=0;j<PERSONAS.length;j++) s += (PERSONAS[j].id||'') + ',' + (PERSONAS[j].name||'') + ';';
+    if (typeof PERSONAS !== 'undefined') {
+      var personaRows = [];
+      for (var j=0;j<PERSONAS.length;j++) {
+        personaRows.push((PERSONAS[j].name||'') + ',' + (PERSONAS[j].id||'') + ',' + (PERSONAS[j].status||'') + ',' + (PERSONAS[j].archivedAt||'') + ';');
+      }
+      personaRows.sort();
+      s += personaRows.join('');
+    }
     s += '#';
     if (typeof MATRIX_CELL_META !== 'undefined' && MATRIX_CELL_META) {
-      var ks = Object.keys(MATRIX_CELL_META);
+      var ks = Object.keys(MATRIX_CELL_META).sort();
       for (var k=0;k<ks.length;k++) {
         var mm = MATRIX_CELL_META[ks[k]] || {};
         s += ks[k] + '=' + (mm.status||'') + '|' + (mm.actionStatus||'') + '|' + (mm.uniqueName||'') + '|' + (mm.dueDate||'') + ';';
@@ -48620,20 +48666,33 @@ window._clearPendingCu = _clearPendingCu;
     }
     s += '#';
     if (typeof CELL_CREATIVE_ASSIGNMENTS !== 'undefined' && CELL_CREATIVE_ASSIGNMENTS) {
-      var cks = Object.keys(CELL_CREATIVE_ASSIGNMENTS);
-      for (var c=0;c<cks.length;c++) s += cks[c] + '=' + (CELL_CREATIVE_ASSIGNMENTS[cks[c]]||[]).join(',') + ';';
+      var cks = Object.keys(CELL_CREATIVE_ASSIGNMENTS).sort();
+      for (var c=0;c<cks.length;c++) {
+        var ids = (CELL_CREATIVE_ASSIGNMENTS[cks[c]]||[]).slice().sort();
+        s += cks[c] + '=' + ids.join(',') + ';';
+      }
     }
     s += '#';
     if (typeof _mxv4 !== 'undefined' && _mxv4) {
-      // Serialize the whole _mxv4 state so filter pill clicks (which set
-      // dropdown-open flags) and any other UI toggle bust the no-op-skip
-      // and the render fires. The previous narrow whitelist froze filters.
-      try { s += '|m=' + JSON.stringify(_mxv4); }
-      catch (e) {
-        s += 'tab=' + (_mxv4.tab||'') + '|exp=' + (_mxv4.expandedCell||'') +
-             '|hl=' + (_mxv4.highlight||'') + '|fm=' + (_mxv4.filterMode||'') +
-             '|dr=' + (_mxv4.dateRange||'') + '|sort=' + (_mxv4.angleSort||'');
-      }
+      // Keep this explicit and stable. The full _mxv4 object contains hover
+      // timers / cursor state; serializing those made background syncs look
+      // like visible matrix changes and caused slow no-op flicker.
+      s += '|m=' + _stableJson({
+        cell: _mxv4.cell || '',
+        source: _mxv4.source || 'all',
+        staleOnly: !!_mxv4.staleOnly,
+        dateRange: _mxv4.dateRange || 'all',
+        dateFrom: _mxv4.dateFrom || 0,
+        dateTo: _mxv4.dateTo || 0,
+        dateBasis: _mxv4.dateBasis || '',
+        filterMode: _mxv4.filterMode || '',
+        angleSort: _mxv4.angleSort || '',
+        angleManualOrder: Array.isArray(_mxv4.angleManualOrder) ? _mxv4.angleManualOrder : [],
+        density: _mxv4.density || '',
+        statusFilter: Array.isArray(_mxv4.statusFilter) ? _mxv4.statusFilter.slice().sort() : [],
+        personaFilter: (typeof _matrixPersonaFilter !== 'undefined' ? _matrixPersonaFilter : ''),
+        formatStatusFilter: (typeof _matrixFormatStatusFilter !== 'undefined' ? _matrixFormatStatusFilter : '')
+      });
     }
     return s;
   }

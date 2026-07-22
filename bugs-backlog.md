@@ -1911,3 +1911,28 @@ The taxonomy guard only matched exact normalized names. AI-generated persona lab
 ### Prevention
 - Do not rely on exact text equality for AI-generated personas.
 - Generated persona names containing numbering, demographics, or misspellings must be canonicalized before auto-discovery or matrix-cell persistence.
+
+---
+
+## Bug 44 — Creative Matrix still flickered slowly on no-op background sync
+**Status:** ✅ fixed locally 2026-07-22
+**Reported:** 2026-07-22
+**Surface:** Creative Matrix / render suppression / background ClickUp sync
+
+### Symptom
+- After Bug 42 removed the fast 1-2 second realtime reconnect loop, the Creative Matrix still flickered at a slower cadence.
+
+### Root cause
+The no-op render guard used order-sensitive fingerprints:
+1. ADS, ANGLES, PERSONAS, matrix meta keys, and assignment keys were serialized in current array/object order. Background Supabase/ClickUp reloads can return the same data in a different order, which made the fingerprint look changed.
+2. The matrix fingerprint serialized the entire `_mxv4` state object, including hover timers and mouse coordinates. Those transient fields are not real matrix data changes but still invalidated the no-op guard.
+3. Manual-action payloads could keep stale `sourcePersona` strings, so an old tab could re-save non-canonical persona text even after the master persona rows were clean.
+
+### Fix
+1. Matrix fingerprints now sort ads, taxonomy rows, matrix meta keys, and assignment ids before comparison.
+2. Matrix fingerprints now include only explicit matrix-visible `_mxv4` fields, not hover timers/cursor state.
+3. Manual actions are canonicalized on DB load, snapshot save, and direct row write so stale `persona` / `sourcePersona` values are folded before persistence.
+
+### Prevention
+- No-op render fingerprints must be deterministic and exclude timers, DOM refs, and pointer/hover internals.
+- Canonical taxonomy cleanup must include action payload fields, not only ad rows and master taxonomy tables.

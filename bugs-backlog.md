@@ -1858,3 +1858,56 @@ Live audit on 2026-07-15 confirmed the shape:
 ### Prevention
 - Every new Supabase realtime channel must track subscription status and reconnect on terminal/error states.
 - Reconnect code must not reset "seen row" cutoffs before checking for missed events.
+
+---
+
+## Bug 42 — Creative Matrix flickered every 1-2 seconds from realtime reconnect loop
+**Status:** ✅ fixed locally 2026-07-22
+**Reported:** 2026-07-22
+**Surface:** Creative Matrix / Supabase realtime reconnects
+
+### Symptom
+- Creative Matrix behaved like it was refreshing every 1-2 seconds even when no data actually changed.
+- The repeated loading-like behavior made the matrix difficult to use.
+
+### Root cause
+Bug 41 added reconnect handling for Supabase channel statuses, but it treated `CLOSED` as an immediate error. The app also intentionally calls `removeChannel()` when switching products or resubscribing. Supabase can report `CLOSED` for that intentional removal, so the old channel callback scheduled a reconnect, which removed the new channel, which produced another `CLOSED`, creating a reconnect loop on the same 1-2 second cadence the user saw.
+
+### Fix
+1. `CHANNEL_ERROR` and `TIMED_OUT` still trigger immediate reconnects.
+2. `CLOSED` is no longer treated as an immediate error from a subscription callback.
+3. The 30s health watchdog still recovers missing/closed channels, which preserves the Bug 41 protection without chasing intentional closes.
+4. Global products reconnects are now single-flight so repeated error statuses cannot stack multiple reconnect timers.
+
+### Prevention
+- Realtime reconnect code must distinguish intentional channel closes from transport failures.
+- Health watchdogs can recover closed/missing channels, but subscription callbacks should not immediately reconnect on `CLOSED` after local `removeChannel()`.
+
+---
+
+## Bug 43 — Generated mom persona variants kept resurrecting as Creative Matrix columns
+**Status:** ✅ fixed locally 2026-07-22
+**Reported:** 2026-07-22
+**Surface:** KIDS LIFE SKILL personas / Creative Matrix taxonomy / ClickUp sync
+
+### Symptom
+- KIDS LIFE SKILL showed multiple versions of the same mom persona: `Overwhelmed Moms (Behaviour)`, `P1 Overwhelmed Mom 35-44`, `Persona 1 - Age 35-44 , F, Overwelmed MOM`, `overwhelmed mom 34-45 year`, and similar generated names.
+- Empty `matrix_cells` rows for removed/archived personas could keep old persona columns alive.
+
+### Root cause
+The taxonomy guard only matched exact normalized names. AI-generated persona labels with prefixes, age/gender suffixes, punctuation, em dashes, singular/plural wording, or the `overwelmed` typo did not match the existing canonical persona. `autoDiscoverTaxonomy()` and save-time matrix-cell persistence could therefore create or preserve new persona rows and empty matrix cells.
+
+### Fix
+1. Added a persona semantic key that collapses the known generated mom variants into canonical groups:
+   - overwhelmed mom variants -> `Overwhelmed Moms (Behaviour)`
+   - mom raising kids variants -> `Moms Raising Kids 28-42`
+2. Persona dedupe now uses the semantic key and prefers stronger taxonomy statuses, so `Winner` rows beat generated `Testing` / `Untested` rows.
+3. Save-time canonicalization now folds duplicate persona cell keys into the canonical cell instead of upserting another column.
+4. Live KIDS LIFE SKILL cleanup:
+   - removed 7 obsolete persona rows,
+   - merged duplicate matrix cells into canonical cells,
+   - remapped affected ads, manual actions, and inspirations.
+
+### Prevention
+- Do not rely on exact text equality for AI-generated personas.
+- Generated persona names containing numbering, demographics, or misspellings must be canonicalized before auto-discovery or matrix-cell persistence.

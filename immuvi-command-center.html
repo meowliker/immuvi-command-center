@@ -11425,12 +11425,17 @@ var _broadcastRealtimeStatus = 'idle';
 var _productsRealtimeStatus = 'idle';
 var _realtimeReconnectTimer = null;
 var _realtimeHealthInterval = null;
+var _productsRealtimeReconnectTimer = null;
 // Notes cache — survives ADS array replacement (onChange merge creates new objects).
 // saveAdNotes writes here; render reads here first; cleared when DB confirms the value.
 var _notesCache = {};
 
 function _isBadRealtimeStatus(status) {
-  return status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED';
+  return status === 'CHANNEL_ERROR' || status === 'TIMED_OUT';
+}
+
+function _isClosedRealtimeStatus(status) {
+  return status === 'CLOSED';
 }
 
 function _scheduleRealtimeReconnect(reason, productId, delayMs) {
@@ -11449,18 +11454,29 @@ function _startRealtimeHealthWatchdog() {
   if (_realtimeHealthInterval) return;
   _realtimeHealthInterval = setInterval(function () {
     if (!SB) return;
-    if (!_productsChannel || _isBadRealtimeStatus(_productsRealtimeStatus)) {
+    if (!_productsChannel || _isBadRealtimeStatus(_productsRealtimeStatus) || _isClosedRealtimeStatus(_productsRealtimeStatus)) {
       try { _initProductsRealtimeChannel(); } catch (e) { console.warn('[products-realtime] watchdog reconnect failed', e); }
     }
     if (!activeProductId) return;
-    if (!_activeRTChannel || _isBadRealtimeStatus(_productRealtimeStatus)) {
+    if (!_activeRTChannel || _isBadRealtimeStatus(_productRealtimeStatus) || _isClosedRealtimeStatus(_productRealtimeStatus)) {
       _scheduleRealtimeReconnect('product-channel-' + (_productRealtimeStatus || 'missing'), activeProductId, 250);
       return;
     }
-    if (!_rtChannel || _isBadRealtimeStatus(_broadcastRealtimeStatus)) {
+    if (!_rtChannel || _isBadRealtimeStatus(_broadcastRealtimeStatus) || _isClosedRealtimeStatus(_broadcastRealtimeStatus)) {
       _scheduleRealtimeReconnect('broadcast-channel-' + (_broadcastRealtimeStatus || 'missing'), activeProductId, 250);
     }
   }, 30000);
+}
+
+function _scheduleProductsRealtimeReconnect(reason, delayMs) {
+  if (!SB) return;
+  if (_productsRealtimeReconnectTimer) clearTimeout(_productsRealtimeReconnectTimer);
+  _productsRealtimeReconnectTimer = setTimeout(function () {
+    _productsRealtimeReconnectTimer = null;
+    if (!SB) return;
+    console.warn('[products-realtime] reconnecting:', reason);
+    try { _initProductsRealtimeChannel(); } catch (e) { console.warn('[products-realtime] reconnect failed', e); }
+  }, delayMs || 1500);
 }
 
 // ── GLOBAL PRODUCTS CHANNEL (2026-05-11) ─────────────────────────────────
@@ -11524,6 +11540,7 @@ function _productFieldsDiffer(a, b) {
 
 function _initProductsRealtimeChannel() {
   if (!SB) return;
+  if (_productsRealtimeReconnectTimer) { clearTimeout(_productsRealtimeReconnectTimer); _productsRealtimeReconnectTimer = null; }
   if (_productsChannel) { try { SB.removeChannel(_productsChannel); } catch(e){} _productsChannel = null; }
   _productsRealtimeStatus = 'idle';
 
@@ -11660,15 +11677,13 @@ function _initProductsRealtimeChannel() {
   _productsChannel.subscribe(function (status) {
     _productsRealtimeStatus = status;
     if (_isBadRealtimeStatus(status)) {
-      setTimeout(function () {
-        if (!SB) return;
-        try { _initProductsRealtimeChannel(); } catch (e) { console.warn('[products-realtime] reconnect failed', e); }
-      }, 1500);
+      _scheduleProductsRealtimeReconnect(status, 1500);
     }
   });
 }
 
 function _initRealtimeChannel(productId) {
+  if (_realtimeReconnectTimer) { clearTimeout(_realtimeReconnectTimer); _realtimeReconnectTimer = null; }
   if (_rtChannel) { SB.removeChannel(_rtChannel); _rtChannel = null; }
   _broadcastRealtimeStatus = 'idle';
   if (!productId || !SB) return;
@@ -14563,12 +14578,47 @@ function _taxonomyLookupKey(name) {
   return String(_normalizeTaxonomyName(name || '') || '').toLowerCase().trim();
 }
 
+function _personaSemanticKey(name) {
+  var s = String(_normalizeTaxonomyName(name || '') || '').toLowerCase();
+  if (!s) return '';
+  s = s.replace(/[–—]/g, '-');
+  var raw = s;
+  s = s.replace(/\boverwelmed\b/g, 'overwhelmed');
+  s = s.replace(/^\s*(?:persona\s*\d+|p\s*\d+)\s*[-:|]?\s*/i, '');
+  s = s.replace(/\b(?:age|aged)\b\s*[-:]?\s*/g, ' ');
+  s = s.replace(/\b\d{2}\s*(?:to|-)\s*\d{2}\b/g, ' ');
+  s = s.replace(/\b\d{2}\+?\b/g, ' ');
+  s = s.replace(/\b(?:years?|yrs?|old|female|male|women|woman|men|man|f|m)\b/g, ' ');
+  s = s.replace(/[^a-z0-9]+/g, ' ').replace(/\s+/g, ' ').trim();
+  if (!s) return '';
+
+  var hasMom = /\bmom(?:s)?\b/.test(s) || /\bmother(?:s)?\b/.test(s);
+  if (hasMom && /\boverwhelm(?:ed|ing)?\b/.test(s)) return 'persona:mom-overwhelmed';
+  if (hasMom && /\bfailed\b/.test(s) && /\bkid(?:s)?\b/.test(s)) return 'persona:mom-overwhelmed';
+  if (hasMom && /\btoo hard\b/.test(s)) return 'persona:mom-overwhelmed';
+  if (hasMom && /\braising kid(?:s)?\b/.test(s)) return 'persona:mom-raising-kids';
+  if (hasMom && s === 'mom' && /\b(?:age|aged|female|woman|women|f|\d{2})\b/.test(raw)) return 'persona:mom-raising-kids';
+  return '';
+}
+
 function _taxonomyCreatedMs(item) {
   if (!item) return 0;
   var raw = item.createdAt || item.created_at || 0;
   if (!raw) return 0;
   var ms = typeof raw === 'number' ? raw : new Date(raw).getTime();
   return isNaN(ms) ? 0 : ms;
+}
+
+function _taxonomyStatusRank(item) {
+  var s = String((item && item.status) || '').toLowerCase().trim();
+  if (s === 'winner') return 60;
+  if (s === 'mild winner' || s === 'scale') return 50;
+  if (s === 'ready to launch' || s === 'ready') return 40;
+  if (s === 'in production') return 30;
+  if (s === 'testing') return 20;
+  if (s === 'untested') return 10;
+  if (s === 'loser' || s === 'killed') return 0;
+  return 5;
 }
 
 function _preferredTaxonomyItem(next, current) {
@@ -14580,6 +14630,9 @@ function _preferredTaxonomyItem(next, current) {
   var currentHasBullet = /^\s*[-–—•*]/.test(currentName);
   if (nextHasBullet !== currentHasBullet) return nextHasBullet ? current : next;
   if (!!next._localNew !== !!current._localNew) return next._localNew ? current : next;
+  var nextStatusRank = _taxonomyStatusRank(next);
+  var currentStatusRank = _taxonomyStatusRank(current);
+  if (nextStatusRank !== currentStatusRank) return nextStatusRank > currentStatusRank ? next : current;
   var nextCreated = _taxonomyCreatedMs(next);
   var currentCreated = _taxonomyCreatedMs(current);
   if (nextCreated && currentCreated && nextCreated !== currentCreated) {
@@ -14600,11 +14653,23 @@ function _canonicalTaxonomyName(name, items) {
       best = _preferredTaxonomyItem(items[i], best);
     }
   }
+  if (!best && typeof PERSONAS !== 'undefined' && items === PERSONAS) {
+    var semanticKey = _personaSemanticKey(clean);
+    if (semanticKey) {
+      for (var j = 0; j < items.length; j++) {
+        var semanticItemName = (items[j] && items[j].name) || '';
+        if (_personaSemanticKey(semanticItemName) === semanticKey) {
+          best = _preferredTaxonomyItem(items[j], best);
+        }
+      }
+    }
+  }
   return best ? _normalizeTaxonomyName(best.name || '') : clean;
 }
 
 function _dedupeTaxonomyItems(items, label) {
   items = Array.isArray(items) ? items : [];
+  var isPersonaLabel = /persona/i.test(label || '');
   var byKey = {};
   var order = [];
   for (var i = 0; i < items.length; i++) {
@@ -14612,6 +14677,7 @@ function _dedupeTaxonomyItems(items, label) {
     if (!item) continue;
     var clean = _normalizeTaxonomyName(item.name || '');
     var key = _taxonomyLookupKey(clean);
+    if (isPersonaLabel) key = _personaSemanticKey(clean) || key;
     if (!key) {
       order.push(item);
       continue;

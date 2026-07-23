@@ -124,6 +124,7 @@ def claim_run(supabase_url: str, service_key: str,
         "status":     "running",
         "started_at": datetime.now(timezone.utc).isoformat(),
         "worker_id":  worker_id,
+        "error":      None,
     }
     out = _request("PATCH", url, service_key, body=body,
                    prefer="return=representation")

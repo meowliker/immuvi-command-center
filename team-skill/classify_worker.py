@@ -56,6 +56,9 @@ ORPHANED_PROCESSING_TIMEOUT_MINUTES = 2
 PREFERRED_WORKER_OFFLINE_GRACE_MINUTES = 2
 CLAUDE_CLI_TIMEOUT_SECONDS = 1200  # 20 min ceiling (bumped 2026-05-14 — 600s tripped on TikToks: yt-dlp + 30 frame extracts + claude classify reliably hits 10-12 min)
 PRODUCER_CLI_TIMEOUT_SECONDS = 1800  # 30 min for Codex image gen jobs
+PRODUCER_STALE_RUNNING_TIMEOUT_MINUTES = int(
+    os.environ.get("PRODUCER_STALE_RUNNING_TIMEOUT_MINUTES", "45")
+)
 # Max producer jobs running in parallel on this machine. Each is a separate
 # codex exec subprocess. Override via PRODUCER_MAX_CONCURRENCY env var.
 # 2026-05-09: bumped from sequential (1) to 10 — user is on ChatGPT Max plan,
@@ -623,6 +626,29 @@ class Worker:
             )
         except Exception as e:
             log(f"stale-claim sweep failed (non-fatal): {e}")
+
+    def release_stale_producer_runs(self):
+        """Reset abandoned producer runs after a worker crash or power loss.
+
+        Producer jobs are first marked running, then executed in a subprocess.
+        If the machine disappears, the restarted worker only sees pending rows,
+        so old running rows need to be returned to the queue after the normal
+        CLI timeout window has clearly passed.
+        """
+        try:
+            cutoff = _now_iso(offset_minutes=-PRODUCER_STALE_RUNNING_TIMEOUT_MINUTES)
+            self.sb.update(
+                "producer_runs",
+                f"started_at=lt.{urllib.parse.quote(cutoff)}&status=eq.running",
+                {
+                    "status": "pending",
+                    "started_at": None,
+                    "worker_id": None,
+                    "error": "auto-requeued: producer run was abandoned after worker restart/power loss",
+                },
+            )
+        except Exception as e:
+            log(f"producer stale-run sweep failed (non-fatal): {e}")
 
     # ── Polling + claim ──
 
@@ -1810,6 +1836,7 @@ class Worker:
 
                     # Cleanup any stale claims first
                     self.release_stale_claims()
+                    self.release_stale_producer_runs()
 
                     # ── CLASSIFY PARALLEL DISPATCH (2026-05-15) ──
                     # Reap completed classify futures (frees slots).

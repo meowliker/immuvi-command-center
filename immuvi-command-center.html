@@ -15462,6 +15462,7 @@ var _producerState = {
   byTask: {},           // task_id → latest producer_runs row
   modalTaskId: null,
   modalProductId: null,
+  modalPrevBodyOverflow: null,
 };
 
 async function _producerLoadForProduct(productId) {
@@ -16005,6 +16006,10 @@ function _composeFormatReferences(taskId) {
 function _producerOpenModal(taskId, productId) {
   _producerState.modalTaskId = taskId;
   _producerState.modalProductId = productId;
+  if (_producerState.modalPrevBodyOverflow === null) {
+    _producerState.modalPrevBodyOverflow = document.body.style.overflow || '';
+  }
+  document.body.style.overflow = 'hidden';
   var _pd = _prodDirectives(productId);
   var _targetAd = (typeof ADS !== 'undefined' && Array.isArray(ADS))
     ? ADS.find(function (a) { return a && (a.id === taskId || a.clickupTaskId === taskId); }) : null;
@@ -16028,10 +16033,13 @@ function _producerOpenModal(taskId, productId) {
     // that sets opacity:0 by default (it expects an .is-open toggle class).
     '<div class="producer-modal-overlay" onclick="_producerCloseModal()" ' +
     'style="position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:9999;' +
-    'display:flex;align-items:center;justify-content:center;opacity:1 !important">' +
+    'display:flex;align-items:flex-start;justify-content:center;opacity:1 !important;' +
+    'overflow-y:auto;overscroll-behavior:contain;padding:16px;box-sizing:border-box">' +
       '<div onclick="event.stopPropagation()" ' +
       'style="background:var(--card,#fff);border-radius:14px;padding:24px;' +
-      'max-width:520px;width:92%;box-shadow:0 24px 64px rgba(0,0,0,0.2)">' +
+      'max-width:520px;width:min(92vw,520px);max-height:calc(100dvh - 32px);' +
+      'overflow-y:auto;overscroll-behavior:contain;box-sizing:border-box;' +
+      'box-shadow:0 24px 64px rgba(0,0,0,0.2)">' +
         '<h3 style="margin:0 0 16px;font-size:1.1rem">🎨 Generate Ad Images</h3>' +
         // ── Concept Picker: strategist-suggested winner formats ──
         '<div style="margin-bottom:14px">' +
@@ -16300,6 +16308,10 @@ function _producerCloseModal() {
   if (m) m.style.display = 'none';
   _producerState.modalTaskId = null;
   _producerState.modalProductId = null;
+  if (_producerState.modalPrevBodyOverflow !== null) {
+    document.body.style.overflow = _producerState.modalPrevBodyOverflow;
+    _producerState.modalPrevBodyOverflow = null;
+  }
 }
 
 async function _producerSubmit() {

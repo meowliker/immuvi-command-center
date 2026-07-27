@@ -13604,6 +13604,12 @@ const DB = {
         url: it.url,
         platform: it.platform || null,
         status: 'pending',
+        attempts: 0,
+        claimed_by: null,
+        claimed_at: null,
+        processed_at: null,
+        error_message: null,
+        queued_at: new Date().toISOString(),
         worker_assignment: assignment,
       };
     });

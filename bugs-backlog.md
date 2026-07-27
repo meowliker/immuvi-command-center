@@ -1936,3 +1936,31 @@ The no-op render guard used order-sensitive fingerprints:
 ### Prevention
 - No-op render fingerprints must be deterministic and exclude timers, DOM refs, and pointer/hover internals.
 - Canonical taxonomy cleanup must include action payload fields, not only ad rows and master taxonomy tables.
+
+---
+
+## Bug 45 — Reposted inspiration queue rows failed again with stale retry state
+**Status:** ✅ fixed locally 2026-07-27
+**Reported:** 2026-07-27
+**Surface:** Inspirations queue / distributed classifier worker
+
+### Symptom
+- KIDS LIFE SKILL inspirations such as `KLS-INS-105` through `KLS-INS-109` moved to `Failed` even after being reposted.
+- The queue rows showed `codex exit 1: Error: Operation not permitted (os error 1)`.
+
+### Root cause
+1. The active worker (`gp-mac-mini`) could see Codex, but Codex failed before classification with a local machine permission error. This was an agent/worker infrastructure failure, not a Facebook URL or classifier-content failure.
+2. The dashboard's queue `upsert` only restored `status: pending` on repost. It did not clear `attempts`, `claimed_by`, `claimed_at`, `processed_at`, or `error_message`, so failed rows could be reposted with stale retry metadata.
+3. The worker treated agent launch/permission errors like normal classification failures, consuming the same 3-attempt budget.
+
+### Fix
+1. Reposting/enqueueing an inspiration now resets retry metadata: `attempts`, claim fields, processed timestamp, error message, and `queued_at`.
+2. Worker agent launch/permission failures are now detected separately from auth and classifier failures.
+3. If the preferred agent has auth or infrastructure failure and another agent is installed, the worker retries once with the alternate agent.
+4. If no local agent can run, the queue row fails visibly with a worker-infrastructure error while preserving the content retry budget.
+5. Classify dispatch now pauses briefly after an agent infrastructure failure to avoid hammering a broken worker machine.
+
+### Prevention
+- Requeue/repost actions must always clear terminal queue metadata.
+- Worker-local agent startup errors must not be counted as ad classification attempts.
+- Queue failure messages should distinguish URL/classifier failures from worker-machine failures.

@@ -77,6 +77,7 @@ PRODUCER_REQUIRE_PREFERRED_WORKER = os.environ.get("PRODUCER_REQUIRE_PREFERRED_W
 # 5 min via _claude_cooldown_until. Set CLASSIFY_MAX_CONCURRENCY=1 to revert.
 CLASSIFY_MAX_CONCURRENCY = int(os.environ.get("CLASSIFY_MAX_CONCURRENCY", "3"))
 CLASSIFY_RATE_LIMIT_COOLDOWN_SECONDS = int(os.environ.get("CLASSIFY_RATE_LIMIT_COOLDOWN_SECONDS", "300"))
+CLASSIFY_AGENT_INFRA_COOLDOWN_SECONDS = int(os.environ.get("CLASSIFY_AGENT_INFRA_COOLDOWN_SECONDS", "600"))
 MAX_ATTEMPTS_BEFORE_FAILED = 3
 AUTO_PAUSE_CHECK_INTERVAL_SECONDS = 60
 
@@ -271,6 +272,20 @@ def _agent_auth_failed(output: str) -> bool:
         or "failed to authenticate" in text
         or "not logged in" in text
         or "login required" in text
+    )
+
+
+def _agent_infra_failed(output: str) -> bool:
+    """True when the worker could not launch/use the local agent process."""
+    text = (output or "").lower()
+    return (
+        "operation not permitted" in text
+        or "os error 1" in text
+        or "permission denied" in text
+        or "eperm" in text
+        or "no usable agent cli found" in text
+        or "agent cli not found" in text
+        or "no agent cli installed" in text
     )
 
 
@@ -535,6 +550,7 @@ class Worker:
         # classify dispatch. Set when _execute_classify_job detects a
         # rate-limit signal in claude stderr/stdout.
         self._claude_cooldown_until = 0.0
+        self._agent_infra_cooldown_until = 0.0
         # Wire signal handlers for graceful shutdown
         for sig in (signal.SIGINT, signal.SIGTERM):
             signal.signal(sig, self._on_signal)
@@ -825,6 +841,8 @@ class Worker:
         """True if pool has a free slot AND we're not in rate-limit cooldown."""
         if time.time() < self._claude_cooldown_until:
             return False
+        if time.time() < self._agent_infra_cooldown_until:
+            return False
         return self._active_classify_count() < CLASSIFY_MAX_CONCURRENCY
 
     def _execute_classify_job(self, job: dict) -> None:
@@ -865,6 +883,11 @@ class Worker:
                 self.mark_classified(queue_id)
                 self.increment_completed()
                 log(f"[{queue_id}] ✓ classified")
+            elif _agent_infra_failed(outcome.get("error", "")):
+                self._agent_infra_cooldown_until = time.time() + CLASSIFY_AGENT_INFRA_COOLDOWN_SECONDS
+                log(f"[{queue_id}] AGENT INFRA FAILURE - pausing classify pool for "
+                    f"{CLASSIFY_AGENT_INFRA_COOLDOWN_SECONDS}s. Error: {err[:200]}")
+                self.mark_agent_infra_failure(job, outcome.get("error", "agent infrastructure failure"))
             else:
                 self.mark_failure(job, outcome.get("error", "unknown error"))
                 self.increment_failed()
@@ -1350,17 +1373,21 @@ class Worker:
                 combined0 = (stdout0 + "\n" + stderr0).strip()
                 if r.returncode == 0:
                     break
-                if idx < len(attempts) - 1 and _agent_auth_failed(combined0):
-                    log(f"[{job.get('id')}] {agent_label} auth failed; retrying with alternate agent")
+                if idx < len(attempts) - 1 and (_agent_auth_failed(combined0) or _agent_infra_failed(combined0)):
+                    reason = "auth" if _agent_auth_failed(combined0) else "infrastructure"
+                    log(f"[{job.get('id')}] {agent_label} {reason} failed; retrying with alternate agent")
                     continue
                 break
             if r is None or cmd is None:
-                return {"success": False, "error": "no usable agent CLI found"}
+                return {"success": False, "error": "agent infrastructure failure: no usable agent CLI found"}
             stdout = (r.stdout or "").strip()
             stderr = (r.stderr or "").strip()
             tail = stdout[-500:] if stdout else stderr[-500:]
             if r.returncode != 0:
-                return {"success": False, "error": f"{agent_label} exit {r.returncode}: {tail}"}
+                error = f"{agent_label} exit {r.returncode}: {tail}"
+                if _agent_infra_failed(error):
+                    error = "agent infrastructure failure: " + error
+                return {"success": False, "error": error}
             # Skill is asked to print 'OK <ins_id>' on success.
             skill_says_ok = f"OK {ins_id}" in stdout
             skill_says_fail = f"FAIL {ins_id}" in stdout
@@ -1384,7 +1411,9 @@ class Worker:
         except subprocess.TimeoutExpired:
             return {"success": False, "error": f"agent timeout after {CLAUDE_CLI_TIMEOUT_SECONDS}s"}
         except FileNotFoundError:
-            return {"success": False, "error": "agent CLI not found in PATH"}
+            return {"success": False, "error": "agent infrastructure failure: agent CLI not found in PATH"}
+        except PermissionError as e:
+            return {"success": False, "error": f"agent infrastructure failure: PermissionError: {e}"}
         except Exception as e:
             return {"success": False, "error": f"{type(e).__name__}: {e}"}
 
@@ -1684,6 +1713,29 @@ class Worker:
             )
         except Exception as e:
             log(f"could not flip {job.get('id')} to {new_status}: {e}")
+
+    def mark_agent_infra_failure(self, job: dict, error: str):
+        """Fail visibly without spending the user's content retry attempts."""
+        attempts = max(0, (job.get("attempts") or 1) - 1)
+        message = (
+            "Worker agent infrastructure failure (not a URL/classification failure): "
+            + str(error)
+        )
+        log(f"[{job.get('id')}] AGENT INFRA FAILURE: {message}")
+        try:
+            self.sb.update(
+                "inspiration_queue",
+                f"id=eq.{job.get('id')}",
+                {
+                    "status": "failed",
+                    "claimed_by": None,
+                    "claimed_at": None,
+                    "attempts": attempts,
+                    "error_message": message[:500],
+                },
+            )
+        except Exception as e:
+            log(f"could not flip {job.get('id')} to agent infra failed: {e}")
 
     def _mark_brief_classifying(self, job_id):
         try:

@@ -1990,3 +1990,5 @@ The no-op render guard used order-sensitive fingerprints:
 ### Prevention
 - `auto` queue assignment must only be used when at least one healthy enabled classifier worker exists.
 - Operational disable flags must be honored by both dashboard routing and worker claim loops.
+- Worker-health blocks must render as `Blocked`, not `Failed`, so users do not mistake infrastructure downtime for bad inspiration URLs.
+- A recently repeated `Operation not permitted (os error 1)` failure must make Codex-only workers unhealthy for dashboard queueing even if an old daemon re-registers itself as enabled.

@@ -1964,3 +1964,29 @@ The no-op render guard used order-sensitive fingerprints:
 - Requeue/repost actions must always clear terminal queue metadata.
 - Worker-local agent startup errors must not be counted as ad classification attempts.
 - Queue failure messages should distinguish URL/classifier failures from worker-machine failures.
+
+---
+
+## Bug 46 — Disabled/broken classifier workers could still claim new inspiration rows
+**Status:** ✅ fixed locally 2026-07-27
+**Reported:** 2026-07-27
+**Surface:** Inspirations queue / worker routing
+
+### Symptom
+- KIDS LIFE SKILL inspirations still failed after the retry-state fix because `gp-mac-mini` kept claiming `auto` rows and failing Codex launch with `Operation not permitted (os error 1)`.
+- The deployed worker file was fixed, but the live daemon had not restarted into that version, so the broken worker remained active.
+
+### Root cause
+1. `worker_registry.enabled` existed but the worker did not preserve or honor it when registering, heartbeating, or claiming jobs.
+2. Dashboard queueing always wrote `pending` + `auto`, even when there was no healthy enabled classifier worker online.
+3. With `gp-laptop` offline and `gp-mac-mini` broken, every new `auto` row was guaranteed to fail.
+
+### Fix
+1. Dashboard enqueue now checks `worker_registry` for a healthy enabled worker before creating claimable queue rows.
+2. If no healthy classifier worker is online, rows are written as failed/blocked with `worker_assignment: blocked:no-healthy-classifier`, so old daemons cannot claim them.
+3. Worker registration now preserves an existing `enabled: false` flag instead of re-enabling itself on restart.
+4. Updated worker code skips claiming while disabled and reports paused in heartbeat.
+
+### Prevention
+- `auto` queue assignment must only be used when at least one healthy enabled classifier worker exists.
+- Operational disable flags must be honored by both dashboard routing and worker claim loops.

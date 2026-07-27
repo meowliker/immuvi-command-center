@@ -562,6 +562,16 @@ class Worker:
         self.shutdown.set()
 
     def register(self):
+        enabled = True
+        try:
+            existing = self.sb.select(
+                "worker_registry",
+                f"select=enabled&worker_id=eq.{urllib.parse.quote(self.worker_id)}&limit=1",
+            )
+            if existing and existing[0].get("enabled") is False:
+                enabled = False
+        except Exception:
+            pass
         row = {
             "worker_id": self.worker_id,
             "hostname": self.hostname,
@@ -571,7 +581,7 @@ class Worker:
             "last_heartbeat": _now_iso(),
             "status": "idle",
             "capabilities": self._caps,
-            "enabled": True,
+            "enabled": enabled,
         }
         try:
             self.sb.upsert("worker_registry", row, on_conflict="worker_id")
@@ -591,6 +601,17 @@ class Worker:
         except Exception as e:
             log(f"deregister failed (non-fatal): {e}")
 
+    def is_worker_enabled(self) -> bool:
+        try:
+            rows = self.sb.select(
+                "worker_registry",
+                f"select=enabled&worker_id=eq.{urllib.parse.quote(self.worker_id)}&limit=1",
+            )
+            return not (rows and rows[0].get("enabled") is False)
+        except Exception as e:
+            log(f"enabled check failed (fail-open): {e}")
+            return True
+
     # ── Heartbeat thread ──
 
     def heartbeat_loop(self):
@@ -602,7 +623,8 @@ class Worker:
                 _producer_active = self._active_producer_count() > 0
                 _classify_active = self._active_classify_count() > 0
                 _is_busy = self.is_busy or _producer_active or _classify_active
-                next_status = "paused" if paused else ("busy" if _is_busy else "idle")
+                enabled = self.is_worker_enabled()
+                next_status = "paused" if (paused or not enabled) else ("busy" if _is_busy else "idle")
                 self.sb.update(
                     "worker_registry",
                     f"worker_id=eq.{urllib.parse.quote(self.worker_id)}",
@@ -1883,6 +1905,10 @@ class Worker:
 
                     if self.auto_pause_when_claude_idle and not is_claude_code_running():
                         # Skip claiming — heartbeat thread will surface 'paused'.
+                        self.shutdown.wait(self.poll_interval)
+                        continue
+
+                    if not self.is_worker_enabled():
                         self.shutdown.wait(self.poll_interval)
                         continue
 

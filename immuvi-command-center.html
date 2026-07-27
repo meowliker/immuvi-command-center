@@ -13597,25 +13597,51 @@ const DB = {
     // Pick up the user's "Run on" choice (set by the picker in the toolbar).
     // Defaults to 'auto' so any worker may claim the row.
     var assignment = (typeof window !== 'undefined' && window._insRunOnAssignment) || 'auto';
+    var workerBlockMessage = null;
+    try {
+      var cutoff = new Date(Date.now() - 2 * 60 * 1000).toISOString();
+      var wr = await SB.from('worker_registry')
+        .select('worker_id,status,last_heartbeat,enabled,capabilities')
+        .gte('last_heartbeat', cutoff)
+        .neq('status', 'offline');
+      if (wr.error) throw wr.error;
+      var workers = (wr.data || []).filter(function (w) {
+        var caps = w.capabilities || {};
+        return w.enabled !== false && (caps.claude || caps.codex);
+      });
+      if (!workers.length) {
+        workerBlockMessage = 'No healthy enabled classifier worker is online. Fix/restart gp-mac-mini or bring gp-laptop online, then repost.';
+      }
+    } catch (e) {
+      console.warn('[SB] worker gate failed; queueing normally', e);
+    }
     const rows = items.map(function (it) {
       return {
         ins_id: it.id || it.ins_id || ('INS-' + Date.now()),
         product_id: productId,
         url: it.url,
         platform: it.platform || null,
-        status: 'pending',
+        status: workerBlockMessage ? 'failed' : 'pending',
         attempts: 0,
         claimed_by: null,
         claimed_at: null,
         processed_at: null,
-        error_message: null,
+        error_message: workerBlockMessage,
         queued_at: new Date().toISOString(),
-        worker_assignment: assignment,
+        worker_assignment: workerBlockMessage ? 'blocked:no-healthy-classifier' : assignment,
       };
     });
     const { error } = await SB.from('inspiration_queue').upsert(rows, { onConflict: 'ins_id,product_id' });
     if (error) { console.error('[SB] enqueueInspirations', error); return { ok: false, error: error }; }
-    return { ok: true, count: rows.length };
+    if (workerBlockMessage) {
+      try {
+        await SB.from('inspirations')
+          .update({ status: 'Failed' })
+          .eq('product_id', productId)
+          .in('id', rows.map(function (r) { return r.ins_id; }));
+      } catch (e) { console.warn('[SB] mark blocked inspirations failed', e); }
+    }
+    return { ok: true, count: rows.length, blocked: !!workerBlockMessage, error_message: workerBlockMessage };
   },
 
   // Replaces bridge GET /queue
@@ -44960,9 +44986,10 @@ async function autoPushToBridge() {
     var toPush = queued.filter(function (i) { return !doneIds.has(i.id); });
     if (toPush.length === 0) return;
 
-    await DB.enqueueInspirations(activeProductId, toPush.map(function (i) {
+    var res = await DB.enqueueInspirations(activeProductId, toPush.map(function (i) {
       return { id: i.id, url: i.sourceUrl, platform: i.platform };
     }));
+    if (res && res.blocked) showInsStatus('error', res.error_message || 'No healthy classifier worker is online');
   } catch (e) { console.error('[SB] autoPushToBridge', e); }
 }
 
@@ -45019,7 +45046,8 @@ async function processAllWithClaude() {
       var res = await DB.enqueueInspirations(activeProductId, queued.map(function (i) {
         return { id: i.id, url: i.sourceUrl, platform: i.platform };
       }));
-      cloudOk = !!(res && res.ok);
+      cloudOk = !!(res && res.ok && !res.blocked);
+      if (res && res.blocked) showInsStatus('error', res.error_message || 'No healthy classifier worker is online');
     }
   } catch (e) { console.error('[SB] processAllWithClaude', e); }
 

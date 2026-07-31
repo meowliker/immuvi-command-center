@@ -13384,6 +13384,15 @@ const DB = {
       // _flushTomb is the closure variable from the ADS section above.
       var _filteredStateMAs = (state.MANUAL_ACTIONS || []).filter(function (ma) {
         if (!ma) return false;
+        if (_isBoundaryQuarantinedAction(ma)) {
+          // Product-boundary rows are wrong-product residue. Do not let a stale
+          // tab write them back into the active product's Action Plan.
+          if (typeof MANUAL_ACTIONS !== 'undefined' && Array.isArray(MANUAL_ACTIONS)) {
+            MANUAL_ACTIONS = MANUAL_ACTIONS.filter(function (x) { return x.id !== ma.id; });
+          }
+          console.log('[SB] flush blocked cross-product MANUAL_ACTION', ma.id, ma._productBoundaryReason || '');
+          return false;
+        }
         var srcId = ma.sourceAdId || ma.adId;
         if (srcId && _flushTomb.has(srcId)) {
           // Also drop from in-memory MANUAL_ACTIONS so the AP doesn't keep showing it.
@@ -34369,6 +34378,12 @@ async function _applyProductBoundaryQuarantine(productId, state) {
     var cuid = _clickupIdForAd(ad);
     if (cuid) ids.push(cuid);
   });
+  if (Array.isArray(state.MANUAL_ACTIONS)) {
+    state.MANUAL_ACTIONS.forEach(function(act) {
+      var cuid = _clickupIdForAction(act);
+      if (cuid) ids.push(cuid);
+    });
+  }
   var duplicateMap = await _queryBoundaryDuplicateAds(productId, ids);
   var quarantinedCuIds = {};
 
@@ -34449,11 +34464,33 @@ async function _applyProductBoundaryQuarantine(productId, state) {
       if (!act || !act.id) return;
       var src = act.sourceAdId || act.adId || '';
       var cu = _clickupIdForAction(act);
+      var reason = '';
       var q = (src && quarantinedAdIds[src]) || (cu && quarantinedCuIds[cu]);
       if (q) {
+        reason = 'linked to wrong-product ad';
+      }
+      if (!reason && cu && duplicateMap[cu] && duplicateMap[cu].length) {
+        var linkedLocalAd = null;
+        for (var lai = 0; lai < state.ADS.length; lai++) {
+          var localAd = state.ADS[lai];
+          if (!localAd) continue;
+          if (src && localAd.id === src) { linkedLocalAd = localAd; break; }
+          if (cu && _clickupIdForAd(localAd) === cu) { linkedLocalAd = localAd; break; }
+        }
+        // If an Action Plan row points at a ClickUp task that is already owned
+        // by another product, but the active product has no matching AD, the
+        // row is a cross-product orphan from an old heal/adopt race. Quarantine
+        // it directly; otherwise it can show Kids Life Skill tasks in Yoga.
+        if (!linkedLocalAd) {
+          var owner = _productById(duplicateMap[cu][0].product_id);
+          reason = 'ClickUp task belongs to ' + ((owner && owner.name) || 'another product');
+        }
+      }
+      if (reason) {
         act._productBoundaryQuarantined = true;
-        act._productBoundaryReason = 'linked to wrong-product ad';
+        act._productBoundaryReason = reason;
         PRODUCT_BOUNDARY_QUARANTINE.actions[act.id] = true;
+        if (cu) quarantinedCuIds[cu] = true;
         var aa = String((act.sourceAngle || act.angle || '')).toLowerCase().trim();
         var pp = String((act.sourcePersona || act.persona || '')).toLowerCase().trim();
         if (aa) quarantinedAngleUse[aa] = true;

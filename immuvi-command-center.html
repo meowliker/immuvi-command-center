@@ -5196,8 +5196,16 @@ button.mx-dt-action-sent .open { color:#0a84ff; font-weight:700; margin-left:4px
   background:var(--card); border:1.5px solid var(--b);
   border-radius:12px; min-width:220px; z-index:200;
   box-shadow:0 8px 24px rgba(0,0,0,0.12);
-  display:none; overflow:hidden;
+  display:none;
+  max-height:min(72vh, calc(100vh - 92px));
+  overflow-x:hidden;
+  overflow-y:auto;
+  overscroll-behavior:contain;
+  -webkit-overflow-scrolling:touch;
 }
+.hdr-prod-dd::-webkit-scrollbar { width:8px; }
+.hdr-prod-dd::-webkit-scrollbar-track { background:transparent; }
+.hdr-prod-dd::-webkit-scrollbar-thumb { background:rgba(100,116,139,0.28); border-radius:999px; border:2px solid transparent; background-clip:padding-box; }
 .hdr-prod-dd.open { display:block; animation:fadeUp .2s cubic-bezier(0.16,1,0.3,1) both; }
 .hdr-prod-dd-item {
   display:flex; align-items:center; gap:8px;
@@ -34675,6 +34683,34 @@ function renderHdrProdDropdown() {
     html += '</div>';
   }
   dd.innerHTML = html;
+  _bindHdrProdDropdownScroll(dd);
+}
+
+function _bindHdrProdDropdownScroll(dd) {
+  if (!dd || dd._hdrProdScrollBound) return;
+  dd._hdrProdScrollBound = true;
+  var lastTouchY = null;
+  dd.addEventListener('wheel', function(e) {
+    if (!dd.classList.contains('open')) return;
+    if (dd.scrollHeight <= dd.clientHeight) return;
+    dd.scrollTop += e.deltaY;
+    e.preventDefault();
+    e.stopPropagation();
+  }, { passive: false });
+  dd.addEventListener('touchstart', function(e) {
+    if (!e.touches || !e.touches.length) return;
+    lastTouchY = e.touches[0].clientY;
+  }, { passive: true });
+  dd.addEventListener('touchmove', function(e) {
+    if (!dd.classList.contains('open')) return;
+    if (lastTouchY == null || !e.touches || !e.touches.length) return;
+    if (dd.scrollHeight <= dd.clientHeight) return;
+    var y = e.touches[0].clientY;
+    dd.scrollTop += (lastTouchY - y);
+    lastTouchY = y;
+    e.preventDefault();
+    e.stopPropagation();
+  }, { passive: false });
 }
 
 function toggleHdrProdSwitcher(e) {

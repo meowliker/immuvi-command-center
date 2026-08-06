@@ -13076,7 +13076,10 @@ const DB = {
       MATRIX_CELL_META: meta,
       CELL_CREATIVE_ASSIGNMENTS: assigns,
       MANUAL_ACTIONS: (actions.data || []).map(function (m) {
-        return _canonicalizeManualActionTaxonomyForSave(Object.assign({}, m.payload || {}, { _dbId: m.id, liveStatus: m.live_status }));
+        var ma = _canonicalizeManualActionTaxonomyForSave(Object.assign({}, m.payload || {}, { _dbId: m.id, liveStatus: m.live_status }));
+        delete ma._cu_creating;
+        delete ma._directWritePromise;
+        return ma;
       }),
       PROD: [], // derived from ads, no dedicated table
       ANGLE_PERSONAS: anglePersonasFromCells // hydrated from matrix_cells rows
@@ -13417,9 +13420,14 @@ const DB = {
       const finalRows = _filteredStateMAs.map(function (ma) {
         ma = _canonicalizeManualActionTaxonomyForSave(ma);
         var payload = {};
-        // _dbId is internal DB row id, _clickupTaskDeleted is runtime-only flag
-        // (recalculated on every sync) — never persist either to DB
-        var _skipKeys = { '_dbId': true, '_clickupTaskDeleted': true };
+        // Runtime-only flags are recalculated from live state. Persisting them
+        // can strand an Action Plan row in "Creating..." after a refresh.
+        var _skipKeys = {
+          '_dbId': true,
+          '_clickupTaskDeleted': true,
+          '_cu_creating': true,
+          '_directWritePromise': true
+        };
         for (var k in ma) { if (!_skipKeys[k]) payload[k] = ma[k]; }
         if (_saveClientId) payload._clientId = _saveClientId;
         var row = { product_id: productId, payload: payload, live_status: ma.liveStatus || null };
@@ -27390,16 +27398,15 @@ function createClickUpTaskFromAction(actionId, onDone, sourceAdOverride) {
     return;
   }
   if (act._clickupId) { toast('Already in ClickUp', 'warn'); return; }
+  var activeProd = getActiveProduct();
+  var listId = activeProd && activeProd.clickupListId;
+  if (!listId) { toast('Link a ClickUp list first', 'err'); return; }
   // Action-level in-flight lock — DOM disable alone isn't enough because the
   // Action Plan can re-render mid-fetch (saveState, auto-sync, realtime echo),
   // reviving an enabled button. This guard survives any re-render because
   // it lives on the action object, not the button.
   if (act._cu_creating) { return; }
   act._cu_creating = true;
-
-  var activeProd = getActiveProduct();
-  var listId = activeProd && activeProd.clickupListId;
-  if (!listId) { toast('Link a ClickUp list first', 'err'); return; }
 
   // Find source AD — prefer explicit override (from recreate flow) so we don't
   // lose the reference if act.sourceAdId somehow got cleared or mismatched.
@@ -28080,6 +28087,10 @@ function createClickUpTaskFromAction(actionId, onDone, sourceAdOverride) {
       btn.textContent = '+ ClickUp';
     }
     // If a re-render occurred during the fetch, this call restores the idle button.
+    saveState();
+    if (typeof _writeManualActionRowDirect === 'function') {
+      try { _writeManualActionRowDirect(act); } catch (e) {}
+    }
     renderActionPlan();
     toast('ClickUp error: ' + (err.message || String(err)), 'err');
     if (onDone) onDone(false);
@@ -32508,7 +32519,12 @@ function _writeManualActionRowDirect(ma) {
   try {
     ma = _canonicalizeManualActionTaxonomyForSave(ma);
     var payload = {};
-    var skipKeys = { '_dbId': true, '_clickupTaskDeleted': true };
+    var skipKeys = {
+      '_dbId': true,
+      '_clickupTaskDeleted': true,
+      '_cu_creating': true,
+      '_directWritePromise': true
+    };
     for (var k in ma) { if (!skipKeys[k]) payload[k] = ma[k]; }
     if (typeof _myClientId !== 'undefined') payload._clientId = _myClientId;
     var row = { product_id: activeProductId, payload: payload, live_status: ma.liveStatus || null };

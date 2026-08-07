@@ -14856,8 +14856,11 @@ function _canonicalizeAdTaxonomyForSave(ad) {
 function _canonicalizeManualActionTaxonomyForSave(ma) {
   if (!ma) return ma;
   var out = Object.assign({}, ma);
-  var angle = _canonicalTaxonomyName(out.angle || out.sourceAngle || '', (typeof ANGLES !== 'undefined' ? ANGLES : []));
-  var persona = _canonicalTaxonomyName(out.persona || out.sourcePersona || '', (typeof PERSONAS !== 'undefined' ? PERSONAS : []));
+  // `sourceAngle/sourcePersona` are the matrix-cell identity. They must win
+  // over stale display snapshots on `angle/persona`, otherwise an old ad-level
+  // taxonomy value can rewrite the action back into the wrong cell on save.
+  var angle = _canonicalTaxonomyName(out.sourceAngle || out.angle || '', (typeof ANGLES !== 'undefined' ? ANGLES : []));
+  var persona = _canonicalTaxonomyName(out.sourcePersona || out.persona || '', (typeof PERSONAS !== 'undefined' ? PERSONAS : []));
   if (angle) {
     if (out.angle) out.angle = angle;
     if (out.sourceAngle) out.sourceAngle = angle;
@@ -27268,6 +27271,44 @@ function _seedCuMirrorsFromTypedFields(ad) {
   return ad;
 }
 
+function _resolveActionCellIdentityForPush(act, sourceAd) {
+  act = act || {};
+  sourceAd = sourceAd || {};
+  var angle = act.sourceAngle || act.angle || sourceAd.angle || '';
+  var persona = act.sourcePersona || act.persona || sourceAd.persona || '';
+  if (typeof _canonicalTaxonomyName === 'function') {
+    angle = _canonicalTaxonomyName(angle, (typeof ANGLES !== 'undefined' ? ANGLES : []));
+    persona = _canonicalTaxonomyName(persona, (typeof PERSONAS !== 'undefined' ? PERSONAS : []));
+  }
+  if (angle) {
+    act.sourceAngle = angle;
+    act.angle = angle;
+  }
+  if (persona) {
+    act.sourcePersona = persona;
+    act.persona = persona;
+  }
+  return { angle: angle || '', persona: persona || '' };
+}
+
+function _withActionCellIdentityForDescription(descAd, identity) {
+  if (!descAd) return descAd;
+  var out = Object.assign({}, descAd);
+  if (identity && identity.angle) out.angle = identity.angle;
+  if (identity && identity.persona) out.persona = identity.persona;
+  if (!out._customFields) out._customFields = {};
+  if (!out._customFieldsRaw) out._customFieldsRaw = {};
+  if (identity && identity.angle) {
+    out._customFields['angle tag'] = identity.angle;
+    out._customFieldsRaw['angle tag'] = identity.angle;
+  }
+  if (identity && identity.persona) {
+    out._customFields['persona tag'] = identity.persona;
+    out._customFieldsRaw['persona tag'] = identity.persona;
+  }
+  return out;
+}
+
 // Per-card: create a single action plan task in ClickUp
 // Recreate a ClickUp task that was deleted in ClickUp.
 // Clears the stale _clickupId from memory + DB, then creates a fresh task.
@@ -27551,6 +27592,7 @@ function createClickUpTaskFromAction(actionId, onDone, sourceAdOverride) {
   if (sourceAd && typeof _hydrateAdFromDescriptionFields === 'function') {
     _hydrateAdFromDescriptionFields(sourceAd);
   }
+  var pushIdentity = _resolveActionCellIdentityForPush(act, sourceAd);
 
   _oneScaleEnsureLaunchTaskFields(act, sourceAd, act.title);
   var clickUpProductName = (typeof _clickUpProductNameForTask === 'function')
@@ -27566,7 +27608,7 @@ function createClickUpTaskFromAction(actionId, onDone, sourceAdOverride) {
   // For tracker-source production clones: build from a synthetic AD that merges the
   // production clone's fields with the source format's drive link as "Inspiration Drive".
   // This avoids the clone inheriting the source's driveLink as its own production Drive Link.
-  var descAd = sourceAd;
+  var descAd = sourceAd ? _withActionCellIdentityForDescription(sourceAd, pushIdentity) : null;
   if (isTrackerSource && sourceAd && sourceAd.sourceFormatId) {
     // Production clone created by addFormatToCell — look up the original tracker format
     var _srcFmt = null;
@@ -27576,8 +27618,8 @@ function createClickUpTaskFromAction(actionId, onDone, sourceAdOverride) {
     // Build a merged descriptor: use clone's own fields, plus source format's driveLink
     // stored as _sourceFormatDriveLink (set in addFormatToCell) as the inspiration reference
     descAd = {
-      angle:              sourceAd.angle,
-      persona:            sourceAd.persona,
+      angle:              pushIdentity.angle || sourceAd.angle,
+      persona:            pushIdentity.persona || sourceAd.persona,
       funnelStage:        sourceAd.funnelStage,
       adType:             sourceAd.adType,
       hookType:           sourceAd.hookType,
@@ -27609,6 +27651,7 @@ function createClickUpTaskFromAction(actionId, onDone, sourceAdOverride) {
     // path. The new task's own brief lives in briefUrl / Winning Video block.
     descAd.creativeHypothesis = '';
   }
+  descAd = _withActionCellIdentityForDescription(descAd, pushIdentity);
   var desc = descAd ? buildTaskDescription(descAd) : (act.reason || '');
 
   // For tracker-source tasks: append Inspiration Drive link (source format's driveLink)
@@ -27627,8 +27670,8 @@ function createClickUpTaskFromAction(actionId, onDone, sourceAdOverride) {
   // resolved through CFG.fields. Kept for backward compatibility with
   // pre-existing field-id configs.
   var customFields = buildFieldsPayload({
-    angle:      act.angle || act.sourceAngle || (sourceAd && sourceAd.angle) || '',
-    persona:    act.persona || act.sourcePersona || (sourceAd && sourceAd.persona) || '',
+    angle:      pushIdentity.angle || '',
+    persona:    pushIdentity.persona || '',
     funnelStage: act.funnelStage || (sourceAd && sourceAd.funnelStage) || '',
     adType:     (sourceAd && sourceAd.adType) || '',
     adLink:     (sourceAd && (sourceAd.adLink || (typeof _sourceAdUrlForDescription === 'function' ? _sourceAdUrlForDescription(sourceAd) : ''))) || act.adLink || ''
@@ -27654,6 +27697,13 @@ function createClickUpTaskFromAction(actionId, onDone, sourceAdOverride) {
       if (meta._native || meta.fieldId === '__assignees__') return;
       if (seenIds[meta.fieldId]) return; // already in the legacy payload
       var raw = sourceAd._customFieldsRaw[lcName];
+      var lcClean = String(lcName || '').toLowerCase().trim();
+      if ((lcClean === 'angle tag' || lcClean === 'angle' || lcClean === 'ad angle') && pushIdentity.angle) {
+        raw = pushIdentity.angle;
+      }
+      if ((lcClean === 'persona tag' || lcClean === 'persona' || lcClean === 'target persona' || lcClean === 'audience') && pushIdentity.persona) {
+        raw = pushIdentity.persona;
+      }
       if (raw == null || raw === '') return;
       var entry = { id: meta.fieldId };
       if (meta.type === 'users') {
@@ -27669,6 +27719,17 @@ function createClickUpTaskFromAction(actionId, onDone, sourceAdOverride) {
         entry.value = dms;
       } else if (meta.type === 'drop_down' || meta.type === 'labels') {
         // raw is the orderindex (number) or option id string.
+        if (typeof raw === 'string') {
+          var opts = Array.isArray(meta.options) ? meta.options : [];
+          var matchedOpt = null;
+          for (var oi = 0; oi < opts.length; oi++) {
+            if (String(opts[oi].name || '').trim().toLowerCase() === raw.trim().toLowerCase()) {
+              matchedOpt = opts[oi]; break;
+            }
+          }
+          if (!matchedOpt) return;
+          raw = (typeof matchedOpt.orderindex === 'number') ? matchedOpt.orderindex : matchedOpt.id;
+        }
         entry.value = raw;
       } else if (meta.type === 'number') {
         var n = (typeof raw === 'number') ? raw : parseFloat(raw);
@@ -27852,8 +27913,8 @@ function createClickUpTaskFromAction(actionId, onDone, sourceAdOverride) {
     if (sourceAd || clickUpProductName) {
       var pushProxy = { _clickupId: newId, id: (sourceAd && sourceAd.id) || act.sourceAdId || act.adId || act.id };
       var fieldsToSync = [
-        ['angle',            act.angle       || act.sourceAngle   || (sourceAd && sourceAd.angle)],
-        ['persona',          act.persona     || act.sourcePersona || (sourceAd && sourceAd.persona)],
+        ['angle',            pushIdentity.angle || (sourceAd && sourceAd.angle)],
+        ['persona',          pushIdentity.persona || (sourceAd && sourceAd.persona)],
         ['funnelStage',      act.funnelStage || (sourceAd && sourceAd.funnelStage)],
         ['adType',           sourceAd && sourceAd.adType],
         ['hookType',         sourceAd && sourceAd.hookType],
@@ -31418,12 +31479,12 @@ function _apResolveCellIdentity(act, ad) {
   ad = ad || null;
   var cfDisplay = (ad && ad._customFields) || act._customFields || {};
   var desc = (act && act.description) || (ad && ad.description) || '';
-  var angle = (ad && ad.angle) || act.angle || act.sourceAngle ||
+  var angle = act.sourceAngle || act.angle || (ad && ad.angle) ||
               cfDisplay['angle tag'] || cfDisplay['angle'] || cfDisplay['ad angle'] ||
               ((typeof _extractDescriptionFieldValue === 'function')
                 ? _extractDescriptionFieldValue(desc, ['Angle', 'Angle Tag', 'Ad Angle'])
                 : '');
-  var persona = (ad && ad.persona) || act.persona || act.sourcePersona ||
+  var persona = act.sourcePersona || act.persona || (ad && ad.persona) ||
                 cfDisplay['persona tag'] || cfDisplay['persona'] || cfDisplay['target persona'] || cfDisplay['audience'] ||
                 ((typeof _extractDescriptionFieldValue === 'function')
                   ? _extractDescriptionFieldValue(desc, ['Persona', 'Persona Tag', 'Target Persona', 'Audience'])

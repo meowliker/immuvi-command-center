@@ -2021,3 +2021,35 @@ There were three due-date write paths:
 - Due date is task-level state. New due-date UI must call the unified due-date save path, not write only cell metadata.
 - Production surfaces should render resolved card/task display state, not stale `MANUAL_ACTIONS` snapshots.
 - Any ClickUp-owned built-in task field (`status`, `name`, `due_date`) must use the retryable ClickUp sync queue so failed writes are visible and retryable.
+
+---
+
+## Bug 48 — ClickUp task description used stale source angle instead of matrix cell angle
+**Status:** ✅ fixed locally 2026-08-07
+**Reported:** 2026-08-07
+**Surface:** Therapy Bundle / Creative Matrix cell push / Action Plan / ClickUp task description
+
+### Symptom
+- A task was created from the `Emotional Pain / Trauma` matrix cell, but immediately after creation the app showed the task under `Callout`, and the Action Plan row also showed `Callout`.
+- After refresh, the app corrected back to `Emotional Pain / Trauma`, but the ClickUp description still contained `| Angle | Callout |`.
+- ClickUp activity showed the `Angle Tag` field changing from `Callout` to `Emotional Pain / Trauma`, which confirmed the later field sync corrected the custom field but not the already-created description body.
+
+### Root cause
+The task-create flow had two different sources of taxonomy truth:
+1. The matrix/action cell identity: `act.sourceAngle/sourcePersona`, which represented where the user actually created the task.
+2. The source AD snapshot: `sourceAd.angle/sourceAd.persona`, which could be stale from the original inspiration/classification or from a previous cell.
+
+The post-create custom-field sync already preferred the action/cell identity, so ClickUp's `Angle Tag` eventually became correct. But `buildTaskDescription()` was called with `sourceAd` before that correction, so it wrote the stale `Callout` value permanently into the ClickUp description. The Action Plan resolver also preferred `ad.angle` before `act.sourceAngle`, causing the temporary in-app flip to `Callout`.
+
+### Fix
+1. Added a shared action-cell identity resolver for ClickUp pushes that prefers `sourceAngle/sourcePersona`, then `angle/persona`, then source AD values.
+2. ClickUp description generation now overlays the resolved matrix cell identity before calling `buildTaskDescription()`.
+3. Initial custom-field payload construction and post-create field sync now use the same resolved identity, preventing create-time `Callout` followed by correction churn.
+4. Manual-action save canonicalization now treats `sourceAngle/sourcePersona` as authoritative over stale display snapshots.
+5. Action Plan card resolution now prefers the action's source cell identity over stale AD-level taxonomy.
+
+### Prevention
+- Matrix cell identity must be authoritative when creating an Action Plan or ClickUp task from a cell.
+- Do not build ClickUp descriptions from raw `sourceAd.angle/persona` without first overlaying `act.sourceAngle/sourcePersona`.
+- Custom fields and description text must be built from the same resolved identity so one cannot correct later while the other stays stale.
+- Preserve the Bug 42/43/44 protections: stale synced AD taxonomy must not rewrite action payload cell identity, and save-time canonicalization must cover manual actions as well as ads.

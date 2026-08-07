@@ -11787,11 +11787,26 @@ function _initRealtimeChannel(productId) {
     // ── Built-in: due date
     if (p.kind === 'due' || p.field === 'dueDate') {
       ad.dueDate = p.value || '';
-      if (p.value) {
-        var ms = Date.parse(p.value + 'T00:00:00');
-        ad._dueDateMs = isNaN(ms) ? null : ms;
-      } else { ad._dueDateMs = null; }
+      ad._dueDateMs = _parseDueDateForClickUp(p.value);
+      if (typeof MATRIX_CELL_META !== 'undefined') {
+        Object.keys(MATRIX_CELL_META).forEach(function(k) {
+          if (k.indexOf(ad.id + '||') === 0) MATRIX_CELL_META[k].dueDate = ad.dueDate;
+        });
+      }
+      if (typeof MANUAL_ACTIONS !== 'undefined' && Array.isArray(MANUAL_ACTIONS)) {
+        for (var dmi = 0; dmi < MANUAL_ACTIONS.length; dmi++) {
+          var dma = MANUAL_ACTIONS[dmi];
+          if (!dma) continue;
+          if (dma.sourceAdId === ad.id || dma.adId === ad.id ||
+              (ad._clickupId && dma._clickupId === ad._clickupId)) {
+            dma.dueDate = ad.dueDate;
+            dma._dueDateMs = ad._dueDateMs;
+          }
+        }
+      }
       if (typeof renderMxv4Modal === 'function') renderMxv4Modal();
+      if (typeof renderActionPlan === 'function') renderActionPlan();
+      if (typeof renderProduction === 'function') renderProduction();
       return;
     }
 
@@ -24699,13 +24714,66 @@ function _renderActionPlan_LEGACY() {
 // Keep renderActions as alias for backward compat (bulk ops still call it)
 function renderActions() { renderActionPlan(); }
 
+function _parseDueDateForClickUp(value) {
+  if (!value) return null;
+  var ms = Date.parse(String(value) + 'T00:00:00');
+  return isNaN(ms) ? null : ms;
+}
+
 function updateManualActionDate(id, date) {
+  var act = null;
   for (var i = 0; i < MANUAL_ACTIONS.length; i++) {
     if (MANUAL_ACTIONS[i].id === id) {
-      MANUAL_ACTIONS[i].dueDate = date;
+      act = MANUAL_ACTIONS[i];
+      act.dueDate = date || '';
+      act._dueDateMs = _parseDueDateForClickUp(date);
       break;
     }
   }
+  if (!act) return;
+
+  var linkedAd = null;
+  var sourceId = act.sourceAdId || act.adId;
+  if (sourceId) {
+    for (var j = 0; j < ADS.length; j++) {
+      if (ADS[j].id === sourceId) { linkedAd = ADS[j]; break; }
+    }
+  }
+  if (!linkedAd && act._clickupId) {
+    for (var k = 0; k < ADS.length; k++) {
+      if (ADS[k]._clickupId === act._clickupId || ADS[k].clickupTaskId === act._clickupId) {
+        linkedAd = ADS[k]; break;
+      }
+    }
+  }
+
+  if (linkedAd) {
+    linkedAd.dueDate = act.dueDate;
+    linkedAd._dueDateMs = act._dueDateMs;
+    if (typeof MATRIX_CELL_META !== 'undefined') {
+      Object.keys(MATRIX_CELL_META).forEach(function(metaKey) {
+        if (metaKey.indexOf(linkedAd.id + '||') === 0) MATRIX_CELL_META[metaKey].dueDate = act.dueDate;
+      });
+    }
+    if (typeof persistAdMetaDebounced === 'function') {
+      try { persistAdMetaDebounced(linkedAd); } catch (e) {}
+    }
+  } else if (act.sourceAdId && act.sourceAngle && act.sourcePersona && typeof MATRIX_CELL_META !== 'undefined') {
+    var cellAdKey = act.sourceAdId + '||' + act.sourceAngle + '||' + act.sourcePersona;
+    if (!MATRIX_CELL_META[cellAdKey]) MATRIX_CELL_META[cellAdKey] = {};
+    MATRIX_CELL_META[cellAdKey].dueDate = act.dueDate;
+  }
+
+  var cuTaskId = act._clickupId || act.clickupTaskId || null;
+  if (cuTaskId && CFG.key && typeof _syncToClickUp === 'function') {
+    _syncToClickUp(cuTaskId, { due_date: act._dueDateMs }, 'due date → ' + (act.dueDate || 'cleared'));
+  }
+
+  if (typeof renderActionPlan === 'function') { try { renderActionPlan(); } catch (e) {} }
+  if (typeof renderProduction === 'function') { try { renderProduction(); } catch (e) {} }
+  if (typeof renderMatrix === 'function') { try { renderMatrix(); } catch (e) {} }
+  if (typeof renderMxv4Modal === 'function' && _mxv4 && !_mxv4.usersPickerOpen) { try { renderMxv4Modal(); } catch (e) {} }
+
   saveState();
 }
 
@@ -24935,23 +25003,46 @@ function addRecToplan(recId) {
   toast('Recommendation added to plan', 'ok');
 }
 
+function _productionItemFromManualAction(act) {
+  var resolved = null;
+  try {
+    if (typeof apResolveCard === 'function') resolved = apResolveCard(act);
+  } catch (e) { resolved = null; }
+  var d = (resolved && resolved.display) || {};
+  return {
+    id: act.id,
+    title: d.title || act.title || act.name || '',
+    name: d.title || act.title || act.name || '',
+    liveStatus: d.status || act.liveStatus || 'Untested',
+    angle: d.angle || act.angle || '',
+    persona: d.persona || act.persona || '',
+    format: act.format || d.adType || '',
+    funnelStage: d.funnelStage || act.funnelStage || '',
+    dueDate: d.dueDate || act.dueDate || '',
+    tag: act.tag || '',
+    _sourceAct: act
+  };
+}
+
 function rebuildProdFromManual() {
   // Sync PROD array from MANUAL_ACTIONS
   PROD = [];
   for (var i = 0; i < MANUAL_ACTIONS.length; i++) {
     var act = MANUAL_ACTIONS[i];
-    var prodStatus = (act.liveStatus === 'Winner' || act.liveStatus === 'Mild Winner' || act.liveStatus === 'Scale' || act.liveStatus === 'Complete' || act.liveStatus === 'Loser') ? 'complete' :
-      (act.liveStatus === 'In Production' || act.liveStatus === 'Ready to Launch' || act.liveStatus === 'Testing') ? 'in progress' : 'to do';
+    var item = _productionItemFromManualAction(act);
+    var st = item.liveStatus || 'Untested';
+    var prodStatus = (st === 'Winner' || st === 'Mild Winner' || st === 'Scale' || st === 'Complete' || st === 'Loser') ? 'complete' :
+      (st === 'In Production' || st === 'Ready to Launch' || st === 'Testing') ? 'in progress' : 'to do';
     PROD.push({
-      id: act.id,
-      name: act.title,
+      id: item.id,
+      name: item.name,
       status: prodStatus,
-      angle: act.angle || '',
-      persona: act.persona || '',
-      format: act.format || '',
-      funnelStage: act.funnelStage || '',
-      dueDate: act.dueDate || '',
-      tag: act.tag || ''
+      angle: item.angle || '',
+      persona: item.persona || '',
+      format: item.format || '',
+      funnelStage: item.funnelStage || '',
+      dueDate: item.dueDate || '',
+      tag: item.tag || ''
     });
   }
 }
@@ -24972,13 +25063,14 @@ function renderProduction() {
   var done = [];       // Winner, Scale, Complete, Loser
   for (var i = 0; i < MANUAL_ACTIONS.length; i++) {
     var act = MANUAL_ACTIONS[i];
-    var st = act.liveStatus || 'Untested';
+    var item = _productionItemFromManualAction(act);
+    var st = item.liveStatus || 'Untested';
     if (st === 'Winner' || st === 'Scale' || st === 'Complete' || st === 'Loser') {
-      done.push(act);
+      done.push(item);
     } else if (st === 'In Production' || st === 'Ready to Launch' || st === 'Testing') {
-      inProd.push(act);
+      inProd.push(item);
     } else {
-      inQueue.push(act); // Untested, Approved
+      inQueue.push(item); // Untested, Approved
     }
   }
 
@@ -29849,16 +29941,33 @@ function saveAdFieldUnified(adId, kind, fieldKey, value) {
 
   // ── Built-in: due date
   else if (kind === 'due') {
-    var dueMs = null;
-    if (value) {
-      dueMs = Date.parse(value + 'T00:00:00');
-      if (isNaN(dueMs)) return;
-    }
+    var dueMs = _parseDueDateForClickUp(value);
+    if (value && dueMs == null) return;
     ad.dueDate = value || '';
     ad._dueDateMs = dueMs;
+    if (typeof MATRIX_CELL_META !== 'undefined') {
+      Object.keys(MATRIX_CELL_META).forEach(function(k) {
+        if (k.indexOf(ad.id + '||') === 0) MATRIX_CELL_META[k].dueDate = ad.dueDate;
+      });
+    }
+    if (typeof MANUAL_ACTIONS !== 'undefined' && Array.isArray(MANUAL_ACTIONS)) {
+      for (var dmi = 0; dmi < MANUAL_ACTIONS.length; dmi++) {
+        var dma = MANUAL_ACTIONS[dmi];
+        if (!dma) continue;
+        if (dma.sourceAdId === ad.id || dma.adId === ad.id ||
+            (ad._clickupId && dma._clickupId === ad._clickupId)) {
+          dma.dueDate = ad.dueDate;
+          dma._dueDateMs = ad._dueDateMs;
+        }
+      }
+    }
     if (cuId && typeof apiUpdateTask === 'function') {
-      apiUpdateTask(cuId, { due_date: dueMs })
-        .catch(function (err) { console.warn('[saveAdField] CU due-date push failed', err); });
+      if (typeof _syncToClickUp === 'function') {
+        _syncToClickUp(cuId, { due_date: dueMs }, 'due date → ' + (ad.dueDate || 'cleared'));
+      } else {
+        apiUpdateTask(cuId, { due_date: dueMs })
+          .catch(function (err) { console.warn('[saveAdField] CU due-date push failed', err); });
+      }
     }
   }
 
@@ -43749,6 +43858,11 @@ function saveAdNotes(adId, value) {
 // saveAdField — persist inline edits to MATRIX_CELL_META (per-cell)
 // ================================================
 function saveAdField(adId, angleName, personaName, field, value) {
+  if (field === 'dueDate') {
+    if (typeof saveAdFieldUnified === 'function') {
+      return saveAdFieldUnified(adId, 'due', 'dueDate', value || '');
+    }
+  }
   var cellAdKey = adId + '||' + angleName + '||' + personaName;
   if (!MATRIX_CELL_META[cellAdKey]) MATRIX_CELL_META[cellAdKey] = {};
   MATRIX_CELL_META[cellAdKey][field] = value;

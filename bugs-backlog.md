@@ -1992,3 +1992,32 @@ The no-op render guard used order-sensitive fingerprints:
 - Operational disable flags must be honored by both dashboard routing and worker claim loops.
 - Worker-health blocks must render as `Blocked`, not `Failed`, so users do not mistake infrastructure downtime for bad inspiration URLs.
 - A recently repeated `Operation not permitted (os error 1)` failure must make Codex-only workers unhealthy for dashboard queueing even if an old daemon re-registers itself as enabled.
+
+---
+
+## Bug 47 — Due dates did not persist to ClickUp or disappeared after approval
+**Status:** ✅ fixed locally 2026-08-07
+**Reported:** 2026-08-07
+**Surface:** Immuvi / due-date edits / Action Plan / Production Queue / ClickUp sync
+
+### Symptom
+- A teammate set a due date in the app, but the date did not reliably register on the ClickUp task.
+- In some cases the date appeared briefly, then after approving the task and moving it into the production queue, the production card showed a blank due date.
+
+### Root cause
+There were three due-date write paths:
+1. Action Plan due-date edits only updated `MANUAL_ACTIONS.dueDate` locally and saved Supabase state. They did not push `due_date` to ClickUp or mirror the value to the linked AD.
+2. Some Matrix detail due-date inputs still called the legacy `saveAdField()` handler, which wrote only `MATRIX_CELL_META[ad||angle||persona].dueDate`. It did not update the canonical AD, linked Action Plan row, or ClickUp task.
+3. Production Queue rendered directly from the stale `MANUAL_ACTIONS` snapshot, not from the resolved live AD/card display used by the Action Plan. So if the due date lived on the AD, approving/status-moving the task made the production card look blank.
+
+### Fix
+1. Added a shared due-date parser for ClickUp epoch milliseconds.
+2. Action Plan due-date edits now update the manual action, linked AD, matrix cell metadata, Supabase, visible surfaces, and the linked ClickUp task through the retryable ClickUp sync queue.
+3. Matrix legacy due-date edits now route through `saveAdFieldUnified()` instead of the meta-only handler.
+4. Unified due-date edits now mirror to linked manual actions and matrix metadata, so all views read the same date.
+5. Production Queue now resolves each manual action through `apResolveCard()` before rendering, so it uses live AD due dates after approval/status movement.
+
+### Prevention
+- Due date is task-level state. New due-date UI must call the unified due-date save path, not write only cell metadata.
+- Production surfaces should render resolved card/task display state, not stale `MANUAL_ACTIONS` snapshots.
+- Any ClickUp-owned built-in task field (`status`, `name`, `due_date`) must use the retryable ClickUp sync queue so failed writes are visible and retryable.

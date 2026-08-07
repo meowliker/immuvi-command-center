@@ -10705,6 +10705,7 @@ body:not(.booting) #__bootLoader {
             <th class="ins-th-hide">Duration</th>
             <th class="ins-th-sortable" data-sort="status" onclick="_insTableSort('status')">Status<span class="ins-sort-arr">▾</span></th>
             <th class="ins-th-sortable sort-desc" data-sort="created" onclick="_insTableSort('created')">Created<span class="ins-sort-arr">▾</span></th>
+            <th class="ins-th-sortable" data-sort="addedBy" onclick="_insTableSort('addedBy')">Added By<span class="ins-sort-arr">▾</span></th>
             <th>Cells</th>
             <th>Brief</th>
             <th class="ins-th-hide">Tags</th>
@@ -13584,14 +13585,14 @@ const DB = {
     let serverDataById = {};
     if (ids.length) {
       const preRead = await SB.from('inspirations')
-        .select('id, data')
+        .select('id, data, added_by')
         .in('id', ids)
         .eq('product_id', productId);
       if (preRead.error) {
         console.warn('[SB] saveInspirations pre-read failed, falling back to blind upsert:', preRead.error);
       } else {
         (preRead.data || []).forEach(function (r) {
-          serverDataById[r.id] = r.data || {};
+          serverDataById[r.id] = Object.assign({}, r.data || {}, { _serverAddedBy: r.added_by || '' });
         });
       }
     }
@@ -13600,9 +13601,11 @@ const DB = {
     // hookType, _clickupDocPageUrl, body_copy, …) goes into the `data` jsonb blob.
     const rows = inspirations.map(function (i) {
       const blob = {};
+      const addedByTouched = !!i._addedByTouched;
       Object.keys(i).forEach(function (k) {
         // Skip undefined and the mirrored top-level columns
         if (i[k] === undefined) return;
+        if (k === '_addedByTouched') return;
         blob[k] = i[k];
       });
       // Merge: server wins for server-owned keys. If the server has a value and
@@ -13617,13 +13620,14 @@ const DB = {
           blob[k] = serverVal;
         }
       });
+      if (!blob.addedBy && serverData._serverAddedBy && !addedByTouched) blob.addedBy = serverData._serverAddedBy;
       return {
         id: i.id,
         product_id: productId,
         url: i.sourceUrl || i.url || '',
         title: i.title || i.formatName || null,
         platform: i.platform || null,
-        added_by: i.addedBy || null,
+        added_by: blob.addedBy || null,
         status: i.status || 'saved',
         data: blob
       };
@@ -19939,6 +19943,7 @@ async function _recApprove(recId) {
       platform: 'Other',
       notes: 'Strategist recommendation · confidence: ' + (rec.confidence_band || 'MEDIUM') + ' · ' + (rec.recommendation_type || ''),
       addedAt: Date.now(),
+      addedBy: getCurrentInspirationAddedBy(),
       classifiedAt: Date.now(),
       importTags: ['Strategist Recommendation', (rec.confidence_band || 'MED')],
       _origin: 'strategist_recommendation',
@@ -45102,6 +45107,17 @@ function getProductInsPrefix() {
   return prefix || 'INS';
 }
 
+function getCurrentInspirationAddedBy() {
+  var label = (CFG && CFG.userLabel) || '';
+  if (!label || label === 'Team Member') {
+    try {
+      var email = AUTH && AUTH.profile && (AUTH.profile.full_name || AUTH.profile.username || AUTH.profile.email);
+      if (email) label = email;
+    } catch (_) {}
+  }
+  return String(label || '').trim();
+}
+
 // Save: push the full INSPIRATIONS array for the active product to Supabase (debounced, fire-and-forget).
 // Captures productId AND a snapshot of INSPIRATIONS at schedule time so a product-switch
 // mid-debounce can't move rows to the wrong product.
@@ -45231,6 +45247,7 @@ function addToInsQueue() {
     importTags: [],
     reusedIn: [],
     addedAt: Date.now(),
+    addedBy: getCurrentInspirationAddedBy(),
     classifiedAt: null,
     _clickupDocId: '',
     _clickupDocPageUrl: '',
@@ -45693,6 +45710,10 @@ var _insSaveTs = 0; // timestamp of last local inspiration save — used for sel
 function updateInsField(id, field, value) {
   var ins = INSPIRATIONS.find(function(i){ return i.id === id; });
   if (!ins) return;
+  if (field === 'addedBy') {
+    value = String(value || '').trim();
+    ins._addedByTouched = true;
+  }
   ins[field] = value;
   _insSaveTs = Date.now();
   saveInspirations();
@@ -46201,7 +46222,7 @@ function renderInspirations() {
       if (!window._insPipelinePassesFilter(ins, qr)) return false;
     }
     if (search) {
-      var hay = [ins.brand,ins.angle,ins.persona,ins.creativeUSP,ins.notes,ins.sourceUrl,ins.formatName].join(' ').toLowerCase();
+      var hay = [ins.brand,ins.angle,ins.persona,ins.creativeUSP,ins.notes,ins.sourceUrl,ins.formatName,ins.addedBy].join(' ').toLowerCase();
       if (!hay.includes(search)) return false;
     }
     return true;
@@ -46227,6 +46248,7 @@ function renderInspirations() {
         case 'platform':   return ins.platform || '';
         case 'status':     return _insQueueDisplayStatus(ins, queueByInsId) || '';
         case 'created':    return ins.classifiedAt || ins.created_at || ins.queuedAt || 0;
+        case 'addedBy':    return ins.addedBy || '';
         default:           return '';
       }
     };
@@ -46291,6 +46313,14 @@ function renderInspirations() {
     var isQueued = displayStatus === 'Queued' || displayStatus === 'Classifying';
     var isHeldQueue = isQueued || isFailedQueue || isBlockedQueue;
     var queueError = (queueRow && queueRow.error_message) || '';
+    var addedByLabel = (ins.addedBy || '').trim();
+    var addedByCell =
+      '<span contenteditable="true" spellcheck="false" title="' + escAttr(addedByLabel || 'Click to edit') + '"' +
+        ' onkeydown="if(event.key===\'Enter\'){event.preventDefault();this.blur();}"' +
+        ' onblur="updateInsField(' + insIdQ + ',\'addedBy\',this.textContent.trim())"' +
+        ' style="display:inline-block;min-width:42px;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:0.68rem;color:' + (addedByLabel ? 'var(--t2)' : 'var(--t3)') + ';font-weight:600;outline:none;cursor:text">' +
+        esc(addedByLabel || '—') +
+      '</span>';
 
     // Build angle select
     var angleOpts = ANGLES.map(function(a){
@@ -46432,6 +46462,7 @@ function renderInspirations() {
         var iso = new Date(t).toISOString().slice(0,10);
         return '<td title="' + iso + '" style="font-size:0.68rem;color:var(--t2);font-family:\'JetBrains Mono\',monospace">' + esc(rel) + '</td>';
       })() +
+      '<td>' + addedByCell + '</td>' +
       // 18. Usage / Performance \u2014 replaces the plain "Cells Used" count
       // with a segmented pill that shows winners / losers / testing /
       // placed status across all ADs spawned from this inspiration.
@@ -46503,7 +46534,7 @@ function renderInspirations() {
           '<button class="ins-dupe-btn" onclick="navigateToCreative(\'' + escAttr(taskId) + '\')">View →</button>' +
         '</div>';
       }).join('');
-      dupeRow = '<tr><td colspan="22" style="padding:0 12px 8px">' +
+      dupeRow = '<tr><td colspan="24" style="padding:0 12px 8px">' +
         '<div class="ins-dupe-banner ' + ins._dupeType + '">' +
           '<span class="ins-dupe-icon">' + dIcon + '</span>' +
           '<div style="flex:1;min-width:0">' +
@@ -46589,6 +46620,7 @@ function showAddInspirationModal() {
     notes: '',
     reusedIn: [],
     addedAt: Date.now(),
+    addedBy: getCurrentInspirationAddedBy(),
     classifiedAt: null
   };
   INS_NEXT_ID++;
@@ -47045,6 +47077,7 @@ function _doImportInspos(idxs, rows) {
       _sourceProductId: row.productId,
       _sourceInsId:     sourceIns.id,
       addedAt:          Date.now(),
+      addedBy:          getCurrentInspirationAddedBy(),
       classifiedAt:     Date.now()
       // 2026-05-19 — Removed the resets of _clickupDocPageUrl / _clickupDocId /
       // _inspoDocCreated. The Object.assign(sourceIns, ...) above now lets
@@ -47097,6 +47130,7 @@ function _doImportWins(idxs, rows) {
       _sourceAdId:       ad.id,
       _sourceClickupId:  ad._clickupId || '',   // stored for brief auto-fetch
       addedAt:           Date.now(),
+      addedBy:           getCurrentInspirationAddedBy(),
       classifiedAt:      Date.now(),
       _clickupDocPageUrl: '',
       _clickupDocId:     '',
@@ -50169,6 +50203,7 @@ window._clearPendingCu = _clearPendingCu;
     var t = e.target;
     while (t && t !== node) {
       var tag = (t.tagName || '').toLowerCase();
+      if (t.isContentEditable) return;
       if (tag === 'select' || tag === 'button' || tag === 'a' || tag === 'input' || tag === 'textarea') return;
       // Cells/Brief popups also short-circuit
       if (t.classList && (t.classList.contains('ins-cells-badge') || t.classList.contains('ins-platform-badge'))) return;

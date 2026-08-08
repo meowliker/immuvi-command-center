@@ -45432,6 +45432,7 @@ async function pollCloudResults() {
 function _resultRowToLegacy(r) {
   var meta = r.metadata || {};
   var cls = r.classification || {};
+  var brief = r.brief || {};
   return Object.assign({
     ins_id: r.ins_id,
     source_url: r.source_url,
@@ -45440,6 +45441,7 @@ function _resultRowToLegacy(r) {
     frames_extracted: r.frames_extracted,
     clickup_doc_page_url: r.clickup_doc_page_url,
     clickup_doc_id: r.clickup_doc_id,
+    voiceOver: cls.voice_over || meta.voice_over || brief.voice_over || '',
     mediaKind: r.media_kind || r.mediaKind || ''
   }, meta, cls);
 }
@@ -45863,6 +45865,7 @@ function applyClassificationResults(results, isPolling) {
     ins.adType            = normalizeInspirationAdType(data);
     ins.creativeHypothesis= data.creative_hypothesis || '';
     ins.notes             = data.notes || '';
+    ins.voiceOver         = data.voice_over || data.voiceOver || ins.voiceOver || '';
     ins.bodyCopy          = data.body_text || '';
     ins.headline          = data.title || '';
     ins.ctaText           = data.cta_text || '';

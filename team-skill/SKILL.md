@@ -370,6 +370,7 @@ Read each frame with the **Read tool** (up to 6 frames). You are a senior media 
 | creative_hypothesis | 2 sentences: why made + why it works. Max 35 words. |
 | notes | What you literally see. Max 30 words. |
 | body_copy_from_frames | Transcribe all visible on-screen text / subtitles from the frames |
+| voice_over | Transcript of spoken voice-over/narration if present. If there is no spoken voice-over, write exactly `No voice over`. Do not copy on-screen text here unless it is clearly speech/subtitles. |
 | page_name | From pipeline page_name metadata, or visually identified brand name if pipeline returned empty (Instagram/TikTok). **IMPORTANT:** dashboard reads `metadata.page_name` for the Brand column — always populate this field, even if the pipeline didn't. |
 | brand | Same value as page_name (human-readable alias) |
 | body_text | From body_text metadata |
@@ -389,6 +390,7 @@ Read each frame with the **Read tool** (up to 6 frames). You are a senior media 
 
 ```
 FRAME_BY_FRAME: timestamped breakdown with label (HOOK/TENSION/PROOF/BRIDGE/CTA) + what happens + emotion triggered
+VOICE_OVER: the spoken voice-over transcript, or exactly "No voice over"
 WHY_IT_WORKS: 4–5 psychological mechanisms in plain English
 REPLICATION_BRIEF: talent, set, key overlay, subtitle style, pacing, music, mid-video, end card
 WHAT_TO_TEST: 5 specific variation ideas (one line each: what changes + why)
@@ -423,7 +425,8 @@ cat > /tmp/result_[INS_ID].json <<'JSON'
     "link_url": "...",
     "ad_id": "...",
     "media_kind": "video|image|carousel",
-    "body_copy_from_frames": "..."
+    "body_copy_from_frames": "...",
+    "voice_over": "spoken transcript or No voice over"
   },
   "classification": {
     "media_kind": "video|image|carousel",
@@ -438,10 +441,12 @@ cat > /tmp/result_[INS_ID].json <<'JSON'
     "angle_matched": true,
     "creative_usp": "...",
     "creative_hypothesis": "...",
-    "notes": "..."
+    "notes": "...",
+    "voice_over": "spoken transcript or No voice over"
   },
   "brief": {
     "frame_by_frame": [ ... ],
+    "voice_over": "spoken transcript or No voice over",
     "why_it_works": "...",
     "replication_brief": "...",
     "what_to_test": "...",
@@ -531,6 +536,7 @@ The dashboard's `applyClassificationResults` function expects these **camelCase*
 | `creativeHypothesis` | classification.creative_hypothesis |
 | `notes` | classification.notes |
 | `bodyCopy` | metadata.body_copy_from_frames OR metadata.body_text |
+| `voiceOver` | classification.voice_over OR metadata.voice_over OR `"No voice over"` |
 | `headline` | metadata.title |
 | `ctaText` | metadata.cta_text |
 | `landingUrl` | metadata.link_url |
@@ -561,6 +567,7 @@ cls = result['classification']
 
 brand = md.get('page_name') or md.get('brand') or ''
 body_copy = md.get('body_copy_from_frames') or md.get('body_text') or ''
+voice_over = cls.get('voice_over') or md.get('voice_over') or (result.get('brief') or {}).get('voice_over') or 'No voice over'
 usp = cls.get('creative_usp') or ''
 format_name = usp.split(' — ')[0].strip() if ' — ' in usp else usp
 media_kind = (cls.get('media_kind') or md.get('media_kind') or result.get('media_kind') or '').lower()
@@ -591,6 +598,7 @@ patch = {
   'creativeHypothesis': cls.get('creative_hypothesis') or '',
   'notes': cls.get('notes') or '',
   'bodyCopy': body_copy,
+  'voiceOver': voice_over,
   'headline': md.get('title') or '',
   'ctaText': md.get('cta_text') or '',
   'landingUrl': md.get('link_url') or '',
@@ -739,6 +747,7 @@ The `content` field should be markdown with these 7 H2 sections — format match
 **Ad Copy:** [body_text or "(not available)"]
 **Headline:** [title or "(not available)"]
 **CTA:** [cta_text or "(not available)"]
+**Voice Over:** [voice_over or "No voice over"]
 
 **In one sentence:** [creative_hypothesis condensed to one sentence]
 * * *

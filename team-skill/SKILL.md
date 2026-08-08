@@ -339,6 +339,7 @@ try:
             "title": decode_unicode(snapshot.get("title") or ""),
             "page_name": decode_unicode(snapshot.get("page_name") or ""),
             "cta_text": decode_unicode(snapshot.get("cta_text") or ""),
+            "cta_type": snapshot.get("cta_type") or "",
             "link_url": snapshot.get("link_url") or snapshot.get("caption") or "",
             "ad_id": snapshot.get("ad_id",""),
         },
@@ -370,12 +371,14 @@ Read each frame with the **Read tool** (up to 6 frames). You are a senior media 
 | creative_hypothesis | 2 sentences: why made + why it works. Max 35 words. |
 | notes | What you literally see. Max 30 words. |
 | body_copy_from_frames | Transcribe all visible on-screen text / subtitles from the frames |
-| voice_over | Transcript of spoken voice-over/narration if present. If there is no spoken voice-over, write exactly `No voice over`. Do not copy on-screen text here unless it is clearly speech/subtitles. |
+| caption_timeline | Array of `{ "time": "0:00-0:03", "caption": "..." }` for every visible caption/overlay. Split the time ranges when the caption text changes. |
+| voice_over | Transcript of spoken voice-over/narration if present. Only include words you can attribute to spoken audio. Do not copy standalone hook text, overlays, or captions into this field. If there is no spoken voice-over, write exactly `No voice over`. If there is speech but the exact words cannot be verified, write exactly `Voice over present - transcript unavailable`. |
 | page_name | From pipeline page_name metadata, or visually identified brand name if pipeline returned empty (Instagram/TikTok). **IMPORTANT:** dashboard reads `metadata.page_name` for the Brand column — always populate this field, even if the pipeline didn't. |
 | brand | Same value as page_name (human-readable alias) |
 | body_text | From body_text metadata |
 | title / headline | From title metadata (dashboard reads both keys — write the same value to both) |
-| cta_text | From cta_text metadata |
+| cta_text | English CTA display text. If Facebook supplies a localized `cta_text` but `cta_type` is available, normalize from `cta_type` (example: `SHOP_NOW` → `Shop now`). Keep Hindi or another language only when the ad's CTA is genuinely custom/on-creative in that language and there is no reliable platform CTA type. |
+| cta_type | From platform metadata when available |
 | landing_url / link_url | From link_url metadata (write to both keys) |
 | duration_seconds | From pipeline output |
 | media_kind | From pipeline output (`media_kind` / `is_video`); used to guard against Photo/Video inversions |
@@ -389,13 +392,14 @@ Read each frame with the **Read tool** (up to 6 frames). You are a senior media 
 **Also build the full 7-section brief data** (same as before):
 
 ```
-FRAME_BY_FRAME: timestamped breakdown with label (HOOK/TENSION/PROOF/BRIDGE/CTA) + what happens + emotion triggered
-VOICE_OVER: the spoken voice-over transcript, or exactly "No voice over"
+FRAME_BY_FRAME: timestamped breakdown with label (HOOK/TENSION/PROOF/BRIDGE/CTA) + caption + what happens + emotion triggered. Time ranges must split whenever visible captions change.
+VOICE_OVER: the spoken voice-over transcript, exactly "No voice over", or exactly "Voice over present - transcript unavailable". Never reconstruct voice-over from visible captions unless they are clearly word-for-word subtitles for heard speech.
 WHY_IT_WORKS: 4–5 psychological mechanisms in plain English
 REPLICATION_BRIEF: talent, set, key overlay, subtitle style, pacing, music, mid-video, end card
 WHAT_TO_TEST: 5 specific variation ideas (one line each: what changes + why)
 COMPETITOR_INTEL: brand scale, funnel strategy, our gap, compete or find lane
 OUR_NEXT_AD: what to steal, what to do differently, 3-bullet editor brief, hypothesis sentence
+NEXT_AD_CAPTION_PLAN: exact caption sequence to use next, what to change from the competitor, and why each caption earns the next beat
 ```
 
 ---
@@ -421,12 +425,14 @@ cat > /tmp/result_[INS_ID].json <<'JSON'
     "title": "...",
     "headline": "...",
     "cta_text": "...",
+    "cta_type": "...",
     "landing_url": "...",
     "link_url": "...",
     "ad_id": "...",
     "media_kind": "video|image|carousel",
     "body_copy_from_frames": "...",
-    "voice_over": "spoken transcript or No voice over"
+    "caption_timeline": [{"time":"0:00-0:03","caption":"..."}],
+    "voice_over": "spoken transcript, No voice over, or Voice over present - transcript unavailable"
   },
   "classification": {
     "media_kind": "video|image|carousel",
@@ -442,16 +448,19 @@ cat > /tmp/result_[INS_ID].json <<'JSON'
     "creative_usp": "...",
     "creative_hypothesis": "...",
     "notes": "...",
-    "voice_over": "spoken transcript or No voice over"
+    "voice_over": "spoken transcript, No voice over, or Voice over present - transcript unavailable",
+    "detected_angle": "raw detected angle before matching",
+    "detected_persona": "raw detected persona before matching"
   },
   "brief": {
     "frame_by_frame": [ ... ],
-    "voice_over": "spoken transcript or No voice over",
+    "voice_over": "spoken transcript, No voice over, or Voice over present - transcript unavailable",
     "why_it_works": "...",
     "replication_brief": "...",
     "what_to_test": "...",
     "competitor_intel": "...",
-    "our_next_ad": "..."
+    "our_next_ad": "...",
+    "next_ad_caption_plan": "..."
   }
 }
 JSON
@@ -537,14 +546,18 @@ The dashboard's `applyClassificationResults` function expects these **camelCase*
 | `notes` | classification.notes |
 | `bodyCopy` | metadata.body_copy_from_frames OR metadata.body_text |
 | `voiceOver` | classification.voice_over OR metadata.voice_over OR `"No voice over"` |
+| `captionTimeline` | metadata.caption_timeline OR brief.caption_timeline |
 | `headline` | metadata.title |
-| `ctaText` | metadata.cta_text |
+| `ctaText` | normalized CTA display text from metadata.cta_type when possible, else metadata.cta_text |
 | `landingUrl` | metadata.link_url |
 | `duration_seconds` | pipeline output |
 | `status` | `"Classified"` literal |
 | `classifiedAt` | `Date.now()` equivalent (epoch ms) |
 | `_needsAngleReview` | `true` if angle_matched=false and no fuzzy match ≥60%, else `false` |
 | `_needsPersonaReview` | same logic for persona |
+| `detectedAngle` / `detectedPersona` | raw detected labels before matching |
+| `_angleScope` / `_personaScope` | `"product"` for matched existing labels, `"inspiration"` for inspiration-local labels |
+| `_angleLocked` / `_personaLocked` | `true` once the classifier has set the inspiration-local or product-matched identity |
 | `_anglePromptDone` | `true` after this skill has tried to match |
 | `_personaPromptDone` | `true` after this skill has tried to match |
 | `_clickupDocPageUrl` | set in Step 6 after page create/update |
@@ -568,6 +581,27 @@ cls = result['classification']
 brand = md.get('page_name') or md.get('brand') or ''
 body_copy = md.get('body_copy_from_frames') or md.get('body_text') or ''
 voice_over = cls.get('voice_over') or md.get('voice_over') or (result.get('brief') or {}).get('voice_over') or 'No voice over'
+if voice_over.strip().lower() in ('', 'n/a', 'na', 'none'):
+  voice_over = 'No voice over'
+cta_type = (md.get('cta_type') or cls.get('cta_type') or '').upper()
+cta_map = {
+  'SHOP_NOW': 'Shop now',
+  'LEARN_MORE': 'Learn more',
+  'SIGN_UP': 'Sign up',
+  'SUBSCRIBE': 'Subscribe',
+  'DOWNLOAD': 'Download',
+  'GET_OFFER': 'Get offer',
+  'GET_QUOTE': 'Get quote',
+  'CONTACT_US': 'Contact us',
+  'BOOK_NOW': 'Book now',
+  'APPLY_NOW': 'Apply now',
+  'WATCH_MORE': 'Watch more',
+  'LISTEN_NOW': 'Listen now',
+  'ORDER_NOW': 'Order now',
+  'BUY_NOW': 'Buy now',
+  'SEND_MESSAGE': 'Send message',
+}
+cta_text = cta_map.get(cta_type) or md.get('cta_text') or ''
 usp = cls.get('creative_usp') or ''
 format_name = usp.split(' — ')[0].strip() if ' — ' in usp else usp
 media_kind = (cls.get('media_kind') or md.get('media_kind') or result.get('media_kind') or '').lower()
@@ -599,14 +633,22 @@ patch = {
   'notes': cls.get('notes') or '',
   'bodyCopy': body_copy,
   'voiceOver': voice_over,
+  'captionTimeline': md.get('caption_timeline') or (result.get('brief') or {}).get('caption_timeline') or [],
   'headline': md.get('title') or '',
-  'ctaText': md.get('cta_text') or '',
+  'ctaText': cta_text,
+  'ctaType': cta_type,
   'landingUrl': md.get('link_url') or '',
   'duration_seconds': result.get('duration_seconds') or 0,
   'status': 'Classified',
   'classifiedAt': int(time.time() * 1000),
-  '_needsAngleReview': not cls.get('angle_matched', False),
-  '_needsPersonaReview': not cls.get('persona_matched', False),
+  '_needsAngleReview': False,
+  '_needsPersonaReview': False,
+  'detectedAngle': cls.get('detected_angle') or cls.get('angle') or '',
+  'detectedPersona': cls.get('detected_persona') or cls.get('persona') or '',
+  '_angleScope': 'product' if cls.get('angle_matched', False) else 'inspiration',
+  '_personaScope': 'product' if cls.get('persona_matched', False) else 'inspiration',
+  '_angleLocked': True,
+  '_personaLocked': True,
   '_anglePromptDone': True,
   '_personaPromptDone': True,
 }
@@ -755,8 +797,8 @@ The `content` field should be markdown with these 7 H2 sections — format match
 ## 2\. CREATIVE BREAKDOWN
 > _Strategist + Editor — frame by frame_
 
-| Time | Label | What Happens | Emotion Triggered |
-| ---| ---| ---| --- |
+| Time | Label | Caption | What Happens | Emotion Triggered |
+| ---| ---| ---| ---| --- |
 [render each frame_by_frame row as table row]
 
 * * *
@@ -789,6 +831,12 @@ The `content` field should be markdown with these 7 H2 sections — format match
 > _Everyone — the actionable output_
 
 [our_next_ad — include: What we're stealing, What we're doing differently, 3-line editor brief, Hypothesis]
+* * *
+
+## 8\. NEXT AD CAPTION PLAN
+> _Editor + Strategist — exact caption sequence_
+
+[next_ad_caption_plan — include the exact captions to use, what to change from the inspiration, timing/order, and why each caption should appear at that moment]
 ```
 
 ### 6d — Write the doc page URL back to `inspirations.data`

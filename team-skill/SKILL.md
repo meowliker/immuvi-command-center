@@ -395,9 +395,9 @@ Read each frame with the **Read tool** (up to 6 frames). You are a senior media 
 **Also build the full 8-section brief data**:
 
 ```
-FRAME_BY_FRAME: timestamped breakdown with label (HOOK/TENSION/PROOF/BRIDGE/CTA) + hook_text (if the static hook card is visible) + caption + voice_over segment + what happens + emotion triggered. Time ranges must split whenever visible captions change.
+FRAME_BY_FRAME: timestamped breakdown with label (HOOK/TENSION/PROOF/BRIDGE/CTA) + one caption/voice-over line + what happens + emotion triggered. Time ranges should follow the spoken transcript when voice-over exists, and split only when a new creative beat starts.
 VOICE_OVER: the spoken voice-over transcript from audio or exactly "No voice over". Never reconstruct voice-over from visible captions unless they are clearly word-for-word subtitles for heard speech. If speech exists but the exact words cannot be verified, omit the Voice Over line from the brief and explain the uncertainty in notes.
-CAPTION_TRANSCRIPT: full visible changing subtitle/caption transcript, excluding static hook cards.
+ON_SCREEN_TEXT_TIMING: compact note before the breakdown table for static hook cards or important overlay text that is not part of the spoken script.
 WHY_IT_WORKS: 4–5 psychological mechanisms in plain English
 REPLICATION_BRIEF: talent, set, key overlay, subtitle style, pacing, music, mid-video, end card
 WHAT_TO_TEST: 5 specific variation ideas (one line each: what changes + why)
@@ -811,9 +811,8 @@ The `content` field should be markdown with these 7 H2 sections — format match
 | Reference | [[source_url]]([source_url]) |
 
 **Ad Copy:** [body_text or "(not available)"]
-**Hook Text:** [hook_text or "(not available)"]
 [If `voice_over` is a real transcript or exactly `No voice over`, render `**Voice Over:** [voice_over]`. If `voice_over` is blank/unverified, omit the Voice Over line entirely.]
-**Caption Transcript:** [caption_transcript or "(not available)"]
+**On-screen Text Timing:** [compact timing note for static hook cards / important overlay text, e.g. `0:00-0:04 top hook card: "Can your child answer this?"`. Omit if no meaningful overlay text.]
 **Headline:** [title or "(not available)"]
 **CTA:** [cta_text or "(not available)"]
 
@@ -823,8 +822,8 @@ The `content` field should be markdown with these 7 H2 sections — format match
 ## 2\. CREATIVE BREAKDOWN
 > _Strategist + Editor — frame by frame_
 
-| Time | Label | Hook Text | Caption | Voice Over | What Happens | Emotion Triggered |
-| ---| ---| ---| ---| ---| ---| --- |
+| Time | Label | Caption / Voice Over | What Happens | Emotion Triggered |
+| ---| ---| ---| ---| --- |
 [render each frame_by_frame row as table row]
 
 * * *

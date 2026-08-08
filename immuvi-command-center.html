@@ -50209,24 +50209,10 @@ window._clearPendingCu = _clearPendingCu;
       html += '</div>';
     }
 
-    if (ins.hookText) {
-      html += '<div class="ins-drw-section">';
-      html += '<div class="ins-drw-section-hdr">HOOK TEXT</div>';
-      html += '<div class="ins-drw-prose">' + esc(ins.hookText) + '</div>';
-      html += '</div>';
-    }
-
     if (ins.voiceOver) {
       html += '<div class="ins-drw-section">';
       html += '<div class="ins-drw-section-hdr">VOICE OVER</div>';
       html += '<div class="ins-drw-prose">' + esc(ins.voiceOver) + '</div>';
-      html += '</div>';
-    }
-
-    if (ins.captionTranscript) {
-      html += '<div class="ins-drw-section">';
-      html += '<div class="ins-drw-section-hdr">CAPTION TRANSCRIPT</div>';
-      html += '<div class="ins-drw-prose">' + esc(ins.captionTranscript) + '</div>';
       html += '</div>';
     }
 

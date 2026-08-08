@@ -1320,7 +1320,8 @@ class Worker:
             f"Do NOT render separate Hook Text or Caption Transcript lines. Put static hook/overlay timing in one compact 'On-screen Text Timing' note before the table. "
             f"In CREATIVE BREAKDOWN, use columns Time | Label | Caption / Voice Over | What Happens | Emotion Triggered. "
             f"When voice-over exists, the Caption / Voice Over column should follow the actual spoken transcript for that timeframe, not a separate OCR caption timeline. "
-            f"Add section ## 8\\. NEXT AD SCRIPTS with exactly 3 complete variation scripts. Each variation must include strategy, hook text, full voice-over script, caption timeline, visual beats, CTA, what to change, and why it should work.\n"
+            f"Add section ## 8\\. NEXT AD SCRIPTS with exactly 3 complete variation scripts. Each variation must include a Strategy Snapshot table, full voice-over script, and a Script Breakdown table with columns Time | Label | Caption / Voice Over | Visual Beat | Editor Notes. "
+            f"Do not render caption timelines and visual beats as separate bullet lists; combine them into the timed script table.\n"
             f"  6. Create a ClickUp Doc page in the product's Inspiration Library doc with the brief. "
             f"Capture the doc page URL.\n\n"
             f"  7. *** MANDATORY DB WRITES — do NOT skip these *** \n"
@@ -1519,7 +1520,7 @@ class Worker:
             f"     hook_type, creative_structure, production_style, funnel_type,\n"
             f"     persona, angle, ad_type, brand. Plus body_copy, headline, cta,\n"
             f"     hook_text, caption_transcript, caption_timeline, voice_over, voice_over_timeline, creative_hypothesis, duration_seconds, frame_by_frame, why_it_works,\n"
-            f"     replication_brief, what_to_test, competitor_intel, our_next_ad, next_ad_scripts with exactly 3 complete variation scripts.\n"
+            f"     replication_brief, what_to_test, competitor_intel, our_next_ad, next_ad_scripts with exactly 3 complete variation scripts, each including script_breakdown rows.\n"
             f"  5. Build the brief markdown using the EXACT SAME 7-section template as\n"
             f"     the /classify-inspiration skill (see ~/.claude/skills/classify-inspiration\n"
             f"     /SKILL.md Step 6 for the canonical template). The user has asked the\n"
@@ -1543,7 +1544,7 @@ class Worker:
             f"       ## 6\\. COMPETITOR INTEL  (how this winner positions us vs the category)\n"
             f"       ## 7\\. OUR NEXT AD  (3-line editor brief + hypothesis for the next variation\n"
             f"                            that builds on this winner)\n"
-            f"       ## 8\\. NEXT AD SCRIPTS  (exactly 3 complete ad variation scripts; each has strategy, hook text, voice-over script, captions + timing/order, visual beats, CTA, what to change + why)\n"
+            f"       ## 8\\. NEXT AD SCRIPTS  (exactly 3 complete ad variation scripts; each has a Strategy Snapshot table, full Voice-over Script, and Script Breakdown table: Time | Label | Caption / Voice Over | Visual Beat | Editor Notes)\n"
             f"\n"
             f"     DO NOT use different headings or fewer sections — the user verified\n"
             f"     this. Every section must be present.\n"
@@ -1674,6 +1675,10 @@ class Worker:
             next_scripts = data.get("nextAdScripts")
             if not isinstance(next_scripts, list) or len(next_scripts) != 3:
                 return (False, "inspirations row missing exactly 3 nextAdScripts")
+            for idx, script in enumerate(next_scripts, start=1):
+                rows = (script or {}).get("script_breakdown") or (script or {}).get("scriptBreakdown")
+                if not isinstance(rows, list) or not rows:
+                    return (False, f"inspirations row nextAdScripts[{idx}] missing script_breakdown rows")
             voice_over = str(data.get("voiceOver") or "").strip().lower()
             if voice_over in (
                 "voice over present - transcript unavailable",

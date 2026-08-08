@@ -2101,7 +2101,7 @@ The classifier contract required `voice_over` but did not strictly forbid recons
 1. Voice Over must now be spoken audio only: exact transcript or `No voice over`. If speech exists but the words cannot be verified, the app stores that as internal status and omits the Voice Over line from the brief.
 2. CTA now normalizes from platform `cta_type` when available (`SHOP_NOW` → `Shop now`) and keeps non-English only for true custom creative CTAs.
 3. Creative Breakdown now uses `Time | Label | Caption / Voice Over | What Happens | Emotion Triggered`, with the full voice-over script rendered before the table and overlay timing noted outside the table.
-4. Briefs now include `## 8. NEXT AD SCRIPTS` with exactly three complete variation scripts, each with hook text, voice-over script, caption timeline, visual beats, CTA, what to change, and why it should work.
+4. Briefs now include `## 8. NEXT AD SCRIPTS` with exactly three complete variation scripts, each rendered with a Strategy Snapshot table plus a timed Script Breakdown table.
 5. Inspiration-only detected angle/persona labels are locked locally and do not auto-create global Angle/Persona rows until intentionally mapped later.
 6. The live `KLS-INS-136` Supabase row and ClickUp brief page were repaired.
 7. Tightened follow-up: classifier now persists `hookText`, `captionTranscript`, `voiceOverTimeline`, and `nextAdScripts` internally, but rendered briefs keep the table simple: no Hook Text column, no Caption Transcript section, and one combined Caption / Voice Over column.
@@ -2112,5 +2112,6 @@ The classifier contract required `voice_over` but did not strictly forbid recons
 - Persist caption timing separately from voice-over transcript.
 - Static hook cards belong in internal `hookText` and should render as a compact timing note outside the breakdown table.
 - Next-ad output must be complete scriptable variations, not single-line caption ideas.
+- Next-ad scripts must use tables: no separate loose Caption Timeline / Visual Beats bullet lists in section 8.
 - Normalize platform CTA display from stable CTA type enums when the raw text is localized by the ad library/session.
 - Custom classifier-only angle/persona labels must stay scoped to the inspiration until a user intentionally promotes them.

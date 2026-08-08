@@ -403,7 +403,7 @@ REPLICATION_BRIEF: talent, set, key overlay, subtitle style, pacing, music, mid-
 WHAT_TO_TEST: 5 specific variation ideas (one line each: what changes + why)
 COMPETITOR_INTEL: brand scale, funnel strategy, our gap, compete or find lane
 OUR_NEXT_AD: what to steal, what to do differently, 3-bullet editor brief, hypothesis sentence
-NEXT_AD_SCRIPTS: exactly 3 complete next-ad variation scripts based on the inspiration. Each variation must include a name, strategic intent, hook text, full voice-over script, caption timeline, visual beats, CTA, what to change from the competitor, and why it should work.
+NEXT_AD_SCRIPTS: exactly 3 complete next-ad variation scripts based on the inspiration. Each variation must include a name, strategic intent, hook text, full voice-over script, a timed script_breakdown table plan, CTA, what to change from the competitor, and why it should work.
 ```
 
 ---
@@ -471,9 +471,9 @@ cat > /tmp/result_[INS_ID].json <<'JSON'
     "competitor_intel": "...",
     "our_next_ad": "...",
     "next_ad_scripts": [
-      {"variation": "Variation 1 name", "intent": "...", "hook_text": "...", "voice_over_script": "...", "caption_timeline": [{"time":"0:00-0:03","caption":"..."}], "visual_beats": [{"time":"0:00-0:03","visual":"..."}], "cta": "...", "what_to_change": "...", "why_it_should_work": "..."},
-      {"variation": "Variation 2 name", "intent": "...", "hook_text": "...", "voice_over_script": "...", "caption_timeline": [{"time":"0:00-0:03","caption":"..."}], "visual_beats": [{"time":"0:00-0:03","visual":"..."}], "cta": "...", "what_to_change": "...", "why_it_should_work": "..."},
-      {"variation": "Variation 3 name", "intent": "...", "hook_text": "...", "voice_over_script": "...", "caption_timeline": [{"time":"0:00-0:03","caption":"..."}], "visual_beats": [{"time":"0:00-0:03","visual":"..."}], "cta": "...", "what_to_change": "...", "why_it_should_work": "..."}
+      {"variation": "Variation 1 name", "intent": "...", "hook_text": "...", "voice_over_script": "...", "script_breakdown": [{"time":"0:00-0:03","label":"HOOK","caption_voice_over":"...","visual_beat":"...","editor_note":"..."}], "cta": "...", "what_to_change": "...", "why_it_should_work": "..."},
+      {"variation": "Variation 2 name", "intent": "...", "hook_text": "...", "voice_over_script": "...", "script_breakdown": [{"time":"0:00-0:03","label":"HOOK","caption_voice_over":"...","visual_beat":"...","editor_note":"..."}], "cta": "...", "what_to_change": "...", "why_it_should_work": "..."},
+      {"variation": "Variation 3 name", "intent": "...", "hook_text": "...", "voice_over_script": "...", "script_breakdown": [{"time":"0:00-0:03","label":"HOOK","caption_voice_over":"...","visual_beat":"...","editor_note":"..."}], "cta": "...", "what_to_change": "...", "why_it_should_work": "..."}
     ]
   }
 }
@@ -861,7 +861,13 @@ The `content` field should be markdown with these 7 H2 sections — format match
 ## 8\. NEXT AD SCRIPTS
 > _Editor + Strategist — three complete variation scripts_
 
-[next_ad_scripts — render exactly 3 complete ad variation scripts. For each variation include: variation name, strategic intent, hook text, full voice-over script, caption timeline, visual beats, CTA, what to change from the inspiration, and why it should work.]
+[next_ad_scripts — render exactly 3 complete ad variation scripts. For each variation render:
+1. Variation heading
+2. Strategy Snapshot table: `Field | Direction` with Strategic intent, Hook Text, CTA, What to change, Why it should work
+3. Full `Voice-over Script` paragraph
+4. Script Breakdown table: `Time | Label | Caption / Voice Over | Visual Beat | Editor Notes`
+
+Do not render Caption Timeline and Visual Beats as separate bullet lists in section 8; combine them into the Script Breakdown table.]
 ```
 
 ### 6d — Write the doc page URL back to `inspirations.data`

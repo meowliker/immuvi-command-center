@@ -2053,3 +2053,29 @@ The post-create custom-field sync already preferred the action/cell identity, so
 - Do not build ClickUp descriptions from raw `sourceAd.angle/persona` without first overlaying `act.sourceAngle/sourcePersona`.
 - Custom fields and description text must be built from the same resolved identity so one cannot correct later while the other stays stale.
 - Preserve the Bug 42/43/44 protections: stale synced AD taxonomy must not rewrite action payload cell identity, and save-time canonicalization must cover manual actions as well as ads.
+
+---
+
+## Bug 49 — Stale inspiration cache saved rows into the wrong product
+**Status:** ✅ fixed locally 2026-08-08
+**Reported:** 2026-08-08
+**Surface:** Product switcher / Inspiration tab / Supabase inspiration persistence
+
+### Symptom
+- Herbal Healing Handbook inspirations appeared in the Diabetics product.
+- The same class of leak also left Medical-prefixed inspirations under Kids Mental Health.
+
+### Root cause
+The inspiration loader and product switch cache used the global `activeProductId` after async work had already started. If a user switched products while an inspiration load or cache restore was still in flight, the app could briefly hold inspirations from product A while product B was active. A later save then upserted that stale in-memory list into the current product.
+
+### Fix
+1. `loadInspirations()` now captures the requested product id and discards results if the user has switched products before the query returns.
+2. Product switch cache stash/restore now filters inspirations through product-boundary validation.
+3. Supabase inspiration reads and saves now reject inspiration ids whose uniquely-owned prefix belongs to another product.
+4. Live data was repaired: Herbal `HHH-INS-*` rows were moved back from Diabetics to Herbal, Medical `M-INS-*` rows were moved back from Kids Mental Health to Medical, and unrelated unreferenced generic rows were removed from Diabetics.
+
+### Prevention
+- Async product-specific loaders must capture an expected product id and verify it before mutating global UI state.
+- Product-switch caches must never save or restore unvalidated product-scoped rows.
+- Save paths must be the final guardrail: never upsert a uniquely-prefixed inspiration id into a different product.
+- Run a prefix-boundary scan after repairing product bleed so hidden historical rows do not remain in other products.

@@ -13546,10 +13546,13 @@ const DB = {
     // Merge the jsonb `data` blob with top-level columns so all fields
     // (sourceUrl, angle, persona, hookType, creativeStructure, _clickupDocPageUrl,
     // importTags, etc.) are present — restoring full parity with localStorage.
-    return (data || []).map(function (r) {
+    return (data || []).filter(function (r) {
+      return _inspirationIdBelongsToProduct(productId, r && r.id);
+    }).map(function (r) {
       const blob = r.data || {};
       return Object.assign({}, blob, {
         id: r.id,
+        product_id: r.product_id,
         url: r.url || blob.url,
         sourceUrl: blob.sourceUrl || r.url,
         title: r.title || blob.title || '',
@@ -13565,6 +13568,12 @@ const DB = {
   async saveInspirations(productId, inspirations) {
     if (!SB) return;
     if (!Array.isArray(inspirations) || !inspirations.length) return;
+    inspirations = inspirations.filter(function (i) {
+      var ok = _inspirationIdBelongsToProduct(productId, i && i.id);
+      if (!ok) console.warn('[SB] blocked cross-product inspiration save', i && i.id, 'into', productId);
+      return ok;
+    });
+    if (!inspirations.length) return;
 
     // Keys the classify-inspiration skill writes server-side after classification.
     // The frontend's in-memory copy may be stale (e.g. realtime event missed, or
@@ -33031,7 +33040,9 @@ async function switchProduct(productId) {
   // Stash current product's data into the cross-product cache so when the
   // user switches back, render is instant (no 200-500ms DB round-trip wait).
   if (activeProductId) {
-    _inspoByProductCache[activeProductId] = (INSPIRATIONS || []).slice();
+    _inspoByProductCache[activeProductId] = (INSPIRATIONS || []).filter(function (ins) {
+      return _inspirationIdBelongsToProduct(activeProductId, ins && ins.id);
+    }).slice();
     // Snapshot ADS + taxonomy + matrix state for instant-restore on switch-back.
     _productDataCache[activeProductId] = {
       ANGLES: ANGLES.slice(),
@@ -33157,8 +33168,10 @@ async function switchProduct(productId) {
   // background. Avoids the 200-500ms round-trip blocking the product-switch render.
   var _cached = _inspoByProductCache[productId];
   if (_cached && _cached.length) {
-    INSPIRATIONS = _cached.slice();
-    INS_NEXT_ID = _cached.length + 1;
+    INSPIRATIONS = _cached.filter(function (ins) {
+      return _inspirationIdBelongsToProduct(productId, ins && ins.id);
+    }).slice();
+    INS_NEXT_ID = INSPIRATIONS.length + 1;
     migrateInspirationDocUrls();
     if (ADS && ADS.length > 0) refreshAllDupeChecks(false);
   } else {
@@ -33176,7 +33189,7 @@ async function switchProduct(productId) {
   // Kick off the authoritative inspiration load in the background.
   // When it returns, update the cache + re-render only the inspirations surfaces.
   (function backgroundRefreshInspos(expectedProductId){
-    loadInspirations().then(function(){
+    loadInspirations(expectedProductId).then(function(){
       if (activeProductId !== expectedProductId) return;  // user moved on
       _inspoByProductCache[expectedProductId] = INSPIRATIONS.slice();
       if (typeof renderInspirations === 'function') renderInspirations();
@@ -45107,6 +45120,38 @@ function getProductInsPrefix() {
   return prefix || 'INS';
 }
 
+function _insPrefixForProduct(productId) {
+  var p = (PRODUCTS || []).find(function (x) { return x && x.id === productId; });
+  if (!p) return '';
+  if (p.insPrefix) return String(p.insPrefix).toUpperCase();
+  var words = (p.name || '').split(/\s+/).filter(Boolean);
+  return (words.map(function (w) { return (w[0] || '').toUpperCase(); }).join('').substring(0, 3) || '');
+}
+
+function _insPrefixOwner(prefix) {
+  prefix = String(prefix || '').toUpperCase();
+  if (!prefix) return null;
+  var owner = null, matches = 0;
+  for (var i = 0; i < (PRODUCTS || []).length; i++) {
+    var p = PRODUCTS[i];
+    if (p && _insPrefixForProduct(p.id) === prefix) {
+      owner = p.id;
+      matches++;
+    }
+  }
+  return matches === 1 ? owner : null;
+}
+
+function _inspirationIdBelongsToProduct(productId, insId) {
+  var m = String(insId || '').match(/^([A-Z0-9]+)-INS-\d+$/i);
+  if (!m) return true;
+  var prefix = m[1].toUpperCase();
+  var expected = _insPrefixForProduct(productId);
+  if (expected && prefix === expected) return true;
+  var owner = _insPrefixOwner(prefix);
+  return !(owner && owner !== productId);
+}
+
 function getCurrentInspirationAddedBy() {
   var label = (CFG && CFG.userLabel) || '';
   if (!label || label === 'Team Member') {
@@ -45138,15 +45183,19 @@ function saveInspirations() {
   }, 600);
 }
 
-async function loadInspirations() {
+async function loadInspirations(expectedProductId) {
+  var requestedProductId = expectedProductId || activeProductId;
+  if (!requestedProductId) return;
   INSPIRATIONS = [];
   INS_NEXT_ID = 1;
-  if (DB.ready && activeProductId) {
+  if (DB.ready && requestedProductId) {
     try {
-      var rows = await DB.listInspirations(activeProductId);
+      var rows = await DB.listInspirations(requestedProductId);
+      if (activeProductId !== requestedProductId) return;
       INSPIRATIONS = rows || [];
       try {
-        window.INSPIRATION_QUEUE = await DB.getQueue(activeProductId);
+        window.INSPIRATION_QUEUE = await DB.getQueue(requestedProductId);
+        if (activeProductId !== requestedProductId) return;
       } catch (qe) {
         console.warn('[SB] load inspiration queue failed', qe);
         window.INSPIRATION_QUEUE = [];

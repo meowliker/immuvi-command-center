@@ -45490,7 +45490,7 @@ function _resultRowToLegacy(r) {
     frames_extracted: r.frames_extracted,
     clickup_doc_page_url: r.clickup_doc_page_url,
     clickup_doc_id: r.clickup_doc_id,
-    voiceOver: cls.voice_over || meta.voice_over || brief.voice_over || '',
+    voiceOver: normalizeInspirationVoiceOver(cls.voice_over || meta.voice_over || brief.voice_over || ''),
     mediaKind: r.media_kind || r.mediaKind || ''
   }, meta, cls);
   out.cta_type = out.cta_type || meta.cta_type || cls.cta_type || '';
@@ -45917,7 +45917,7 @@ function applyClassificationResults(results, isPolling) {
     ins.adType            = normalizeInspirationAdType(data);
     ins.creativeHypothesis= data.creative_hypothesis || '';
     ins.notes             = data.notes || '';
-    ins.voiceOver         = data.voice_over || data.voiceOver || ins.voiceOver || '';
+    ins.voiceOver         = normalizeInspirationVoiceOver(data.voice_over || data.voiceOver || ins.voiceOver || '');
     ins.bodyCopy          = data.body_text || '';
     ins.headline          = data.title || '';
     ins.ctaText           = normalizeInspirationCta(data.cta_text || data.ctaText || '', data.cta_type || data.ctaType || '');
@@ -46154,6 +46154,16 @@ function normalizeInspirationCta(ctaText, ctaType) {
   };
   if (map[rawType]) return map[rawType];
   return String(ctaText || '').trim();
+}
+
+function normalizeInspirationVoiceOver(value) {
+  var v = String(value || '').trim();
+  if (!v) return '';
+  var low = v.toLowerCase();
+  if (low === 'voice over present - transcript unavailable') return '';
+  if (low === 'voiceover present - transcript unavailable') return '';
+  if (low === 'transcript unavailable') return '';
+  return v;
 }
 
 function isPendingInspirationStatus(status) {

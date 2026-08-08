@@ -2096,15 +2096,16 @@ The inspiration loader and product switch cache used the global `activeProductId
 The classifier contract required `voice_over` but did not strictly forbid reconstructing it from visible captions when exact audio transcription was unavailable. It also stored raw platform `cta_text` without normalizing known CTA types, and the brief template had no dedicated caption column/timeline.
 
 ### Fix
-1. Voice Over must now be spoken audio only: exact transcript, `No voice over`, or `Voice over present - transcript unavailable`.
+1. Voice Over must now be spoken audio only: exact transcript or `No voice over`. If speech exists but the words cannot be verified, the app stores that as internal status and omits the Voice Over line from the brief.
 2. CTA now normalizes from platform `cta_type` when available (`SHOP_NOW` → `Shop now`) and keeps non-English only for true custom creative CTAs.
 3. Creative Breakdown now uses `Time | Label | Caption | What Happens | Emotion Triggered`, with time ranges split when visible captions change.
-4. Briefs now include `## 8. NEXT AD CAPTION PLAN` for exact next-ad captions, timing/order, and what to change.
+4. Briefs now include `## 8. NEXT AD CAPTION PLAN` with exactly three variation ideas, each with caption sequence, timing/order, what to change, and why it should work.
 5. Inspiration-only detected angle/persona labels are locked locally and do not auto-create global Angle/Persona rows until intentionally mapped later.
 6. The live `KLS-INS-136` Supabase row and ClickUp brief page were repaired.
 
 ### Prevention
 - Never use visible overlay text as Voice Over unless it is clearly heard as speech/subtitles.
+- Never show an unavailable-transcript placeholder as if it were useful brief copy.
 - Persist caption timing separately from voice-over transcript.
 - Normalize platform CTA display from stable CTA type enums when the raw text is localized by the ad library/session.
 - Custom classifier-only angle/persona labels must stay scoped to the inspiration until a user intentionally promotes them.

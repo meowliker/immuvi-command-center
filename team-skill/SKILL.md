@@ -372,7 +372,7 @@ Read each frame with the **Read tool** (up to 6 frames). You are a senior media 
 | notes | What you literally see. Max 30 words. |
 | body_copy_from_frames | Transcribe all visible on-screen text / subtitles from the frames |
 | caption_timeline | Array of `{ "time": "0:00-0:03", "caption": "..." }` for every visible caption/overlay. Split the time ranges when the caption text changes. |
-| voice_over | Transcript of spoken voice-over/narration if present. Only include words you can attribute to spoken audio. Do not copy standalone hook text, overlays, or captions into this field. If there is no spoken voice-over, write exactly `No voice over`. If there is speech but the exact words cannot be verified, write exactly `Voice over present - transcript unavailable`. |
+| voice_over | Transcript of spoken voice-over/narration if present. Only include words you can attribute to spoken audio. Do not copy standalone hook text, overlays, or captions into this field. If there is no spoken voice-over, write exactly `No voice over`. If speech exists but the exact words cannot be verified, leave this blank and explain the uncertainty in `notes`; do not print an unavailable-transcript placeholder in the brief. |
 | page_name | From pipeline page_name metadata, or visually identified brand name if pipeline returned empty (Instagram/TikTok). **IMPORTANT:** dashboard reads `metadata.page_name` for the Brand column — always populate this field, even if the pipeline didn't. |
 | brand | Same value as page_name (human-readable alias) |
 | body_text | From body_text metadata |
@@ -389,17 +389,17 @@ Read each frame with the **Read tool** (up to 6 frames). You are a senior media 
 - `media_kind=video` → `photo_video` must not be `Photo` or `Carousel`.
 - Do not use `duration_seconds` alone to decide media kind; TikTok photo posts can have a duration and Instagram reels can sometimes probe as `0`.
 
-**Also build the full 7-section brief data** (same as before):
+**Also build the full 8-section brief data**:
 
 ```
 FRAME_BY_FRAME: timestamped breakdown with label (HOOK/TENSION/PROOF/BRIDGE/CTA) + caption + what happens + emotion triggered. Time ranges must split whenever visible captions change.
-VOICE_OVER: the spoken voice-over transcript, exactly "No voice over", or exactly "Voice over present - transcript unavailable". Never reconstruct voice-over from visible captions unless they are clearly word-for-word subtitles for heard speech.
+VOICE_OVER: the spoken voice-over transcript or exactly "No voice over". Never reconstruct voice-over from visible captions unless they are clearly word-for-word subtitles for heard speech. If speech exists but the exact words cannot be verified, omit the Voice Over line from the brief and explain the uncertainty in notes.
 WHY_IT_WORKS: 4–5 psychological mechanisms in plain English
 REPLICATION_BRIEF: talent, set, key overlay, subtitle style, pacing, music, mid-video, end card
 WHAT_TO_TEST: 5 specific variation ideas (one line each: what changes + why)
 COMPETITOR_INTEL: brand scale, funnel strategy, our gap, compete or find lane
 OUR_NEXT_AD: what to steal, what to do differently, 3-bullet editor brief, hypothesis sentence
-NEXT_AD_CAPTION_PLAN: exact caption sequence to use next, what to change from the competitor, and why each caption earns the next beat
+NEXT_AD_CAPTION_PLAN: exactly 3 variation ideas. Each variation must include a name, strategic intent, exact caption sequence with timing/order, what to change from the competitor, and why it should work.
 ```
 
 ---
@@ -432,7 +432,7 @@ cat > /tmp/result_[INS_ID].json <<'JSON'
     "media_kind": "video|image|carousel",
     "body_copy_from_frames": "...",
     "caption_timeline": [{"time":"0:00-0:03","caption":"..."}],
-    "voice_over": "spoken transcript, No voice over, or Voice over present - transcript unavailable"
+    "voice_over": "spoken transcript, No voice over, or blank when speech is unverified"
   },
   "classification": {
     "media_kind": "video|image|carousel",
@@ -448,19 +448,23 @@ cat > /tmp/result_[INS_ID].json <<'JSON'
     "creative_usp": "...",
     "creative_hypothesis": "...",
     "notes": "...",
-    "voice_over": "spoken transcript, No voice over, or Voice over present - transcript unavailable",
+    "voice_over": "spoken transcript, No voice over, or blank when speech is unverified",
     "detected_angle": "raw detected angle before matching",
     "detected_persona": "raw detected persona before matching"
   },
   "brief": {
     "frame_by_frame": [ ... ],
-    "voice_over": "spoken transcript, No voice over, or Voice over present - transcript unavailable",
+    "voice_over": "spoken transcript, No voice over, or blank when speech is unverified",
     "why_it_works": "...",
     "replication_brief": "...",
     "what_to_test": "...",
     "competitor_intel": "...",
     "our_next_ad": "...",
-    "next_ad_caption_plan": "..."
+    "next_ad_caption_plan": [
+      {"variation": "Variation 1 name", "intent": "...", "caption_sequence": [{"time":"0:00-0:03","caption":"..."}], "what_to_change": "...", "why_it_should_work": "..."},
+      {"variation": "Variation 2 name", "intent": "...", "caption_sequence": [{"time":"0:00-0:03","caption":"..."}], "what_to_change": "...", "why_it_should_work": "..."},
+      {"variation": "Variation 3 name", "intent": "...", "caption_sequence": [{"time":"0:00-0:03","caption":"..."}], "what_to_change": "...", "why_it_should_work": "..."}
+    ]
   }
 }
 JSON
@@ -580,9 +584,9 @@ cls = result['classification']
 
 brand = md.get('page_name') or md.get('brand') or ''
 body_copy = md.get('body_copy_from_frames') or md.get('body_text') or ''
-voice_over = cls.get('voice_over') or md.get('voice_over') or (result.get('brief') or {}).get('voice_over') or 'No voice over'
-if voice_over.strip().lower() in ('', 'n/a', 'na', 'none'):
-  voice_over = 'No voice over'
+voice_over = cls.get('voice_over') or md.get('voice_over') or (result.get('brief') or {}).get('voice_over') or ''
+if voice_over.strip().lower() in ('voice over present - transcript unavailable', 'voiceover present - transcript unavailable', 'transcript unavailable', 'n/a', 'na', 'none'):
+  voice_over = ''
 cta_type = (md.get('cta_type') or cls.get('cta_type') or '').upper()
 cta_map = {
   'SHOP_NOW': 'Shop now',
@@ -789,7 +793,7 @@ The `content` field should be markdown with these 7 H2 sections — format match
 **Ad Copy:** [body_text or "(not available)"]
 **Headline:** [title or "(not available)"]
 **CTA:** [cta_text or "(not available)"]
-**Voice Over:** [voice_over or "No voice over"]
+[If `voice_over` is a real transcript or exactly `No voice over`, render `**Voice Over:** [voice_over]`. If `voice_over` is blank/unverified, omit the Voice Over line entirely.]
 
 **In one sentence:** [creative_hypothesis condensed to one sentence]
 * * *
@@ -836,7 +840,7 @@ The `content` field should be markdown with these 7 H2 sections — format match
 ## 8\. NEXT AD CAPTION PLAN
 > _Editor + Strategist — exact caption sequence_
 
-[next_ad_caption_plan — include the exact captions to use, what to change from the inspiration, timing/order, and why each caption should appear at that moment]
+[next_ad_caption_plan — render exactly 3 variation ideas. For each variation include: variation name, strategic intent, exact caption sequence with timing/order, what to change from the inspiration, and why it should work.]
 ```
 
 ### 6d — Write the doc page URL back to `inspirations.data`

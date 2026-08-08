@@ -45490,7 +45490,12 @@ function _resultRowToLegacy(r) {
     frames_extracted: r.frames_extracted,
     clickup_doc_page_url: r.clickup_doc_page_url,
     clickup_doc_id: r.clickup_doc_id,
+    hookText: meta.hook_text || cls.hook_text || brief.hook_text || '',
+    captionTranscript: meta.caption_transcript || brief.caption_transcript || '',
+    captionTimeline: meta.caption_timeline || brief.caption_timeline || [],
     voiceOver: normalizeInspirationVoiceOver(cls.voice_over || meta.voice_over || brief.voice_over || ''),
+    voiceOverTimeline: cls.voice_over_timeline || meta.voice_over_timeline || brief.voice_over_timeline || [],
+    nextAdScripts: brief.next_ad_scripts || [],
     mediaKind: r.media_kind || r.mediaKind || ''
   }, meta, cls);
   out.cta_type = out.cta_type || meta.cta_type || cls.cta_type || '';
@@ -45903,8 +45908,25 @@ function applyClassificationResults(results, isPolling) {
       return (data.ins_id && i.id === data.ins_id) || i.sourceUrl === data.source_url;
     });
     if (!ins) return;
-    // Skip only if fully classified — allow re-processing if mapping was deferred
-    if (ins.status === 'Classified' && !ins._needsAngleReview && !ins._needsPersonaReview) return;
+    // Skip only if fully classified and the incoming result doesn't carry
+    // newer brief-only fields we still lack. This lets rerenders repair
+    // hook/caption/voice-over data without reopening old taxonomy prompts.
+    var hasFreshBriefFields = !!(
+      data.hookText || data.hook_text ||
+      data.captionTranscript || data.caption_transcript ||
+      data.voiceOverTimeline || data.voice_over_timeline ||
+      data.nextAdScripts || data.next_ad_scripts
+    );
+    var lacksFreshBriefFields = !ins.hookText ||
+      !ins.captionTranscript ||
+      !(Array.isArray(ins.voiceOverTimeline) && ins.voiceOverTimeline.length) ||
+      !(Array.isArray(ins.nextAdScripts) && ins.nextAdScripts.length);
+    if (
+      ins.status === 'Classified' &&
+      !ins._needsAngleReview &&
+      !ins._needsPersonaReview &&
+      !(hasFreshBriefFields && lacksFreshBriefFields)
+    ) return;
 
     ins.brand             = data.page_name || ins.brand || '';
     ins.formatName        = extractFormatName(data.creative_usp || '');
@@ -45917,7 +45939,11 @@ function applyClassificationResults(results, isPolling) {
     ins.adType            = normalizeInspirationAdType(data);
     ins.creativeHypothesis= data.creative_hypothesis || '';
     ins.notes             = data.notes || '';
+    ins.hookText          = data.hook_text || data.hookText || ins.hookText || '';
     ins.voiceOver         = normalizeInspirationVoiceOver(data.voice_over || data.voiceOver || ins.voiceOver || '');
+    ins.voiceOverTimeline = data.voice_over_timeline || data.voiceOverTimeline || ins.voiceOverTimeline || [];
+    ins.captionTranscript = data.caption_transcript || data.captionTranscript || ins.captionTranscript || '';
+    ins.nextAdScripts     = data.next_ad_scripts || data.nextAdScripts || ins.nextAdScripts || [];
     ins.bodyCopy          = data.body_text || '';
     ins.headline          = data.title || '';
     ins.ctaText           = normalizeInspirationCta(data.cta_text || data.ctaText || '', data.cta_type || data.ctaType || '');
@@ -50180,6 +50206,27 @@ window._clearPendingCu = _clearPendingCu;
       html += '<div class="ins-drw-section">';
       html += '<div class="ins-drw-section-hdr">AD COPY (BODY)</div>';
       html += '<div class="ins-drw-prose">' + esc(ins.bodyCopy) + '</div>';
+      html += '</div>';
+    }
+
+    if (ins.hookText) {
+      html += '<div class="ins-drw-section">';
+      html += '<div class="ins-drw-section-hdr">HOOK TEXT</div>';
+      html += '<div class="ins-drw-prose">' + esc(ins.hookText) + '</div>';
+      html += '</div>';
+    }
+
+    if (ins.voiceOver) {
+      html += '<div class="ins-drw-section">';
+      html += '<div class="ins-drw-section-hdr">VOICE OVER</div>';
+      html += '<div class="ins-drw-prose">' + esc(ins.voiceOver) + '</div>';
+      html += '</div>';
+    }
+
+    if (ins.captionTranscript) {
+      html += '<div class="ins-drw-section">';
+      html += '<div class="ins-drw-section-hdr">CAPTION TRANSCRIPT</div>';
+      html += '<div class="ins-drw-prose">' + esc(ins.captionTranscript) + '</div>';
       html += '</div>';
     }
 

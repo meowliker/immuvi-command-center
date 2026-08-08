@@ -370,9 +370,12 @@ Read each frame with the **Read tool** (up to 6 frames). You are a senior media 
 | creative_usp | "Format Name — scroll-stopping mechanic" in 20 words |
 | creative_hypothesis | 2 sentences: why made + why it works. Max 35 words. |
 | notes | What you literally see. Max 30 words. |
-| body_copy_from_frames | Transcribe all visible on-screen text / subtitles from the frames |
-| caption_timeline | Array of `{ "time": "0:00-0:03", "caption": "..." }` for every visible caption/overlay. Split the time ranges when the caption text changes. |
-| voice_over | Transcript of spoken voice-over/narration if present. Only include words you can attribute to spoken audio. Do not copy standalone hook text, overlays, or captions into this field. If there is no spoken voice-over, write exactly `No voice over`. If speech exists but the exact words cannot be verified, leave this blank and explain the uncertainty in `notes`; do not print an unavailable-transcript placeholder in the brief. |
+| hook_text | Primary static hook overlay/card shown on the creative, e.g. a top bubble like "Can your child answer this?". Do not copy this into caption_timeline unless it is the changing subtitle itself. |
+| body_copy_from_frames | Backward-compatible visible text summary. Prefer `hook_text + caption_transcript` only; do not use this as voice-over. |
+| caption_transcript | Full transcript of changing visible captions/subtitles in reading order. Exclude static hook cards, UI chrome, and platform ad copy. |
+| caption_timeline | Array of `{ "time": "0:00-0:03", "caption": "..." }` for every changing visible caption/subtitle. Split the time ranges whenever bottom/active caption text changes. Static hook cards belong in `hook_text`, not here. |
+| voice_over | Transcript of spoken voice-over/narration extracted from audio/transcription if present. Only include words you can attribute to spoken audio. Do not copy standalone hook text, overlays, or captions into this field. If there is no spoken voice-over, write exactly `No voice over`. If speech exists but the exact words cannot be verified, leave this blank and explain the uncertainty in `notes`; do not print an unavailable-transcript placeholder in the brief. |
+| voice_over_timeline | Array of `{ "time": "0:00-0:04", "voice_over": "..." }` from audio transcription segments when available. Empty array if no voice-over or transcript unavailable. |
 | page_name | From pipeline page_name metadata, or visually identified brand name if pipeline returned empty (Instagram/TikTok). **IMPORTANT:** dashboard reads `metadata.page_name` for the Brand column — always populate this field, even if the pipeline didn't. |
 | brand | Same value as page_name (human-readable alias) |
 | body_text | From body_text metadata |
@@ -392,14 +395,15 @@ Read each frame with the **Read tool** (up to 6 frames). You are a senior media 
 **Also build the full 8-section brief data**:
 
 ```
-FRAME_BY_FRAME: timestamped breakdown with label (HOOK/TENSION/PROOF/BRIDGE/CTA) + caption + what happens + emotion triggered. Time ranges must split whenever visible captions change.
-VOICE_OVER: the spoken voice-over transcript or exactly "No voice over". Never reconstruct voice-over from visible captions unless they are clearly word-for-word subtitles for heard speech. If speech exists but the exact words cannot be verified, omit the Voice Over line from the brief and explain the uncertainty in notes.
+FRAME_BY_FRAME: timestamped breakdown with label (HOOK/TENSION/PROOF/BRIDGE/CTA) + hook_text (if the static hook card is visible) + caption + voice_over segment + what happens + emotion triggered. Time ranges must split whenever visible captions change.
+VOICE_OVER: the spoken voice-over transcript from audio or exactly "No voice over". Never reconstruct voice-over from visible captions unless they are clearly word-for-word subtitles for heard speech. If speech exists but the exact words cannot be verified, omit the Voice Over line from the brief and explain the uncertainty in notes.
+CAPTION_TRANSCRIPT: full visible changing subtitle/caption transcript, excluding static hook cards.
 WHY_IT_WORKS: 4–5 psychological mechanisms in plain English
 REPLICATION_BRIEF: talent, set, key overlay, subtitle style, pacing, music, mid-video, end card
 WHAT_TO_TEST: 5 specific variation ideas (one line each: what changes + why)
 COMPETITOR_INTEL: brand scale, funnel strategy, our gap, compete or find lane
 OUR_NEXT_AD: what to steal, what to do differently, 3-bullet editor brief, hypothesis sentence
-NEXT_AD_CAPTION_PLAN: exactly 3 variation ideas. Each variation must include a name, strategic intent, exact caption sequence with timing/order, what to change from the competitor, and why it should work.
+NEXT_AD_SCRIPTS: exactly 3 complete next-ad variation scripts based on the inspiration. Each variation must include a name, strategic intent, hook text, full voice-over script, caption timeline, visual beats, CTA, what to change from the competitor, and why it should work.
 ```
 
 ---
@@ -430,9 +434,12 @@ cat > /tmp/result_[INS_ID].json <<'JSON'
     "link_url": "...",
     "ad_id": "...",
     "media_kind": "video|image|carousel",
+    "hook_text": "...",
     "body_copy_from_frames": "...",
+    "caption_transcript": "...",
     "caption_timeline": [{"time":"0:00-0:03","caption":"..."}],
-    "voice_over": "spoken transcript, No voice over, or blank when speech is unverified"
+    "voice_over": "spoken transcript, No voice over, or blank when speech is unverified",
+    "voice_over_timeline": [{"time":"0:00-0:04","voice_over":"..."}]
   },
   "classification": {
     "media_kind": "video|image|carousel",
@@ -449,21 +456,24 @@ cat > /tmp/result_[INS_ID].json <<'JSON'
     "creative_hypothesis": "...",
     "notes": "...",
     "voice_over": "spoken transcript, No voice over, or blank when speech is unverified",
+    "voice_over_timeline": [{"time":"0:00-0:04","voice_over":"..."}],
     "detected_angle": "raw detected angle before matching",
     "detected_persona": "raw detected persona before matching"
   },
   "brief": {
     "frame_by_frame": [ ... ],
     "voice_over": "spoken transcript, No voice over, or blank when speech is unverified",
+    "caption_transcript": "...",
+    "voice_over_timeline": [{"time":"0:00-0:04","voice_over":"..."}],
     "why_it_works": "...",
     "replication_brief": "...",
     "what_to_test": "...",
     "competitor_intel": "...",
     "our_next_ad": "...",
-    "next_ad_caption_plan": [
-      {"variation": "Variation 1 name", "intent": "...", "caption_sequence": [{"time":"0:00-0:03","caption":"..."}], "what_to_change": "...", "why_it_should_work": "..."},
-      {"variation": "Variation 2 name", "intent": "...", "caption_sequence": [{"time":"0:00-0:03","caption":"..."}], "what_to_change": "...", "why_it_should_work": "..."},
-      {"variation": "Variation 3 name", "intent": "...", "caption_sequence": [{"time":"0:00-0:03","caption":"..."}], "what_to_change": "...", "why_it_should_work": "..."}
+    "next_ad_scripts": [
+      {"variation": "Variation 1 name", "intent": "...", "hook_text": "...", "voice_over_script": "...", "caption_timeline": [{"time":"0:00-0:03","caption":"..."}], "visual_beats": [{"time":"0:00-0:03","visual":"..."}], "cta": "...", "what_to_change": "...", "why_it_should_work": "..."},
+      {"variation": "Variation 2 name", "intent": "...", "hook_text": "...", "voice_over_script": "...", "caption_timeline": [{"time":"0:00-0:03","caption":"..."}], "visual_beats": [{"time":"0:00-0:03","visual":"..."}], "cta": "...", "what_to_change": "...", "why_it_should_work": "..."},
+      {"variation": "Variation 3 name", "intent": "...", "hook_text": "...", "voice_over_script": "...", "caption_timeline": [{"time":"0:00-0:03","caption":"..."}], "visual_beats": [{"time":"0:00-0:03","visual":"..."}], "cta": "...", "what_to_change": "...", "why_it_should_work": "..."}
     ]
   }
 }
@@ -548,9 +558,13 @@ The dashboard's `applyClassificationResults` function expects these **camelCase*
 | `formatName` | first phrase of creative_usp before " — " |
 | `creativeHypothesis` | classification.creative_hypothesis |
 | `notes` | classification.notes |
+| `hookText` | metadata.hook_text OR classification.hook_text |
 | `bodyCopy` | metadata.body_copy_from_frames OR metadata.body_text |
+| `captionTranscript` | metadata.caption_transcript OR brief.caption_transcript |
 | `voiceOver` | classification.voice_over OR metadata.voice_over OR `"No voice over"` |
+| `voiceOverTimeline` | classification.voice_over_timeline OR metadata.voice_over_timeline OR brief.voice_over_timeline |
 | `captionTimeline` | metadata.caption_timeline OR brief.caption_timeline |
+| `nextAdScripts` | brief.next_ad_scripts |
 | `headline` | metadata.title |
 | `ctaText` | normalized CTA display text from metadata.cta_type when possible, else metadata.cta_text |
 | `landingUrl` | metadata.link_url |
@@ -583,6 +597,8 @@ md = result['metadata']
 cls = result['classification']
 
 brand = md.get('page_name') or md.get('brand') or ''
+hook_text = md.get('hook_text') or cls.get('hook_text') or ''
+caption_transcript = md.get('caption_transcript') or (result.get('brief') or {}).get('caption_transcript') or ''
 body_copy = md.get('body_copy_from_frames') or md.get('body_text') or ''
 voice_over = cls.get('voice_over') or md.get('voice_over') or (result.get('brief') or {}).get('voice_over') or ''
 if voice_over.strip().lower() in ('voice over present - transcript unavailable', 'voiceover present - transcript unavailable', 'transcript unavailable', 'n/a', 'na', 'none'):
@@ -635,9 +651,13 @@ patch = {
   'formatName': format_name,
   'creativeHypothesis': cls.get('creative_hypothesis') or '',
   'notes': cls.get('notes') or '',
+  'hookText': hook_text,
   'bodyCopy': body_copy,
+  'captionTranscript': caption_transcript,
   'voiceOver': voice_over,
+  'voiceOverTimeline': cls.get('voice_over_timeline') or md.get('voice_over_timeline') or (result.get('brief') or {}).get('voice_over_timeline') or [],
   'captionTimeline': md.get('caption_timeline') or (result.get('brief') or {}).get('caption_timeline') or [],
+  'nextAdScripts': (result.get('brief') or {}).get('next_ad_scripts') or [],
   'headline': md.get('title') or '',
   'ctaText': cta_text,
   'ctaType': cta_type,
@@ -791,9 +811,11 @@ The `content` field should be markdown with these 7 H2 sections — format match
 | Reference | [[source_url]]([source_url]) |
 
 **Ad Copy:** [body_text or "(not available)"]
+**Hook Text:** [hook_text or "(not available)"]
+[If `voice_over` is a real transcript or exactly `No voice over`, render `**Voice Over:** [voice_over]`. If `voice_over` is blank/unverified, omit the Voice Over line entirely.]
+**Caption Transcript:** [caption_transcript or "(not available)"]
 **Headline:** [title or "(not available)"]
 **CTA:** [cta_text or "(not available)"]
-[If `voice_over` is a real transcript or exactly `No voice over`, render `**Voice Over:** [voice_over]`. If `voice_over` is blank/unverified, omit the Voice Over line entirely.]
 
 **In one sentence:** [creative_hypothesis condensed to one sentence]
 * * *
@@ -801,8 +823,8 @@ The `content` field should be markdown with these 7 H2 sections — format match
 ## 2\. CREATIVE BREAKDOWN
 > _Strategist + Editor — frame by frame_
 
-| Time | Label | Caption | What Happens | Emotion Triggered |
-| ---| ---| ---| ---| --- |
+| Time | Label | Hook Text | Caption | Voice Over | What Happens | Emotion Triggered |
+| ---| ---| ---| ---| ---| ---| --- |
 [render each frame_by_frame row as table row]
 
 * * *
@@ -837,10 +859,10 @@ The `content` field should be markdown with these 7 H2 sections — format match
 [our_next_ad — include: What we're stealing, What we're doing differently, 3-line editor brief, Hypothesis]
 * * *
 
-## 8\. NEXT AD CAPTION PLAN
-> _Editor + Strategist — exact caption sequence_
+## 8\. NEXT AD SCRIPTS
+> _Editor + Strategist — three complete variation scripts_
 
-[next_ad_caption_plan — render exactly 3 variation ideas. For each variation include: variation name, strategic intent, exact caption sequence with timing/order, what to change from the inspiration, and why it should work.]
+[next_ad_scripts — render exactly 3 complete ad variation scripts. For each variation include: variation name, strategic intent, hook text, full voice-over script, caption timeline, visual beats, CTA, what to change from the inspiration, and why it should work.]
 ```
 
 ### 6d — Write the doc page URL back to `inspirations.data`

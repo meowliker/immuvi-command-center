@@ -2083,7 +2083,7 @@ The inspiration loader and product switch cache used the global `activeProductId
 ---
 
 ## Bug 50 — Inspiration briefs copied visible captions into Voice Over and localized platform CTAs
-**Status:** ✅ fixed locally 2026-08-08
+**Status:** ✅ fixed + tightened 2026-08-08
 **Reported:** 2026-08-08
 **Surface:** Inspiration classifier / ClickUp brief pages / Inspiration row data
 
@@ -2091,21 +2091,26 @@ The inspiration loader and product switch cache used the global `activeProductId
 - `KLS-INS-136` showed the same text under Visible Copy and Voice Over even though the opening hook caption was not spoken.
 - Facebook returned `cta_text` as Hindi (`अभी खरीदें`) while the platform CTA type was `SHOP_NOW`, so the brief showed a Hindi CTA for an English-facing ad.
 - Creative Breakdown did not show which visible caption was active during each time range.
+- A static top hook card (`Can your child answer this?`) was later mixed into the Caption column, while the changing bottom caption (`Children from wealthy families`) was omitted from the first beat.
+- The "next ad" output drifted into short caption ideas instead of full usable scripts.
 
 ### Root cause
-The classifier contract required `voice_over` but did not strictly forbid reconstructing it from visible captions when exact audio transcription was unavailable. It also stored raw platform `cta_text` without normalizing known CTA types, and the brief template had no dedicated caption column/timeline.
+The classifier contract required `voice_over` but did not strictly forbid reconstructing it from visible captions when exact audio transcription was unavailable. It also stored raw platform `cta_text` without normalizing known CTA types, and the brief template did not separate static hook overlays, changing captions/subtitles, and spoken audio strongly enough.
 
 ### Fix
 1. Voice Over must now be spoken audio only: exact transcript or `No voice over`. If speech exists but the words cannot be verified, the app stores that as internal status and omits the Voice Over line from the brief.
 2. CTA now normalizes from platform `cta_type` when available (`SHOP_NOW` → `Shop now`) and keeps non-English only for true custom creative CTAs.
-3. Creative Breakdown now uses `Time | Label | Caption | What Happens | Emotion Triggered`, with time ranges split when visible captions change.
-4. Briefs now include `## 8. NEXT AD CAPTION PLAN` with exactly three variation ideas, each with caption sequence, timing/order, what to change, and why it should work.
+3. Creative Breakdown now uses `Time | Label | Hook Text | Caption | Voice Over | What Happens | Emotion Triggered`, with time ranges split when visible captions change.
+4. Briefs now include `## 8. NEXT AD SCRIPTS` with exactly three complete variation scripts, each with hook text, voice-over script, caption timeline, visual beats, CTA, what to change, and why it should work.
 5. Inspiration-only detected angle/persona labels are locked locally and do not auto-create global Angle/Persona rows until intentionally mapped later.
 6. The live `KLS-INS-136` Supabase row and ClickUp brief page were repaired.
+7. Tightened follow-up: classifier now persists `hookText`, `captionTranscript`, `voiceOverTimeline`, and `nextAdScripts`; Creative Breakdown uses separate Hook Text / Caption / Voice Over columns; section 8 is now `NEXT AD SCRIPTS` with 3 complete variation scripts.
 
 ### Prevention
 - Never use visible overlay text as Voice Over unless it is clearly heard as speech/subtitles.
 - Never show an unavailable-transcript placeholder as if it were useful brief copy.
 - Persist caption timing separately from voice-over transcript.
+- Static hook cards belong in `hookText`; caption timelines are for changing bottom/active subtitles only.
+- Next-ad output must be complete scriptable variations, not single-line caption ideas.
 - Normalize platform CTA display from stable CTA type enums when the raw text is localized by the ad library/session.
 - Custom classifier-only angle/persona labels must stay scoped to the inspiration until a user intentionally promotes them.

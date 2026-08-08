@@ -1307,16 +1307,18 @@ class Worker:
             f"       hook_type, creative_structure, production_style, funnel_type,\n"
             f"       persona, angle, ad_type, brand, media_kind.\n"
             f"     media_kind is factual downloaded media, not marketing style. ad_type must agree: image=>Photo, carousel=>Carousel/Photo, video=>Video/UGC/VSL/AI Style.\n"
-            f"     Plus: body_copy, caption_timeline, creative_hypothesis, duration_seconds (best-effort), and voice_over when verifiable.\n"
-            f"     caption_timeline is MANDATORY: visible captions/overlays with time ranges, split whenever caption text changes.\n"
-            f"     voice_over is spoken narration only. Never copy standalone visible captions or hook text into voice_over. "
+            f"     Plus: hook_text, caption_transcript, caption_timeline, voice_over_timeline, creative_hypothesis, duration_seconds (best-effort), and voice_over when verifiable.\n"
+            f"     hook_text is the primary static hook overlay/card (for example a top bubble). Do not put static hook cards into caption_timeline.\n"
+            f"     caption_transcript is the full changing visible subtitle/caption transcript in reading order, excluding static hook cards and platform body copy.\n"
+            f"     caption_timeline is MANDATORY: changing visible captions/subtitles with time ranges, split whenever active caption text changes.\n"
+            f"     voice_over is spoken narration only, extracted from audio/transcription when audio is present. Never copy standalone visible captions or hook text into voice_over. "
             f"If there is no spoken narration, write exactly 'No voice over'. If speech is present but exact words cannot be verified, "
             f"leave voice_over blank and explain the uncertainty in notes; do not print an unavailable-transcript placeholder in the brief.\n"
             f"     CTA must be English display text when a platform cta_type is available (SHOP_NOW => Shop now); keep Hindi only for true custom Hindi creative CTA.\n"
             f"  5. Build the creative brief markdown. In the SNAPSHOT section, include "
-            f"a dedicated 'Voice Over' line only when there is a real transcript or exactly 'No voice over'; omit the line when speech is unverified. "
-            f"In CREATIVE BREAKDOWN, use columns Time | Label | Caption | What Happens | Emotion Triggered and split rows when captions change. "
-            f"Add section ## 8\\. NEXT AD CAPTION PLAN with exactly 3 variation ideas. Each variation must include exact captions, timing/order, what to change, and why it should work.\n"
+            f"dedicated lines for 'Hook Text', 'Voice Over', and 'Caption Transcript'. Include 'Voice Over' only when there is a real transcript or exactly 'No voice over'; omit the line when speech is unverified. "
+            f"In CREATIVE BREAKDOWN, use columns Time | Label | Hook Text | Caption | Voice Over | What Happens | Emotion Triggered and split rows when captions change. "
+            f"Add section ## 8\\. NEXT AD SCRIPTS with exactly 3 complete variation scripts. Each variation must include strategy, hook text, full voice-over script, caption timeline, visual beats, CTA, what to change, and why it should work.\n"
             f"  6. Create a ClickUp Doc page in the product's Inspiration Library doc with the brief. "
             f"Capture the doc page URL.\n\n"
             f"  7. *** MANDATORY DB WRITES — do NOT skip these *** \n"
@@ -1335,8 +1337,8 @@ class Worker:
             f"           - platform    = '{platform_hint}'\n"
             f"           - status      = 'Saved' (or 'Classified')\n"
             f"           - data        = JSONB blob with ALL of: hookType, creativeStructure, "
-            f"productionStyle, funnelStage, persona, angle, adType, brand, sourceUrl, bodyCopy, "
-            f"captionTimeline, creativeHypothesis, duration_seconds, mediaKind, voiceOver, _clickupDocPageUrl, _clickupDocId, classifiedAt, "
+            f"productionStyle, funnelStage, persona, angle, adType, brand, sourceUrl, hookText, bodyCopy, "
+            f"captionTranscript, captionTimeline, creativeHypothesis, duration_seconds, mediaKind, voiceOver, voiceOverTimeline, nextAdScripts, _clickupDocPageUrl, _clickupDocId, classifiedAt, "
             f"formatName, notes, detectedAngle, detectedPersona, _angleScope, _personaScope, _angleLocked, _personaLocked.\n"
             f"\n"
             f"     Use the Supabase REST API with the service-role key from $SUPABASE_SERVICE_ROLE_KEY "
@@ -1357,6 +1359,7 @@ class Worker:
             f"    data->>'funnelStage'       non-empty\n"
             f"    data->>'adType'            non-empty\n"
             f"    data->>'mediaKind'         non-empty\n"
+            f"    data->>'hookText'          non-empty when a static hook overlay/card exists\n"
             f"    data->>'captionTimeline'   non-empty JSON array for video/animated creatives with visible captions\n"
             f"  AND data->>'_clickupDocPageUrl' is non-empty.\n"
             f"  Also confirm data->>'adType' does not contradict data->>'mediaKind' "
@@ -1513,8 +1516,8 @@ class Worker:
             f"  4. Visually classify the WINNING variation (ALL 8 mandatory):\n"
             f"     hook_type, creative_structure, production_style, funnel_type,\n"
             f"     persona, angle, ad_type, brand. Plus body_copy, headline, cta,\n"
-            f"     caption_timeline, voice_over, creative_hypothesis, duration_seconds, frame_by_frame, why_it_works,\n"
-            f"     replication_brief, what_to_test, competitor_intel, our_next_ad, next_ad_caption_plan with exactly 3 variation ideas.\n"
+            f"     hook_text, caption_transcript, caption_timeline, voice_over, voice_over_timeline, creative_hypothesis, duration_seconds, frame_by_frame, why_it_works,\n"
+            f"     replication_brief, what_to_test, competitor_intel, our_next_ad, next_ad_scripts with exactly 3 complete variation scripts.\n"
             f"  5. Build the brief markdown using the EXACT SAME 7-section template as\n"
             f"     the /classify-inspiration skill (see ~/.claude/skills/classify-inspiration\n"
             f"     /SKILL.md Step 6 for the canonical template). The user has asked the\n"
@@ -1529,7 +1532,7 @@ class Worker:
             f"                              Decision, Reference=<drive_url>) + Ad Copy,\n"
             f"                              Headline, CTA + 'In one sentence' summary\n"
             f"       ## 2\\. CREATIVE BREAKDOWN   (frame-by-frame table split when captions change:\n"
-            f"                                    Time | Label | Caption | What Happens | Emotion Triggered)\n"
+            f"                                    Time | Label | Hook Text | Caption | Voice Over | What Happens | Emotion Triggered)\n"
             f"       ## 3\\. WHY IT WORKS  (bullets — the psychology that made THIS variant win)\n"
             f"       ## 4\\. REPLICATION BRIEF  (Talent, Set, Key overlay, Subtitle style,\n"
             f"                                  Pacing, Music, Mid-video, End card)\n"
@@ -1538,7 +1541,7 @@ class Worker:
             f"       ## 6\\. COMPETITOR INTEL  (how this winner positions us vs the category)\n"
             f"       ## 7\\. OUR NEXT AD  (3-line editor brief + hypothesis for the next variation\n"
             f"                            that builds on this winner)\n"
-            f"       ## 8\\. NEXT AD CAPTION PLAN  (exactly 3 variation ideas; each has captions + timing/order + what to change + why)\n"
+            f"       ## 8\\. NEXT AD SCRIPTS  (exactly 3 complete ad variation scripts; each has strategy, hook text, voice-over script, captions + timing/order, visual beats, CTA, what to change + why)\n"
             f"\n"
             f"     DO NOT use different headings or fewer sections — the user verified\n"
             f"     this. Every section must be present.\n"
@@ -1666,6 +1669,22 @@ class Worker:
                 return (False, f"inspirations row mediaKind/adType mismatch: {media_kind}/{ad_type}")
             if media_kind == "video" and ad_type in ("Photo", "Carousel"):
                 return (False, f"inspirations row mediaKind/adType mismatch: {media_kind}/{ad_type}")
+            next_scripts = data.get("nextAdScripts")
+            if not isinstance(next_scripts, list) or len(next_scripts) != 3:
+                return (False, "inspirations row missing exactly 3 nextAdScripts")
+            voice_over = str(data.get("voiceOver") or "").strip().lower()
+            if voice_over in (
+                "voice over present - transcript unavailable",
+                "voiceover present - transcript unavailable",
+                "transcript unavailable",
+            ):
+                return (False, "inspirations row contains an unavailable voice-over placeholder")
+            hook_text = str(data.get("hookText") or "").strip().lower()
+            captions = data.get("captionTimeline") or []
+            if hook_text and isinstance(captions, list) and captions:
+                first_caption = str((captions[0] or {}).get("caption") or "").strip().lower()
+                if first_caption and first_caption == hook_text:
+                    return (False, "inspirations row duplicated hookText as the first caption")
             return (True, "verified")
         except Exception as e:
             return (False, f"verify query failed: {e}")

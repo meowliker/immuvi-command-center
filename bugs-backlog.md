@@ -2113,5 +2113,6 @@ The classifier contract required `voice_over` but did not strictly forbid recons
 - Static hook cards belong in internal `hookText` and should render as a compact timing note outside the breakdown table.
 - Next-ad output must be complete scriptable variations, not single-line caption ideas.
 - Next-ad scripts must use tables: no separate loose Caption Timeline / Visual Beats bullet lists in section 8.
+- Next-ad scripts must sell OUR selected product/offer, not the competitor/inspiration product. Borrow the mechanic and pacing, never the competitor product promise.
 - Normalize platform CTA display from stable CTA type enums when the raw text is localized by the ad library/session.
 - Custom classifier-only angle/persona labels must stay scoped to the inspiration until a user intentionally promotes them.

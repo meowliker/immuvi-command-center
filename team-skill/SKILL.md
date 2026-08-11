@@ -403,7 +403,7 @@ REPLICATION_BRIEF: talent, set, key overlay, subtitle style, pacing, music, mid-
 WHAT_TO_TEST: 5 specific variation ideas (one line each: what changes + why)
 COMPETITOR_INTEL: brand scale, funnel strategy, our gap, compete or find lane
 OUR_NEXT_AD: what to steal, what to do differently, 3-bullet editor brief, hypothesis sentence
-NEXT_AD_SCRIPTS: exactly 3 complete next-ad variation scripts based on the inspiration. Each variation must include a name, strategic intent, hook text, full voice-over script, a timed script_breakdown table plan, CTA, what to change from the competitor, and why it should work.
+NEXT_AD_SCRIPTS: exactly 3 complete next-ad variation scripts for OUR selected product, not the inspiration/competitor product. Use the current product name and product config offer when available. Borrow only the inspiration's creative mechanic, pacing, emotional trigger, proof structure, and table format. Each variation must include a name, strategic intent, hook text, full voice-over script, a timed script_breakdown table plan, CTA, what to change from the competitor, and why it should work.
 ```
 
 ---
@@ -861,7 +861,7 @@ The `content` field should be markdown with these 7 H2 sections — format match
 ## 8\. NEXT AD SCRIPTS
 > _Editor + Strategist — three complete variation scripts_
 
-[next_ad_scripts — render exactly 3 complete ad variation scripts. For each variation render:
+[next_ad_scripts — render exactly 3 complete ad variation scripts for OUR selected product, not for the inspiration/competitor product. Use `[PRODUCT_NAME]` and its offer/config; borrow only the winning structure/mechanic from the inspiration. For each variation render:
 1. Variation heading
 2. Strategy Snapshot table: `Field | Direction` with Strategic intent, Hook Text, CTA, What to change, Why it should work
 3. Full `Voice-over Script` paragraph

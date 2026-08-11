@@ -2116,3 +2116,29 @@ The classifier contract required `voice_over` but did not strictly forbid recons
 - Next-ad scripts must sell OUR selected product/offer, not the competitor/inspiration product. Borrow the mechanic and pacing, never the competitor product promise.
 - Normalize platform CTA display from stable CTA type enums when the raw text is localized by the ad library/session.
 - Custom classifier-only angle/persona labels must stay scoped to the inspiration until a user intentionally promotes them.
+
+---
+
+## Bug 51 — Deleted app-created production tasks resurrected from live AD rows
+**Status:** ✅ fixed locally 2026-08-11
+**Reported:** 2026-08-11
+**Surface:** Action Plan delete / ClickUp delete / app-created production task heal
+
+### Symptom
+- A teammate deleted `13103 - V2 - CTA` from the app and then tried deleting the ClickUp task (`86d3z5ta9`), but the task appeared again.
+- Supabase still had the backing AD row `86d2qa5bm-V2` live (`deleted_at = null`) with the `app-created` marker and a manual action still linked to the ClickUp task.
+
+### Root cause
+The Action Plan delete fallback only looked up linked ads by `_clickupId`, not `clickupTaskId`, and when the linked AD was missing from the current tab's memory it removed only the manual action plus ClickUp task. It did not soft-delete the underlying AD row or write a durable `deleted_ads` tombstone. Later, the app-created heal/lazy-promotion logic saw a live `app-created` AD and recreated the Action Plan/production surface.
+
+### Fix
+1. Action Plan deletion now resolves linked ads by both `_clickupId` and `clickupTaskId`.
+2. If an action still has a source AD id but the AD is missing from memory, deletion still routes through `deleteAdEverywhere(sourceId)` so Supabase gets `ads.deleted_at` and `deleted_ads`.
+3. `deleteAdEverywhere()` now tombstones the ClickUp id from either `_clickupId`, `clickupTaskId`, or the linked manual action.
+4. Tombstone caches now track both app AD ids and ClickUp task ids, including soft-deleted AD rows.
+5. Save/import/lazy-heal/create-push paths now refuse to preserve, heal, or recreate rows whose AD id or ClickUp id is tombstoned.
+
+### Prevention
+- App-created heal must never be allowed to materialize a row unless both the AD id and ClickUp task id are clear of durable tombstones.
+- Delete paths must write the authoritative `ads.deleted_at` signal even when the current tab cannot resolve a full AD object.
+- Tombstone filtering must use ClickUp ids as first-class identifiers, because app-created production rows can temporarily lose their local AD linkage across tabs and sync cycles.

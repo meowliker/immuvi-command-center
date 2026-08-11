@@ -13197,7 +13197,8 @@ const DB = {
       _deletedAdIdsCacheProductId = productId;
     } catch (e) { console.warn('[SB] flush tombstone fetch failed (proceeding without filter)', e); }
     const _filteredStateAds = (state.ADS || []).filter(function (a) {
-      if (a && a.id && _flushTomb.has(a.id)) {
+      var _aCu = a && (a._clickupId || a.clickupTaskId);
+      if (a && a.id && (_flushTomb.has(a.id) || (_aCu && _deletedAdClickUpIdsCache && _deletedAdClickUpIdsCache.has(_aCu)))) {
         // Stale-memory resurrection blocked at the save boundary.
         // Also drop from in-memory ADS so the UI doesn't keep showing it.
         if (typeof ADS !== 'undefined' && Array.isArray(ADS)) {
@@ -13421,7 +13422,8 @@ const DB = {
           return false;
         }
         var srcId = ma.sourceAdId || ma.adId;
-        if (srcId && _flushTomb.has(srcId)) {
+        var maCu = ma._clickupId || ma.clickupTaskId;
+        if ((srcId && _flushTomb.has(srcId)) || (maCu && _deletedAdClickUpIdsCache && _deletedAdClickUpIdsCache.has(maCu))) {
           // Also drop from in-memory MANUAL_ACTIONS so the AP doesn't keep showing it.
           if (typeof MANUAL_ACTIONS !== 'undefined' && Array.isArray(MANUAL_ACTIONS)) {
             MANUAL_ACTIONS = MANUAL_ACTIONS.filter(function (x) { return x.id !== ma.id; });
@@ -15227,6 +15229,7 @@ function _nextFormatSerial(prefix) {
 // the upsert can never accidentally resurrect a soft-deleted row, AND by
 // _flushStateToSupabase to filter the upsert payload.
 var _deletedAdIdsCache = new Set();
+var _deletedAdClickUpIdsCache = new Set();
 var _deletedAdIdsCacheProductId = null;
 
 async function _refreshDeletedAdIdsCache(productId) {
@@ -15237,6 +15240,26 @@ async function _refreshDeletedAdIdsCache(productId) {
     _deletedAdIdsCache = union;
     _deletedAdIdsCacheProductId = productId;
   } catch (e) { console.warn('[deleted_ads cache] refresh failed', e); }
+}
+
+function _isDeletedAdTombstonedNow(probe) {
+  probe = probe || {};
+  var adid = probe.adid || probe.id || '';
+  var cuid = probe.cuid || probe.clickupTaskId || probe._clickupId || '';
+  var title = probe.title || '';
+  if (adid && _deletedAdIdsCache && _deletedAdIdsCache.has(adid)) return true;
+  if (cuid && _deletedAdClickUpIdsCache && _deletedAdClickUpIdsCache.has(cuid)) return true;
+  if (adid && _recentlyDeletedAdIds && _recentlyDeletedAdIds.has(adid)) return true;
+  try {
+    var local = JSON.parse(localStorage.getItem('_deletedCuIds_' + (activeProductId || 'x')) || '{}');
+    if (cuid && local[cuid] && (Date.now() - local[cuid]) < 600000) return true;
+    if (adid && local[adid] && (Date.now() - local[adid]) < 600000) return true;
+  } catch (e) {}
+  try {
+    if (typeof window._apIsTombstoned === 'function' &&
+        window._apIsTombstoned({ cuid: cuid, adid: adid, title: title })) return true;
+  } catch (e2) {}
+  return false;
 }
 
 // Bug 9 / 2026-05-08 regression guard:
@@ -15259,17 +15282,20 @@ async function _fetchAllDeletedAdIds(productId) {
   var tomb = null, dirty = null;
   try {
     var both = await Promise.all([
-      SB.from('deleted_ads').select('id').eq('product_id', productId),
-      SB.from('ads').select('id').eq('product_id', productId).not('deleted_at', 'is', null)
+      SB.from('deleted_ads').select('id,clickup_task_id').eq('product_id', productId),
+      SB.from('ads').select('id,clickup_task_id').eq('product_id', productId).not('deleted_at', 'is', null)
     ]);
     tomb = both[0]; dirty = both[1];
   } catch (e) {
     console.warn('[tombstone fetch] failed', e);
+    _deletedAdClickUpIdsCache = new Set();
     return new Set();
   }
   var union = new Set();
-  if (tomb && tomb.data)  tomb.data.forEach(function(r){ union.add(r.id); });
-  if (dirty && dirty.data) dirty.data.forEach(function(r){ union.add(r.id); });
+  var cuUnion = new Set();
+  if (tomb && tomb.data)  tomb.data.forEach(function(r){ union.add(r.id); if (r.clickup_task_id) cuUnion.add(r.clickup_task_id); });
+  if (dirty && dirty.data) dirty.data.forEach(function(r){ union.add(r.id); if (r.clickup_task_id) cuUnion.add(r.clickup_task_id); });
+  _deletedAdClickUpIdsCache = cuUnion;
 
   // Self-heal: any soft-deleted ad missing from deleted_ads gets a
   // tombstone written. Best-effort, non-blocking.
@@ -15281,7 +15307,7 @@ async function _fetchAllDeletedAdIds(productId) {
       try {
         SB.from('deleted_ads').upsert(
           orphans.map(function(r){
-            return { id: r.id, product_id: productId, deleted_by: 'self-heal' };
+            return { id: r.id, product_id: productId, clickup_task_id: r.clickup_task_id || null, deleted_by: 'self-heal' };
           }),
           { onConflict: 'id' }
         ).then(function(){
@@ -24932,8 +24958,17 @@ function deleteManualAction(id) {
   // the Creative Tracker / Matrix after sync. ────────────────────────────────
   if (!sourceAd && cuId) {
     for (var jj = 0; jj < ADS.length; jj++) {
-      if (ADS[jj]._clickupId === cuId) { sourceAd = ADS[jj]; break; }
+      if (ADS[jj]._clickupId === cuId || ADS[jj].clickupTaskId === cuId) { sourceAd = ADS[jj]; break; }
     }
+  }
+
+  // If the action still has a source id but that AD is not present in this
+  // tab's memory, delete by id anyway. deleteAdEverywhere writes the durable
+  // ads.deleted_at + deleted_ads tombstone, so a stale app-created AD cannot
+  // be lazily healed back into Action Plan on the next render/sync.
+  if (!sourceAd && sourceId) {
+    deleteAdEverywhere(sourceId);
+    return;
   }
 
   // ── No source AD anywhere: just remove action + ClickUp task ─────────────
@@ -25910,7 +25945,7 @@ async function deleteAdEverywhere(adId) {
 
   // Collect ClickUp task ID for this specific AD
   var cuIdsToDelete = [];
-  if (ad && ad._clickupId) cuIdsToDelete.push(ad._clickupId);
+  if (ad && (ad._clickupId || ad.clickupTaskId)) cuIdsToDelete.push(ad._clickupId || ad.clickupTaskId);
 
   // Collect ClickUp ID from any Action Plan entry tied to this AD
   for (var j = 0; j < MANUAL_ACTIONS.length; j++) {
@@ -25963,7 +25998,7 @@ async function deleteAdEverywhere(adId) {
       var _tombResp = await SB.from('deleted_ads').upsert({
         id: adId,
         product_id: activeProductId,
-        clickup_task_id: (ad && ad._clickupId) || null,
+        clickup_task_id: (ad && (ad._clickupId || ad.clickupTaskId)) || cuIdsToDelete[0] || null,
         deleted_at: _delAd_now,
         deleted_by: (CFG && CFG.userLabel) || 'unknown'
       }, { onConflict: 'id' });
@@ -25976,6 +26011,7 @@ async function deleteAdEverywhere(adId) {
     // Update in-memory tombstone cache so the next save's filter sees it
     // even if the periodic refresh hasn't fired yet.
     try { _deletedAdIdsCache.add(adId); } catch (_) {}
+    try { cuIdsToDelete.forEach(function (cuid) { if (cuid) _deletedAdClickUpIdsCache.add(cuid); }); } catch (_) {}
   }
 
   // Both Supabase writes committed. Now safe to clear local state.
@@ -27606,6 +27642,18 @@ function createClickUpTaskFromAction(actionId, onDone, sourceAdOverride) {
   if (sourceAd && typeof _hydrateAdFromDescriptionFields === 'function') {
     _hydrateAdFromDescriptionFields(sourceAd);
   }
+  if (typeof _isDeletedAdTombstonedNow === 'function') {
+    var _pushTombProbe = {
+      adid: (sourceAd && sourceAd.id) || act.sourceAdId || act.adId || '',
+      cuid: (sourceAd && (sourceAd._clickupId || sourceAd.clickupTaskId)) || act._clickupId || act.clickupTaskId || '',
+      title: (sourceAd && sourceAd.formatName) || act.title || ''
+    };
+    if (_isDeletedAdTombstonedNow(_pushTombProbe)) {
+      act._cu_creating = false;
+      toast('This task was deleted earlier, so it will not be recreated in ClickUp.', 'warn');
+      return;
+    }
+  }
   var pushIdentity = _resolveActionCellIdentityForPush(act, sourceAd);
 
   _oneScaleEnsureLaunchTaskFields(act, sourceAd, act.title);
@@ -29140,6 +29188,7 @@ async function importTasksFromClickUp(tasks) {
   var localByClickupId = {};
   for (var i = 0; i < ADS.length; i++) {
     var _cuid = ADS[i]._clickupId || ADS[i].clickupTaskId;
+    if (_isDeletedAdTombstonedNow({ adid: ADS[i].id, cuid: _cuid, title: ADS[i].formatName })) continue;
     if (_cuid && !localByClickupId[_cuid]) localByClickupId[_cuid] = ADS[i];
   }
 
@@ -29321,6 +29370,8 @@ async function importTasksFromClickUp(tasks) {
   // back in the fetch (`fetchedClickupIds[id]` false) and push it onto newAds.
   for (var i = 0; i < ADS.length; i++) {
     var localAd = ADS[i];
+    var localCu = localAd && (localAd._clickupId || localAd.clickupTaskId);
+    if (localAd && _isDeletedAdTombstonedNow({ adid: localAd.id, cuid: localCu, title: localAd.formatName })) continue;
     if (!localAd._clickupId) {
       newAds.push(localAd);
       if (localAd.angle && !seenAngles[localAd.angle])     seenAngles[localAd.angle]   = true;
@@ -30580,7 +30631,9 @@ function pollFullSync() {
           // this app, never random tracker imports / parent format tasks.
           // Bug 8 protection. See memory/feedback_bug8_orphan_protection.md.
           var _hasAppMarker = Array.isArray(ad._tags) && ad._tags.indexOf('app-created') !== -1;
-          if (!_alreadyLinked && !_isParent && !_isTombstoned && _hasAppMarker) {
+          var _isDurablyDeleted = (typeof _isDeletedAdTombstonedNow === 'function') &&
+                                  _isDeletedAdTombstonedNow({ adid: ad.id, cuid: ad._clickupId || ad.clickupTaskId, title: ad.formatName });
+          if (!_alreadyLinked && !_isParent && !_isTombstoned && !_isDurablyDeleted && _hasAppMarker) {
             if (apAdoptAdAsAction(ad, { reason: 'production tag detected during sync' })) changed = true;
           }
         }
@@ -32075,6 +32128,10 @@ function apResolveAllCards() {
         // only path that turns a virtual into an MA).
         if (Array.isArray(ad._tags) && ad._tags.indexOf('app-created') !== -1 &&
             typeof _lazyPromoteVirtual === 'function') {
+          if (typeof _isDeletedAdTombstonedNow === 'function' &&
+              _isDeletedAdTombstonedNow({ adid: ad.id, cuid: ad._clickupId || ad.clickupTaskId, title: ad.formatName })) {
+            continue;
+          }
           var newMaId = null;
           try { newMaId = _lazyPromoteVirtual(ad); } catch (e) { console.warn('[apResolve] lazy-promote failed', ad.id, e); }
           if (newMaId && typeof MANUAL_ACTIONS !== 'undefined') {
@@ -32440,6 +32497,10 @@ async function _apHealAutoAdoptedFromClickUpTag(opts) {
 // (no adopt markers) so the rose badge never appears on app-pushed tasks.
 function _lazyPromoteVirtual(ad) {
   if (!ad || !ad.id) return null;
+  if (typeof _isDeletedAdTombstonedNow === 'function' &&
+      _isDeletedAdTombstonedNow({ adid: ad.id, cuid: ad._clickupId || ad.clickupTaskId, title: ad.formatName })) {
+    return null;
+  }
   if (typeof MANUAL_ACTIONS !== 'undefined' && Array.isArray(MANUAL_ACTIONS)) {
     for (var i = 0; i < MANUAL_ACTIONS.length; i++) {
       var ma = MANUAL_ACTIONS[i];

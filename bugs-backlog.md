@@ -2142,3 +2142,29 @@ The Action Plan delete fallback only looked up linked ads by `_clickupId`, not `
 - App-created heal must never be allowed to materialize a row unless both the AD id and ClickUp task id are clear of durable tombstones.
 - Delete paths must write the authoritative `ads.deleted_at` signal even when the current tab cannot resolve a full AD object.
 - Tombstone filtering must use ClickUp ids as first-class identifiers, because app-created production rows can temporarily lose their local AD linkage across tabs and sync cycles.
+
+---
+
+## Bug 52 — ClickUp push failed on product lists without Command Center statuses
+**Status:** ✅ fixed locally 2026-08-13
+**Reported:** 2026-08-13
+**Surface:** Action Plan → push to ClickUp / product-specific ClickUp statuses
+
+### Symptom
+- Pushing a Kids Earnest JR Action Plan task to ClickUp failed with:
+  - `API Error 400: {"err":"Status not found","ECODE":"CRTSK_001"}`
+
+### Root cause
+ClickUp statuses are list-specific, but the app kept `CLICKUP_STATUSES` as a global cache. After using a production list that has statuses like `untested`, the push flow could switch to Kids Earnest JR and still send `status: "untested"` to its ClickUp list. That list only has `to do`, `review`, `in progress`, and `complete`, so ClickUp rejected the task create request.
+
+### Fix
+1. ClickUp status cache is now scoped to the active ClickUp list id.
+2. Product switch and boot fetch the target list statuses proactively.
+3. Create-time status resolution now only trusts statuses from the current list.
+4. If the exact local status is missing, the app maps to a safe list-native equivalent, such as `Untested → to do` and `In Production → in progress`.
+5. If no current-list statuses are confirmed, the app omits `status` from the create payload instead of sending an invalid value.
+
+### Prevention
+- Never send a ClickUp status name unless it has been validated against the destination list.
+- Status caches must be keyed by ClickUp list id, not global browser state.
+- Small product/store lists may use simple operational statuses; the app must gracefully map Command Center statuses into those lists.

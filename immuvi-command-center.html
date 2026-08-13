@@ -26984,17 +26984,49 @@ function _hydrateAdFromDescriptionFields(ad) {
   return ad;
 }
 
+function _clickUpStatusesMatchActiveList() {
+  var prod = (typeof getActiveProduct === 'function') ? getActiveProduct() : null;
+  var listId = prod && prod.clickupListId;
+  return !!(listId && typeof _cuStatusesListId !== 'undefined' && _cuStatusesListId === listId);
+}
+
 function _clickUpStatusNameForCreate(desired, fallback) {
   var wanted = String(desired || fallback || '').trim();
   if (!wanted) return '';
-  if (typeof CLICKUP_STATUSES !== 'undefined' && Array.isArray(CLICKUP_STATUSES)) {
+  if (typeof CLICKUP_STATUSES !== 'undefined' && Array.isArray(CLICKUP_STATUSES) &&
+      CLICKUP_STATUSES.length && _clickUpStatusesMatchActiveList()) {
     var lower = wanted.toLowerCase();
+    var byName = {};
     for (var i = 0; i < CLICKUP_STATUSES.length; i++) {
       var statusName = String((CLICKUP_STATUSES[i] && CLICKUP_STATUSES[i].status) || '').trim();
-      if (statusName && statusName.toLowerCase() === lower) return statusName;
+      if (!statusName) continue;
+      byName[statusName.toLowerCase()] = statusName;
+      if (statusName.toLowerCase() === lower) return statusName;
     }
+    var aliases = {
+      'untested': ['untested', 'to do', 'todo', 'open'],
+      'approved': ['approved', 'review', 'in progress', 'to do'],
+      'assigned': ['assigned', 'review', 'in progress', 'to do'],
+      'in production': ['in production', 'in progress', 'review', 'to do'],
+      'ready to launch': ['ready to launch', 'review', 'in progress', 'to do'],
+      'testing': ['testing', 'review', 'in progress', 'to do'],
+      'mild winner': ['mild winner', 'winner', 'review', 'in progress'],
+      'winner': ['winner', 'review', 'in progress'],
+      'loser': ['loser', 'complete', 'closed'],
+      'scale': ['scale', 'in progress', 'review'],
+      'complete': ['complete', 'done', 'closed']
+    };
+    var candidates = aliases[lower] || [lower];
+    for (var j = 0; j < candidates.length; j++) {
+      if (byName[candidates[j]]) return byName[candidates[j]];
+    }
+    for (var k = 0; k < CLICKUP_STATUSES.length; k++) {
+      var s = CLICKUP_STATUSES[k];
+      if (s && s.type === 'open' && s.status) return s.status;
+    }
+    return (CLICKUP_STATUSES[0] && CLICKUP_STATUSES[0].status) || '';
   }
-  return wanted;
+  return '';
 }
 
 function _clickUpStatusCandidates(status) {
@@ -27903,7 +27935,7 @@ function createClickUpTaskFromAction(actionId, onDone, sourceAdOverride) {
   var _initCuStatus = (typeof _clickUpStatusNameForCreate === 'function')
     ? _clickUpStatusNameForCreate(_desiredCuStatus, _desiredCuStatus)
     : _desiredCuStatus;
-  createPayload.status = _initCuStatus;
+  if (_initCuStatus) createPayload.status = _initCuStatus;
 
   apiCreateTask(listId, createPayload)
   .then(function(resp) {
@@ -31229,13 +31261,29 @@ function apAgeStateForRow(row) {
 // Dynamic ClickUp status list — pulled from the active product's list, cached.
 var CLICKUP_STATUSES = []; // [{ id, status (name), color, orderindex, type }]
 var _cuStatusesFetchedAt = 0;
-function _fetchCuStatuses(force) {
+var _cuStatusesListId = null;
+function _fetchCuStatuses(force, listIdOverride) {
   if (typeof apiFetch !== 'function') return Promise.resolve(CLICKUP_STATUSES);
   var prod = (typeof getActiveProduct === 'function') ? getActiveProduct() : null;
-  var listId = prod && prod.clickupListId;
+  var listId = listIdOverride || (prod && prod.clickupListId);
   if (!listId) return Promise.resolve(CLICKUP_STATUSES);
+  if (_cuStatusesListId !== listId) {
+    CLICKUP_STATUSES = [];
+    _cuStatusesFetchedAt = 0;
+    try {
+      var cached = localStorage.getItem('ap.cuStatuses.' + listId);
+      if (cached) {
+        var arr = JSON.parse(cached);
+        if (Array.isArray(arr) && arr.length) {
+          CLICKUP_STATUSES = arr;
+          _cuStatusesListId = listId;
+          _cuStatusesFetchedAt = Date.now();
+        }
+      }
+    } catch (e) {}
+  }
   // Cache for 60s unless `force` is true.
-  if (!force && CLICKUP_STATUSES.length && (Date.now() - _cuStatusesFetchedAt) < 60000) {
+  if (!force && CLICKUP_STATUSES.length && _cuStatusesListId === listId && (Date.now() - _cuStatusesFetchedAt) < 60000) {
     return Promise.resolve(CLICKUP_STATUSES);
   }
   return apiFetch('/list/' + listId).then(function (data) {
@@ -31247,11 +31295,14 @@ function _fetchCuStatuses(force) {
           orderindex: s.orderindex, type: s.type
         };
       });
+      _cuStatusesListId = listId;
       _cuStatusesFetchedAt = Date.now();
       try { localStorage.setItem('ap.cuStatuses.' + listId, JSON.stringify(CLICKUP_STATUSES)); } catch (e) {}
     }
     return CLICKUP_STATUSES;
-  }).catch(function () { return CLICKUP_STATUSES; });
+  }).catch(function () {
+    return (_cuStatusesListId === listId) ? CLICKUP_STATUSES : [];
+  });
 }
 
 // Hydrate from localStorage on boot so the filter has options before the
@@ -31262,7 +31313,14 @@ function _hydrateCuStatusesFromCache() {
   if (!listId) return;
   try {
     var raw = localStorage.getItem('ap.cuStatuses.' + listId);
-    if (raw) { var arr = JSON.parse(raw); if (Array.isArray(arr) && arr.length) CLICKUP_STATUSES = arr; }
+    if (raw) {
+      var arr = JSON.parse(raw);
+      if (Array.isArray(arr) && arr.length) {
+        CLICKUP_STATUSES = arr;
+        _cuStatusesListId = listId;
+        _cuStatusesFetchedAt = Date.now();
+      }
+    }
   } catch (e) {}
 }
 
@@ -33275,6 +33333,9 @@ async function switchProduct(productId) {
   // Auto-fetch field map for new product if API key is set
   if (CFG.key && prod.clickupListId && !getActiveFieldMap()) {
     fetchAndStoreFieldMap(prod.clickupListId);
+  }
+  if (CFG.key && prod.clickupListId && typeof _fetchCuStatuses === 'function') {
+    _fetchCuStatuses(true, prod.clickupListId);
   }
   // Run Action Plan v2 legacy backfill once per product (idempotent).
   // Adopts every pre-v2 production-tagged AD into MANUAL_ACTIONS so the
@@ -35328,6 +35389,9 @@ window.addEventListener('load', async function () {
     var ap = getActiveProduct();
     if (CFG.key && ap && ap.clickupListId && !getActiveFieldMap()) {
       fetchAndStoreFieldMap(ap.clickupListId);
+    }
+    if (CFG.key && ap && ap.clickupListId && typeof _fetchCuStatuses === 'function') {
+      _fetchCuStatuses(false, ap.clickupListId);
     }
   })();
 

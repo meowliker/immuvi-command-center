@@ -2168,3 +2168,36 @@ ClickUp statuses are list-specific, but the app kept `CLICKUP_STATUSES` as a glo
 - Never send a ClickUp status name unless it has been validated against the destination list.
 - Status caches must be keyed by ClickUp list id, not global browser state.
 - Small product/store lists may use simple operational statuses; the app must gracefully map Command Center statuses into those lists.
+
+---
+
+## Bug 53 — Kids Earnest JR ClickUp tasks created without standard custom fields
+**Status:** ✅ fixed locally + live ClickUp list repaired 2026-08-14
+**Reported:** 2026-08-14
+**Surface:** Action Plan → push to ClickUp / custom fields / product-specific lists
+
+### Symptom
+- New Kids Earnest JR tasks could be created in ClickUp, but the normal production fields did not appear or did not fill like other products.
+
+### Root cause
+There were two problems:
+1. The Kids Earnest JR ClickUp list was missing several standard fields used by other production lists, including Funnel Type, Photo/Video, Product, Inspiration Link, Drive Link, Notes, Approved Date, Launch Date, and Editor.
+2. The app's `CLICKUP_FIELD_META` registry was global browser state and mostly learned from synced task payloads. On a product/list switch, a fresh push could use stale field ids from another list or have no destination-list metadata yet, creating half-filled tasks.
+
+### Fix
+1. Added the missing standard fields to the live Kids Earnest JR ClickUp list.
+2. Field metadata is now cached by ClickUp list id, not globally.
+3. `fetchAndStoreFieldMap()` now installs the full destination-list field schema into `CLICKUP_FIELD_META`, not only the small app field map.
+4. Product switch and boot hydrate/fetch the current list's schema proactively.
+5. `createClickUpTaskFromAction()` now pauses and loads the destination field schema before creating a ClickUp task; if schema loading fails, it does not create an incomplete task.
+6. Create-time and post-create custom-field pushes only use metadata confirmed for the destination list.
+
+### Live repair / verification
+- Added missing standard fields to ClickUp list `901615425547` (`Kids Earnest Jr store`).
+- Created and deleted a temporary probe task in that list.
+- Verified ClickUp accepted non-empty values for Angle Tag, Persona Tag, Funnel Type, Photo/Video, Hook Type, Creative Structure, Production Style, Creative USP, Inspiration Link, Drive Link, Product, and Notes.
+
+### Prevention
+- ClickUp field ids must always be treated as list-scoped, even if many lists coincidentally share some field ids.
+- Never create a ClickUp production task before the target list's field schema is loaded.
+- New product lists must be checked for the standard field set before the team starts pushing production tasks.

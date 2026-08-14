@@ -27616,6 +27616,26 @@ function createClickUpTaskFromAction(actionId, onDone, sourceAdOverride) {
   var activeProd = getActiveProduct();
   var listId = activeProd && activeProd.clickupListId;
   if (!listId) { toast('Link a ClickUp list first', 'err'); return; }
+  var needsFieldSchema = !getActiveFieldMap() ||
+    !(typeof _clickUpFieldMetaMatchesList === 'function' && _clickUpFieldMetaMatchesList(listId));
+  if (needsFieldSchema) {
+    if (act._cu_fieldmap_loading) return;
+    act._cu_fieldmap_loading = true;
+    toast('Loading ClickUp fields for this product…', 'info');
+    fetchAndStoreFieldMap(listId).then(function (map) {
+      act._cu_fieldmap_loading = false;
+      if (!map || !Object.keys(map).length) {
+        toast('Could not load ClickUp fields for this list. Sync/setup fields first, then try again.', 'err');
+        return;
+      }
+      createClickUpTaskFromAction(actionId, onDone, sourceAdOverride);
+    }).catch(function (err) {
+      act._cu_fieldmap_loading = false;
+      console.warn('[ClickUp push] field schema load failed', err);
+      toast('Could not load ClickUp fields for this list. Try Sync, then push again.', 'err');
+    });
+    return;
+  }
   // Action-level in-flight lock — DOM disable alone isn't enough because the
   // Action Plan can re-render mid-fetch (saveState, auto-sync, realtime echo),
   // reviving an enabled button. This guard survives any re-render because
@@ -27777,7 +27797,8 @@ function createClickUpTaskFromAction(actionId, onDone, sourceAdOverride) {
   // CLICKUP_FIELD_META registry instead of a hardcoded 5-field allowlist.
   // This is what makes the matrix-cell modal edits actually land on the new
   // ClickUp task at create time (Editor was previously blank on creation).
-  if (sourceAd && typeof CLICKUP_FIELD_META !== 'undefined' && sourceAd._customFieldsRaw) {
+  if (sourceAd && typeof CLICKUP_FIELD_META !== 'undefined' && sourceAd._customFieldsRaw &&
+      (typeof _clickUpFieldMetaMatchesList !== 'function' || _clickUpFieldMetaMatchesList(listId))) {
     var seenIds = {};
     customFields.forEach(function (cf) { if (cf && cf.id) seenIds[cf.id] = true; });
     Object.keys(sourceAd._customFieldsRaw).forEach(function (lcName) {
@@ -28069,7 +28090,8 @@ function createClickUpTaskFromAction(actionId, onDone, sourceAdOverride) {
       // BEFORE +ClickUp actually land on the new task.
       // Editor (native assignees) is already handled via createPayload.assignees.
       try {
-        if (sourceAd && sourceAd._customFieldsRaw && typeof CLICKUP_FIELD_META !== 'undefined' && typeof _setTaskField === 'function') {
+        if (sourceAd && sourceAd._customFieldsRaw && typeof CLICKUP_FIELD_META !== 'undefined' && typeof _setTaskField === 'function' &&
+            (typeof _clickUpFieldMetaMatchesList !== 'function' || _clickUpFieldMetaMatchesList(listId))) {
           Object.keys(sourceAd._customFieldsRaw).forEach(function (lcName, idx) {
             var meta = CLICKUP_FIELD_META[lcName];
             if (!meta || !meta.fieldId) return;
@@ -28669,8 +28691,12 @@ function setupClickUpFields() {
 
 function fetchAndStoreFieldMap(listId) {
   if (!CFG.key || !listId || !activeProductId) return Promise.resolve();
+  var productIdForMap = activeProductId;
   return apiFetch('/list/' + listId + '/field').then(function(data) {
     var fields = (data && data.fields) ? data.fields : [];
+    if (typeof _installClickUpFieldSchemaFromList === 'function') {
+      _installClickUpFieldSchemaFromList(listId, fields);
+    }
     var map = {};
     // Field name → app key mapping
     var nameToKey = {
@@ -28738,7 +28764,7 @@ function fetchAndStoreFieldMap(listId) {
         map[appKey] = entry;
       }
     }
-    PRODUCT_FIELD_MAPS[activeProductId] = map;
+    PRODUCT_FIELD_MAPS[productIdForMap] = map;
     saveFieldMaps();
     // Auto-push any values that were pending because options didn't exist before
     setTimeout(flushPendingFieldPushes, 500);
@@ -30268,6 +30294,66 @@ if (typeof CLICKUP_FIELD_META === 'undefined') {
     return {};
   })();
 }
+var _cuFieldMetaListId = null;
+function _cuFieldSchemaKey(listId, kind) {
+  return 'tracker.cuField' + kind + '.' + (listId || 'default');
+}
+function _fieldMetaFromClickUpField(field) {
+  if (!field) return null;
+  var opts = (field.type_config && Array.isArray(field.type_config.options))
+    ? field.type_config.options.map(function (o) {
+        return { name: o.name, orderindex: o.orderindex, id: o.id, color: o.color || null };
+      })
+    : null;
+  return { fieldId: field.id, type: field.type, options: opts };
+}
+function _installClickUpFieldSchemaFromList(listId, fields) {
+  if (!listId || !Array.isArray(fields)) return;
+  var registry = {};
+  var meta = {};
+  fields.forEach(function (field) {
+    var name = String((field && field.name) || '').trim();
+    if (!name || !field.id) return;
+    var key = name.toLowerCase();
+    registry[key] = name;
+    meta[key] = _fieldMetaFromClickUpField(field);
+  });
+  // Native task assignees are the Editor fallback even on lists without a real
+  // Editor users field. If a real Editor field exists, it stays in meta above.
+  if (!meta.editor) {
+    registry.editor = registry.editor || 'Editor';
+    meta.editor = { fieldId: '__assignees__', type: 'users', options: null, _native: true };
+  }
+  CLICKUP_FIELD_REGISTRY = registry;
+  CLICKUP_FIELD_META = meta;
+  _cuFieldMetaListId = listId;
+  try {
+    localStorage.setItem(_cuFieldSchemaKey(listId, 'Registry'), JSON.stringify(CLICKUP_FIELD_REGISTRY));
+    localStorage.setItem(_cuFieldSchemaKey(listId, 'Meta'), JSON.stringify(CLICKUP_FIELD_META));
+    localStorage.setItem('tracker.cuFieldRegistry', JSON.stringify(CLICKUP_FIELD_REGISTRY));
+    localStorage.setItem('tracker.cuFieldMeta', JSON.stringify(CLICKUP_FIELD_META));
+  } catch (e) {}
+}
+function _hydrateCuFieldSchemaForList(listId) {
+  if (!listId) return false;
+  try {
+    var rawReg = localStorage.getItem(_cuFieldSchemaKey(listId, 'Registry'));
+    var rawMeta = localStorage.getItem(_cuFieldSchemaKey(listId, 'Meta'));
+    if (!rawReg || !rawMeta) return false;
+    var reg = JSON.parse(rawReg);
+    var meta = JSON.parse(rawMeta);
+    if (!reg || !meta || typeof reg !== 'object' || typeof meta !== 'object') return false;
+    CLICKUP_FIELD_REGISTRY = reg;
+    CLICKUP_FIELD_META = meta;
+    _cuFieldMetaListId = listId;
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+function _clickUpFieldMetaMatchesList(listId) {
+  return !!(listId && _cuFieldMetaListId === listId && CLICKUP_FIELD_META && Object.keys(CLICKUP_FIELD_META).length);
+}
 // Throttled write — registry is touched once per task during sync; coalesces
 // writes within a 500ms window so localStorage doesn't get slammed.
 var _cuRegSaveTimer = null;
@@ -30278,6 +30364,12 @@ function _saveCuFieldRegistry() {
     try {
       localStorage.setItem('tracker.cuFieldRegistry', JSON.stringify(CLICKUP_FIELD_REGISTRY));
       localStorage.setItem('tracker.cuFieldMeta',     JSON.stringify(CLICKUP_FIELD_META));
+      var prod = (typeof getActiveProduct === 'function') ? getActiveProduct() : null;
+      var listId = _cuFieldMetaListId || (prod && prod.clickupListId) || null;
+      if (listId) {
+        localStorage.setItem(_cuFieldSchemaKey(listId, 'Registry'), JSON.stringify(CLICKUP_FIELD_REGISTRY));
+        localStorage.setItem(_cuFieldSchemaKey(listId, 'Meta'), JSON.stringify(CLICKUP_FIELD_META));
+      }
     } catch (e) {}
   }, 500);
 }
@@ -33330,8 +33422,13 @@ async function switchProduct(productId) {
     var _swLbl = document.getElementById('statusLbl');
     if (_swLbl) _swLbl.textContent = prod.clickupListId ? 'Add API key to go live' : 'Link a ClickUp list to sync';
   }
-  // Auto-fetch field map for new product if API key is set
-  if (CFG.key && prod.clickupListId && !getActiveFieldMap()) {
+  if (prod.clickupListId && typeof _hydrateCuFieldSchemaForList === 'function') {
+    _hydrateCuFieldSchemaForList(prod.clickupListId);
+  }
+  // Auto-fetch field map/schema for new product if API key is set. Field ids
+  // are list-scoped, so refresh when switching even if this product has an old map.
+  if (CFG.key && prod.clickupListId &&
+      (!getActiveFieldMap() || !(typeof _clickUpFieldMetaMatchesList === 'function' && _clickUpFieldMetaMatchesList(prod.clickupListId)))) {
     fetchAndStoreFieldMap(prod.clickupListId);
   }
   if (CFG.key && prod.clickupListId && typeof _fetchCuStatuses === 'function') {
@@ -35387,7 +35484,11 @@ window.addEventListener('load', async function () {
   // Auto-fetch field map if we have API key + list but no stored map
   (function() {
     var ap = getActiveProduct();
-    if (CFG.key && ap && ap.clickupListId && !getActiveFieldMap()) {
+    if (ap && ap.clickupListId && typeof _hydrateCuFieldSchemaForList === 'function') {
+      _hydrateCuFieldSchemaForList(ap.clickupListId);
+    }
+    if (CFG.key && ap && ap.clickupListId &&
+        (!getActiveFieldMap() || !(typeof _clickUpFieldMetaMatchesList === 'function' && _clickUpFieldMetaMatchesList(ap.clickupListId)))) {
       fetchAndStoreFieldMap(ap.clickupListId);
     }
     if (CFG.key && ap && ap.clickupListId && typeof _fetchCuStatuses === 'function') {

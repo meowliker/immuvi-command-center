@@ -2263,3 +2263,33 @@ There was also an old worker process still running on `gp-mac-mini`; it marked t
 - Agent skills must be updated in every active agent home, not only the historical Claude path.
 - Worker health should expose a contract/version marker so stale daemons are visible from `worker_registry`.
 - Do not re-enable a classifier worker after a brief-contract fix until its heartbeat shows the expected worker contract.
+
+---
+
+## Bug 56 — Inspiration VO contract had no real audio transcription path
+**Status:** ✅ fixed locally 2026-08-17
+**Reported:** 2026-08-17
+**Surface:** Inspiration download/classification pipeline / Voice Over extraction / ClickUp brief tables
+
+### Symptom
+- `AT-INS-142` showed `Audio present; exact transcript not verified` repeatedly in the Creative Breakdown table.
+- The brief still had no real Voice Over line even though the ad had an audio track.
+
+### Root cause
+The inspiration skill asked the agent to provide `voice_over`, but the pipeline script only downloaded the video long enough to extract frames, then deleted it. It did not extract `audio.wav` or run any transcription step. The agent therefore could not verify spoken audio and filled the breakdown with an uncertainty placeholder.
+
+### Fix
+1. Inspiration pipeline now probes the video for an audio stream.
+2. For videos with audio, it extracts mono 16k WAV via ffmpeg.
+3. If the `whisper` Python package is available, it transcribes the WAV and writes:
+   - `metadata.voice_over`
+   - `metadata.voice_over_timeline`
+   - `metadata.audio_probe.transcript_source`
+4. If no audio exists, it writes exactly `No voice over`.
+5. If audio exists but transcription is unavailable or empty, it leaves `voice_over` blank and records uncertainty internally; it must not render placeholder text into the brief.
+6. Worker verification now rejects ClickUp pages containing unavailable-audio placeholders such as `Audio present; exact transcript not verified`.
+
+### Prevention
+- Any field that requires audio truth must be backed by an actual audio extraction/transcription step, not frame-only inference.
+- Brief tables must never show internal uncertainty placeholders as if they were creative copy.
+- Workers should fail and retry when the final ClickUp page contains placeholder text from a failed transcription path.

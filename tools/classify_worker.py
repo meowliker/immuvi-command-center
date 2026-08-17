@@ -1400,7 +1400,7 @@ class Worker:
             f"  2. Download the ad media (Playwright only for Facebook Ad Library; non-browser downloader chain for TikTok; yt-dlp/helper chain for IG/other video URLs).\n"
             f"     Never try to download TikTok through a browser UI. For ads.tiktok.com Creative Center/topads links, use the skill helper's Creative Center SSR signed-MP4 resolver.\n"
             f"     Record factual mediaKind/media_kind from the downloaded media: video, image, or carousel.\n"
-            f"  3. Extract frames + audio probe via ffmpeg.\n"
+            f"  3. Extract frames plus audio via ffmpeg. Run Whisper/local transcription when available and use that transcript as the only source for voice_over.\n"
             f"  4. Visually classify (ALL 9 are MANDATORY — none may be blank):\n"
             f"       hook_type, creative_structure, production_style, funnel_type,\n"
             f"       persona, angle, ad_type, brand, media_kind.\n"
@@ -1411,7 +1411,8 @@ class Worker:
             f"     caption_timeline is MANDATORY: changing visible captions/subtitles with time ranges, split whenever active caption text changes.\n"
             f"     voice_over is spoken narration only, extracted from audio/transcription when audio is present. Never copy standalone visible captions or hook text into voice_over. "
             f"If there is no spoken narration, write exactly 'No voice over'. If speech is present but exact words cannot be verified, "
-            f"leave voice_over blank and explain the uncertainty in notes; do not print an unavailable-transcript placeholder in the brief.\n"
+            f"leave voice_over blank and explain the uncertainty in notes; do not print an unavailable-transcript placeholder in the brief or frame table. "
+            f"Never write phrases like 'Audio present; exact transcript not verified' in Caption / Voice Over.\n"
             f"     CTA must be English display text when a platform cta_type is available (SHOP_NOW => Shop now); keep Hindi only for true custom Hindi creative CTA.\n"
             f"  5. Build the creative brief markdown. In the SNAPSHOT section, include "
             f"a full 'Voice Over' script line/paragraph before the table when there is a real transcript or exactly 'No voice over'; omit the line when speech is unverified. "
@@ -1823,6 +1824,17 @@ class Worker:
             return (False, f"ClickUp brief page unreadable: {e}")
         if not content.strip():
             return (False, "ClickUp brief page has empty content")
+        bad_placeholders = (
+            "audio present; exact transcript not verified",
+            "exact transcript not verified",
+            "voice over present - transcript unavailable",
+            "voiceover present - transcript unavailable",
+            "transcript unavailable",
+        )
+        lowered = content.lower()
+        for placeholder in bad_placeholders:
+            if placeholder in lowered:
+                return (False, f"ClickUp brief page contains unavailable-audio placeholder: {placeholder}")
         checks = {
             "creative breakdown Caption / Voice Over column": "Caption / Voice Over" in content,
             "section 8 NEXT AD SCRIPTS": bool(re.search(r"##\s*8\s*(?:\\\.)?\.?\s*NEXT AD SCRIPTS", content, re.I)),

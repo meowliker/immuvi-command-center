@@ -236,6 +236,70 @@ def get_duration(vp):
     except: pass
     return 0.0
 
+def _fmt_time(seconds):
+    try:
+        seconds = max(0, float(seconds))
+    except Exception:
+        seconds = 0
+    minutes = int(seconds // 60)
+    secs = int(round(seconds % 60))
+    return f"{minutes}:{secs:02d}"
+
+def transcribe_audio(wav_path):
+    try:
+        import whisper
+        model_name = os.environ.get("WHISPER_MODEL", "base")
+        model = whisper.load_model(model_name)
+        result = model.transcribe(wav_path, fp16=False, verbose=False)
+        segments = []
+        for seg in result.get("segments") or []:
+            text = (seg.get("text") or "").strip()
+            if not text:
+                continue
+            segments.append({
+                "time": f"{_fmt_time(seg.get('start', 0))}-{_fmt_time(seg.get('end', 0))}",
+                "voice_over": text,
+            })
+        transcript = " ".join(s["voice_over"] for s in segments).strip()
+        return transcript, segments, f"whisper:{model_name}" if transcript else f"whisper:{model_name}:empty"
+    except Exception as e:
+        return "", [], f"unavailable:{str(e)[:160]}"
+
+def probe_and_transcribe_audio(video_path, work_dir):
+    probe = {
+        "has_audio": False,
+        "has_voice": None,
+        "transcript_source": "",
+        "error": "",
+    }
+    try:
+        r = subprocess.run(
+            ["ffprobe", "-v", "quiet", "-print_format", "json", "-show_streams", video_path],
+            capture_output=True, text=True, timeout=20,
+        )
+        streams = json.loads(r.stdout or "{}").get("streams", [])
+        probe["has_audio"] = any(s.get("codec_type") == "audio" for s in streams)
+    except Exception as e:
+        probe["error"] = f"ffprobe:{str(e)[:120]}"
+    if not probe["has_audio"]:
+        probe["has_voice"] = False
+        return probe, "No voice over", []
+
+    wav = os.path.join(work_dir, "audio.wav")
+    try:
+        subprocess.run(
+            ["ffmpeg", "-y", "-i", video_path, "-vn", "-ac", "1", "-ar", "16000", "-f", "wav", wav],
+            capture_output=True, text=True, timeout=60, check=True,
+        )
+    except Exception as e:
+        probe["error"] = f"ffmpeg-audio:{str(e)[:120]}"
+        return probe, "", []
+
+    transcript, timeline, source = transcribe_audio(wav)
+    probe["transcript_source"] = source
+    probe["has_voice"] = bool(transcript) if transcript else None
+    return probe, transcript, timeline
+
 def download_ytdlp(url, outdir):
     os.makedirs(outdir, exist_ok=True)
     vp = os.path.join(outdir, "video.mp4")
@@ -250,6 +314,9 @@ platform = detect_platform(url)
 snapshot = {}
 frames = []
 duration = 0.0
+audio_probe = {"has_audio": False, "has_voice": False, "transcript_source": "", "error": ""}
+voice_over = "No voice over"
+voice_over_timeline = []
 
 try:
     if platform == "facebook":
@@ -262,6 +329,7 @@ try:
             download_video(video_url, vp)
             duration = get_duration(vp)
             frames = extract_frames(vp, work_dir)
+            audio_probe, voice_over, voice_over_timeline = probe_and_transcribe_audio(vp, work_dir)
             os.remove(vp)
         elif snapshot.get("image_url"):
             ip = os.path.join(work_dir, "frame_001.jpg")
@@ -289,6 +357,7 @@ try:
                 with urllib.request.urlopen(req, timeout=60) as r, open(vp,"wb") as f: f.write(r.read())
             duration = get_duration(vp)
             frames = extract_frames(vp, work_dir)
+            audio_probe, voice_over, voice_over_timeline = probe_and_transcribe_audio(vp, work_dir)
             os.remove(vp)
     elif platform == "instagram":
         # Instagram public media uses the shared robust chain:
@@ -316,6 +385,7 @@ try:
         vp = download_ytdlp(url, work_dir)
         duration = get_duration(vp)
         frames = extract_frames(vp, work_dir)
+        audio_probe, voice_over, voice_over_timeline = probe_and_transcribe_audio(vp, work_dir)
         os.remove(vp)
 
     result = {
@@ -329,6 +399,9 @@ try:
             "cta_type": snapshot.get("cta_type") or "",
             "link_url": snapshot.get("link_url") or snapshot.get("caption") or "",
             "ad_id": snapshot.get("ad_id",""),
+            "audio_probe": audio_probe,
+            "voice_over": voice_over,
+            "voice_over_timeline": voice_over_timeline,
         },
         "error": None
     }
@@ -361,7 +434,8 @@ Read each frame with the **Read tool** (up to 6 frames). You are a senior media 
 | body_copy_from_frames | Backward-compatible visible text summary. Prefer `hook_text + caption_transcript` only; do not use this as voice-over. |
 | caption_transcript | Full transcript of changing visible captions/subtitles in reading order. Exclude static hook cards, UI chrome, and platform ad copy. |
 | caption_timeline | Array of `{ "time": "0:00-0:03", "caption": "..." }` for every changing visible caption/subtitle. Split the time ranges whenever bottom/active caption text changes. Static hook cards belong in `hook_text`, not here. |
-| voice_over | Transcript of spoken voice-over/narration extracted from audio/transcription if present. Only include words you can attribute to spoken audio. Do not copy standalone hook text, overlays, or captions into this field. If there is no spoken voice-over, write exactly `No voice over`. If speech exists but the exact words cannot be verified, leave this blank and explain the uncertainty in `notes`; do not print an unavailable-transcript placeholder in the brief. |
+| audio_probe | Pipeline metadata showing whether an audio track exists and whether Whisper produced a transcript. Use this to decide `voice_over`; do not invent audio from frames. |
+| voice_over | Transcript of spoken voice-over/narration extracted from audio/transcription if present. Prefer `metadata.voice_over` from the pipeline because it is Whisper/audio-derived. Only include words you can attribute to spoken audio. Do not copy standalone hook text, overlays, or captions into this field. If there is no spoken voice-over, write exactly `No voice over`. If speech exists but the exact words cannot be verified, leave this blank and explain the uncertainty in `notes`; do not print an unavailable-transcript placeholder in the brief or frame table. |
 | voice_over_timeline | Array of `{ "time": "0:00-0:04", "voice_over": "..." }` from audio transcription segments when available. Empty array if no voice-over or transcript unavailable. |
 | page_name | From pipeline page_name metadata, or visually identified brand name if pipeline returned empty (Instagram/TikTok). **IMPORTANT:** dashboard reads `metadata.page_name` for the Brand column — always populate this field, even if the pipeline didn't. |
 | brand | Same value as page_name (human-readable alias) |
@@ -382,7 +456,7 @@ Read each frame with the **Read tool** (up to 6 frames). You are a senior media 
 **Also build the full 8-section brief data**:
 
 ```
-FRAME_BY_FRAME: timestamped breakdown with label (HOOK/TENSION/PROOF/BRIDGE/CTA) + one caption/voice-over line + what happens + emotion triggered. Time ranges should follow the spoken transcript when voice-over exists, and split only when a new creative beat starts.
+FRAME_BY_FRAME: timestamped breakdown with label (HOOK/TENSION/PROOF/BRIDGE/CTA) + one caption/voice-over line + what happens + emotion triggered. Time ranges should follow the spoken transcript when voice-over exists, and split only when a new creative beat starts. If the audio transcript is blank/unverified, use visible caption text or a concise visual beat in the Caption / Voice Over column; never write placeholders such as "audio present; exact transcript not verified".
 VOICE_OVER: the spoken voice-over transcript from audio or exactly "No voice over". Never reconstruct voice-over from visible captions unless they are clearly word-for-word subtitles for heard speech. If speech exists but the exact words cannot be verified, omit the Voice Over line from the brief and explain the uncertainty in notes.
 ON_SCREEN_TEXT_TIMING: compact note before the breakdown table for static hook cards or important overlay text that is not part of the spoken script.
 WHY_IT_WORKS: 4–5 psychological mechanisms in plain English

@@ -30,6 +30,7 @@ import re
 import shutil
 import subprocess
 import sys
+import sysconfig
 import urllib.parse
 import urllib.request
 from pathlib import Path
@@ -78,6 +79,33 @@ def decode_unicode(s: str) -> str:
     return result
 
 
+def _tool_command(binary: str, module: str = "") -> list[str]:
+    """Find CLI tools installed by brew, pip --user, or as Python modules."""
+    found = shutil.which(binary)
+    if found:
+        return [found]
+
+    candidates = [
+        os.path.expanduser(f"~/Library/Python/{sys.version_info.major}.{sys.version_info.minor}/bin/{binary}"),
+        os.path.expanduser(f"~/.local/bin/{binary}"),
+        os.path.join(sysconfig.get_path("scripts") or "", binary),
+        f"/opt/homebrew/bin/{binary}",
+        f"/usr/local/bin/{binary}",
+    ]
+    for path in candidates:
+        if path and os.path.exists(path) and os.access(path, os.X_OK):
+            return [path]
+
+    if module:
+        try:
+            __import__(module)
+            return [sys.executable, "-m", module]
+        except Exception:
+            pass
+
+    raise RuntimeError(f"{binary} not installed")
+
+
 # ── TikTok: non-browser media download chain ─────────────────────────────────
 def _download_url(url: str, dest: str, referer: str = "") -> None:
     if shutil.which("curl"):
@@ -106,12 +134,9 @@ def _download_url(url: str, dest: str, referer: str = "") -> None:
 
 
 def _tiktok_download_ytdlp(url: str, work_dir: str, cookies: bool) -> str:
-    if not shutil.which("yt-dlp"):
-        raise RuntimeError("yt-dlp not installed")
-
     out = os.path.join(work_dir, "_tiktok.%(ext)s")
     cmd = [
-        "yt-dlp",
+        *_tool_command("yt-dlp", "yt_dlp"),
         "--quiet",
         "--no-warnings",
         "--no-playlist",
@@ -360,10 +385,6 @@ def download_tiktok_media(url: str, work_dir: str) -> dict:
         pass
 
     frames = extract_frames(raw_path, work_dir)
-    try:
-        os.remove(raw_path)
-    except OSError:
-        pass
 
     author = meta.get("author") or {}
     page_name = author.get("unique_id") or author.get("nickname") or ""
@@ -381,6 +402,7 @@ def download_tiktok_media(url: str, work_dir: str) -> dict:
         },
         "via": via,
         "is_video": True,
+        "media_path": raw_path,
     }
 
 
@@ -431,21 +453,19 @@ def fetch_instagram_og(url: str) -> dict:
 
 
 def _ig_download_gallery_dl(url: str, work_dir: str) -> tuple[str, str]:
-    if not shutil.which("gallery-dl"):
-        raise RuntimeError("gallery-dl not installed")
-
     tmp = os.path.join(work_dir, "_ig_gallery_dl")
     shutil.rmtree(tmp, ignore_errors=True)
     os.makedirs(tmp, exist_ok=True)
+    gallery_dl = _tool_command("gallery-dl", "gallery_dl")
 
     last_err = ""
-    for browser in ("chrome", "firefox", "brave", "edge", "safari"):
+    for browser in ("chrome", "safari"):
         try:
             r = subprocess.run(
-                ["gallery-dl", "--cookies-from-browser", browser, "-d", tmp, "--no-mtime", "-q", url],
+                [*gallery_dl, "--cookies-from-browser", browser, "-d", tmp, "--no-mtime", "-q", url],
                 capture_output=True,
                 text=True,
-                timeout=90,
+                timeout=35,
             )
             if r.returncode != 0:
                 last_err = (r.stderr or r.stdout or f"{browser} cookies failed").strip()
@@ -464,6 +484,35 @@ def _ig_download_gallery_dl(url: str, work_dir: str) -> tuple[str, str]:
             last_err = str(e)
 
     raise RuntimeError("gallery-dl: no usable Instagram media" + (f" ({last_err})" if last_err else ""))
+
+
+def _ig_download_ytdlp(url: str, work_dir: str) -> tuple[str, str]:
+    out = os.path.join(work_dir, "_ig_ytdlp.%(ext)s")
+    cmd = [
+        *_tool_command("yt-dlp", "yt_dlp"),
+        "--quiet",
+        "--no-warnings",
+        "--no-playlist",
+        "-f",
+        "bv*[ext=mp4]+ba[ext=m4a]/b[ext=mp4]/mp4/best",
+        "-o",
+        out,
+        url,
+    ]
+    r = subprocess.run(cmd, capture_output=True, text=True, timeout=150)
+    if r.returncode != 0:
+        err = (r.stderr or r.stdout or "unknown yt-dlp failure").strip().splitlines()
+        raise RuntimeError(err[-1] if err else "unknown yt-dlp failure")
+    for filename in sorted(os.listdir(work_dir)):
+        if not filename.startswith("_ig_ytdlp."):
+            continue
+        path = os.path.join(work_dir, filename)
+        if os.path.getsize(path) <= 500:
+            continue
+        ext = filename.lower().rsplit(".", 1)[-1]
+        kind = "video" if ext in ("mp4", "mov", "webm", "m4v") else "image"
+        return path, kind
+    raise RuntimeError("yt-dlp finished but no Instagram media file was written")
 
 
 def _ig_download_snapinsta(url: str, work_dir: str) -> tuple[str, str]:
@@ -566,6 +615,7 @@ def download_instagram_media(url: str, work_dir: str) -> dict:
     kind = ""
     via = ""
     chain = (
+        ("yt-dlp", lambda: _ig_download_ytdlp(url, work_dir)),
         ("gallery-dl", lambda: _ig_download_gallery_dl(url, work_dir)),
         ("snapinsta", lambda: _ig_download_snapinsta(url, work_dir)),
         ("og", lambda: _ig_download_og(url, work_dir, og)),
@@ -589,15 +639,13 @@ def download_instagram_media(url: str, work_dir: str) -> dict:
     duration = _ig_get_duration(final_path) if kind == "video" else 0.0
     if kind == "video":
         frames = extract_frames(final_path, work_dir)
-        try:
-            os.remove(final_path)
-        except OSError:
-            pass
+        media_path = final_path
     else:
         frame_path = os.path.join(work_dir, "frame_001.jpg")
         if os.path.abspath(final_path) != os.path.abspath(frame_path):
             shutil.move(final_path, frame_path)
         frames = [frame_path]
+        media_path = ""
 
     return {
         "frames": frames,
@@ -613,6 +661,7 @@ def download_instagram_media(url: str, work_dir: str) -> dict:
         },
         "via": via,
         "is_video": kind == "video",
+        "media_path": media_path,
     }
 
 

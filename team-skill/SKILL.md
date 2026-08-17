@@ -369,6 +369,8 @@ try:
         snapshot = ig["metadata"]
         frames = ig["frames"]
         duration = ig["duration"]
+        if ig.get("media_path"):
+            audio_probe, voice_over, voice_over_timeline = probe_and_transcribe_audio(ig["media_path"], work_dir)
         print(f"[instagram] downloaded via {ig['via']} ({len(frames)} frame(s))", file=sys.stderr)
     elif platform == "tiktok":
         # Do not use browser automation for TikTok downloads. TikTok's web UI
@@ -380,6 +382,8 @@ try:
         snapshot = tt["metadata"]
         frames = tt["frames"]
         duration = tt["duration"]
+        if tt.get("media_path"):
+            audio_probe, voice_over, voice_over_timeline = probe_and_transcribe_audio(tt["media_path"], work_dir)
         print(f"[tiktok] downloaded via {tt['via']} ({len(frames)} frame(s))", file=sys.stderr)
     else:
         vp = download_ytdlp(url, work_dir)
@@ -435,7 +439,7 @@ Read each frame with the **Read tool** (up to 6 frames). You are a senior media 
 | caption_transcript | Full transcript of changing visible captions/subtitles in reading order. Exclude static hook cards, UI chrome, and platform ad copy. |
 | caption_timeline | Array of `{ "time": "0:00-0:03", "caption": "..." }` for every changing visible caption/subtitle. Split the time ranges whenever bottom/active caption text changes. Static hook cards belong in `hook_text`, not here. |
 | audio_probe | Pipeline metadata showing whether an audio track exists and whether Whisper produced a transcript. Use this to decide `voice_over`; do not invent audio from frames. |
-| voice_over | Transcript of spoken voice-over/narration extracted from audio/transcription if present. Prefer `metadata.voice_over` from the pipeline because it is Whisper/audio-derived. Only include words you can attribute to spoken audio. Do not copy standalone hook text, overlays, or captions into this field. If there is no spoken voice-over, write exactly `No voice over`. If speech exists but the exact words cannot be verified, leave this blank and explain the uncertainty in `notes`; do not print an unavailable-transcript placeholder in the brief or frame table. |
+| voice_over | Transcript of spoken voice-over/narration extracted from audio/transcription if present. Prefer `metadata.voice_over` from the pipeline because it is Whisper/audio-derived. Only include words you can attribute to spoken audio. Do not copy standalone hook text, overlays, or captions into this field. If there is no spoken voice-over, write exactly `No voice over`. If video speech exists but the exact words cannot be verified, leave this blank, explain the uncertainty in `notes`, and treat the item as not ready to mark OK; do not print an unavailable-transcript placeholder in the brief or frame table. |
 | voice_over_timeline | Array of `{ "time": "0:00-0:04", "voice_over": "..." }` from audio transcription segments when available. Empty array if no voice-over or transcript unavailable. |
 | page_name | From pipeline page_name metadata, or visually identified brand name if pipeline returned empty (Instagram/TikTok). **IMPORTANT:** dashboard reads `metadata.page_name` for the Brand column — always populate this field, even if the pipeline didn't. |
 | brand | Same value as page_name (human-readable alias) |
@@ -457,7 +461,7 @@ Read each frame with the **Read tool** (up to 6 frames). You are a senior media 
 
 ```
 FRAME_BY_FRAME: timestamped breakdown with label (HOOK/TENSION/PROOF/BRIDGE/CTA) + one caption/voice-over line + what happens + emotion triggered. Time ranges should follow the spoken transcript when voice-over exists, and split only when a new creative beat starts. If the audio transcript is blank/unverified, use visible caption text or a concise visual beat in the Caption / Voice Over column; never write placeholders such as "audio present; exact transcript not verified".
-VOICE_OVER: the spoken voice-over transcript from audio or exactly "No voice over". Never reconstruct voice-over from visible captions unless they are clearly word-for-word subtitles for heard speech. If speech exists but the exact words cannot be verified, omit the Voice Over line from the brief and explain the uncertainty in notes.
+VOICE_OVER: the spoken voice-over transcript from audio or exactly "No voice over". Never reconstruct voice-over from visible captions unless they are clearly word-for-word subtitles for heard speech. If video speech exists but the exact words cannot be verified, do not mark the item OK; omit the Voice Over line from the brief and explain the uncertainty in notes so the worker can fail/retry instead of publishing a bad brief.
 ON_SCREEN_TEXT_TIMING: compact note before the breakdown table for static hook cards or important overlay text that is not part of the spoken script.
 WHY_IT_WORKS: 4–5 psychological mechanisms in plain English
 REPLICATION_BRIEF: talent, set, key overlay, subtitle style, pacing, music, mid-video, end card

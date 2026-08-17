@@ -2293,3 +2293,38 @@ The inspiration skill asked the agent to provide `voice_over`, but the pipeline 
 - Any field that requires audio truth must be backed by an actual audio extraction/transcription step, not frame-only inference.
 - Brief tables must never show internal uncertainty placeholders as if they were creative copy.
 - Workers should fail and retry when the final ClickUp page contains placeholder text from a failed transcription path.
+
+---
+
+## Bug 57 — Instagram/TikTok inspiration helpers skipped the VO transcription path
+**Status:** ✅ fixed locally 2026-08-17
+**Reported:** 2026-08-17
+**Surface:** Instagram/TikTok inspiration classification / Voice Over extraction / all products
+
+### Symptom
+- `KLS-INS-138` was an Instagram inspiration with audio, but its ClickUp brief rendered `Voice Over: Audio track present; exact transcript unavailable on this worker. Visible captions are captured below.`
+- The row was still marked `classified`, so the incomplete brief looked done in the dashboard.
+
+### Root Cause
+Bug 56 added real audio probing/transcription for the main downloaded-video path, but the Instagram and TikTok branches use helper functions. Those helpers extracted frames and then either deleted the downloaded video or returned only frame paths. The pipeline therefore had no `media_path` to pass into `probe_and_transcribe_audio()` for Instagram/TikTok, leaving `audioProbe` empty and `voiceOver` blank or placeholder-driven.
+
+`KLS-INS-138` exposed a second Instagram-specific failure: `gallery-dl` and `yt-dlp` were installed in the Python user-bin directory, but that directory was not on PATH. The helper skipped those non-browser tools, fell into the Snapinsta browser fallback, and returned only a preview image/no audio. Direct `yt-dlp` could fetch the 45.5s MP4 with audio, but it needed longer than the old short test window.
+
+### Fix
+1. `download_instagram_media()` and `download_tiktok_media()` now keep the downloaded video for the duration of the temp work directory and return `media_path` for video posts.
+2. The skill pipeline now runs `probe_and_transcribe_audio()` for Instagram/TikTok helpers when `media_path` is present.
+3. Helper tool resolution now finds `yt-dlp` / `gallery-dl` from PATH, Python user-bin, common brew paths, or Python modules.
+4. Instagram downloads now try direct `yt-dlp` before browser-cookie/gallery and Snapinsta fallbacks, with enough timeout for Reels that spend time checking accessibility before downloading video+audio.
+5. Worker verification now rejects video rows with blank `voiceOver`; a video brief must have either a real transcript or exactly `No voice over`.
+6. Worker verification now rejects both stored rows and final ClickUp pages that contain stricter unavailable-audio placeholder variants, including:
+   - `exact transcript unavailable`
+   - `unavailable on this worker`
+   - `visible captions are captured below`
+7. `KLS-INS-138` was repaired live with a Whisper transcript from the actual MP4, 25 voice-over timeline segments, and a verified ClickUp brief page.
+
+### Prevention
+- Any new platform helper must return the downloaded video path when the media is a video, not just extracted frames.
+- Audio verification must be tested per platform branch: Facebook Ads Library, direct CDN, Instagram, TikTok, and generic yt-dlp.
+- Worker environments must resolve user-installed CLI tools, not only tools exposed on PATH.
+- Blank `voiceOver` is not acceptable for video inspirations; use a real transcript or `No voice over`, otherwise fail/retry.
+- Stale workers must remain disabled until their heartbeat exposes the current `worker_contract`.

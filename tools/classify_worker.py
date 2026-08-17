@@ -1773,6 +1773,9 @@ class Worker:
                 return (False, f"inspirations row mediaKind/adType mismatch: {media_kind}/{ad_type}")
             if media_kind == "video" and ad_type in ("Photo", "Carousel"):
                 return (False, f"inspirations row mediaKind/adType mismatch: {media_kind}/{ad_type}")
+            voice_over = str(data.get("voiceOver") or "").strip().lower()
+            if media_kind == "video" and not voice_over:
+                return (False, "video inspiration row has blank voiceOver")
             next_scripts = data.get("nextAdScripts")
             if not isinstance(next_scripts, list) or len(next_scripts) != 3:
                 return (False, "inspirations row missing exactly 3 nextAdScripts")
@@ -1780,12 +1783,17 @@ class Worker:
                 rows = (script or {}).get("script_breakdown") or (script or {}).get("scriptBreakdown")
                 if not isinstance(rows, list) or not rows:
                     return (False, f"inspirations row nextAdScripts[{idx}] missing script_breakdown rows")
-            voice_over = str(data.get("voiceOver") or "").strip().lower()
-            if voice_over in (
+            bad_voice_over_fragments = (
+                "audio present; exact transcript not verified",
+                "exact transcript not verified",
+                "exact transcript unavailable",
+                "unavailable on this worker",
+                "visible captions are captured below",
                 "voice over present - transcript unavailable",
                 "voiceover present - transcript unavailable",
                 "transcript unavailable",
-            ):
+            )
+            if any(fragment in voice_over for fragment in bad_voice_over_fragments):
                 return (False, "inspirations row contains an unavailable voice-over placeholder")
             hook_text = str(data.get("hookText") or "").strip().lower()
             captions = data.get("captionTimeline") or []
@@ -1836,6 +1844,9 @@ class Worker:
         bad_placeholders = (
             "audio present; exact transcript not verified",
             "exact transcript not verified",
+            "exact transcript unavailable",
+            "unavailable on this worker",
+            "visible captions are captured below",
             "voice over present - transcript unavailable",
             "voiceover present - transcript unavailable",
             "transcript unavailable",

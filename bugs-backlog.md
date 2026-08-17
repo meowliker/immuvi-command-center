@@ -2232,3 +2232,34 @@ The worker prompt and skill contract had been updated to require the 8-section b
 - A queue row must not be marked `classified` unless the final ClickUp page contains the same deliverables promised by the stored structured data.
 - Brief-format changes must update the prompt, skill template, stored data mapping, and worker verification together.
 - Cross-product recovery must be queue-based and product-agnostic so fixes do not only cover the product used as the test case.
+
+---
+
+## Bug 55 — Codex-only classifier kept using stale 7-section skill instructions
+**Status:** ✅ fixed locally 2026-08-17
+**Reported:** 2026-08-17
+**Surface:** Mac mini classifier worker / Codex skill home / inspiration brief generation
+
+### Symptom
+- `AT-INS-142` was requeued after Bug 54, but the Mac mini classified it again with no persisted `voiceOver`, no `nextAdScripts`, and a ClickUp page that still stopped at Section 7.
+- The page showed placeholder-like breakdown text such as `Audio present; exact transcript not verified` instead of a real voice-over script, `No voice over`, or a clean omission.
+
+### Root cause
+The Mac mini worker runs Codex, not Claude. The classify skill's Step 0 auto-update only refreshed `~/.claude/skills/classify-inspiration`, while Codex loaded its local instructions from `~/.codex/skills/classify-inspiration`. That left Codex executing stale 7-section skill instructions even after the deployed skill and worker prompt required the 8-section brief.
+
+There was also an old worker process still running on `gp-mac-mini`; it marked the row `classified` and left `claimed_by` set, proving it had not picked up the stricter worker contract yet.
+
+### Fix
+1. Worker now syncs `SKILL.md` and `fb_ad_classifier.py` from the deployed `team-skill` bundle into both:
+   - `~/.codex/skills/classify-inspiration`
+   - `~/.claude/skills/classify-inspiration`
+   before launching any classifier or variation-brief agent.
+2. Skill Step 0 now refreshes both Codex and Claude skill homes, and its reload instructions point agents to their active skill home.
+3. The embedded pipeline helper now searches both Codex and Claude skill dirs for `fb_ad_classifier.py`.
+4. Worker capabilities now expose `worker_contract = inspiration-brief-8-section-page-verified` so we can see when a worker has restarted onto the fixed code.
+5. `gp-mac-mini` was paused in `worker_registry` while the stale worker issue was being corrected so it could not keep claiming jobs and producing incomplete briefs.
+
+### Prevention
+- Agent skills must be updated in every active agent home, not only the historical Claude path.
+- Worker health should expose a contract/version marker so stale daemons are visible from `worker_registry`.
+- Do not re-enable a classifier worker after a brief-contract fix until its heartbeat shows the expected worker contract.

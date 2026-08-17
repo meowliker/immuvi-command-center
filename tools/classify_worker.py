@@ -122,6 +122,14 @@ WORKER_UPDATE_TOOLS_BASE_URL = os.environ.get(
         else WORKER_UPDATE_BASE_URL + "/tools"
     ),
 ).rstrip("/")
+CLASSIFY_SKILL_ASSET_BASE = os.environ.get(
+    "CLASSIFY_SKILL_ASSET_BASE",
+    "https://immuvi-command-center.vercel.app/team-skill",
+).rstrip("/")
+CLASSIFY_SKILL_DIRS = (
+    Path.home() / ".claude" / "skills" / "classify-inspiration",
+    Path.home() / ".codex" / "skills" / "classify-inspiration",
+)
 
 # Each entry is (Vercel URL path → local file path relative to project root).
 # Use rel_path="__self__" for the worker file so a process launched from a
@@ -210,7 +218,39 @@ def probe_capabilities() -> dict:
         "python_version": platform.python_version(),
         "claude_code_version": _safe_run(["claude", "--version"]),
         "codex": _resolve_codex_bin() is not None,
+        "worker_contract": "inspiration-brief-8-section-page-verified",
     }
+
+
+def sync_classify_skill_files() -> None:
+    """Keep Claude and Codex local skill folders on the deployed version.
+
+    The Mac mini runs Codex, while older workers ran Claude. The skill's old
+    self-update block only refreshed ~/.claude, so Codex could keep executing a
+    stale 7-section SKILL.md even after the worker prompt required Section 8.
+    Sync both homes before launching any agent process.
+    """
+    for skill_dir in CLASSIFY_SKILL_DIRS:
+        try:
+            skill_dir.mkdir(parents=True, exist_ok=True)
+        except Exception as e:
+            log(f"[skill-sync] could not create {skill_dir}: {e}")
+            continue
+        for name in ("SKILL.md", "fb_ad_classifier.py"):
+            dest = skill_dir / name
+            url = f"{CLASSIFY_SKILL_ASSET_BASE}/{name}"
+            try:
+                req = urllib.request.Request(url, headers={"User-Agent": "immuvi-classify-worker"})
+                with urllib.request.urlopen(req, timeout=15) as resp:
+                    body = resp.read()
+                if dest.exists() and dest.read_bytes() == body:
+                    continue
+                tmp = dest.with_suffix(dest.suffix + ".tmp")
+                tmp.write_bytes(body)
+                tmp.replace(dest)
+                log(f"[skill-sync] updated {dest}")
+            except Exception as e:
+                log(f"[skill-sync] could not update {dest}: {e}")
 
 
 # ── Agent-CLI dispatcher (claude OR codex, whichever is installed) ─────
@@ -1339,6 +1379,8 @@ class Worker:
         if not ins_id or not product_id or not url:
             return {"success": False, "error": "queue row missing ins_id/product_id/url"}
 
+        sync_classify_skill_files()
+
         # The classify-inspiration skill is the one that processes
         # inspiration_queue rows. The worker prompt is INTENTIONALLY explicit
         # about every required DB write — earlier loose phrasings caused the
@@ -1527,6 +1569,8 @@ class Worker:
         drive_file_id = job.get("drive_file_id")
         drive_url     = f"https://drive.google.com/file/d/{drive_file_id}/view"
 
+        sync_classify_skill_files()
+
         parent = ctx.get("parent_ad") or {}
         target = ctx.get("target_ad") or {}
         parent_name = parent.get("format_name") or parent_ad_id
@@ -1578,7 +1622,7 @@ class Worker:
             f"     hook_text, caption_transcript, caption_timeline, voice_over, voice_over_timeline, creative_hypothesis, duration_seconds, frame_by_frame, why_it_works,\n"
             f"     replication_brief, what_to_test, competitor_intel, our_next_ad, next_ad_scripts with exactly 3 complete variation scripts for OUR selected product, each including script_breakdown rows.\n"
             f"  5. Build the brief markdown using the EXACT SAME 8-section template as\n"
-            f"     the /classify-inspiration skill (see ~/.claude/skills/classify-inspiration\n"
+            f"     the /classify-inspiration skill (see the active agent skill home: ~/.codex/skills/classify-inspiration or ~/.claude/skills/classify-inspiration\n"
             f"     /SKILL.md Step 6 for the canonical template). The user has asked the\n"
             f"     winner briefs to look identical to inspiration briefs so they render\n"
             f"     consistently inside the same ClickUp doc. Reuse the exact section\n"

@@ -12,54 +12,37 @@ This skill reads the queue and writes results directly to Supabase — no more l
 - **System:** `ffmpeg`, `yt-dlp` (`brew install ffmpeg yt-dlp`)
 - **Python:** `psycopg2-binary`, `requests`, `playwright` (`pip3 install --user`) and `python3 -m playwright install chromium`
 - **Env file:** `~/.classify-inspiration.env` with `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_DB_URL`, `SUPABASE_DB_PASSWORD`
-- **Bundled:** `fb_ad_classifier.py` must sit next to this `SKILL.md` in `~/.claude/skills/classify-inspiration/`
+- **Bundled:** `fb_ad_classifier.py` must sit next to this `SKILL.md` in the active agent skill directory (`~/.codex/skills/classify-inspiration/` for Codex, `~/.claude/skills/classify-inspiration/` for Claude).
 
 ---
 
 ## Step 0 — Auto-update (always run this first) + hot-reload on change
 
-Silently refresh the skill files from origin using HTTP ETags — unchanged files are a 304 Not Modified (zero bytes transferred, ~90ms). When the origin has a newer `SKILL.md`, the script prints a single sentinel line: `SKILL_UPDATED_RELOAD_NOW`. **If you (the agent) see that sentinel in the output, stop following these in-context instructions immediately and Read `~/.claude/skills/classify-inspiration/SKILL.md` with the Read tool — then follow THAT freshly-downloaded version for the rest of this run. This eliminates the one-run lag so every SKILL.md change applies on the same run it was published.** (`fb_ad_classifier.py` is re-imported every run anyway, so Python changes take effect immediately with no reload needed.)
+Silently refresh the skill files from origin into both Codex and Claude skill homes. When the origin has a newer `SKILL.md`, the script prints a single sentinel line: `SKILL_UPDATED_RELOAD_NOW`. **If you (the agent) see that sentinel in the output, stop following these in-context instructions immediately and Read the refreshed `SKILL.md` from your active agent home (`~/.codex/skills/classify-inspiration/SKILL.md` for Codex, `~/.claude/skills/classify-inspiration/SKILL.md` for Claude) — then follow THAT freshly-downloaded version for the rest of this run. This eliminates the one-run lag so every SKILL.md change applies on the same run it was published.** (`fb_ad_classifier.py` is re-imported every run anyway, so Python changes take effect immediately with no reload needed.)
 
 ```bash
-SKILL_DIR="$HOME/.claude/skills/classify-inspiration"
 ASSET_BASE="https://immuvi-command-center.vercel.app/team-skill"
 SKILL_MD_UPDATED=0
+SKILL_DIRS="$HOME/.codex/skills/classify-inspiration $HOME/.claude/skills/classify-inspiration"
 
 for f in SKILL.md fb_ad_classifier.py; do
-  file_path="$SKILL_DIR/$f"
-  etag_path="$SKILL_DIR/.$f.etag"
-  tmp_body="$SKILL_DIR/.$f.body.tmp"
-  tmp_head="$SKILL_DIR/.$f.head.tmp"
-
-  inm_args=()
-  if [ -f "$file_path" ] && [ -s "$etag_path" ]; then
-    inm_args=(-H "If-None-Match: $(cat "$etag_path")")
-  fi
-
-  http=$(curl -sS --max-time 10 "${inm_args[@]}" -D "$tmp_head" -o "$tmp_body" \
-    -w "%{http_code}" "$ASSET_BASE/$f" 2>/dev/null) || http=""
-
-  case "$http" in
-    200)
-      # Only count as "changed" if the new body actually differs from what's on disk.
-      # Protects against the rare case where origin re-hashed but content is identical.
-      if [ ! -f "$file_path" ] || ! cmp -s "$tmp_body" "$file_path"; then
-        mv "$tmp_body" "$file_path"
-        [ "$f" = "SKILL.md" ] && SKILL_MD_UPDATED=1
-      else
-        rm -f "$tmp_body"
-      fi
-      new_etag=$(awk -F': ' 'tolower($1)=="etag"{gsub(/\r/,"",$2); e=$2} END{print e}' "$tmp_head")
-      [ -n "$new_etag" ] && printf '%s' "$new_etag" > "$etag_path"
-      ;;
-    304|*) rm -f "$tmp_body" ;;
-  esac
-  rm -f "$tmp_head"
+  tmp_body="/tmp/classify-inspiration.$f.body.$$"
+  http=$(curl -sS --max-time 10 -o "$tmp_body" -w "%{http_code}" "$ASSET_BASE/$f" 2>/dev/null) || http=""
+  [ "$http" = "200" ] || { rm -f "$tmp_body"; continue; }
+  for SKILL_DIR in $SKILL_DIRS; do
+    mkdir -p "$SKILL_DIR"
+    file_path="$SKILL_DIR/$f"
+    if [ ! -f "$file_path" ] || ! cmp -s "$tmp_body" "$file_path"; then
+      cp "$tmp_body" "$file_path"
+      [ "$f" = "SKILL.md" ] && SKILL_MD_UPDATED=1
+    fi
+  done
+  rm -f "$tmp_body"
 done
 
 if [ "$SKILL_MD_UPDATED" = "1" ]; then
   echo "SKILL_UPDATED_RELOAD_NOW"
-  echo "[skill-update] A newer SKILL.md was downloaded to $SKILL_DIR/SKILL.md — reload it now before continuing."
+  echo "[skill-update] A newer SKILL.md was downloaded to Codex/Claude skill homes — reload the active agent copy before continuing."
 fi
 ```
 
@@ -67,7 +50,7 @@ Fails silently on network errors and continues with the on-disk copy.
 
 **Agent reload protocol when you see `SKILL_UPDATED_RELOAD_NOW`:**
 
-1. Call `Read` on `~/.claude/skills/classify-inspiration/SKILL.md` (the full file — no offset/limit).
+1. Call `Read` on the refreshed active-agent copy: `~/.codex/skills/classify-inspiration/SKILL.md` for Codex or `~/.claude/skills/classify-inspiration/SKILL.md` for Claude (the full file — no offset/limit).
 2. Discard the version of the instructions currently in your context from Steps 1–8; follow the freshly-read file end-to-end instead.
 3. Do not re-run Step 0 after the reload (it just ran — no ETag drift in the same second).
 4. Continue from Step 1 of the newly-read instructions.
@@ -228,8 +211,12 @@ Same Python script as before — downloads the video/image, extracts frames, ret
 ```python
 import asyncio, json, os, re, shutil, subprocess, sys, urllib.request
 
-_SKILL_DIR = os.path.expanduser('~/.claude/skills/classify-inspiration')
-if _SKILL_DIR not in sys.path: sys.path.insert(0, _SKILL_DIR)
+for _SKILL_DIR in (
+    os.path.expanduser('~/.codex/skills/classify-inspiration'),
+    os.path.expanduser('~/.claude/skills/classify-inspiration'),
+):
+    if os.path.isdir(_SKILL_DIR) and _SKILL_DIR not in sys.path:
+        sys.path.insert(0, _SKILL_DIR)
 from fb_ad_classifier import fetch_ad_snapshot, download_instagram_media, download_tiktok_media, download_video, extract_frames, extract_ad_id, decode_unicode, USER_AGENT, OUTPUT_BASE
 
 def detect_platform(url):

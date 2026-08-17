@@ -2222,7 +2222,7 @@ The worker prompt and skill contract had been updated to require the 8-section b
 2. Worker verification now fetches the final ClickUp doc page and requires:
    - `Caption / Voice Over` in the creative breakdown.
    - `## 8. NEXT AD SCRIPTS`.
-   - `Strategy Snapshot`, `Voice-over Script`, and `Script Breakdown`.
+   - The next-ad strategy table, `Voice-over Script`, and the timed script-breakdown table. Literal `Strategy Snapshot` / `Script Breakdown` headings are preferred, but the exact tables are accepted.
    - Three numbered variations.
    - A rendered `Voice Over` line whenever `voiceOver` is present in Supabase.
 3. The worker now periodically audits product-agnostic `classified` queue rows and requeues any row whose stored data or ClickUp page fails the same verification contract.

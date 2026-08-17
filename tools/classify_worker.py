@@ -1814,14 +1814,23 @@ class Worker:
         api_key = self.env.get("CLICKUP_API_KEY")
         if not api_key:
             return (False, "CLICKUP_API_KEY unavailable for brief page verification")
-        try:
-            url = f"https://api.clickup.com/api/v3/workspaces/9016762494/docs/{urllib.parse.quote(doc_id)}/pages/{urllib.parse.quote(page_id)}"
-            req = urllib.request.Request(url, headers={"Authorization": api_key})
-            with urllib.request.urlopen(req, timeout=20) as resp:
-                payload = json.loads(resp.read().decode("utf-8"))
-            content = str((payload or {}).get("content") or "")
-        except Exception as e:
-            return (False, f"ClickUp brief page unreadable: {e}")
+        url = f"https://api.clickup.com/api/v3/workspaces/9016762494/docs/{urllib.parse.quote(doc_id)}/pages/{urllib.parse.quote(page_id)}"
+        last_error = None
+        content = ""
+        for attempt in range(3):
+            try:
+                req = urllib.request.Request(url, headers={"Authorization": api_key})
+                with urllib.request.urlopen(req, timeout=20) as resp:
+                    payload = json.loads(resp.read().decode("utf-8"))
+                content = str((payload or {}).get("content") or "")
+                last_error = None
+                break
+            except Exception as e:
+                last_error = e
+                if attempt < 2:
+                    time.sleep(2 * (attempt + 1))
+        if last_error is not None:
+            return (False, f"ClickUp brief page unreadable: {last_error}")
         if not content.strip():
             return (False, "ClickUp brief page has empty content")
         bad_placeholders = (
@@ -1835,12 +1844,22 @@ class Worker:
         for placeholder in bad_placeholders:
             if placeholder in lowered:
                 return (False, f"ClickUp brief page contains unavailable-audio placeholder: {placeholder}")
+        has_strategy_snapshot = (
+            "Strategy Snapshot" in content
+            or "| Field | Direction |" in content
+            or "| Field | Direction |" in content.replace("\\|", "|")
+        )
+        has_script_breakdown = (
+            "Script Breakdown" in content
+            or "| Time | Label | Caption / Voice Over | Visual Beat | Editor Notes |" in content
+            or "| Time | Label | Caption / Voice Over | Visual Beat | Editor Notes |" in content.replace("\\|", "|")
+        )
         checks = {
             "creative breakdown Caption / Voice Over column": "Caption / Voice Over" in content,
             "section 8 NEXT AD SCRIPTS": bool(re.search(r"##\s*8\s*(?:\\\.)?\.?\s*NEXT AD SCRIPTS", content, re.I)),
-            "Strategy Snapshot": "Strategy Snapshot" in content,
+            "Strategy Snapshot table": has_strategy_snapshot,
             "Voice-over Script": bool(re.search(r"Voice[- ]over Script", content, re.I)),
-            "Script Breakdown": "Script Breakdown" in content,
+            "Script Breakdown table": has_script_breakdown,
         }
         missing = [label for label, ok in checks.items() if not ok]
         if missing:

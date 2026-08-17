@@ -1,6 +1,6 @@
 ---
 name: classify-inspiration
-description: Classify competitor ad URLs for the Immuvi Command Center. Reads pending items from the Supabase `inspiration_queue` table, downloads video/frames, classifies using Claude vision, creates ClickUp doc pages with 7-section creative briefs, writes results to Supabase `inspiration_results`. Bridge/localhost/JSON files are deprecated as of April 2026.
+description: Classify competitor ad URLs for the Immuvi Command Center. Reads pending items from the Supabase `inspiration_queue` table, downloads video/frames, classifies using Claude vision, creates ClickUp doc pages with 8-section creative briefs, writes results to Supabase `inspiration_results`. Bridge/localhost/JSON files are deprecated as of April 2026.
 ---
 
 # Classify Inspiration Skill (Supabase-native)
@@ -695,7 +695,7 @@ The dashboard sees this within 1–2 s via its realtime subscription on `public.
 
 ---
 
-## Step 6 — Create or UPDATE ClickUp Doc Page (7-section brief)
+## Step 6 — Create or UPDATE ClickUp Doc Page (8-section brief)
 
 Uses the `doc_id` from `products.config->>'doc_id'` (pulled in Step 1). **IMPORTANT:** always list existing pages first. If a page already starts with `[INS_ID]` (same ins_id, regardless of old/stale title), UPDATE it instead of creating a duplicate.
 
@@ -781,13 +781,13 @@ Use `clickup_list_document_pages` MCP tool with `document_id = [DOC_ID]`. Scan r
 - `name`: `[INS_ID] — [Brand] | [Angle]`
 - `sub_title`: `[Platform] · [Duration]s · [Funnel] · [Hook Type] hook`
 - `content_format`: `text/md`
-- `content`: the full 7-section markdown (see template below)
+- `content`: the full 8-section markdown (see template below)
 
 **If no existing page:** call `clickup_create_document_page` with the same fields (use `document_id` + no `page_id`).
 
-### 6c — 7-section page content template
+### 6c — 8-section page content template
 
-The `content` field should be markdown with these 7 H2 sections — format matches existing pages in the doc for consistency:
+The `content` field should be markdown with these 8 H2 sections — format matches existing pages in the doc for consistency:
 
 ```markdown
 # [INS_ID] — [Brand] | [Angle]

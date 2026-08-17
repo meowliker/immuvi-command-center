@@ -2201,3 +2201,34 @@ There were two problems:
 - ClickUp field ids must always be treated as list-scoped, even if many lists coincidentally share some field ids.
 - Never create a ClickUp production task before the target list's field schema is loaded.
 - New product lists must be checked for the standard field set before the team starts pushing production tasks.
+
+---
+
+## Bug 54 — Inspiration jobs marked classified with incomplete 8-section briefs
+**Status:** ✅ fixed locally 2026-08-17
+**Reported:** 2026-08-17
+**Surface:** Inspiration classifier / ClickUp brief pages / all products
+
+### Symptom
+- A newly-added inspiration, for example `AT-INS-142`, created a ClickUp brief page but stopped at `OUR NEXT AD`.
+- The page did not include the Voice Over line and did not include `NEXT AD SCRIPTS` with three product-specific scripts.
+- Similar incomplete classified rows existed across several products, not only the product used during the earlier KLS brief-format test.
+
+### Root cause
+The worker prompt and skill contract had been updated to require the 8-section brief, but the worker success gate still trusted the agent once the Supabase row had basic classification fields. It did not read the final ClickUp page and verify that the user-facing deliverable contained the combined `Caption / Voice Over` breakdown and Section 8 script tables. Some skill instructions also still used stale "7-section" wording, which made it easier for the agent to stop at Section 7.
+
+### Fix
+1. Worker verification now rejects inspiration rows unless `nextAdScripts` contains exactly three scripts and each script has timed breakdown rows.
+2. Worker verification now fetches the final ClickUp doc page and requires:
+   - `Caption / Voice Over` in the creative breakdown.
+   - `## 8. NEXT AD SCRIPTS`.
+   - `Strategy Snapshot`, `Voice-over Script`, and `Script Breakdown`.
+   - Three numbered variations.
+   - A rendered `Voice Over` line whenever `voiceOver` is present in Supabase.
+3. The worker now periodically audits product-agnostic `classified` queue rows and requeues any row whose stored data or ClickUp page fails the same verification contract.
+4. Skill and worker wording now consistently says "8-section brief" instead of the stale "7-section" label.
+
+### Prevention
+- A queue row must not be marked `classified` unless the final ClickUp page contains the same deliverables promised by the stored structured data.
+- Brief-format changes must update the prompt, skill template, stored data mapping, and worker verification together.
+- Cross-product recovery must be queue-based and product-agnostic so fixes do not only cover the product used as the test case.

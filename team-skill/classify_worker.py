@@ -78,6 +78,8 @@ PRODUCER_REQUIRE_PREFERRED_WORKER = os.environ.get("PRODUCER_REQUIRE_PREFERRED_W
 CLASSIFY_MAX_CONCURRENCY = int(os.environ.get("CLASSIFY_MAX_CONCURRENCY", "3"))
 CLASSIFY_RATE_LIMIT_COOLDOWN_SECONDS = int(os.environ.get("CLASSIFY_RATE_LIMIT_COOLDOWN_SECONDS", "300"))
 CLASSIFY_AGENT_INFRA_COOLDOWN_SECONDS = int(os.environ.get("CLASSIFY_AGENT_INFRA_COOLDOWN_SECONDS", "600"))
+INCOMPLETE_CLASSIFIED_AUDIT_INTERVAL_SECONDS = int(os.environ.get("INCOMPLETE_CLASSIFIED_AUDIT_INTERVAL_SECONDS", "600"))
+INCOMPLETE_CLASSIFIED_AUDIT_LIMIT = int(os.environ.get("INCOMPLETE_CLASSIFIED_AUDIT_LIMIT", "120"))
 MAX_ATTEMPTS_BEFORE_FAILED = 3
 AUTO_PAUSE_CHECK_INTERVAL_SECONDS = 60
 
@@ -551,6 +553,7 @@ class Worker:
         # rate-limit signal in claude stderr/stdout.
         self._claude_cooldown_until = 0.0
         self._agent_infra_cooldown_until = 0.0
+        self._last_incomplete_classified_audit_at = 0.0
         # Wire signal handlers for graceful shutdown
         for sig in (signal.SIGINT, signal.SIGTERM):
             signal.signal(sig, self._on_signal)
@@ -687,6 +690,59 @@ class Worker:
             )
         except Exception as e:
             log(f"producer stale-run sweep failed (non-fatal): {e}")
+
+    def requeue_incomplete_classified_jobs(self):
+        """Find rows marked classified whose delivered brief is incomplete.
+
+        A prior worker version only verified dashboard fields, so some jobs
+        were marked classified even though the ClickUp page missed required
+        brief deliverables such as Voice Over or Section 8 next-ad scripts.
+        Keep this audit product-agnostic: every product's classified queue row
+        must pass the same _verify_inspirations_row contract.
+        """
+        now = time.time()
+        if now - self._last_incomplete_classified_audit_at < INCOMPLETE_CLASSIFIED_AUDIT_INTERVAL_SECONDS:
+            return
+        self._last_incomplete_classified_audit_at = now
+        try:
+            rows = self.sb.select(
+                "inspiration_queue",
+                "select=id,ins_id,product_id,status,attempts,processed_at"
+                "&status=eq.classified"
+                "&order=processed_at.desc.nullslast"
+                f"&limit={INCOMPLETE_CLASSIFIED_AUDIT_LIMIT}",
+            )
+        except Exception as e:
+            log(f"incomplete-classified audit failed to select rows: {e}")
+            return
+        requeued = 0
+        for row in rows:
+            ins_id = row.get("ins_id")
+            product_id = row.get("product_id")
+            job_id = row.get("id")
+            if not ins_id or not product_id or not job_id:
+                continue
+            ok, msg = self._verify_inspirations_row(ins_id, product_id)
+            if ok:
+                continue
+            try:
+                self.sb.update(
+                    "inspiration_queue",
+                    f"id=eq.{urllib.parse.quote(str(job_id))}&status=eq.classified",
+                    {
+                        "status": "pending",
+                        "processed_at": None,
+                        "claimed_by": None,
+                        "claimed_at": None,
+                        "error_message": f"auto-requeued: incomplete classified brief: {msg}"[:500],
+                    },
+                )
+                requeued += 1
+                log(f"[{job_id}] requeued incomplete classified inspiration {ins_id}: {msg}")
+            except Exception as e:
+                log(f"[{job_id}] could not requeue incomplete classified inspiration {ins_id}: {e}")
+        if requeued:
+            log(f"[audit] requeued {requeued} incomplete classified inspiration job(s)")
 
     # ── Polling + claim ──
 
@@ -1497,7 +1553,7 @@ class Worker:
         prompt = (
             f"Generate a creative brief for a WINNING VIDEO VARIATION using the same\n"
             f"workflow as the /classify-inspiration skill (download Drive file → ffmpeg\n"
-            f"frames + audio → visual classification → 7-section brief → ClickUp Doc\n"
+            f"frames + audio → visual classification → 8-section brief → ClickUp Doc\n"
             f"page). Do NOT batch-scan, do NOT pause for consolidation, do NOT ask any\n"
             f"questions.\n\n"
             f"Target job:\n"
@@ -1521,7 +1577,7 @@ class Worker:
             f"     persona, angle, ad_type, brand. Plus body_copy, headline, cta,\n"
             f"     hook_text, caption_transcript, caption_timeline, voice_over, voice_over_timeline, creative_hypothesis, duration_seconds, frame_by_frame, why_it_works,\n"
             f"     replication_brief, what_to_test, competitor_intel, our_next_ad, next_ad_scripts with exactly 3 complete variation scripts for OUR selected product, each including script_breakdown rows.\n"
-            f"  5. Build the brief markdown using the EXACT SAME 7-section template as\n"
+            f"  5. Build the brief markdown using the EXACT SAME 8-section template as\n"
             f"     the /classify-inspiration skill (see ~/.claude/skills/classify-inspiration\n"
             f"     /SKILL.md Step 6 for the canonical template). The user has asked the\n"
             f"     winner briefs to look identical to inspiration briefs so they render\n"
@@ -1692,9 +1748,53 @@ class Worker:
                 first_caption = str((captions[0] or {}).get("caption") or "").strip().lower()
                 if first_caption and first_caption == hook_text:
                     return (False, "inspirations row duplicated hookText as the first caption")
+            page_ok, page_msg = self._verify_clickup_brief_page(data)
+            if not page_ok:
+                return (False, page_msg)
             return (True, "verified")
         except Exception as e:
             return (False, f"verify query failed: {e}")
+
+    def _verify_clickup_brief_page(self, data: dict) -> tuple:
+        """Verify the final ClickUp page, not only Supabase JSON."""
+        page_url = str(data.get("_clickupDocPageUrl") or "").strip()
+        page_id = str(data.get("_clickupDocId") or "").strip()
+        doc_id = ""
+        match = re.search(r"/docs/([^/]+)/([^/?#]+)", page_url)
+        if match:
+            doc_id = match.group(1)
+            page_id = page_id or match.group(2)
+        if not doc_id or not page_id:
+            return (False, "inspirations row missing ClickUp doc/page ids")
+        api_key = self.env.get("CLICKUP_API_KEY")
+        if not api_key:
+            return (False, "CLICKUP_API_KEY unavailable for brief page verification")
+        try:
+            url = f"https://api.clickup.com/api/v3/workspaces/9016762494/docs/{urllib.parse.quote(doc_id)}/pages/{urllib.parse.quote(page_id)}"
+            req = urllib.request.Request(url, headers={"Authorization": api_key})
+            with urllib.request.urlopen(req, timeout=20) as resp:
+                payload = json.loads(resp.read().decode("utf-8"))
+            content = str((payload or {}).get("content") or "")
+        except Exception as e:
+            return (False, f"ClickUp brief page unreadable: {e}")
+        if not content.strip():
+            return (False, "ClickUp brief page has empty content")
+        checks = {
+            "creative breakdown Caption / Voice Over column": "Caption / Voice Over" in content,
+            "section 8 NEXT AD SCRIPTS": bool(re.search(r"##\s*8\s*(?:\\\.)?\.?\s*NEXT AD SCRIPTS", content, re.I)),
+            "Strategy Snapshot": "Strategy Snapshot" in content,
+            "Voice-over Script": bool(re.search(r"Voice[- ]over Script", content, re.I)),
+            "Script Breakdown": "Script Breakdown" in content,
+        }
+        missing = [label for label, ok in checks.items() if not ok]
+        if missing:
+            return (False, "ClickUp brief page missing: " + ", ".join(missing))
+        if len(re.findall(r"\bVariation\s+\d", content, re.I)) < 3:
+            return (False, "ClickUp brief page missing 3 next-ad variations")
+        voice_over = str(data.get("voiceOver") or "").strip()
+        if voice_over and "**Voice Over:**" not in content and "Voice Over:" not in content:
+            return (False, "ClickUp brief page missing Voice Over line")
+        return (True, "ClickUp page verified")
 
     def _verify_variation_brief_row(self, drive_file_id):
         """Confirm the skill actually wrote a usable row to public.variation_briefs.
@@ -1744,6 +1844,8 @@ class Worker:
                 {
                     "status": "classified",
                     "processed_at": _now_iso(),
+                    "claimed_by": None,
+                    "claimed_at": None,
                     "error_message": None,
                 },
             )
@@ -1951,6 +2053,7 @@ class Worker:
                     # Cleanup any stale claims first
                     self.release_stale_claims()
                     self.release_stale_producer_runs()
+                    self.requeue_incomplete_classified_jobs()
 
                     # ── CLASSIFY PARALLEL DISPATCH (2026-05-15) ──
                     # Reap completed classify futures (frees slots).

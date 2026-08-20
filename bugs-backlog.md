@@ -2328,3 +2328,30 @@ Bug 56 added real audio probing/transcription for the main downloaded-video path
 - Worker environments must resolve user-installed CLI tools, not only tools exposed on PATH.
 - Blank `voiceOver` is not acceptable for video inspirations; use a real transcript or `No voice over`, otherwise fail/retry.
 - Stale workers must remain disabled until their heartbeat exposes the current `worker_contract`.
+
+---
+
+## Bug 58 — Next-ad scripts drifted away from the inspiration script format
+**Status:** ✅ fixed locally 2026-08-20
+**Reported:** 2026-08-20
+**Surface:** Inspiration brief generation / Section 8 NEXT AD SCRIPTS
+
+### Symptom
+- In a Kids Life Skill inspiration brief, the inspiration used a clear format: `What to do during ... and what to avoid`, then short product/offer beats.
+- Section 8 generated next-ad scripts for our product, but the voice-over changed into a generic rewrite such as `When your child's brain goes offline...` instead of preserving the inspiration's opening construction and beat order.
+- Variation 1 was not close enough to the source format even though the user expected it to be the reference-faithful version.
+
+### Root Cause
+The brief contract told the classifier to borrow the inspiration's mechanic, pacing, emotional trigger, proof structure, and table format, but did not explicitly require a script skeleton extraction step. The generator treated Section 8 as "make new scripts inspired by this" instead of "translate this exact script format to our product."
+
+### Fix
+1. Section 8 now requires an `Inspiration Script Skeleton` before generating variations.
+2. Variation 1 must preserve the inspiration's opening construction, beat order, sentence rhythm, time ranges where possible, and CTA rhythm, changing only product-specific nouns/problem/proof/offer/CTA.
+3. Variations 2 and 3 may change wording moderately, but must remain close to the same skeleton and cannot become generic unrelated scripts.
+4. Each stored `nextAdScripts` item now requires `source_format_match`.
+5. Worker post-run verification now requires a visible `Inspiration Script Skeleton` and `Source Format Match` field in Section 8 so newly generated briefs cannot pass with generic scripts only. Historical classified-row audits keep the older baseline contract so existing inspirations are not requeued by this fix.
+
+### Prevention
+- For Section 8, "our product" means product substitution inside the source creative format, not a freeform new concept.
+- Variation 1 is always reference-faithful; only later variations may loosen wording.
+- Prompt, stored JSON schema, rendered ClickUp template, and worker verification must be updated together for every future brief-format change.

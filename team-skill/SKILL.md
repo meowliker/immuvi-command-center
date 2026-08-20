@@ -468,7 +468,7 @@ REPLICATION_BRIEF: talent, set, key overlay, subtitle style, pacing, music, mid-
 WHAT_TO_TEST: 5 specific variation ideas (one line each: what changes + why)
 COMPETITOR_INTEL: brand scale, funnel strategy, our gap, compete or find lane
 OUR_NEXT_AD: what to steal, what to do differently, 3-bullet editor brief, hypothesis sentence
-NEXT_AD_SCRIPTS: exactly 3 complete next-ad variation scripts for OUR selected product, not the inspiration/competitor product. Use the current product name and product config offer when available. Borrow only the inspiration's creative mechanic, pacing, emotional trigger, proof structure, and table format. Each variation must include a name, strategic intent, hook text, full voice-over script, a timed script_breakdown table plan, CTA, what to change from the competitor, and why it should work.
+NEXT_AD_SCRIPTS: exactly 3 complete next-ad variation scripts for OUR selected product, not the inspiration/competitor product. First extract an `inspiration_script_skeleton`: the opening phrase pattern, beat order, sentence rhythm, time ranges, repeated phrasing, CTA rhythm, and proof/offer sequence from the inspiration's Voice Over or Caption / Voice Over table. Borrow the inspiration's creative mechanic, pacing, emotional trigger, proof structure, table format, and script skeleton. Variation 1 is the reference-faithful script: keep the same opening construction and beat order as the inspiration while swapping only product-specific nouns, problem, proof, offer, and CTA into our product. If the inspiration starts "What to do during [moment] and what to avoid", Variation 1 must start with the same construction for our product. Variations 2 and 3 may change wording moderately, but must stay close to the same format/skeleton and must not become generic new scripts. Each variation must include a name, strategic intent, hook text, source_format_match, full voice-over script, a timed script_breakdown table plan that mirrors the inspiration's beat order/time ranges where possible, CTA, what to change from the competitor, and why it should work.
 ```
 
 ---
@@ -530,15 +530,16 @@ cat > /tmp/result_[INS_ID].json <<'JSON'
     "voice_over": "spoken transcript, No voice over, or blank when speech is unverified",
     "caption_transcript": "...",
     "voice_over_timeline": [{"time":"0:00-0:04","voice_over":"..."}],
+    "inspiration_script_skeleton": "Opening phrase pattern + beat order + sentence rhythm + CTA rhythm extracted from the inspiration",
     "why_it_works": "...",
     "replication_brief": "...",
     "what_to_test": "...",
     "competitor_intel": "...",
     "our_next_ad": "...",
     "next_ad_scripts": [
-      {"variation": "Variation 1 name", "intent": "...", "hook_text": "...", "voice_over_script": "...", "script_breakdown": [{"time":"0:00-0:03","label":"HOOK","caption_voice_over":"...","visual_beat":"...","editor_note":"..."}], "cta": "...", "what_to_change": "...", "why_it_should_work": "..."},
-      {"variation": "Variation 2 name", "intent": "...", "hook_text": "...", "voice_over_script": "...", "script_breakdown": [{"time":"0:00-0:03","label":"HOOK","caption_voice_over":"...","visual_beat":"...","editor_note":"..."}], "cta": "...", "what_to_change": "...", "why_it_should_work": "..."},
-      {"variation": "Variation 3 name", "intent": "...", "hook_text": "...", "voice_over_script": "...", "script_breakdown": [{"time":"0:00-0:03","label":"HOOK","caption_voice_over":"...","visual_beat":"...","editor_note":"..."}], "cta": "...", "what_to_change": "...", "why_it_should_work": "..."}
+      {"variation": "Variation 1 name", "intent": "...", "hook_text": "...", "source_format_match": "Reference-faithful: uses the same opening construction, beat order, sentence rhythm, and CTA rhythm as the inspiration", "voice_over_script": "...", "script_breakdown": [{"time":"0:00-0:03","label":"HOOK","caption_voice_over":"...","visual_beat":"...","editor_note":"..."}], "cta": "...", "what_to_change": "...", "why_it_should_work": "..."},
+      {"variation": "Variation 2 name", "intent": "...", "hook_text": "...", "source_format_match": "Close format: keeps the same skeleton/beat order while changing the angle slightly", "voice_over_script": "...", "script_breakdown": [{"time":"0:00-0:03","label":"HOOK","caption_voice_over":"...","visual_beat":"...","editor_note":"..."}], "cta": "...", "what_to_change": "...", "why_it_should_work": "..."},
+      {"variation": "Variation 3 name", "intent": "...", "hook_text": "...", "source_format_match": "Close format: keeps the same skeleton/beat order while changing the emotional emphasis slightly", "voice_over_script": "...", "script_breakdown": [{"time":"0:00-0:03","label":"HOOK","caption_voice_over":"...","visual_beat":"...","editor_note":"..."}], "cta": "...", "what_to_change": "...", "why_it_should_work": "..."}
     ]
   }
 }
@@ -926,9 +927,13 @@ The `content` field should be markdown with these 8 H2 sections — format match
 ## 8\. NEXT AD SCRIPTS
 > _Editor + Strategist — three complete variation scripts_
 
-[next_ad_scripts — render exactly 3 complete ad variation scripts for OUR selected product, not for the inspiration/competitor product. Use `[PRODUCT_NAME]` and its offer/config; borrow only the winning structure/mechanic from the inspiration. For each variation render:
+[next_ad_scripts — render exactly 3 complete ad variation scripts for OUR selected product, not for the inspiration/competitor product. Use `[PRODUCT_NAME]` and its offer/config; borrow the winning structure/mechanic AND the inspiration's script skeleton. Before the variations, render:
+
+**Inspiration Script Skeleton:** [opening phrase pattern + beat order + sentence rhythm + CTA rhythm extracted from the inspiration]
+
+Variation 1 must be reference-faithful: same opening construction, same beat order, same sentence rhythm, same time ranges where possible, same CTA rhythm; swap only our product/problem/proof/offer. Variations 2 and 3 can move wording 20–35%, but must remain close to the same format and cannot become unrelated generic scripts. For each variation render:
 1. Variation heading
-2. Strategy Snapshot table: `Field | Direction` with Strategic intent, Hook Text, CTA, What to change, Why it should work
+2. Strategy Snapshot table: `Field | Direction` with Strategic intent, Hook Text, Source Format Match, CTA, What to change, Why it should work
 3. Full `Voice-over Script` paragraph
 4. Script Breakdown table: `Time | Label | Caption / Voice Over | Visual Beat | Editor Notes`
 

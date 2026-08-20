@@ -1419,7 +1419,12 @@ class Worker:
             f"Do NOT render separate Hook Text or Caption Transcript lines. Put static hook/overlay timing in one compact 'On-screen Text Timing' note before the table. "
             f"In CREATIVE BREAKDOWN, use columns Time | Label | Caption / Voice Over | What Happens | Emotion Triggered. "
             f"When voice-over exists, the Caption / Voice Over column should follow the actual spoken transcript for that timeframe, not a separate OCR caption timeline. "
-            f"Add section ## 8\\. NEXT AD SCRIPTS with exactly 3 complete variation scripts for OUR selected product, not the inspiration/competitor product. Use the resolved product name and offer/config; borrow only the inspiration's mechanic, pacing, emotional trigger, and proof structure. Each variation must include a Strategy Snapshot table, full voice-over script, and a Script Breakdown table with columns Time | Label | Caption / Voice Over | Visual Beat | Editor Notes. "
+            f"Add section ## 8\\. NEXT AD SCRIPTS with exactly 3 complete variation scripts for OUR selected product, not the inspiration/competitor product. "
+            f"First extract and render an Inspiration Script Skeleton: the inspiration's opening phrase pattern, beat order, sentence rhythm, time ranges, repeated phrasing, CTA rhythm, and proof/offer sequence from the Voice Over or Caption / Voice Over table. "
+            f"Use the resolved product name and offer/config; borrow the inspiration's mechanic, pacing, emotional trigger, proof structure, table format, and script skeleton. "
+            f"Variation 1 must be reference-faithful: keep the same opening construction, beat order, sentence rhythm, time ranges where possible, and CTA rhythm as the inspiration while swapping only product-specific nouns, problem, proof, offer, and CTA into our product. If the inspiration starts like 'What to do during <moment> and what to avoid', Variation 1 must start with the same construction for our product. "
+            f"Variations 2 and 3 may change wording 20-35%, but must remain close to the same skeleton/format and must not become generic new scripts. "
+            f"Each variation must include a Strategy Snapshot table with Source Format Match, full voice-over script, and a Script Breakdown table with columns Time | Label | Caption / Voice Over | Visual Beat | Editor Notes that mirrors the inspiration's beat order/time ranges where possible. "
             f"Do not render caption timelines and visual beats as separate bullet lists; combine them into the timed script table.\n"
             f"  6. Create a ClickUp Doc page in the product's Inspiration Library doc with the brief. "
             f"Capture the doc page URL.\n\n"
@@ -1535,7 +1540,11 @@ class Worker:
             # without writing to the DB. Worker MUST not flip the queue
             # row to "classified" unless the dashboard would actually have
             # something to render.
-            verify_ok, verify_msg = self._verify_inspirations_row(ins_id, product_id)
+            verify_ok, verify_msg = self._verify_inspirations_row(
+                ins_id,
+                product_id,
+                require_next_script_format=True,
+            )
             if not verify_ok:
                 return {"success": False, "error": f"skill returned without persisting: {verify_msg}"}
             if skill_says_ok:
@@ -1621,7 +1630,7 @@ class Worker:
             f"     hook_type, creative_structure, production_style, funnel_type,\n"
             f"     persona, angle, ad_type, brand. Plus body_copy, headline, cta,\n"
             f"     hook_text, caption_transcript, caption_timeline, voice_over, voice_over_timeline, creative_hypothesis, duration_seconds, frame_by_frame, why_it_works,\n"
-            f"     replication_brief, what_to_test, competitor_intel, our_next_ad, next_ad_scripts with exactly 3 complete variation scripts for OUR selected product, each including script_breakdown rows.\n"
+            f"     replication_brief, what_to_test, competitor_intel, our_next_ad, inspiration_script_skeleton, next_ad_scripts with exactly 3 complete variation scripts for OUR selected product, each including source_format_match and script_breakdown rows.\n"
             f"  5. Build the brief markdown using the EXACT SAME 8-section template as\n"
             f"     the /classify-inspiration skill (see the active agent skill home: ~/.codex/skills/classify-inspiration or ~/.claude/skills/classify-inspiration\n"
             f"     /SKILL.md Step 6 for the canonical template). The user has asked the\n"
@@ -1645,7 +1654,7 @@ class Worker:
             f"       ## 6\\. COMPETITOR INTEL  (how this winner positions us vs the category)\n"
             f"       ## 7\\. OUR NEXT AD  (3-line editor brief + hypothesis for the next variation\n"
             f"                            that builds on this winner)\n"
-            f"       ## 8\\. NEXT AD SCRIPTS  (exactly 3 complete ad variation scripts for OUR selected product, not copied from the source/winner product; each has a Strategy Snapshot table, full Voice-over Script, and Script Breakdown table: Time | Label | Caption / Voice Over | Visual Beat | Editor Notes)\n"
+            f"       ## 8\\. NEXT AD SCRIPTS  (exactly 3 complete ad variation scripts for OUR selected product, not copied from the source/winner product; first render Inspiration Script Skeleton. Variation 1 must be reference-faithful to the source script skeleton; Variations 2-3 stay close to the same format. Each has a Strategy Snapshot table with Source Format Match, full Voice-over Script, and Script Breakdown table: Time | Label | Caption / Voice Over | Visual Beat | Editor Notes)\n"
             f"\n"
             f"     DO NOT use different headings or fewer sections — the user verified\n"
             f"     this. Every section must be present.\n"
@@ -1715,7 +1724,12 @@ class Worker:
 
     # ── Server-side verification of skill output ──
 
-    def _verify_inspirations_row(self, ins_id: str, product_id: str) -> tuple:
+    def _verify_inspirations_row(
+        self,
+        ins_id: str,
+        product_id: str,
+        require_next_script_format: bool = False,
+    ) -> tuple:
         """Confirm the skill actually wrote a usable row to public.inspirations.
 
         Note on schema: `inspirations` has no `ins_id` column — the
@@ -1780,6 +1794,14 @@ class Worker:
             if not isinstance(next_scripts, list) or len(next_scripts) != 3:
                 return (False, "inspirations row missing exactly 3 nextAdScripts")
             for idx, script in enumerate(next_scripts, start=1):
+                if require_next_script_format:
+                    source_match = (
+                        (script or {}).get("source_format_match")
+                        or (script or {}).get("sourceFormatMatch")
+                        or ""
+                    )
+                    if not str(source_match).strip():
+                        return (False, f"inspirations row nextAdScripts[{idx}] missing source_format_match")
                 rows = (script or {}).get("script_breakdown") or (script or {}).get("scriptBreakdown")
                 if not isinstance(rows, list) or not rows:
                     return (False, f"inspirations row nextAdScripts[{idx}] missing script_breakdown rows")
@@ -1872,6 +1894,9 @@ class Worker:
             "Voice-over Script": bool(re.search(r"Voice[- ]over Script", content, re.I)),
             "Script Breakdown table": has_script_breakdown,
         }
+        if require_next_script_format:
+            checks["Inspiration Script Skeleton"] = "Inspiration Script Skeleton" in content
+            checks["Source Format Match"] = "Source Format Match" in content
         missing = [label for label, ok in checks.items() if not ok]
         if missing:
             return (False, "ClickUp brief page missing: " + ", ".join(missing))

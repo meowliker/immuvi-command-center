@@ -13661,10 +13661,14 @@ const DB = {
         .gte('last_heartbeat', cutoff)
         .neq('status', 'offline');
       if (wr.error) throw wr.error;
-      var workers = (wr.data || []).filter(function (w) {
-        var caps = w.capabilities || {};
-        return w.enabled !== false && (caps.claude || caps.codex);
+      var registryRows = wr.data || [];
+      var liveWorkers = registryRows.filter(function (w) {
+        return w && w.enabled !== false && _insWorkerIsLive(w) && (((w.capabilities || {}).claude) || ((w.capabilities || {}).codex));
       });
+      var staleContractWorkers = liveWorkers.filter(function (w) {
+        return !_insWorkerHasClassifierContract(w);
+      });
+      var workers = liveWorkers.filter(_insWorkerIsHealthyClassifier);
       var hasClaudeWorker = workers.some(function (w) {
         return !!((w.capabilities || {}).claude);
       });
@@ -13681,7 +13685,11 @@ const DB = {
         }
       }
       if (!workers.length) {
-        workerBlockMessage = workerBlockMessage || 'No healthy enabled classifier worker is online. Fix/restart gp-mac-mini or bring gp-laptop online, then repost.';
+        workerBlockMessage = workerBlockMessage || (
+          staleContractWorkers.length
+            ? 'Classifier worker is online but running an old contract. Restart/reinstall the Mac mini worker so it reports ' + EXPECTED_CLASSIFIER_CONTRACT + ', then repost.'
+            : 'No healthy enabled classifier worker is online. Fix/restart gp-mac-mini or bring gp-laptop online, then repost.'
+        );
       }
     } catch (e) {
       console.warn('[SB] worker gate failed; queueing normally', e);
@@ -49888,7 +49896,7 @@ window._clearPendingCu = _clearPendingCu;
 
     // Workers chip — small, sits in the TODAY card head (inspired by AP's range button placement)
     var wlist = window._insWorkersList || [];
-    var liveCnt = wlist.filter(function(w){ return workerEffectiveStatus(w) !== 'offline' && workerEffectiveStatus(w) !== 'paused'; }).length;
+    var liveCnt = wlist.filter(_insWorkerIsHealthyClassifier).length;
     var workersBtn = '<button class="ap-pulse-range-btn' + (liveCnt ? ' on' : '') + '"' +
                      ' onclick="event.stopPropagation();_insWorkersToggleDrawer()" title="Worker pool — pause / resume / inspect">' +
                        '<span class="ins-worker-dot ' + (liveCnt ? 'idle' : 'offline') + '" style="width:7px;height:7px;display:inline-block;margin-right:5px;vertical-align:middle"></span>' +
@@ -49956,6 +49964,22 @@ window._clearPendingCu = _clearPendingCu;
   window._insPipelineRefresh = refreshPipeline;
 
   // ── Workers ────────────────────────────────────────────────────
+  var EXPECTED_CLASSIFIER_CONTRACT = 'inspiration-brief-8-section-page-verified';
+
+  function _insWorkerIsLive(w) {
+    var hb = w && w.last_heartbeat ? new Date(w.last_heartbeat).getTime() : 0;
+    return !!(hb && (Date.now() - hb) <= WORKER_HEARTBEAT_GRACE_MS);
+  }
+
+  function _insWorkerHasClassifierContract(w) {
+    return !!(w && (w.capabilities || {}).worker_contract === EXPECTED_CLASSIFIER_CONTRACT);
+  }
+
+  function _insWorkerIsHealthyClassifier(w) {
+    var caps = (w && w.capabilities) || {};
+    return !!(w && w.enabled !== false && _insWorkerIsLive(w) && (caps.claude || caps.codex) && _insWorkerHasClassifierContract(w));
+  }
+
   async function fetchWorkers() {
     if (typeof SB === 'undefined' || !SB) return [];
     try {
@@ -50026,6 +50050,9 @@ window._clearPendingCu = _clearPendingCu;
       var capParts = ['ffmpeg','claude','yt_dlp']
         .map(function(k){ return caps[k] ? '<span style="color:#15803d">' + k + ' ✓</span>' : '<span style="color:#9ca3af">' + k + ' ✗</span>'; })
         .join(' · ');
+      capParts += ' · ' + (_insWorkerHasClassifierContract(w)
+        ? '<span style="color:#15803d">contract ✓</span>'
+        : '<span style="color:#dc2626">old contract ✗</span>');
       var hb = w.last_heartbeat ? _relTime(w.last_heartbeat) : 'never';
       var lj = w.last_job_at ? _relTime(w.last_job_at) : 'never';
       var pauseBtn = (w.enabled === false)
@@ -50654,18 +50681,20 @@ window._clearPendingCu = _clearPendingCu;
     var sel = document.getElementById('insRunOnSelect');
     if (!sel) return;
     try {
-      var r = await SB.from('worker_registry').select('worker_id, status, last_heartbeat, enabled');
+      var r = await SB.from('worker_registry').select('worker_id, status, last_heartbeat, enabled, capabilities');
       var workers = r.data || [];
       var prev = sel.value;
       sel.innerHTML = '<option value="auto">Auto (any free worker)</option>';
       workers.forEach(function (w) {
-        var hb = w.last_heartbeat ? new Date(w.last_heartbeat).getTime() : 0;
-        var live = hb && (Date.now() - hb) < 120000;
-        var status = (w.enabled === false) ? '⏸ paused' : (live ? (w.status || 'idle') : '🔴 offline');
+        var live = _insWorkerIsLive(w);
+        var hasContract = _insWorkerHasClassifierContract(w);
+        var status = (w.enabled === false)
+          ? '⏸ paused'
+          : (!live ? '🔴 offline' : (!hasContract ? '⚠ old contract' : (w.status || 'idle')));
         var opt = document.createElement('option');
         opt.value = w.worker_id;
         opt.textContent = w.worker_id + ' · ' + status;
-        if (!live || w.enabled === false) opt.disabled = true;
+        if (!live || w.enabled === false || !hasContract) opt.disabled = true;
         sel.appendChild(opt);
       });
       sel.value = prev || 'auto';

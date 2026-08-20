@@ -2355,3 +2355,29 @@ The brief contract told the classifier to borrow the inspiration's mechanic, pac
 - For Section 8, "our product" means product substitution inside the source creative format, not a freeform new concept.
 - Variation 1 is always reference-faithful; only later variations may loosen wording.
 - Prompt, stored JSON schema, rendered ClickUp template, and worker verification must be updated together for every future brief-format change.
+
+---
+
+## Bug 59 — Section 8 next-ad scripts lost the required tables
+**Status:** ✅ fixed locally 2026-08-20
+**Reported:** 2026-08-20
+**Surface:** Inspiration brief generation / ClickUp brief rendering
+
+### Symptom
+- KLS-INS-140 rendered Section 8 as loose paragraphs (`Hook text`, `Voice-over script`, `CTA`) instead of the previously accepted table structure.
+- The generated scripts were still not close enough to the inspiration format, even after the earlier source-format patch.
+- The Supabase row also had an empty `nextAdScripts` array, so the stored data and ClickUp deliverable disagreed.
+
+### Root Cause
+The worker prompt required tables, but the ClickUp page verifier only checked for broad keywords and did not receive the strict-format flag. A stale Mac mini worker also kept running without a visible `worker_contract`, so it could publish using older instructions.
+
+### Fix
+1. Pass the strict next-script-format flag into ClickUp page verification.
+2. Require Section 8 to contain three Strategy Snapshot tables and three Script Breakdown tables.
+3. Reject Section 8 when it contains loose `Hook text:` or `CTA:` fields instead of the mandatory tables.
+4. Strengthen the classify skill and worker prompts so Variation 1 is built row-by-row from the inspiration breakdown while only rewriting the `Caption / Voice Over` cells for our product.
+
+### Prevention
+- Section 8 format changes must be enforced in both prompt text and the final ClickUp page verifier.
+- A classified inspiration must not pass when stored `nextAdScripts` is empty or the visible doc lacks the three tabled variation scripts.
+- After any brief-contract update, restart stale workers and confirm their heartbeat includes the current `worker_contract`.

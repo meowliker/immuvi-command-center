@@ -1425,6 +1425,8 @@ class Worker:
             f"Variation 1 must be reference-faithful: keep the same opening construction, beat order, sentence rhythm, time ranges where possible, and CTA rhythm as the inspiration while swapping only product-specific nouns, problem, proof, offer, and CTA into our product. If the inspiration starts like 'What to do during <moment> and what to avoid', Variation 1 must start with the same construction for our product. "
             f"Variations 2 and 3 may change wording 20-35%, but must remain close to the same skeleton/format and must not become generic new scripts. "
             f"Each variation must include a Strategy Snapshot table with Source Format Match, full voice-over script, and a Script Breakdown table with columns Time | Label | Caption / Voice Over | Visual Beat | Editor Notes that mirrors the inspiration's beat order/time ranges where possible. "
+            f"Do not collapse Section 8 into loose paragraphs or standalone 'Hook text:' and 'CTA:' lines. "
+            f"The existing table structure is mandatory. For Variation 1, build the Script Breakdown row-by-row from the inspiration's breakdown: preserve the row count, time ranges, labels, and visual beat shape where possible, and rewrite only the Caption / Voice Over cells for our product. "
             f"Do not render caption timelines and visual beats as separate bullet lists; combine them into the timed script table.\n"
             f"  6. Create a ClickUp Doc page in the product's Inspiration Library doc with the brief. "
             f"Capture the doc page URL.\n\n"
@@ -1654,7 +1656,7 @@ class Worker:
             f"       ## 6\\. COMPETITOR INTEL  (how this winner positions us vs the category)\n"
             f"       ## 7\\. OUR NEXT AD  (3-line editor brief + hypothesis for the next variation\n"
             f"                            that builds on this winner)\n"
-            f"       ## 8\\. NEXT AD SCRIPTS  (exactly 3 complete ad variation scripts for OUR selected product, not copied from the source/winner product; first render Inspiration Script Skeleton. Variation 1 must be reference-faithful to the source script skeleton; Variations 2-3 stay close to the same format. Each has a Strategy Snapshot table with Source Format Match, full Voice-over Script, and Script Breakdown table: Time | Label | Caption / Voice Over | Visual Beat | Editor Notes)\n"
+            f"       ## 8\\. NEXT AD SCRIPTS  (exactly 3 complete ad variation scripts for OUR selected product, not copied from the source/winner product; first render Inspiration Script Skeleton. Variation 1 must be reference-faithful to the source script skeleton; Variations 2-3 stay close to the same format. Each has a Strategy Snapshot table with Source Format Match, full Voice-over Script, and Script Breakdown table: Time | Label | Caption / Voice Over | Visual Beat | Editor Notes. Do not replace these tables with loose Hook text / CTA paragraphs.)\n"
             f"\n"
             f"     DO NOT use different headings or fewer sections — the user verified\n"
             f"     this. Every section must be present.\n"
@@ -1823,14 +1825,21 @@ class Worker:
                 first_caption = str((captions[0] or {}).get("caption") or "").strip().lower()
                 if first_caption and first_caption == hook_text:
                     return (False, "inspirations row duplicated hookText as the first caption")
-            page_ok, page_msg = self._verify_clickup_brief_page(data)
+            page_ok, page_msg = self._verify_clickup_brief_page(
+                data,
+                require_next_script_format=require_next_script_format,
+            )
             if not page_ok:
                 return (False, page_msg)
             return (True, "verified")
         except Exception as e:
             return (False, f"verify query failed: {e}")
 
-    def _verify_clickup_brief_page(self, data: dict) -> tuple:
+    def _verify_clickup_brief_page(
+        self,
+        data: dict,
+        require_next_script_format: bool = False,
+    ) -> tuple:
         """Verify the final ClickUp page, not only Supabase JSON."""
         page_url = str(data.get("_clickupDocPageUrl") or "").strip()
         page_id = str(data.get("_clickupDocId") or "").strip()
@@ -1877,16 +1886,23 @@ class Worker:
         for placeholder in bad_placeholders:
             if placeholder in lowered:
                 return (False, f"ClickUp brief page contains unavailable-audio placeholder: {placeholder}")
-        has_strategy_snapshot = (
-            "Strategy Snapshot" in content
-            or "| Field | Direction |" in content
-            or "| Field | Direction |" in content.replace("\\|", "|")
+        normalized = content.replace("\\|", "|")
+        section8_match = re.search(
+            r"##\s*8\s*(?:\\\.)?\.?\s*NEXT AD SCRIPTS(?P<section>.*)",
+            normalized,
+            re.I | re.S,
         )
-        has_script_breakdown = (
-            "Script Breakdown" in content
-            or "| Time | Label | Caption / Voice Over | Visual Beat | Editor Notes |" in content
-            or "| Time | Label | Caption / Voice Over | Visual Beat | Editor Notes |" in content.replace("\\|", "|")
+        section8 = section8_match.group("section") if section8_match else ""
+        strategy_table_count = len(re.findall(r"\|\s*Field\s*\|\s*Direction\s*\|", section8, re.I))
+        script_table_count = len(
+            re.findall(
+                r"\|\s*Time\s*\|\s*Label\s*\|\s*Caption\s*/\s*Voice Over\s*\|\s*Visual Beat\s*\|\s*Editor Notes\s*\|",
+                section8,
+                re.I,
+            )
         )
+        has_strategy_snapshot = bool(re.search(r"Strategy Snapshot", section8, re.I)) and strategy_table_count >= 1
+        has_script_breakdown = bool(re.search(r"Script Breakdown", section8, re.I)) and script_table_count >= 1
         checks = {
             "creative breakdown Caption / Voice Over column": "Caption / Voice Over" in content,
             "section 8 NEXT AD SCRIPTS": bool(re.search(r"##\s*8\s*(?:\\\.)?\.?\s*NEXT AD SCRIPTS", content, re.I)),
@@ -1897,9 +1913,13 @@ class Worker:
         if require_next_script_format:
             checks["Inspiration Script Skeleton"] = "Inspiration Script Skeleton" in content
             checks["Source Format Match"] = "Source Format Match" in content
+            checks["3 Strategy Snapshot tables"] = strategy_table_count >= 3
+            checks["3 Script Breakdown tables"] = script_table_count >= 3
         missing = [label for label, ok in checks.items() if not ok]
         if missing:
             return (False, "ClickUp brief page missing: " + ", ".join(missing))
+        if require_next_script_format and re.search(r"(?im)^\s*(?:\*\*)?(Hook text|CTA)(?:\*\*)?\s*:", section8):
+            return (False, "ClickUp brief page has loose Section 8 script fields instead of required tables")
         if len(re.findall(r"\bVariation\s+\d", content, re.I)) < 3:
             return (False, "ClickUp brief page missing 3 next-ad variations")
         voice_over = str(data.get("voiceOver") or "").strip()

@@ -80,6 +80,7 @@ CLASSIFY_RATE_LIMIT_COOLDOWN_SECONDS = int(os.environ.get("CLASSIFY_RATE_LIMIT_C
 CLASSIFY_AGENT_INFRA_COOLDOWN_SECONDS = int(os.environ.get("CLASSIFY_AGENT_INFRA_COOLDOWN_SECONDS", "600"))
 INCOMPLETE_CLASSIFIED_AUDIT_INTERVAL_SECONDS = int(os.environ.get("INCOMPLETE_CLASSIFIED_AUDIT_INTERVAL_SECONDS", "600"))
 INCOMPLETE_CLASSIFIED_AUDIT_LIMIT = int(os.environ.get("INCOMPLETE_CLASSIFIED_AUDIT_LIMIT", "120"))
+AUTO_REQUEUE_INCOMPLETE_CLASSIFIED = os.environ.get("AUTO_REQUEUE_INCOMPLETE_CLASSIFIED", "0") == "1"
 MAX_ATTEMPTS_BEFORE_FAILED = 3
 AUTO_PAUSE_CHECK_INTERVAL_SECONDS = 60
 
@@ -732,14 +733,20 @@ class Worker:
             log(f"producer stale-run sweep failed (non-fatal): {e}")
 
     def requeue_incomplete_classified_jobs(self):
-        """Find rows marked classified whose delivered brief is incomplete.
+        """Optionally reopen classified rows whose delivered brief is incomplete.
 
         A prior worker version only verified dashboard fields, so some jobs
         were marked classified even though the ClickUp page missed required
         brief deliverables such as Voice Over or Section 8 next-ad scripts.
-        Keep this audit product-agnostic: every product's classified queue row
-        must pass the same _verify_inspirations_row contract.
+
+        This retrofit was too aggressive for historical rows: when the brief
+        contract changes, hundreds of already-reviewed inspirations can be
+        pushed back into the live queue. Keep strict verification for newly
+        claimed jobs, but require an explicit env opt-in before mutating old
+        classified rows.
         """
+        if not AUTO_REQUEUE_INCOMPLETE_CLASSIFIED:
+            return
         now = time.time()
         if now - self._last_incomplete_classified_audit_at < INCOMPLETE_CLASSIFIED_AUDIT_INTERVAL_SECONDS:
             return

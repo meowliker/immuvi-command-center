@@ -59,6 +59,7 @@ PRODUCER_CLI_TIMEOUT_SECONDS = 1800  # 30 min for Codex image gen jobs
 PRODUCER_STALE_RUNNING_TIMEOUT_MINUTES = int(
     os.environ.get("PRODUCER_STALE_RUNNING_TIMEOUT_MINUTES", "45")
 )
+STRATEGIST_STALE_RUNNING_TIMEOUT_MINUTES = int(os.environ.get("STRATEGIST_STALE_RUNNING_TIMEOUT_MINUTES", "45"))
 # Max producer jobs running in parallel on this machine. Each is a separate
 # codex exec subprocess. Override via PRODUCER_MAX_CONCURRENCY env var.
 # 2026-05-09: bumped from sequential (1) to 10 — user is on ChatGPT Max plan,
@@ -110,6 +111,7 @@ def _resolve_codex_bin():
 # Disable by setting WORKER_AUTO_UPDATE=0 in the environment.
 WORKER_AUTO_UPDATE_ENABLED = os.environ.get("WORKER_AUTO_UPDATE", "1") != "0"
 WORKER_UPDATE_CHECK_EVERY_SECONDS = 60  # ETag check every Nth poll cycle
+WORKER_PENDING_RESTART_MAX_WAIT_SECONDS = int(os.environ.get("WORKER_PENDING_RESTART_MAX_WAIT_SECONDS", "900"))
 WORKER_BACKUP_KEEP_COUNT = 3  # keep last N backups; older ones get pruned
 WORKER_UPDATE_BASE_URL = os.environ.get(
     "WORKER_UPDATE_BASE_URL",
@@ -595,6 +597,7 @@ class Worker:
         self._claude_cooldown_until = 0.0
         self._agent_infra_cooldown_until = 0.0
         self._last_incomplete_classified_audit_at = 0.0
+        self._pending_self_restart_since = 0.0
         # Wire signal handlers for graceful shutdown
         for sig in (signal.SIGINT, signal.SIGTERM):
             signal.signal(sig, self._on_signal)
@@ -731,6 +734,22 @@ class Worker:
             )
         except Exception as e:
             log(f"producer stale-run sweep failed (non-fatal): {e}")
+
+    def release_stale_strategist_runs(self):
+        """Fail abandoned strategist runs so they cannot leave stale busy state."""
+        try:
+            cutoff = _now_iso(offset_minutes=-STRATEGIST_STALE_RUNNING_TIMEOUT_MINUTES)
+            self.sb.update(
+                "strategist_runs",
+                f"started_at=lt.{urllib.parse.quote(cutoff)}&status=eq.running",
+                {
+                    "status": "failed",
+                    "finished_at": _now_iso(),
+                    "error": "auto-failed: strategist run was abandoned after worker restart/power loss",
+                },
+            )
+        except Exception as e:
+            log(f"strategist stale-run sweep failed (non-fatal): {e}")
 
     def requeue_incomplete_classified_jobs(self):
         """Optionally reopen classified rows whose delivered brief is incomplete.
@@ -2143,12 +2162,16 @@ class Worker:
                             self._last_update_check_at = now
                             if check_for_worker_update():
                                 self._pending_self_restart = True
+                                self._pending_self_restart_since = time.time()
 
                     # ── Restart if pending and BOTH pools drained ──
                     if self._pending_self_restart:
                         p_active = self._active_producer_count() if hasattr(self, "_active_producer_count") else 0
                         c_active = self._active_classify_count() if hasattr(self, "_active_classify_count") else 0
-                        if p_active == 0 and c_active == 0 and not self.is_busy:
+                        waited = time.time() - (self._pending_self_restart_since or time.time())
+                        if p_active == 0 and c_active == 0 and (not self.is_busy or waited >= WORKER_PENDING_RESTART_MAX_WAIT_SECONDS):
+                            if waited >= WORKER_PENDING_RESTART_MAX_WAIT_SECONDS:
+                                log("[self-update] forcing restart after stale in-flight wait")
                             log("[self-update] both pools drained · re-executing worker with new code")
                             # Shut down both executors + heartbeat thread cleanly
                             try:
@@ -2191,6 +2214,7 @@ class Worker:
                     # Cleanup any stale claims first
                     self.release_stale_claims()
                     self.release_stale_producer_runs()
+                    self.release_stale_strategist_runs()
                     self.requeue_incomplete_classified_jobs()
 
                     # ── CLASSIFY PARALLEL DISPATCH (2026-05-15) ──

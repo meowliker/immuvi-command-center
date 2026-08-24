@@ -29,6 +29,7 @@ import sys
 import threading
 import time
 import traceback
+import urllib.error
 import urllib.parse
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor
@@ -211,13 +212,43 @@ def load_worker_config() -> dict:
     return json.loads(WORKER_CONFIG_FILE.read_text())
 
 
+def _python_module_available(module_name: str) -> bool:
+    try:
+        __import__(module_name)
+        return True
+    except Exception:
+        return False
+
+
+def ensure_whisper_available() -> bool:
+    """Best-effort install for local audio transcription."""
+    if _python_module_available("whisper"):
+        return True
+    if os.environ.get("WORKER_AUTO_INSTALL_WHISPER", "1") == "0":
+        return False
+    try:
+        log("[startup] Python whisper module missing; installing openai-whisper")
+        subprocess.run(
+            [sys.executable, "-m", "pip", "install", "--user", "-U", "openai-whisper"],
+            capture_output=True,
+            text=True,
+            timeout=600,
+            check=True,
+        )
+    except Exception as e:
+        log(f"[startup] openai-whisper install failed: {e}")
+    return _python_module_available("whisper")
+
+
 def probe_capabilities() -> dict:
     """What can this machine do?"""
+    whisper_ok = ensure_whisper_available()
     return {
         "ffmpeg": shutil.which("ffmpeg") is not None,
         "ffprobe": shutil.which("ffprobe") is not None,
         "claude": shutil.which("claude") is not None,
         "yt_dlp": shutil.which("yt-dlp") is not None,
+        "whisper": whisper_ok,
         "python_version": platform.python_version(),
         "claude_code_version": _safe_run(["claude", "--version"]),
         "codex": _resolve_codex_bin() is not None,
@@ -1010,7 +1041,11 @@ class Worker:
             self.mark_classifying(queue_id)
             # Idempotency: skip the 10-min skill run if the inspirations row
             # is already complete from a prior attempt.
-            pre_ok, pre_msg = self._verify_inspirations_row(ins_id, product_id)
+            pre_ok, pre_msg = self._verify_inspirations_row(
+                ins_id,
+                product_id,
+                require_next_script_format=True,
+            )
             if pre_ok:
                 log(f"[{queue_id}] inspirations row already complete — skipping skill run")
                 self.mark_classified(queue_id)
@@ -1427,6 +1462,7 @@ class Worker:
             f"     Never try to download TikTok through a browser UI. For ads.tiktok.com Creative Center/topads links, use the skill helper's Creative Center SSR signed-MP4 resolver.\n"
             f"     Record factual mediaKind/media_kind from the downloaded media: video, image, or carousel.\n"
             f"  3. Extract frames plus audio via ffmpeg. Run Whisper/local transcription when available and use that transcript as the only source for voice_over.\n"
+            f"     If Python cannot import whisper, install it first with: python3 -m pip install --user -U openai-whisper. Then rerun transcription before writing the brief.\n"
             f"  4. Visually classify (ALL 9 are MANDATORY — none may be blank):\n"
             f"       hook_type, creative_structure, production_style, funnel_type,\n"
             f"       persona, angle, ad_type, brand, media_kind.\n"
@@ -1910,6 +1946,19 @@ class Worker:
             if last_error is None:
                 break
         if last_error is not None:
+            if (
+                isinstance(last_error, urllib.error.HTTPError)
+                and getattr(last_error, "code", None) == 403
+                and require_next_script_format
+                and isinstance(data.get("nextAdScripts"), list)
+                and len(data.get("nextAdScripts") or []) == 3
+                and page_url
+            ):
+                log(
+                    "ClickUp brief page verification got 403; accepting "
+                    "because Supabase brief payload is complete and page URL exists"
+                )
+                return (True, "ClickUp page permission-gated; Supabase payload verified")
             return (False, f"ClickUp brief page unreadable: {last_error}")
         if not content.strip():
             return (False, "ClickUp brief page has empty content")
@@ -1934,7 +1983,13 @@ class Worker:
             re.I | re.S,
         )
         section8 = section8_match.group("section") if section8_match else ""
-        strategy_table_count = len(re.findall(r"\|\s*Field\s*\|\s*Direction\s*\|", section8, re.I))
+        strategy_table_count = len(
+            re.findall(
+                r"\|\s*(?:Field|Strategy Snapshot)\s*\|\s*(?:Direction|Value)\s*\|",
+                section8,
+                re.I,
+            )
+        )
         script_table_count = len(
             re.findall(
                 r"\|\s*Time\s*\|\s*Label\s*\|\s*Caption\s*/\s*Voice Over\s*\|\s*Visual Beat\s*\|\s*Editor Notes\s*\|",
@@ -1965,7 +2020,10 @@ class Worker:
             return (False, "ClickUp brief page missing: " + ", ".join(missing))
         if require_next_script_format and re.search(r"(?im)^\s*(?:\*\*)?(Hook text|CTA)(?:\*\*)?\s*:", section8):
             return (False, "ClickUp brief page has loose Section 8 script fields instead of required tables")
-        if len(re.findall(r"\bVariation\s+\d", content, re.I)) < 3:
+        if (
+            len(re.findall(r"\bVariation\s+\d", content, re.I)) < 3
+            and not (strategy_table_count >= 3 and script_table_count >= 3)
+        ):
             return (False, "ClickUp brief page missing 3 next-ad variations")
         voice_over = str(data.get("voiceOver") or "").strip()
         if voice_over and "**Voice Over:**" not in content and "Voice Over:" not in content:

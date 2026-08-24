@@ -1868,32 +1868,47 @@ class Worker:
     ) -> tuple:
         """Verify the final ClickUp page, not only Supabase JSON."""
         page_url = str(data.get("_clickupDocPageUrl") or "").strip()
-        page_id = str(data.get("_clickupDocId") or "").strip()
+        stored_page_id = str(data.get("_clickupDocId") or "").strip()
+        page_id = stored_page_id
         doc_id = ""
+        url_page_id = ""
         match = re.search(r"/docs/([^/]+)/([^/?#]+)", page_url)
         if match:
             doc_id = match.group(1)
-            page_id = page_id or match.group(2)
+            url_page_id = match.group(2)
+            # The dashboard historically stored the ClickUp *document* id in
+            # _clickupDocId for a few rows. The page URL has the authoritative
+            # page id, so prefer it whenever present.
+            page_id = url_page_id or page_id
+            if stored_page_id and stored_page_id == doc_id:
+                page_id = url_page_id
         if not doc_id or not page_id:
             return (False, "inspirations row missing ClickUp doc/page ids")
         api_key = self.env.get("CLICKUP_API_KEY")
         if not api_key:
             return (False, "CLICKUP_API_KEY unavailable for brief page verification")
-        url = f"https://api.clickup.com/api/v3/workspaces/9016762494/docs/{urllib.parse.quote(doc_id)}/pages/{urllib.parse.quote(page_id)}"
         last_error = None
         content = ""
-        for attempt in range(3):
-            try:
-                req = urllib.request.Request(url, headers={"Authorization": api_key})
-                with urllib.request.urlopen(req, timeout=20) as resp:
-                    payload = json.loads(resp.read().decode("utf-8"))
-                content = str((payload or {}).get("content") or "")
-                last_error = None
+        page_candidates = []
+        for candidate in (url_page_id, stored_page_id, page_id):
+            if candidate and candidate not in page_candidates and candidate != doc_id:
+                page_candidates.append(candidate)
+        for candidate in page_candidates or [page_id]:
+            url = f"https://api.clickup.com/api/v3/workspaces/9016762494/docs/{urllib.parse.quote(doc_id)}/pages/{urllib.parse.quote(candidate)}"
+            for attempt in range(3):
+                try:
+                    req = urllib.request.Request(url, headers={"Authorization": api_key})
+                    with urllib.request.urlopen(req, timeout=20) as resp:
+                        payload = json.loads(resp.read().decode("utf-8"))
+                    content = str((payload or {}).get("content") or "")
+                    last_error = None
+                    break
+                except Exception as e:
+                    last_error = e
+                    if attempt < 2:
+                        time.sleep(2 * (attempt + 1))
+            if last_error is None:
                 break
-            except Exception as e:
-                last_error = e
-                if attempt < 2:
-                    time.sleep(2 * (attempt + 1))
         if last_error is not None:
             return (False, f"ClickUp brief page unreadable: {last_error}")
         if not content.strip():
@@ -1927,11 +1942,15 @@ class Worker:
                 re.I,
             )
         )
-        has_strategy_snapshot = bool(re.search(r"Strategy Snapshot", section8, re.I)) and strategy_table_count >= 1
-        has_script_breakdown = bool(re.search(r"Script Breakdown", section8, re.I)) and script_table_count >= 1
+        # Treat the canonical table headers as the source of truth. Some
+        # ClickUp pages render the required tables directly under each
+        # variation without an extra "Strategy Snapshot" / "Script Breakdown"
+        # label, and those should not be false-failed.
+        has_strategy_snapshot = strategy_table_count >= 1
+        has_script_breakdown = script_table_count >= 1
         checks = {
             "creative breakdown Caption / Voice Over column": "Caption / Voice Over" in content,
-            "section 8 NEXT AD SCRIPTS": bool(re.search(r"##\s*8\s*(?:\\\.)?\.?\s*NEXT AD SCRIPTS", content, re.I)),
+            "section 8 NEXT AD SCRIPTS": bool(re.search(r"##\s*8\s*(?:\\\.)?\.?\s*NEXT AD SCRIPTS", normalized, re.I)),
             "Strategy Snapshot table": has_strategy_snapshot,
             "Voice-over Script": bool(re.search(r"Voice[- ]over Script", content, re.I)),
             "Script Breakdown table": has_script_breakdown,

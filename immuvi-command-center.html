@@ -14692,6 +14692,48 @@ function _taxonomyLookupKey(name) {
   return String(_normalizeTaxonomyName(name || '') || '').toLowerCase().trim();
 }
 
+function _newTaxonomyId(kind, items) {
+  var prefix = kind === 'persona' ? 'per' : 'ang';
+  var seen = {};
+  (items || []).forEach(function (item) { if (item && item.id) seen[item.id] = true; });
+  for (var i = 0; i < 5; i++) {
+    var id = prefix + '-manual-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);
+    if (!seen[id]) return id;
+  }
+  return prefix + '-manual-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2);
+}
+
+function _ensureTaxonomyItem(kind, name, notes) {
+  var list = kind === 'persona' ? PERSONAS : ANGLES;
+  var clean = _canonicalTaxonomyName(name, list);
+  if (!clean) return '';
+  var exists = list.some(function (item) {
+    return item && _taxonomyLookupKey(item.name) === _taxonomyLookupKey(clean);
+  });
+  if (!exists) {
+    _forgetTaxonomyDeletion(kind, activeProductId, clean);
+    list.push({
+      id: _newTaxonomyId(kind, list),
+      name: clean,
+      status: 'Untested',
+      sourceLink: '',
+      notes: notes || '',
+      createdAt: Date.now(),
+      _localNew: true
+    });
+  }
+  return clean;
+}
+
+function _commitEditableOnEnter(event, el) {
+  if (event && event.key === 'Enter') {
+    event.preventDefault();
+    if (el && typeof el.blur === 'function') el.blur();
+    return false;
+  }
+  return true;
+}
+
 function _personaSemanticKey(name) {
   var s = String(_normalizeTaxonomyName(name || '') || '').toLowerCase();
   if (!s) return '';
@@ -19014,6 +19056,7 @@ function renderAngles() {
       '<div class="tr-num">' + (i + 1) + '</div>' +
       '<div class="tr-name" contenteditable="true" ' +
         'onblur="updateAngleName(' + i + ', this.textContent)" ' +
+        'onkeydown="return _commitEditableOnEnter(event,this)" ' +
         'ondblclick="this.focus()" ' +
         'title="Double-click to edit">' + esc(ang.name) + winnerBadge + _archivedChipA + '</div>' +
       '<div class="tr-status"><span class="tr-status-badge ' + c.cls + '" title="Auto-derived from creatives">' + esc(derivedAngStatus) + '</span></div>' +
@@ -19956,11 +19999,11 @@ async function _recApprove(recId) {
     var per = _canonicalTaxonomyName((rec.recommended_persona || '').trim(), PERSONAS);
 
     if (ang && !ANGLES.find(function (a) { return _taxonomyLookupKey(a.name) === _taxonomyLookupKey(ang); })) {
-      var newAngId = 'ang-rec-' + Date.now();
+      var newAngId = _newTaxonomyId('angle', ANGLES);
       ANGLES.push({ id: newAngId, name: ang, status: 'Untested', sourceLink: '', notes: 'From strategist recommendation', _localNew: true });
     }
     if (per && !PERSONAS.find(function (p) { return _taxonomyLookupKey(p.name) === _taxonomyLookupKey(per); })) {
-      var newPerId = 'per-rec-' + Date.now();
+      var newPerId = _newTaxonomyId('persona', PERSONAS);
       PERSONAS.push({ id: newPerId, name: per, status: 'Untested', sourceLink: '', notes: 'From strategist recommendation', _localNew: true });
     }
 
@@ -20214,6 +20257,7 @@ function renderPersonas() {
       '<div class="tr-num">' + (i + 1) + '</div>' +
       '<div class="tr-name" contenteditable="true" ' +
         'onblur="updatePersonaName(' + i + ', this.textContent)" ' +
+        'onkeydown="return _commitEditableOnEnter(event,this)" ' +
         'ondblclick="this.focus()" ' +
         'title="Double-click to edit">' + esc(per.name) + winnerBadge + _archivedChip + '</div>' +
       '<div class="tr-status"><span class="tr-status-badge ' + c.cls + '" title="Auto-derived from creatives">' + esc(derivedPerStatus) + '</span></div>' +
@@ -25246,7 +25290,7 @@ function addAngleRow() {
   // tombstone so the new row isn't filtered back out by the merge handlers.
   _forgetTaxonomyDeletion('angle', activeProductId, 'New Angle');
   ANGLES.push({
-    id: 'ang-' + (ANGLES.length + 1),
+    id: _newTaxonomyId('angle', ANGLES),
     name: 'New Angle',
     status: 'Untested',
     sourceLink: '',
@@ -25302,8 +25346,8 @@ function deleteAngle(idx) {
 
 function openEditAngle(idx) {
   var ang = ANGLES[idx];
-  var body = '<div class="form-group"><label>Angle Name</label><input type="text" class="f-inp" id="editAngleName" value="' + escAttr(ang.name) + '"></div>' +
-    '<div class="form-group"><label>Source Link</label><input type="text" class="f-inp" id="editAngleLink" value="' + escAttr(ang.sourceLink || '') + '"></div>' +
+  var body = '<div class="form-group"><label>Angle Name</label><input type="text" class="f-inp" id="editAngleName" value="' + escAttr(ang.name) + '" onkeydown="if(event.key===\'Enter\'){event.preventDefault();saveEditAngle(' + idx + ')}"></div>' +
+    '<div class="form-group"><label>Source Link</label><input type="text" class="f-inp" id="editAngleLink" value="' + escAttr(ang.sourceLink || '') + '" onkeydown="if(event.key===\'Enter\'){event.preventDefault();saveEditAngle(' + idx + ')}"></div>' +
     '<div class="form-group"><label>Notes</label><textarea class="f-inp" id="editAngleNotes" rows="3">' + esc(ang.notes || '') + '</textarea></div>';
   var foot = '<button class="btn-add" onclick="saveEditAngle(' + idx + ')">Save</button> <button class="btn-ghost" onclick="closeModal()">Cancel</button>';
   openModal('Edit Angle', body, foot);
@@ -25385,7 +25429,7 @@ function updatePersonaName(idx, text) {
 function addPersonaRow() {
   _forgetTaxonomyDeletion('persona', activeProductId, 'New Persona');
   PERSONAS.push({
-    id: 'per-' + (PERSONAS.length + 1),
+    id: _newTaxonomyId('persona', PERSONAS),
     name: 'New Persona',
     status: 'Untested',
     sourceLink: '',
@@ -25568,8 +25612,8 @@ function deletePersona(idx) {
 
 function openEditPersona(idx) {
   var per = PERSONAS[idx];
-  var body = '<div class="form-group"><label>Persona Name</label><input type="text" class="f-inp" id="editPersonaName" value="' + escAttr(per.name) + '"></div>' +
-    '<div class="form-group"><label>Source Link</label><input type="text" class="f-inp" id="editPersonaLink" value="' + escAttr(per.sourceLink || '') + '"></div>' +
+  var body = '<div class="form-group"><label>Persona Name</label><input type="text" class="f-inp" id="editPersonaName" value="' + escAttr(per.name) + '" onkeydown="if(event.key===\'Enter\'){event.preventDefault();saveEditPersona(' + idx + ')}"></div>' +
+    '<div class="form-group"><label>Source Link</label><input type="text" class="f-inp" id="editPersonaLink" value="' + escAttr(per.sourceLink || '') + '" onkeydown="if(event.key===\'Enter\'){event.preventDefault();saveEditPersona(' + idx + ')}"></div>' +
     '<div class="form-group"><label>Notes</label><textarea class="f-inp" id="editPersonaNotes" rows="3">' + esc(per.notes || '') + '</textarea></div>';
   var foot = '<button class="btn-add" onclick="saveEditPersona(' + idx + ')">Save</button> <button class="btn-ghost" onclick="closeModal()">Cancel</button>';
   openModal('Edit Persona', body, foot);
@@ -25828,10 +25872,10 @@ function _executeMergeFromModal(type) {
     // Insert survivor into ANGLES/PERSONAS array if not already present
     if (type === 'angle') {
       var exists = ANGLES.some(function(a){ return a.name === survivorName; });
-      if (!exists) ANGLES.push({ id: 'ang-merge-' + Date.now(), name: survivorName, status: 'Untested', sourceLink: '', notes: '', _localNew: true });
+      if (!exists) ANGLES.push({ id: _newTaxonomyId('angle', ANGLES), name: survivorName, status: 'Untested', sourceLink: '', notes: '', _localNew: true });
     } else {
       var exists = PERSONAS.some(function(p){ return p.name === survivorName; });
-      if (!exists) PERSONAS.push({ id: 'per-merge-' + Date.now(), name: survivorName, status: 'Untested', sourceLink: '', notes: '', _localNew: true });
+      if (!exists) PERSONAS.push({ id: _newTaxonomyId('persona', PERSONAS), name: survivorName, status: 'Untested', sourceLink: '', notes: '', _localNew: true });
     }
   }
 
@@ -29155,7 +29199,7 @@ function autoDiscoverTaxonomy(sourceAds) {
     if (ang && !angleSeen[angKey] && !existingAngleNamesLC[angKey] && !_angTomb[angKey]) {
       angleSeen[angKey] = true;
       ANGLES.push({
-        id: 'ang-auto-' + Date.now() + '-' + addedAngles.length,
+        id: _newTaxonomyId('angle', ANGLES),
         name: ang,
         status: 'Untested',
         sourceLink: '',
@@ -29173,7 +29217,7 @@ function autoDiscoverTaxonomy(sourceAds) {
     if (per && !personaSeen[perKey] && !existingPersonaNamesLC[perKey] && !_perTomb[perKey]) {
       personaSeen[perKey] = true;
       PERSONAS.push({
-        id: 'per-auto-' + Date.now() + '-' + addedPersonas.length,
+        id: _newTaxonomyId('persona', PERSONAS),
         name: per,
         status: 'Untested',
         sourceLink: '',
@@ -35027,12 +35071,12 @@ function updateCreativeFieldInline(adId, field, val) {
   var addedNew = false;
   if (field === 'angle' && val && !ANGLES.some(function(a) { return _taxonomyLookupKey(a.name) === _taxonomyLookupKey(val); })) {
     _forgetTaxonomyDeletion('angle', activeProductId, val); // BUG-004
-    ANGLES.push({ id: 'ang-' + Date.now(), name: val, status: 'Untested', sourceLink: '', notes: '', _localNew: true });
+    ANGLES.push({ id: _newTaxonomyId('angle', ANGLES), name: val, status: 'Untested', sourceLink: '', notes: '', _localNew: true });
     addedNew = true;
   }
   if (field === 'persona' && val && !PERSONAS.some(function(p) { return _taxonomyLookupKey(p.name) === _taxonomyLookupKey(val); })) {
     _forgetTaxonomyDeletion('persona', activeProductId, val); // BUG-004
-    PERSONAS.push({ id: 'per-' + Date.now(), name: val, status: 'Untested', sourceLink: '', notes: '', _localNew: true });
+    PERSONAS.push({ id: _newTaxonomyId('persona', PERSONAS), name: val, status: 'Untested', sourceLink: '', notes: '', _localNew: true });
     addedNew = true;
   }
 
@@ -35653,7 +35697,7 @@ function assignAndExpandCell(angleName, personaName) {
   }
   if (!hasInPersonas) {
     PERSONAS.push({
-      id: 'per-' + (PERSONAS.length + 1),
+      id: _newTaxonomyId('persona', PERSONAS),
       name: personaName,
       status: 'Untested',
       sourceLink: '',
@@ -46003,6 +46047,24 @@ var _insSaveTs = 0; // timestamp of last local inspiration save — used for sel
 function updateInsField(id, field, value) {
   var ins = INSPIRATIONS.find(function(i){ return i.id === id; });
   if (!ins) return;
+  var touchedTaxonomy = false;
+  if (field === 'angle' || field === 'persona') {
+    if (value === '__custom__') {
+      var entered = prompt('Add ' + field + ' name:', ins[field] && ins[field] !== '__custom__' ? ins[field] : '');
+      if (entered === null) { renderInspirations(); return; }
+      value = entered.trim();
+    }
+    value = _ensureTaxonomyItem(field, value, 'Manually added from inspiration');
+    if (!value) { renderInspirations(); return; }
+    touchedTaxonomy = true;
+    if (field === 'angle') {
+      ins._needsAngleReview = false;
+      ins._anglePromptDone = true;
+    } else {
+      ins._needsPersonaReview = false;
+      ins._personaPromptDone = true;
+    }
+  }
   if (field === 'addedBy') {
     value = String(value || '').trim();
     ins._addedByTouched = true;
@@ -46010,6 +46072,10 @@ function updateInsField(id, field, value) {
   ins[field] = value;
   _insSaveTs = Date.now();
   saveInspirations();
+  if (touchedTaxonomy) {
+    saveState();
+    renderInspirations();
+  }
   // Push adType to ClickUp if this inspiration has a linked task
   if (field === 'adType' && ins._sourceClickupId && CFG.key) {
     var _insProxy = { _clickupId: ins._sourceClickupId, id: ins.id };

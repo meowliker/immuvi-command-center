@@ -21163,6 +21163,17 @@ var _AP_DEFAULT_COLUMNS = [
   { key:'del',      width:96,  hidden:false }
 ];
 
+function _apResolvedClickUpTaskId(cardOrRow) {
+  var card = cardOrRow || {};
+  var act = card.act || card;
+  var display = card.display || {};
+  var ad = card.ad || null;
+  return (act && (act.clickupTaskId || act._clickupId || act.clickupId))
+      || (display && (display._clickupId || display.clickupTaskId))
+      || (ad && (ad.clickupTaskId || ad._clickupId || (_looksLikeClickUpTaskId(ad.id) ? ad.id : '')))
+      || '';
+}
+
 // Built-in column registry — head label, sort key, lock flag, render fns.
 // Custom-field columns get registered lazily by _apEnsureCfColumns() based
 // on whatever ClickUp custom fields the workspace has configured.
@@ -21297,11 +21308,11 @@ var _AP_COL_REGISTRY = {
     label: 'ClickUp',
     renderCell: function (r) {
       var act = r.act;
+      var clickupTaskId = _apResolvedClickUpTaskId(r);
       var cuHtml = '';
       if (act._clickupTaskDeleted) {
         cuHtml = '<button class="ap-cu-btn warn" onclick="event.stopPropagation();recreateClickUpTask(\'' + escAttr(act.id) + '\')">↻ Recreate</button>';
-      } else if (act.clickupTaskId || act._clickupId) {
-        var clickupTaskId = act.clickupTaskId || act._clickupId;
+      } else if (clickupTaskId) {
         cuHtml = '<a class="ap-cu-link" href="https://app.clickup.com/t/' + escAttr(clickupTaskId) + '" target="_blank" rel="noopener" onclick="event.stopPropagation()">↗ ClickUp</a>';
       } else if (act._cu_creating) {
         cuHtml = '<button class="ap-cu-btn loading" disabled>Creating…</button>';
@@ -21341,7 +21352,7 @@ var _AP_COL_REGISTRY = {
       // The producer skill fetches the task from ClickUp by this id.
       // Order: explicit a.clickupTaskId → a._clickupId → '' (no button rendered).
       var act = r.act || {};
-      var taskId = act.clickupTaskId || act._clickupId || '';
+      var taskId = _apResolvedClickUpTaskId(r);
       var productId = (typeof activeProductId !== 'undefined' && activeProductId) || '';
       // If no ClickUp task yet, render a disabled placeholder so the user
       // knows they need to push to ClickUp first via the "+ ClickUp" button.
@@ -23869,9 +23880,15 @@ function apBulkApplyStatus(newStatus) {
 
 // Sequential bulk push to ClickUp with auto-retry (≤2 retries per task).
 function apBulkPushToClickUp() {
+  var cardsByActionId = {};
+  try {
+    apResolveAllCards().forEach(function (card) {
+      if (card && card.act && card.act.id) cardsByActionId[card.act.id] = card;
+    });
+  } catch (e) {}
   var ids = Object.keys(_apState.selected).filter(function (id) {
     var act = MANUAL_ACTIONS.find(function (a) { return a.id === id; });
-    return act && !act._clickupId && !act._cu_creating;
+    return act && !_apResolvedClickUpTaskId(cardsByActionId[id] || act) && !act._cu_creating;
   });
   if (!ids.length) { toast('Nothing to push (already in ClickUp or in flight)', 'warn'); return; }
   _apState.bulkPushInFlight = true;
@@ -24209,8 +24226,9 @@ function renderApDrawerHtml(card) {
   html += '</div>';
   // Action row
   html += '<div class="ap-drawer-actions">';
-  if (act._clickupId) {
-    html += '<a class="ap-drawer-btn primary" href="https://app.clickup.com/t/' + escAttr(act._clickupId) + '" target="_blank" rel="noopener">↗ Open in ClickUp</a>';
+  var drawerClickupId = _apResolvedClickUpTaskId(card);
+  if (drawerClickupId) {
+    html += '<a class="ap-drawer-btn primary" href="https://app.clickup.com/t/' + escAttr(drawerClickupId) + '" target="_blank" rel="noopener">↗ Open in ClickUp</a>';
   } else {
     html += '<button class="ap-drawer-btn primary" onclick="createClickUpTaskFromAction(\'' + escAttr(act.id) + '\')">+ Push to ClickUp</button>';
   }
@@ -24298,8 +24316,9 @@ function renderApDrawerMbBody(card) {
   if (d.adLink)    html += '<a class="ap-dr-link" href="' + escAttr(d.adLink) + '" target="_blank" rel="noopener">📎 Inspiration / Ad link</a>';
   if (d.driveLink) html += '<a class="ap-dr-link" href="' + escAttr(d.driveLink) + '" target="_blank" rel="noopener">📁 Drive folder</a>';
   if (src.refUrl)  html += '<a class="ap-dr-link" href="' + escAttr(src.refUrl) + '" target="_blank" rel="noopener">🔗 ' + esc(src.label) + '</a>';
-  if (act._clickupId) html += '<a class="ap-dr-link" href="https://app.clickup.com/t/' + escAttr(act._clickupId) + '" target="_blank" rel="noopener">↗ ClickUp task</a>';
-  if (!d.adLink && !d.driveLink && !src.refUrl && !act._clickupId) html += '<div class="ap-dr-empty">No links yet</div>';
+  var mbClickupId = _apResolvedClickUpTaskId(card);
+  if (mbClickupId) html += '<a class="ap-dr-link" href="https://app.clickup.com/t/' + escAttr(mbClickupId) + '" target="_blank" rel="noopener">↗ ClickUp task</a>';
+  if (!d.adLink && !d.driveLink && !src.refUrl && !mbClickupId) html += '<div class="ap-dr-empty">No links yet</div>';
   html += '</div>';
   html += '</section>';
 
@@ -24351,9 +24370,10 @@ function renderApDrawerStrategistBody(card) {
     html += '<span class="ap-dr-prov-label"><a href="#" onclick="event.preventDefault();apJumpToMatrixCell(\'' + escJs(d.angle) + '\',\'' + escJs(d.persona) + '\')">' + esc(d.angle) + ' × ' + esc(d.persona) + '</a></span>';
     html += '</div>';
   }
-  if (act._clickupId) {
+  var strategistClickupId = _apResolvedClickUpTaskId(card);
+  if (strategistClickupId) {
     html += '<div class="ap-dr-prov-row"><span class="kind c-stone">clickup</span>';
-    html += '<span class="ap-dr-prov-label"><a href="https://app.clickup.com/t/' + escAttr(act._clickupId) + '" target="_blank" rel="noopener">' + esc(act._clickupId) + ' ↗</a></span>';
+    html += '<span class="ap-dr-prov-label"><a href="https://app.clickup.com/t/' + escAttr(strategistClickupId) + '" target="_blank" rel="noopener">' + esc(strategistClickupId) + ' ↗</a></span>';
     html += '</div>';
   }
   html += '</div>';
@@ -24692,11 +24712,12 @@ function _renderActionPlan_LEGACY() {
       //   3. Create-in-flight          → animated spinner button (disabled — survives re-render mid-fetch)
       //   4. Idle                      → "+ ClickUp" create button
       var cuControl = '';
-      if (act._clickupId && act._clickupTaskDeleted) {
+      var cardClickupId = _apResolvedClickUpTaskId({ act: act, ad: srcAd });
+      if (cardClickupId && act._clickupTaskDeleted) {
         cuControl = '<span class="ap-cu-deleted-badge" title="This ClickUp task was deleted. Click Recreate to create a fresh one.">&#9888; Deleted in ClickUp</span>' +
           '<button class="ap-cu-create-btn" style="margin-left:4px" onclick="recreateClickUpTask(\'' + escAttr(act.id) + '\')">&#8635; Recreate</button>';
-      } else if (act._clickupId) {
-        cuControl = '<a class="ap-cu-done-link" href="https://app.clickup.com/t/' + escAttr(act._clickupId) + '" target="_blank" rel="noopener">&#8599; ClickUp</a>';
+      } else if (cardClickupId) {
+        cuControl = '<a class="ap-cu-done-link" href="https://app.clickup.com/t/' + escAttr(cardClickupId) + '" target="_blank" rel="noopener">&#8599; ClickUp</a>';
       } else if (act._cu_creating) {
         cuControl = '<button class="ap-cu-create-btn loading" id="ap_cu_btn_' + escAttr(act.id) + '" disabled aria-busy="true">Creating</button>';
       } else {
@@ -28422,9 +28443,15 @@ function createClickUpTaskFromAction(actionId, onDone, sourceAdOverride) {
 function bulkCreateClickUp() {
   if (!CFG.key) { toast('Enter ClickUp API key first', 'err'); return; }
 
+  var cardsByActionId = {};
+  try {
+    apResolveAllCards().forEach(function (card) {
+      if (card && card.act && card.act.id) cardsByActionId[card.act.id] = card;
+    });
+  } catch (e) {}
   var toCreate = [];
   for (var i = 0; i < MANUAL_ACTIONS.length; i++) {
-    if (selectedActions.has(MANUAL_ACTIONS[i].id) && !MANUAL_ACTIONS[i]._clickupId) {
+    if (selectedActions.has(MANUAL_ACTIONS[i].id) && !_apResolvedClickUpTaskId(cardsByActionId[MANUAL_ACTIONS[i].id] || MANUAL_ACTIONS[i])) {
       toCreate.push(MANUAL_ACTIONS[i].id);
     }
   }
@@ -32187,7 +32214,7 @@ function apResolveCard(act) {
     driveLink: (ad && ad.driveLink) || cfDisplay['drive link'] || '',
     adLink: (ad && ad.adLink) || act.adLink || '',
     _clickupId: act.clickupTaskId || act._clickupId || (ad && (ad.clickupTaskId || ad._clickupId)) || null,
-    _clickupUrl: (ad && ad._clickupUrl) || ((act.clickupTaskId || act._clickupId) ? 'https://app.clickup.com/t/' + (act.clickupTaskId || act._clickupId) : ''),
+    _clickupUrl: (ad && ad._clickupUrl) || ((act.clickupTaskId || act._clickupId || (ad && (ad.clickupTaskId || ad._clickupId))) ? 'https://app.clickup.com/t/' + (act.clickupTaskId || act._clickupId || (ad && (ad.clickupTaskId || ad._clickupId))) : ''),
     _customFields: cfDisplay,
     _customFieldsRaw: cfRaw
   };

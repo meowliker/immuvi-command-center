@@ -1851,6 +1851,13 @@ class Worker:
                 return (False, f"inspirations row mediaKind/adType mismatch: {media_kind}/{ad_type}")
             if media_kind == "video" and ad_type in ("Photo", "Carousel"):
                 return (False, f"inspirations row mediaKind/adType mismatch: {media_kind}/{ad_type}")
+            notes_l = str(data.get("notes") or "").strip().lower()
+            if media_kind == "image" and (
+                "og image preview" in notes_l
+                or "play icon" in notes_l
+                or "no video file was obtainable" in notes_l
+            ):
+                return (False, "Instagram video preview image was published as Photo; retry with real media download")
             voice_over = str(data.get("voiceOver") or "").strip().lower()
             if media_kind == "video" and not voice_over:
                 return (False, "video inspiration row has blank voiceOver")

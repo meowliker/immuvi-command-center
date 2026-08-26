@@ -362,9 +362,9 @@ try:
     elif platform == "instagram":
         # Instagram public media uses the shared robust chain:
         # gallery-dl with browser cookies -> snapinsta via off-screen Playwright
-        # -> Open Graph media fallback. This keeps photo posts from being
-        # classified against cropped/partial previews when better media is
-        # available on the worker.
+        # -> Open Graph video fallback only. Never accept OG image previews as
+        # final media; reels/videos can expose only a preview image with a play
+        # icon, which would publish a Video as Photo.
         ig = download_instagram_media(url, work_dir)
         snapshot = ig["metadata"]
         frames = ig["frames"]

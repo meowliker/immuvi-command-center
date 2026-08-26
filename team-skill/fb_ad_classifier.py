@@ -563,6 +563,10 @@ def _ig_download_snapinsta(url: str, work_dir: str) -> tuple[str, str]:
 
 
 def _ig_download_og(url: str, work_dir: str, og: dict) -> tuple[str, str]:
+    # OG images are crawler previews, not necessarily the actual Instagram
+    # creative. Reels/video posts often expose only an og:image with a play icon;
+    # accepting that preview caused videos to be classified as Photo. Only allow
+    # OG fallback when Instagram exposes an actual video URL.
     if og.get("video_url"):
         dest = os.path.join(work_dir, "_ig_og.mp4")
         req = urllib.request.Request(og["video_url"], headers={"User-Agent": "facebookexternalhit/1.1"})
@@ -571,15 +575,7 @@ def _ig_download_og(url: str, work_dir: str, og: dict) -> tuple[str, str]:
         if os.path.getsize(dest) > 500:
             return dest, "video"
 
-    if og.get("image_url"):
-        dest = os.path.join(work_dir, "_ig_og.jpg")
-        req = urllib.request.Request(og["image_url"], headers={"User-Agent": "facebookexternalhit/1.1"})
-        with urllib.request.urlopen(req, timeout=30) as r, open(dest, "wb") as f:
-            f.write(r.read())
-        if os.path.getsize(dest) > 500:
-            return dest, "image"
-
-    raise RuntimeError("og: no usable Instagram media")
+    raise RuntimeError("og: no usable Instagram video media; refusing image preview fallback")
 
 
 def _ig_get_duration(path: str) -> float:
@@ -658,6 +654,7 @@ def download_instagram_media(url: str, work_dir: str) -> dict:
             "cta_text": "",
             "link_url": og.get("link_url") or url,
             "media_kind": kind,
+            "download_via": via,
         },
         "via": via,
         "is_video": kind == "video",

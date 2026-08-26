@@ -395,6 +395,7 @@ def download_tiktok_media(url: str, work_dir: str) -> dict:
         "metadata": {
             "page_name": page_name,
             "body_text": meta.get("title") or meta.get("desc") or "",
+            "caption": meta.get("title") or meta.get("desc") or "",
             "title": meta.get("title") or "",
             "cta_text": "",
             "link_url": url,
@@ -650,6 +651,7 @@ def download_instagram_media(url: str, work_dir: str) -> dict:
         "metadata": {
             "page_name": decode_unicode(og.get("page_name") or ""),
             "body_text": decode_unicode(og.get("body_text") or og.get("caption") or ""),
+            "caption": decode_unicode(og.get("caption") or og.get("body_text") or ""),
             "title": decode_unicode(og.get("title") or ""),
             "cta_text": "",
             "link_url": og.get("link_url") or url,

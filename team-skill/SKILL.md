@@ -397,6 +397,7 @@ try:
         "duration": round(duration, 1),
         "metadata": {
             "body_text": decode_unicode(snapshot.get("body_text") or ""),
+            "caption": decode_unicode(snapshot.get("caption") or snapshot.get("body_text") or ""),
             "title": decode_unicode(snapshot.get("title") or ""),
             "page_name": decode_unicode(snapshot.get("page_name") or ""),
             "cta_text": decode_unicode(snapshot.get("cta_text") or ""),
@@ -443,7 +444,7 @@ Read each frame with the **Read tool** (up to 6 frames). You are a senior media 
 | voice_over_timeline | Array of `{ "time": "0:00-0:04", "voice_over": "..." }` from audio transcription segments when available. Empty array if no voice-over or transcript unavailable. |
 | page_name | From pipeline page_name metadata, or visually identified brand name if pipeline returned empty (Instagram/TikTok). **IMPORTANT:** dashboard reads `metadata.page_name` for the Brand column — always populate this field, even if the pipeline didn't. |
 | brand | Same value as page_name (human-readable alias) |
-| body_text | From body_text metadata |
+| body_text | From platform ad copy/caption metadata. For Instagram and TikTok this must be the post caption/description when available, not a placeholder telling the user to open the source. |
 | title / headline | From title metadata (dashboard reads both keys — write the same value to both) |
 | cta_text | English CTA display text. If Facebook supplies a localized `cta_text` but `cta_type` is available, normalize from `cta_type` (example: `SHOP_NOW` → `Shop now`). Keep Hindi or another language only when the ad's CTA is genuinely custom/on-creative in that language and there is no reliable platform CTA type. |
 | cta_type | From platform metadata when available |
@@ -625,7 +626,7 @@ The dashboard's `applyClassificationResults` function expects these **camelCase*
 | `creativeHypothesis` | classification.creative_hypothesis |
 | `notes` | classification.notes |
 | `hookText` | metadata.hook_text OR classification.hook_text |
-| `bodyCopy` | metadata.body_copy_from_frames OR metadata.body_text |
+| `bodyCopy` | metadata.body_text OR metadata.caption OR metadata.body_copy_from_frames |
 | `captionTranscript` | metadata.caption_transcript OR brief.caption_transcript |
 | `voiceOver` | classification.voice_over OR metadata.voice_over OR `"No voice over"` |
 | `voiceOverTimeline` | classification.voice_over_timeline OR metadata.voice_over_timeline OR brief.voice_over_timeline |
@@ -665,7 +666,7 @@ cls = result['classification']
 brand = md.get('page_name') or md.get('brand') or ''
 hook_text = md.get('hook_text') or cls.get('hook_text') or ''
 caption_transcript = md.get('caption_transcript') or (result.get('brief') or {}).get('caption_transcript') or ''
-body_copy = md.get('body_copy_from_frames') or md.get('body_text') or ''
+body_copy = md.get('body_text') or md.get('caption') or md.get('body_copy_from_frames') or ''
 voice_over = cls.get('voice_over') or md.get('voice_over') or (result.get('brief') or {}).get('voice_over') or ''
 if voice_over.strip().lower() in ('voice over present - transcript unavailable', 'voiceover present - transcript unavailable', 'transcript unavailable', 'n/a', 'na', 'none'):
   voice_over = ''
@@ -876,7 +877,7 @@ The `content` field should be markdown with these 8 H2 sections — format match
 | Decision | — |
 | Reference | [[source_url]]([source_url]) |
 
-**Ad Copy:** [body_text or "(not available)"]
+**Ad Copy:** [body_text/platform caption or "(not available)"]
 [If `voice_over` is a real transcript or exactly `No voice over`, render `**Voice Over:** [voice_over]`. If `voice_over` is blank/unverified, omit the Voice Over line entirely.]
 **On-screen Text Timing:** [compact timing note for static hook cards / important overlay text, e.g. `0:00-0:04 top hook card: "Can your child answer this?"`. Omit if no meaningful overlay text.]
 **Headline:** [title or "(not available)"]

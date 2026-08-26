@@ -1477,6 +1477,7 @@ class Worker:
             f"Never write phrases like 'Audio present; exact transcript not verified' in Caption / Voice Over.\n"
             f"     CTA must be English display text when a platform cta_type is available (SHOP_NOW => Shop now); keep Hindi only for true custom Hindi creative CTA.\n"
             f"  5. Build the creative brief markdown. In the SNAPSHOT section, include "
+            f"the real platform Ad Copy/bodyCopy. For Instagram and TikTok, Ad Copy must be the actual post caption/description when the downloader exposes it; never use a placeholder like 'use the source link for full caption'. "
             f"a full 'Voice Over' script line/paragraph before the table when there is a real transcript or exactly 'No voice over'; omit the line when speech is unverified. "
             f"Do NOT render separate Hook Text or Caption Transcript lines. Put static hook/overlay timing in one compact 'On-screen Text Timing' note before the table. "
             f"In CREATIVE BREAKDOWN, use columns Time | Label | Caption / Voice Over | What Happens | Emotion Triggered. "
@@ -1888,6 +1889,9 @@ class Worker:
             )
             if any(fragment in voice_over for fragment in bad_voice_over_fragments):
                 return (False, "inspirations row contains an unavailable voice-over placeholder")
+            body_copy_l = str(data.get("bodyCopy") or "").strip().lower()
+            if "instagram caption supports the same message" in body_copy_l or "use the source link for full caption" in body_copy_l:
+                return (False, "inspirations row contains Ad Copy placeholder instead of platform caption")
             hook_text = str(data.get("hookText") or "").strip().lower()
             captions = data.get("captionTimeline") or []
             if hook_text and isinstance(captions, list) and captions:
@@ -1983,6 +1987,8 @@ class Worker:
         for placeholder in bad_placeholders:
             if placeholder in lowered:
                 return (False, f"ClickUp brief page contains unavailable-audio placeholder: {placeholder}")
+        if "instagram caption supports the same message" in lowered or "use the source link for full caption" in lowered:
+            return (False, "ClickUp brief page contains Ad Copy placeholder instead of platform caption")
         normalized = content.replace("\\|", "|")
         section8_match = re.search(
             r"##\s*8\s*(?:\\\.)?\.?\s*NEXT AD SCRIPTS(?P<section>.*)",

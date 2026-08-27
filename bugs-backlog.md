@@ -2381,3 +2381,29 @@ The worker prompt required tables, but the ClickUp page verifier only checked fo
 - Section 8 format changes must be enforced in both prompt text and the final ClickUp page verifier.
 - A classified inspiration must not pass when stored `nextAdScripts` is empty or the visible doc lacks the three tabled variation scripts.
 - After any brief-contract update, restart stale workers and confirm their heartbeat includes the current `worker_contract`.
+
+---
+
+## Bug 60 — Angle rename silently cascaded into Patchwork tasks
+**Status:** ✅ fixed locally 2026-08-27
+**Reported:** 2026-08-27
+**Surface:** Angles tab / Creative Matrix / ClickUp task fields
+
+### Symptom
+- Patchwork showed the angle `Shopping for someone else, not for herself` in `Testing`.
+- Source inspiration briefs showed those rows originally belonged to `Transformation / Skeptic`, and one task (`PA-064-INS-079`) belonged to `Transformation / Upcycle`.
+- Because the rename cascaded, affected task Angle Tag fields in ClickUp also showed the wrong angle.
+
+### Root Cause
+Angle/persona rename handlers updated `ADS`, `INSPIRATIONS`, `ANGLE_PERSONAS`, and matrix keys immediately without warning when a taxonomy name was edited. A single accidental rename of a master angle row therefore rewrote existing task/inspiration taxonomy. There was no audit row recording the rename, so recovery had to compare source brief pages with live task rows.
+
+### Fix
+1. Repaired Patchwork live data in Supabase and ClickUp: seven affected rows restored to `Transformation / Skeptic`; `PA-064-INS-079` restored to `Transformation / Upcycle`.
+2. Restored the master Patchwork angle row from `Shopping for someone else, not for herself` to `Transformation / Skeptic`.
+3. Removed the duplicate manual `Transformation / Skeptic` angle row created during recovery.
+4. Added a confirmation guard before angle/persona renames cascade into existing creatives/tasks or inspirations.
+
+### Prevention
+- Taxonomy rename is allowed, but if it will touch existing creative/task rows or inspiration rows, the app must show the affected counts before saving.
+- If a taxonomy repair is needed again, verify against source brief pages and ClickUp task fields before mass-updating rows.
+- Never rely on the visible status of a renamed taxonomy row alone to infer the original name; use row-level task/source evidence.

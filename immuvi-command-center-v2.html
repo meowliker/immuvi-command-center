@@ -8054,10 +8054,34 @@ function updateAngleNotes(idx, text) {
   saveState();
 }
 
+function _confirmTaxonomyRenameCascade(kind, oldName, newName) {
+  if (!oldName || !newName || oldName === newName) return true;
+  var field = kind === 'persona' ? 'persona' : 'angle';
+  var label = kind === 'persona' ? 'persona' : 'angle';
+  var creativeCount = 0;
+  var inspirationCount = 0;
+  for (var i = 0; i < (ADS || []).length; i++) {
+    if (ADS[i] && ADS[i][field] === oldName && !ADS[i].parentAdId) creativeCount++;
+  }
+  for (var j = 0; j < (INSPIRATIONS || []).length; j++) {
+    if (INSPIRATIONS[j] && INSPIRATIONS[j][field] === oldName) inspirationCount++;
+  }
+  if (!creativeCount && !inspirationCount) return true;
+  return confirm(
+    'Rename ' + label + ' "' + oldName + '" to "' + newName + '"?\n\n' +
+    'This will also update ' + creativeCount + ' creative/task row' + (creativeCount === 1 ? '' : 's') +
+    ' and ' + inspirationCount + ' inspiration row' + (inspirationCount === 1 ? '' : 's') + '.'
+  );
+}
+
 function updateAngleName(idx, text) {
   var newName = text.trim();
   if (!newName || newName === ANGLES[idx].name) return;
   var oldName = ANGLES[idx].name;
+  if (!_confirmTaxonomyRenameCascade('angle', oldName, newName)) {
+    renderAngles();
+    return;
+  }
   ANGLES[idx].name = newName;
   // Sync to ADS
   for (var i = 0; i < ADS.length; i++) {
@@ -8136,6 +8160,7 @@ function openEditAngle(idx) {
 function saveEditAngle(idx) {
   var oldName = ANGLES[idx].name;
   var newName = document.getElementById('editAngleName').value.trim() || oldName;
+  if (newName !== oldName && !_confirmTaxonomyRenameCascade('angle', oldName, newName)) return;
   ANGLES[idx].name = newName;
   ANGLES[idx].sourceLink = document.getElementById('editAngleLink').value.trim();
   ANGLES[idx].notes = document.getElementById('editAngleNotes').value.trim();
@@ -8180,6 +8205,10 @@ function updatePersonaName(idx, text) {
   var newName = text.trim();
   if (!newName || newName === PERSONAS[idx].name) return;
   var oldName = PERSONAS[idx].name;
+  if (!_confirmTaxonomyRenameCascade('persona', oldName, newName)) {
+    renderPersonas();
+    return;
+  }
   PERSONAS[idx].name = newName;
   // Sync to ADS
   for (var i = 0; i < ADS.length; i++) {
@@ -8262,6 +8291,7 @@ function openEditPersona(idx) {
 function saveEditPersona(idx) {
   var oldName = PERSONAS[idx].name;
   var newName = document.getElementById('editPersonaName').value.trim() || oldName;
+  if (newName !== oldName && !_confirmTaxonomyRenameCascade('persona', oldName, newName)) return;
   PERSONAS[idx].name = newName;
   PERSONAS[idx].sourceLink = document.getElementById('editPersonaLink').value.trim();
   PERSONAS[idx].notes = document.getElementById('editPersonaNotes').value.trim();

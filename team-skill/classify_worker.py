@@ -1471,17 +1471,18 @@ class Worker:
             f"     hook_text is the primary static hook overlay/card (for example a top bubble). Do not put static hook cards into caption_timeline.\n"
             f"     caption_transcript is the full changing visible subtitle/caption transcript in reading order, excluding static hook cards and platform body copy.\n"
             f"     caption_timeline is MANDATORY: changing visible captions/subtitles with time ranges, split whenever active caption text changes.\n"
-            f"     voice_over is spoken narration only, extracted from audio/transcription when audio is present. Never copy standalone visible captions or hook text into voice_over. "
-            f"If there is no spoken narration, write exactly 'No voice over'. If speech is present but exact words cannot be verified, "
+            f"     voice_over is spoken ad narration only, extracted from audio/transcription when audio is present. Never copy standalone visible captions or hook text into voice_over. "
+            f"Do not treat background conversation, kids shouting, classroom/game chatter, music, song lyrics, crowd noise, or incidental dialogue as voice-over; those are ambient audio, so write exactly 'No voice over' and leave voice_over_timeline empty. "
+            f"If there is no spoken ad narration, write exactly 'No voice over'. If true ad narration exists but exact words cannot be verified, "
             f"leave voice_over blank and explain the uncertainty in notes; do not print an unavailable-transcript placeholder in the brief or frame table. "
             f"Never write phrases like 'Audio present; exact transcript not verified' in Caption / Voice Over.\n"
             f"     CTA must be English display text when a platform cta_type is available (SHOP_NOW => Shop now); keep Hindi only for true custom Hindi creative CTA.\n"
             f"  5. Build the creative brief markdown. In the SNAPSHOT section, include "
-            f"the real platform Ad Copy/bodyCopy. For Instagram and TikTok, Ad Copy must be the actual post caption/description when the downloader exposes it; never use a placeholder like 'use the source link for full caption'. "
+            f"the real platform Ad Copy/bodyCopy. For Instagram and TikTok, Ad Copy must be the actual post caption/description when the downloader exposes it; never use a placeholder like 'use the source link for full caption'. Preserve it as plain Markdown text with real line breaks; never render literal '<br>' tags. "
             f"a full 'Voice Over' script line/paragraph before the table when there is a real transcript or exactly 'No voice over'; omit the line when speech is unverified. "
             f"Do NOT render separate Hook Text or Caption Transcript lines. Put static hook/overlay timing in one compact 'On-screen Text Timing' note before the table. "
             f"In CREATIVE BREAKDOWN, use columns Time | Label | Caption / Voice Over | What Happens | Emotion Triggered. "
-            f"When voice-over exists, the Caption / Voice Over column should follow the actual spoken transcript for that timeframe, not a separate OCR caption timeline. "
+            f"When voice-over exists, the Caption / Voice Over column should follow the actual spoken transcript for that timeframe, not a separate OCR caption timeline. When voice-over is 'No voice over', use visible captions/on-screen text or concise visual beats for that column; never use ambient chatter as the script. "
             f"Add section ## 8\\. NEXT AD SCRIPTS with exactly 3 complete variation scripts for OUR selected product, not the inspiration/competitor product. "
             f"First extract and render an Inspiration Script Skeleton: the inspiration's opening phrase pattern, beat order, sentence rhythm, time ranges, repeated phrasing, CTA rhythm, and proof/offer sequence from the Voice Over or Caption / Voice Over table. "
             f"Use the resolved product name and offer/config; borrow the inspiration's mechanic, pacing, emotional trigger, proof structure, table format, and script skeleton. "
@@ -1889,9 +1890,18 @@ class Worker:
             )
             if any(fragment in voice_over for fragment in bad_voice_over_fragments):
                 return (False, "inspirations row contains an unavailable voice-over placeholder")
+            ambient_voice_over_fragments = (
+                "it's a ball. it's a ball",
+                "i'm getting past your basketball",
+                "what an amazing, amazing pass",
+            )
+            if any(fragment in voice_over for fragment in ambient_voice_over_fragments):
+                return (False, "inspirations row used ambient classroom audio as voice-over")
             body_copy_l = str(data.get("bodyCopy") or "").strip().lower()
             if "instagram caption supports the same message" in body_copy_l or "use the source link for full caption" in body_copy_l:
                 return (False, "inspirations row contains Ad Copy placeholder instead of platform caption")
+            if "<br" in body_copy_l:
+                return (False, "inspirations row contains literal <br> tags in Ad Copy/bodyCopy")
             hook_text = str(data.get("hookText") or "").strip().lower()
             captions = data.get("captionTimeline") or []
             if hook_text and isinstance(captions, list) and captions:
@@ -1973,6 +1983,8 @@ class Worker:
             return (False, f"ClickUp brief page unreadable: {last_error}")
         if not content.strip():
             return (False, "ClickUp brief page has empty content")
+        if re.search(r"<br\s*/?>", content, re.I):
+            return (False, "ClickUp brief page contains literal <br> tags")
         bad_placeholders = (
             "audio present; exact transcript not verified",
             "exact transcript not verified",
@@ -1987,6 +1999,13 @@ class Worker:
         for placeholder in bad_placeholders:
             if placeholder in lowered:
                 return (False, f"ClickUp brief page contains unavailable-audio placeholder: {placeholder}")
+        ambient_voice_over_fragments = (
+            "it's a ball. it's a ball",
+            "i'm getting past your basketball",
+            "what an amazing, amazing pass",
+        )
+        if any(fragment in lowered for fragment in ambient_voice_over_fragments):
+            return (False, "ClickUp brief page used ambient classroom audio as voice-over")
         if "instagram caption supports the same message" in lowered or "use the source link for full caption" in lowered:
             return (False, "ClickUp brief page contains Ad Copy placeholder instead of platform caption")
         normalized = content.replace("\\|", "|")

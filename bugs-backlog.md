@@ -2407,3 +2407,30 @@ Angle/persona rename handlers updated `ADS`, `INSPIRATIONS`, `ANGLE_PERSONAS`, a
 - Taxonomy rename is allowed, but if it will touch existing creative/task rows or inspiration rows, the app must show the affected counts before saving.
 - If a taxonomy repair is needed again, verify against source brief pages and ClickUp task fields before mass-updating rows.
 - Never rely on the visible status of a renamed taxonomy row alone to infer the original name; use row-level task/source evidence.
+
+---
+
+## Bug 61 — Instagram Reel ambient audio was treated as Voice Over and `<br>` rendered in Ad Copy
+**Status:** ✅ fixed locally 2026-08-27
+**Reported:** 2026-08-27
+**Surface:** Inspiration classifier / Instagram Reel briefs / ClickUp brief rendering
+
+### Symptom
+- `P-INS-097` was an Instagram Reel/video, but the user saw it classified as Photo in the dashboard shortly after classification.
+- The ClickUp brief rendered the Instagram caption with literal `<br>` tags inside `Ad Copy`.
+- The brief used children/classroom audio (`It's a ball...`) as `Voice Over`, even though the creative had no ad narration; it only had ambient classroom/kid audio plus visible hook/inset captions.
+
+### Root Cause
+The latest media-kind guard fixed hard Photo/Video contradictions, but the worker contract still treated any Whisper transcript as usable voice-over. For Reels with ambient classroom audio, that meant incidental speech could be promoted into the source script. The ClickUp page verifier also did not reject literal HTML line-break tags in markdown output, so malformed caption formatting passed verification.
+
+### Fix
+1. Repaired `P-INS-097`: `mediaKind=video`, `adType=UGC`, `voiceOver=No voice over`, empty `voiceOverTimeline`, cleaned caption timeline, and updated the ClickUp brief page in place.
+2. Worker prompts now define voice-over as spoken ad narration only.
+3. Background conversation, kids shouting, classroom/game chatter, music, song lyrics, crowd noise, and incidental dialogue must be treated as ambient audio and written as `No voice over`.
+4. Worker/ClickUp verification now rejects literal `<br>` tags in Ad Copy/bodyCopy or ClickUp brief content.
+5. Dashboard import now normalizes `<br>` tags into real line breaks if a stale worker still sends them.
+
+### Prevention
+- A transcribed audio track is not automatically voice-over; only deliberate ad narration belongs in `voiceOver`.
+- When `voiceOver` is `No voice over`, the Creative Breakdown `Caption / Voice Over` column should use visible captions/on-screen text or concise visual beats, not ambient audio.
+- Instagram/TikTok captions must stay plain Markdown text with real line breaks.

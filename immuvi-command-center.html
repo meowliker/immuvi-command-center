@@ -45825,8 +45825,8 @@ function _resultRowToLegacy(r) {
     frames_extracted: r.frames_extracted,
     clickup_doc_page_url: r.clickup_doc_page_url,
     clickup_doc_id: r.clickup_doc_id,
-    hookText: meta.hook_text || cls.hook_text || brief.hook_text || '',
-    captionTranscript: meta.caption_transcript || brief.caption_transcript || '',
+    hookText: sanitizeInspirationText(meta.hook_text || cls.hook_text || brief.hook_text || ''),
+    captionTranscript: sanitizeInspirationText(meta.caption_transcript || brief.caption_transcript || ''),
     captionTimeline: meta.caption_timeline || brief.caption_timeline || [],
     voiceOver: normalizeInspirationVoiceOver(cls.voice_over || meta.voice_over || brief.voice_over || ''),
     voiceOverTimeline: cls.voice_over_timeline || meta.voice_over_timeline || brief.voice_over_timeline || [],
@@ -46296,17 +46296,17 @@ function applyClassificationResults(results, isPolling) {
     ins.adType            = normalizeInspirationAdType(data);
     ins.creativeHypothesis= data.creative_hypothesis || '';
     ins.notes             = data.notes || '';
-    ins.hookText          = data.hook_text || data.hookText || ins.hookText || '';
+    ins.hookText          = sanitizeInspirationText(data.hook_text || data.hookText || ins.hookText || '');
     ins.voiceOver         = normalizeInspirationVoiceOver(data.voice_over || data.voiceOver || ins.voiceOver || '');
     ins.voiceOverTimeline = data.voice_over_timeline || data.voiceOverTimeline || ins.voiceOverTimeline || [];
-    ins.captionTranscript = data.caption_transcript || data.captionTranscript || ins.captionTranscript || '';
+    ins.captionTranscript = sanitizeInspirationText(data.caption_transcript || data.captionTranscript || ins.captionTranscript || '');
     ins.nextAdScripts     = data.next_ad_scripts || data.nextAdScripts || ins.nextAdScripts || [];
-    ins.bodyCopy          = data.body_text || '';
-    ins.headline          = data.title || '';
+    ins.bodyCopy          = sanitizeInspirationText(data.body_text || '');
+    ins.headline          = sanitizeInspirationText(data.title || '');
     ins.ctaText           = normalizeInspirationCta(data.cta_text || data.ctaText || '', data.cta_type || data.ctaType || '');
     ins.landingUrl        = data.landing_url || '';
     ins.duration_seconds  = data.duration_seconds || 0;
-    ins.bodyCopy          = data.body_copy_from_frames || data.body_text || ins.bodyCopy || '';
+    ins.bodyCopy          = sanitizeInspirationText(data.body_copy_from_frames || data.body_text || ins.bodyCopy || '');
     ins.captionTimeline   = data.caption_timeline || data.captionTimeline || data.osd_text_timed || ins.captionTimeline || [];
     ins.detectedAngle     = data.detected_angle || data.angle || ins.detectedAngle || '';
     ins.detectedPersona   = data.detected_persona || data.persona || ins.detectedPersona || '';
@@ -46539,13 +46539,20 @@ function normalizeInspirationCta(ctaText, ctaType) {
   return String(ctaText || '').trim();
 }
 
+function sanitizeInspirationText(value) {
+  return String(value || '').replace(/<br\s*\/?>/gi, '\n').trim();
+}
+
 function normalizeInspirationVoiceOver(value) {
-  var v = String(value || '').trim();
+  var v = sanitizeInspirationText(value);
   if (!v) return '';
   var low = v.toLowerCase();
   if (low === 'voice over present - transcript unavailable') return '';
   if (low === 'voiceover present - transcript unavailable') return '';
   if (low === 'transcript unavailable') return '';
+  if (low.indexOf("it's a ball. it's a ball") !== -1) return 'No voice over';
+  if (low.indexOf("i'm getting past your basketball") !== -1) return 'No voice over';
+  if (low.indexOf('what an amazing, amazing pass') !== -1) return 'No voice over';
   return v;
 }
 

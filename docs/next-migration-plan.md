@@ -83,6 +83,11 @@ Started in QA:
   rules used by the React surface.
 - `lib/domain/admin-users.js` contains the tested user-row and product
   assignment helpers used by the React admin surface.
+- `/qa-next/inspiration` is a read-only React operations surface for queue
+  counts, recent inspiration jobs, stale-claim detection, and worker registry
+  heartbeat health.
+- `lib/domain/worker-queue.js` contains tested queue summarization, worker
+  health, and stale-claim helpers.
 
 ## Phase 3: Legacy Retirement
 

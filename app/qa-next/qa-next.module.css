@@ -589,6 +589,163 @@
   background: #6b7280;
 }
 
+.queueMeta {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.queueMeta span {
+  border: 1px solid #d9dee8;
+  border-radius: 999px;
+  padding: 8px 10px;
+  background: #ffffff;
+}
+
+.queueGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 340px;
+  gap: 18px;
+  width: min(1160px, 100%);
+  margin: 0 auto;
+  align-items: start;
+}
+
+.queueMain,
+.workerPanel {
+  min-width: 0;
+  border: 1px solid #d9dee8;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.workerPanel {
+  display: grid;
+  gap: 16px;
+  padding: 20px;
+}
+
+.workerPanel h2 {
+  margin: 0;
+  font-size: 22px;
+  letter-spacing: 0;
+}
+
+.filterSelect {
+  min-height: 40px;
+  border: 1px solid #cfd6e2;
+  border-radius: 8px;
+  padding: 0 12px;
+  background: #fbfcff;
+  color: #172033;
+  font: inherit;
+  font-weight: 800;
+}
+
+.queueRows,
+.workerRows {
+  display: grid;
+}
+
+.queueRow,
+.workerRow {
+  display: grid;
+  gap: 12px;
+  border-top: 1px solid #edf1f7;
+  padding: 18px 20px;
+}
+
+.queueRows .queueRow:first-child,
+.workerRows .workerRow:first-child {
+  border-top: 0;
+}
+
+.jobTitle,
+.workerRow > div:first-child {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+}
+
+.jobTitle strong,
+.workerRow strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.jobTitle a {
+  flex: 0 0 auto;
+  color: #4f46e5;
+  font-size: 13px;
+  font-weight: 900;
+  text-decoration: none;
+}
+
+.queueFacts,
+.workerRow dl {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin: 0;
+}
+
+.workerRow dl {
+  grid-template-columns: 1fr;
+}
+
+.queueFacts div,
+.workerRow dl div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.queueFacts dt,
+.workerRow dt {
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.queueFacts dd,
+.workerRow dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.queueError {
+  margin: 0;
+  border-left: 3px solid #ef4444;
+  padding: 8px 10px;
+  background: #fff1f2;
+  color: #991b1b;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.workerRow span {
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.emptyState {
+  padding: 24px 20px;
+  color: #64748b;
+  font-weight: 800;
+}
+
 @media (max-width: 820px) {
   .shell,
   .dashboard {
@@ -620,7 +777,8 @@
   }
 
   .grid,
-  .adminGrid {
+  .adminGrid,
+  .queueGrid {
     grid-template-columns: 1fr;
   }
 
@@ -630,5 +788,9 @@
 
   .userRow {
     grid-template-columns: 1fr;
+  }
+
+  .queueFacts {
+    grid-template-columns: 1fr 1fr;
   }
 }

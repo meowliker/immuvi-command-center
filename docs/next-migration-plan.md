@@ -54,6 +54,9 @@ Service extraction:
   the existing browser-facing `/api/clickup?path=...` contract.
 - `tests/services/*.test.js` covers service URL construction, fail-closed
   secret handling, ClickUp path validation, and header forwarding.
+- `lib/services/product-repository.js` starts the Supabase product data layer
+  with the legacy-safe config upsert rule that prevents stale writes from
+  clearing ClickUp list mappings.
 
 ## Phase 2: React Surfaces
 

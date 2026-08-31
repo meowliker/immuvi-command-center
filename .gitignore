@@ -30,6 +30,11 @@ __pycache__/
 .venv/
 venv/
 
+# Next.js
+.next/
+out/
+tsconfig.tsbuildinfo
+
 # Local backups (kept out of repo — you can restore from git history)
 backups/
 *.backup-*.html

@@ -3,7 +3,24 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "typecheck": "tsc --noEmit",
+    "test:domain": "node --test tests/domain/*.test.js",
     "test:drive": "node tests/api/test_drive_endpoint.js",
     "test:db": "bash tests/db/test_video_winners.sh"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.57.4",
+    "next": "16.3.3",
+    "react": "19.2.6",
+    "react-dom": "19.2.6"
+  },
+  "devDependencies": {
+    "@types/node": "^24.3.0",
+    "@types/react": "^19.1.10",
+    "@types/react-dom": "^19.1.7",
+    "typescript": "5.9.3"
   }
 }

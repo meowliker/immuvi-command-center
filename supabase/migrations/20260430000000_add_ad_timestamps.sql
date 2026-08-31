@@ -14,9 +14,9 @@
 --   * For ads created locally: Date.now() at insert.
 --
 -- Storage choice:
---   bigint over timestamptz so we can write the raw ClickUp epoch ms
---   without lossy conversions and sort numerically. The app converts to
---   Date on display.
+--   The current base schema stores created_at / updated_at as timestamptz.
+--   The app now writes ISO timestamps for these columns and stores raw epoch
+--   milliseconds in last_status_change_at.
 --
 -- Backfill:
 --   Existing rows get the row's INSERT time as a "best-guess" created_at
@@ -31,7 +31,7 @@ ALTER TABLE ads
 
 -- Best-guess backfill so existing data has SOMETHING for the new column.
 UPDATE ads
-   SET created_at = EXTRACT(EPOCH FROM now()) * 1000
+   SET created_at = now()
  WHERE created_at IS NULL;
 
 -- Useful for the modal's "sort by recency" + "stale cell" filter.

@@ -70,6 +70,15 @@ Migrate in this order:
 6. Creative Matrix.
 7. Strategist and Producer.
 
+Started in QA:
+
+- `/qa-next` is a separate React App Router surface for Supabase login,
+  forced password change, profile active-state gating, and product switching.
+- It shares the legacy auth storage key and active product key so QA can compare
+  the new surface with `/immuvi-command-center.html` using the same session.
+- `lib/domain/auth-access.js` contains the tested admin/member product access
+  rules used by the React surface.
+
 ## Phase 3: Legacy Retirement
 
 - Keep the legacy route behind a QA-only link until all high-risk workflows

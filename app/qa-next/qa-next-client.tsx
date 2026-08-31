@@ -43,6 +43,15 @@ import {
   productClickUpListName,
   productRowToView,
 } from '../../lib/domain/product-config.js';
+import {
+  deriveTaxonomyStatus,
+  filterTaxonomyRows,
+  newTaxonomyId,
+  normalizeTaxonomyName,
+  normalizeTaxonomyRow,
+  summarizeTaxonomyRows,
+  taxonomyStats,
+} from '../../lib/domain/taxonomy.js';
 import styles from './qa-next.module.css';
 
 type Profile = {
@@ -63,13 +72,16 @@ type Product = {
   clickupListName?: string;
 };
 
-type ActiveTab = 'overview' | 'action-plan' | 'creative-tracker' | 'inspiration' | 'admin';
+type ActiveTab = 'overview' | 'angles' | 'personas' | 'action-plan' | 'creative-tracker' | 'inspiration' | 'admin';
 type ActionDisplay = NonNullable<ReturnType<typeof resolveActionDisplay>>;
 type ActionFilter = 'all' | 'backlog' | 'production' | 'testing' | 'winners' | 'losers' | 'overdue';
 type QueueJob = ReturnType<typeof normalizeQueueJob>;
 type WorkerRow = ReturnType<typeof normalizeWorker>;
 type QueueFilter = 'all' | 'pending' | 'active' | 'classified' | 'failed';
 type Creative = ReturnType<typeof normalizeCreativeRow>;
+type TaxonomyKind = 'angle' | 'persona';
+type TaxonomyRow = ReturnType<typeof normalizeTaxonomyRow>;
+type TaxonomyView = 'active' | 'archived' | 'all';
 type TrackerSortColumn = 'id' | 'formatName' | 'status' | 'dateCreated';
 type TrackerSort = { col: TrackerSortColumn; dir: 1 | -1 };
 type TrackerFilters = {
@@ -398,6 +410,12 @@ export default function QaNextClient({ supabaseUrl, supabaseAnonKey }: QaNextCli
         {state.activeTab === 'overview' ? (
           <OverviewTab profile={state.profile} products={state.products} activeProduct={activeProduct} switchProduct={switchProduct} />
         ) : null}
+        {state.activeTab === 'angles' ? (
+          <TaxonomyTab kind="angle" supabase={supabase} activeProductId={state.activeProductId} />
+        ) : null}
+        {state.activeTab === 'personas' ? (
+          <TaxonomyTab kind="persona" supabase={supabase} activeProductId={state.activeProductId} />
+        ) : null}
         {state.activeTab === 'action-plan' ? (
           <ActionPlanTab supabase={supabase} activeProductId={state.activeProductId} activeProduct={activeProduct} />
         ) : null}
@@ -451,6 +469,212 @@ function OverviewTab({
         </div>
       </article>
     </section>
+  );
+}
+
+function TaxonomyTab({ kind, supabase, activeProductId }: { kind: TaxonomyKind; supabase: SupabaseClient; activeProductId: string }) {
+  const [rows, setRows] = useState<TaxonomyRow[]>([]);
+  const [creatives, setCreatives] = useState<Creative[]>([]);
+  const [drafts, setDrafts] = useState<Record<string, TaxonomyRow>>({});
+  const [view, setView] = useState<TaxonomyView>('active');
+  const [loadedAt, setLoadedAt] = useState('');
+  const [notice, setNotice] = useState('');
+  const [error, setError] = useState('');
+  const [busyAction, setBusyAction] = useState('');
+  const tableName = taxonomyTable(kind);
+  const columnName = taxonomyColumn(kind);
+  const label = taxonomyLabel(kind);
+  const oppositeLabel = kind === 'angle' ? 'personas' : 'angles';
+
+  useEffect(() => {
+    void reload();
+  }, [activeProductId, tableName]);
+
+  async function reload(options: { notice?: string } = {}) {
+    if (!activeProductId) return;
+    setBusyAction('reload');
+    const [rowsResult, adsResult] = await Promise.all([
+      supabase.from(tableName).select('id,product_id,name,status,source_link,notes,created_at,updated_at,archived_at').eq('product_id', activeProductId).order('created_at', { ascending: true }),
+      supabase.from('ads').select('id,product_id,format_name,status,angle,persona,parent_ad_id,meta,deleted_at').eq('product_id', activeProductId).is('deleted_at', null).limit(3000),
+    ]);
+    const nextRows = Array.isArray(rowsResult.data) ? rowsResult.data.map(normalizeTaxonomyRow) : [];
+    setRows(nextRows);
+    setDrafts(Object.fromEntries(nextRows.map((row) => [row.id, row])));
+    setCreatives(Array.isArray(adsResult.data) ? adsResult.data.map(normalizeCreativeRow) : []);
+    setLoadedAt(new Date().toISOString());
+    setNotice(options.notice || '');
+    setError(rowsResult.error || adsResult.error ? `Some ${label.toLowerCase()} data could not be loaded.` : '');
+    setBusyAction('');
+  }
+
+  async function addRow() {
+    const name = nextTaxonomyName(`New ${label}`, rows);
+    const id = newTaxonomyId(kind, rows);
+    setBusyAction('add');
+    const result = await supabase.from(tableName).insert({
+      id,
+      product_id: activeProductId,
+      name,
+      status: 'Untested',
+      source_link: '',
+      notes: '',
+    });
+    if (result.error) {
+      setError(result.error.message);
+      setBusyAction('');
+      return;
+    }
+    await reload({ notice: `${label} added.` });
+  }
+
+  async function saveRow(row: TaxonomyRow) {
+    const draft = drafts[row.id] || row;
+    const nextName = normalizeTaxonomyName(draft.name) || row.name;
+    if (rows.some((candidate) => candidate.id !== row.id && candidate.name.toLowerCase() === nextName.toLowerCase())) {
+      setError(`${label} "${nextName}" already exists.`);
+      return;
+    }
+    if (nextName !== row.name && !window.confirm(`Rename ${label.toLowerCase()} "${row.name}" to "${nextName}"?\n\nRelated creatives and inspirations will be retagged.`)) {
+      setDrafts((current) => ({ ...current, [row.id]: row }));
+      return;
+    }
+
+    setBusyAction(`save:${row.id}`);
+    const update = await supabase.from(tableName).update({
+      name: nextName,
+      source_link: draft.sourceLink.trim(),
+      notes: draft.notes.trim(),
+      updated_at: new Date().toISOString(),
+    }).eq('id', row.id);
+    if (update.error) {
+      setError(update.error.message);
+      setBusyAction('');
+      return;
+    }
+
+    if (nextName !== row.name) {
+      const [adsUpdate, inspirationsUpdate] = await Promise.all([
+        supabase.from('ads').update({ [columnName]: nextName, updated_at: new Date().toISOString() }).eq('product_id', activeProductId).eq(columnName, row.name),
+        supabase.from('inspirations').update({ [columnName]: nextName, updated_at: new Date().toISOString() }).eq('product_id', activeProductId).eq(columnName, row.name),
+      ]);
+      if (adsUpdate.error || inspirationsUpdate.error) {
+        setError(`Saved ${label.toLowerCase()}, but some related rows could not be retagged.`);
+        setBusyAction('');
+        return;
+      }
+    }
+
+    await reload({ notice: `${label} saved.` });
+  }
+
+  async function setArchived(row: TaxonomyRow, archived: boolean) {
+    if (archived && !window.confirm(`Archive ${label.toLowerCase()} "${row.name}"?\n\nIt will be hidden from active taxonomy views. Existing creatives keep their tagging.`)) return;
+    setBusyAction(`archive:${row.id}`);
+    const result = await supabase.from(tableName).update({
+      archived_at: archived ? new Date().toISOString() : null,
+      updated_at: new Date().toISOString(),
+    }).eq('id', row.id);
+    if (result.error) {
+      setError(result.error.message);
+      setBusyAction('');
+      return;
+    }
+    await reload({ notice: `${row.name} ${archived ? 'archived' : 'restored'}.` });
+  }
+
+  async function deleteRow(row: TaxonomyRow) {
+    if (!window.confirm(`Delete ${label.toLowerCase()} "${row.name}"?\n\nThis will clear it from related creatives and inspirations.`)) return;
+    setBusyAction(`delete:${row.id}`);
+    const [adsUpdate, inspirationsUpdate] = await Promise.all([
+      supabase.from('ads').update({ [columnName]: '', updated_at: new Date().toISOString() }).eq('product_id', activeProductId).eq(columnName, row.name),
+      supabase.from('inspirations').update({ [columnName]: '', updated_at: new Date().toISOString() }).eq('product_id', activeProductId).eq(columnName, row.name),
+    ]);
+    const deletion = await supabase.from(tableName).delete().eq('id', row.id);
+    if (adsUpdate.error || inspirationsUpdate.error || deletion.error) {
+      setError(`Delete failed: ${(adsUpdate.error || inspirationsUpdate.error || deletion.error)?.message || 'unknown error'}`);
+      setBusyAction('');
+      return;
+    }
+    await reload({ notice: `${label} deleted.` });
+  }
+
+  function setDraftField(row: TaxonomyRow, field: keyof Pick<TaxonomyRow, 'name' | 'sourceLink' | 'notes'>, value: string) {
+    setDrafts((current) => ({ ...current, [row.id]: { ...(current[row.id] || row), [field]: value } }));
+  }
+
+  const summary = summarizeTaxonomyRows(kind, rows, creatives);
+  const visibleRows = filterTaxonomyRows(rows, view);
+
+  return (
+    <>
+      <section className={styles.adminToolbar}>
+        <div><strong>{summary.total}</strong><span>{label}s</span></div>
+        <div><strong>{summary.winners}</strong><span>Winners</span></div>
+        <div><strong>{summary.totalCreatives}</strong><span>Creatives</span></div>
+        <button disabled={Boolean(busyAction)} type="button" onClick={addRow}>{busyAction === 'add' ? 'Adding...' : `Add ${label}`}</button>
+        <button disabled={busyAction === 'reload'} type="button" onClick={() => reload()}>{busyAction === 'reload' ? 'Refreshing...' : 'Refresh'}</button>
+      </section>
+      {notice ? <div className={styles.notice}>{notice}</div> : null}
+      {error ? <div className={styles.error}>{error}</div> : null}
+      <section className={styles.productBar}>
+        <div className={styles.queueMeta}>
+          <span>{summary.active} active</span>
+          <span>{summary.archived} archived</span>
+          <span>{summary.testing} testing</span>
+          <span>{summary.untested} untested</span>
+          <span>Loaded {formatDateTime(loadedAt)}</span>
+        </div>
+        <div className={styles.segmented}>
+          <button className={view === 'active' ? styles.segmentActive : ''} type="button" onClick={() => setView('active')}>Active</button>
+          <button className={view === 'archived' ? styles.segmentActive : ''} type="button" onClick={() => setView('archived')}>Archived</button>
+          <button className={view === 'all' ? styles.segmentActive : ''} type="button" onClick={() => setView('all')}>All</button>
+        </div>
+      </section>
+      <section className={styles.taxonomyPanel}>
+        <div className={styles.adminSectionHeader}>
+          <div><span className={styles.eyebrow}>{label}s</span><h2>{label} strategy tracker</h2></div>
+        </div>
+        <div className={styles.taxonomyRows}>
+          {visibleRows.length ? visibleRows.map((row, index) => {
+            const draft = drafts[row.id] || row;
+            const derivedStatus = deriveTaxonomyStatus(kind, row.name, creatives);
+            const stats = taxonomyStats(kind, row.name, creatives);
+            const changed = draft.name !== row.name || draft.sourceLink !== row.sourceLink || draft.notes !== row.notes;
+            return (
+              <article className={row.archivedAt ? styles.taxonomyRowArchived : styles.taxonomyRow} key={row.id}>
+                <div className={styles.taxonomyIndex}>{index + 1}</div>
+                <label className={styles.taxonomyName}>
+                  <span>{label} Name</span>
+                  <input value={draft.name} onChange={(event) => setDraftField(row, 'name', event.target.value)} />
+                </label>
+                <div className={styles.statusStack}>
+                  <span className={creativeStatusClass(derivedStatus, styles)}>{derivedStatus}</span>
+                  {row.archivedAt ? <span className={styles.inactiveBadge}>Archived</span> : null}
+                </div>
+                <label className={styles.taxonomySource}>
+                  <span>Source Link</span>
+                  <input value={draft.sourceLink} placeholder="https://" onChange={(event) => setDraftField(row, 'sourceLink', event.target.value)} />
+                </label>
+                <div className={styles.taxonomyStats}>
+                  <span>{stats.relatedCount} {oppositeLabel}</span>
+                  <span>{stats.creatives} creatives</span>
+                  <span>{stats.winRate}% win</span>
+                </div>
+                <label className={styles.taxonomyNotes}>
+                  <span>Notes</span>
+                  <textarea value={draft.notes} rows={2} onChange={(event) => setDraftField(row, 'notes', event.target.value)} />
+                </label>
+                <div className={styles.rowActions}>
+                  <button disabled={!changed || busyAction === `save:${row.id}`} type="button" onClick={() => saveRow(row)}>{busyAction === `save:${row.id}` ? 'Saving...' : 'Save'}</button>
+                  <button disabled={busyAction === `archive:${row.id}`} type="button" onClick={() => setArchived(row, !row.archivedAt)}>{row.archivedAt ? 'Restore' : 'Archive'}</button>
+                  <button disabled={busyAction === `delete:${row.id}`} type="button" onClick={() => deleteRow(row)}>Delete</button>
+                </div>
+              </article>
+            );
+          }) : <div className={styles.emptyState}>No {label.toLowerCase()}s in this view.</div>}
+        </div>
+      </section>
+    </>
   );
 }
 
@@ -1063,8 +1287,10 @@ async function loadAuthedState(supabase: SupabaseClient, session: Session, setSt
 function commandTabs(profile: Profile) {
   const tabs: Array<{ id: ActiveTab; label: string; caption: string }> = [
     { id: 'overview', label: 'Overview', caption: 'Product access' },
-    { id: 'action-plan', label: 'Action Plan', caption: 'Manual actions' },
+    { id: 'angles', label: 'Angles', caption: 'Strategy axes' },
+    { id: 'personas', label: 'Personas', caption: 'Audience axes' },
     { id: 'creative-tracker', label: 'Creative Tracker', caption: 'Ad inventory' },
+    { id: 'action-plan', label: 'Action Plan', caption: 'Manual actions' },
     { id: 'inspiration', label: 'Inspiration Queue', caption: 'Worker health' },
   ];
   if (profile.role === 'admin') tabs.push({ id: 'admin', label: 'Admin', caption: 'Users' });
@@ -1074,7 +1300,29 @@ function commandTabs(profile: Profile) {
 function validTabForProfile(tab: ActiveTab | null, profile: Profile): tab is ActiveTab {
   if (!tab) return false;
   if (tab === 'admin' && profile.role !== 'admin') return false;
-  return ['overview', 'action-plan', 'creative-tracker', 'inspiration', 'admin'].includes(tab);
+  return ['overview', 'angles', 'personas', 'action-plan', 'creative-tracker', 'inspiration', 'admin'].includes(tab);
+}
+
+function taxonomyTable(kind: TaxonomyKind) {
+  return kind === 'angle' ? 'angles' : 'personas';
+}
+
+function taxonomyColumn(kind: TaxonomyKind) {
+  return kind === 'angle' ? 'angle' : 'persona';
+}
+
+function taxonomyLabel(kind: TaxonomyKind) {
+  return kind === 'angle' ? 'Angle' : 'Persona';
+}
+
+function nextTaxonomyName(baseName: string, rows: TaxonomyRow[]) {
+  const existing = new Set(rows.map((row) => row.name.toLowerCase()));
+  if (!existing.has(baseName.toLowerCase())) return baseName;
+  for (let index = 2; index < 100; index += 1) {
+    const candidate = `${baseName} ${index}`;
+    if (!existing.has(candidate.toLowerCase())) return candidate;
+  }
+  return `${baseName} ${Date.now().toString(36)}`;
 }
 
 function FilterSelect({ label, value, values, onChange }: { label: string; value: string; values: string[]; onChange: (value: string) => void }) {

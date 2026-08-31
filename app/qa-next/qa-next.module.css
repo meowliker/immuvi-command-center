@@ -676,6 +676,107 @@
   align-items: start;
 }
 
+.taxonomyPanel {
+  width: min(1160px, 100%);
+  margin: 0 auto;
+  border: 1px solid #d9dee8;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.taxonomyRows {
+  display: grid;
+}
+
+.taxonomyRow,
+.taxonomyRowArchived {
+  display: grid;
+  grid-template-columns: 42px minmax(180px, 1fr) 130px minmax(180px, 1fr) minmax(210px, 0.8fr);
+  gap: 12px;
+  align-items: start;
+  border-top: 1px solid #edf1f7;
+  padding: 16px 20px;
+}
+
+.taxonomyRowArchived {
+  background: #f8fafc;
+  opacity: 0.68;
+}
+
+.taxonomyIndex {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border: 1px solid #d9dee8;
+  border-radius: 999px;
+  background: #fbfcff;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.taxonomyName,
+.taxonomySource,
+.taxonomyNotes {
+  display: grid;
+  gap: 6px;
+}
+
+.taxonomyName span,
+.taxonomySource span,
+.taxonomyNotes span {
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.taxonomyName input,
+.taxonomySource input,
+.taxonomyNotes textarea {
+  width: 100%;
+  border: 1px solid #cfd6e2;
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: #fbfcff;
+  color: #172033;
+  font: inherit;
+}
+
+.taxonomyNotes {
+  grid-column: 2 / 5;
+}
+
+.taxonomyNotes textarea {
+  min-height: 64px;
+  resize: vertical;
+}
+
+.taxonomyName input:focus,
+.taxonomySource input:focus,
+.taxonomyNotes textarea:focus {
+  border-color: #6d28d9;
+  box-shadow: 0 0 0 3px rgba(109, 40, 217, 0.14);
+  outline: none;
+}
+
+.taxonomyStats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.taxonomyStats span {
+  border: 1px solid #d9dee8;
+  border-radius: 999px;
+  padding: 6px 8px;
+  background: #fbfcff;
+  color: #334155;
+  font-size: 12px;
+  font-weight: 800;
+}
+
 .queueMain,
 .workerPanel {
   min-width: 0;
@@ -1059,6 +1160,15 @@
 
   .userRow {
     grid-template-columns: 1fr;
+  }
+
+  .taxonomyRow,
+  .taxonomyRowArchived {
+    grid-template-columns: 1fr;
+  }
+
+  .taxonomyNotes {
+    grid-column: auto;
   }
 
   .queueFacts {

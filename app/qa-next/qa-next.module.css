@@ -304,7 +304,7 @@
 
 .adminToolbar {
   display: grid;
-  grid-template-columns: repeat(3, minmax(120px, 1fr)) auto auto auto;
+  grid-template-columns: repeat(3, minmax(120px, 1fr)) repeat(4, auto);
   align-items: stretch;
   gap: 10px;
   width: min(1160px, 100%);
@@ -606,7 +606,8 @@
   background: #ffffff;
 }
 
-.queueGrid {
+.queueGrid,
+.actionGrid {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 340px;
   gap: 18px;
@@ -647,12 +648,16 @@
 }
 
 .queueRows,
-.workerRows {
+.workerRows,
+.actionRows,
+.eventRows {
   display: grid;
 }
 
 .queueRow,
-.workerRow {
+.workerRow,
+.actionRow,
+.eventRow {
   display: grid;
   gap: 12px;
   border-top: 1px solid #edf1f7;
@@ -660,11 +665,14 @@
 }
 
 .queueRows .queueRow:first-child,
-.workerRows .workerRow:first-child {
+.workerRows .workerRow:first-child,
+.actionRows .actionRow:first-child,
+.eventRows .eventRow:first-child {
   border-top: 0;
 }
 
 .jobTitle,
+.actionTitle,
 .workerRow > div:first-child {
   display: flex;
   align-items: center;
@@ -674,6 +682,7 @@
 }
 
 .jobTitle strong,
+.actionTitle strong,
 .workerRow strong {
   min-width: 0;
   overflow: hidden;
@@ -690,6 +699,7 @@
 }
 
 .queueFacts,
+.actionFacts,
 .workerRow dl {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -702,6 +712,7 @@
 }
 
 .queueFacts div,
+.actionFacts div,
 .workerRow dl div {
   display: grid;
   gap: 3px;
@@ -709,6 +720,7 @@
 }
 
 .queueFacts dt,
+.actionFacts dt,
 .workerRow dt {
   color: #64748b;
   font-size: 11px;
@@ -717,10 +729,117 @@
 }
 
 .queueFacts dd,
+.actionFacts dd,
 .workerRow dd {
   margin: 0;
   overflow-wrap: anywhere;
   font-size: 13px;
+  font-weight: 800;
+}
+
+.actionTitle > div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.actionTitle span:not(.roleAdmin):not(.roleMember):not(.activeBadge):not(.inactiveBadge):not(.pendingBadge) {
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 800;
+  overflow-wrap: anywhere;
+}
+
+.actionLinks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.actionLinks a,
+.actionLinks > span {
+  border: 1px solid #d9dee8;
+  border-radius: 999px;
+  padding: 7px 10px;
+  background: #fbfcff;
+  color: #334155;
+  font-size: 12px;
+  font-weight: 900;
+  text-decoration: none;
+}
+
+.actionLinks a {
+  border-color: #c7d2fe;
+  background: #eef2ff;
+  color: #4338ca;
+}
+
+.actionDescription {
+  display: -webkit-box;
+  margin: 0;
+  overflow: hidden;
+  color: #475569;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.5;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.overdueText {
+  color: #b91c1c;
+}
+
+.actionSummary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.actionSummary div {
+  display: grid;
+  gap: 2px;
+  border: 1px solid #d9dee8;
+  border-radius: 8px;
+  padding: 12px;
+  background: #fbfcff;
+}
+
+.actionSummary strong {
+  font-size: 18px;
+}
+
+.actionSummary span {
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.eventRows {
+  border: 1px solid #edf1f7;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.eventRows .adminSectionHeader {
+  padding: 14px;
+}
+
+.eventRows h2 {
+  font-size: 18px;
+}
+
+.eventRow strong {
+  font-size: 13px;
+  text-transform: capitalize;
+}
+
+.eventRow span,
+.eventRow small {
+  color: #64748b;
+  font-size: 12px;
   font-weight: 800;
 }
 
@@ -778,7 +897,8 @@
 
   .grid,
   .adminGrid,
-  .queueGrid {
+  .queueGrid,
+  .actionGrid {
     grid-template-columns: 1fr;
   }
 
@@ -792,5 +912,10 @@
 
   .queueFacts {
     grid-template-columns: 1fr 1fr;
+  }
+
+  .actionFacts,
+  .actionSummary {
+    grid-template-columns: 1fr;
   }
 }

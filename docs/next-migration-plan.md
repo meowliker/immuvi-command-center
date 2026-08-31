@@ -88,6 +88,12 @@ Started in QA:
   heartbeat health.
 - `lib/domain/worker-queue.js` contains tested queue summarization, worker
   health, and stale-claim helpers.
+- `/qa-next/action-plan` is a read-only React Action Plan surface for manual
+  action rows, linked ads, live status resolution, due-date risk, source links,
+  and recent activity events.
+- `lib/domain/action-plan.js` contains the tested read-side manual-action/ad
+  resolver. Mutating Action Plan controls and ClickUp writes remain on the
+  legacy route until the write path has focused regression coverage.
 
 ## Phase 3: Legacy Retirement
 

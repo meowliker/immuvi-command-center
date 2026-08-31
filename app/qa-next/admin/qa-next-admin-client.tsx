@@ -307,6 +307,7 @@ export default function QaNextAdminClient({ supabaseUrl, supabaseAnonKey }: QaNe
           <span>Admin API</span>
         </div>
         <a href="/qa-next">Product switcher</a>
+        <a href="/qa-next/action-plan">Action Plan</a>
         <a href="/qa-next/inspiration">Inspiration Queue</a>
         <a href="/immuvi-command-center.html">Legacy dashboard</a>
         <button type="button" onClick={reload}>Refresh</button>

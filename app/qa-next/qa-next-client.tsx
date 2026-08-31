@@ -252,6 +252,7 @@ export default function QaNextClient({ supabaseUrl, supabaseAnonKey }: QaNextCli
           </select>
         </label>
         <div className={styles.navActions}>
+          <a href="/qa-next/action-plan">Action Plan</a>
           <a href="/qa-next/inspiration">Inspiration Queue</a>
           {state.profile.role === 'admin' ? <a href="/qa-next/admin">Admin</a> : null}
           <a href="/immuvi-command-center.html">Open legacy dashboard</a>

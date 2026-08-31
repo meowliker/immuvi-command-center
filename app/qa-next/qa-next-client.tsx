@@ -251,7 +251,10 @@ export default function QaNextClient({ supabaseUrl, supabaseAnonKey }: QaNextCli
             ))}
           </select>
         </label>
-        <a href="/immuvi-command-center.html">Open legacy dashboard</a>
+        <div className={styles.navActions}>
+          {state.profile.role === 'admin' ? <a href="/qa-next/admin">Admin</a> : null}
+          <a href="/immuvi-command-center.html">Open legacy dashboard</a>
+        </div>
       </section>
 
       {state.error ? <div className={styles.error}>{state.error}</div> : null}

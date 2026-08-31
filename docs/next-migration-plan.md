@@ -74,10 +74,15 @@ Started in QA:
 
 - `/qa-next` is a separate React App Router surface for Supabase login,
   forced password change, profile active-state gating, and product switching.
+- `/qa-next/admin` is a separate React admin surface for listing users,
+  creating users, resetting passwords, changing roles, toggling active state,
+  and assigning member products through the existing server-side admin API.
 - It shares the legacy auth storage key and active product key so QA can compare
   the new surface with `/immuvi-command-center.html` using the same session.
 - `lib/domain/auth-access.js` contains the tested admin/member product access
   rules used by the React surface.
+- `lib/domain/admin-users.js` contains the tested user-row and product
+  assignment helpers used by the React admin surface.
 
 ## Phase 3: Legacy Retirement
 

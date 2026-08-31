@@ -221,6 +221,65 @@
   overflow-wrap: anywhere;
 }
 
+.commandTabs {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 8px;
+  width: min(1160px, 100%);
+  margin: 0 auto 18px;
+  border-bottom: 1px solid #dfe5ee;
+  padding-bottom: 12px;
+}
+
+.commandTabs button {
+  display: grid;
+  gap: 3px;
+  min-height: 58px;
+  border: 1px solid #d9dee8;
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: #ffffff;
+  color: #334155;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.commandTabs button[aria-selected='true'],
+.commandTabActive {
+  border-color: #6d28d9;
+  background: #f4f0ff;
+  color: #312e81;
+}
+
+.commandTabs span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+  font-weight: 900;
+}
+
+.commandTabs small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.tabPanel {
+  display: grid;
+  gap: 18px;
+}
+
+.legacyLink {
+  color: #4f46e5;
+  font-weight: 900;
+  text-decoration: none;
+}
+
 .grid {
   display: grid;
   grid-template-columns: minmax(0, 1.05fr) minmax(320px, 0.95fr);

@@ -72,29 +72,29 @@ Migrate in this order:
 
 Started in QA:
 
-- `/qa-next` is a separate React App Router surface for Supabase login,
-  forced password change, profile active-state gating, and product switching.
-- `/qa-next/admin` is a separate React admin surface for listing users,
-  creating users, resetting passwords, changing roles, toggling active state,
-  and assigning member products through the existing server-side admin API.
+- `/qa-next` is a single React App Router Command Center surface with internal
+  tabs for Overview, Action Plan, Creative Tracker, Inspiration Queue, and Admin.
+- The QA page handles Supabase login, forced password change, profile
+  active-state gating, product switching, and admin-only tab visibility.
 - It shares the legacy auth storage key and active product key so QA can compare
-  the new surface with `/immuvi-command-center.html` using the same session.
+  the new command center with `/immuvi-command-center.html` using the same
+  session.
 - `lib/domain/auth-access.js` contains the tested admin/member product access
   rules used by the React surface.
 - `lib/domain/admin-users.js` contains the tested user-row and product
-  assignment helpers used by the React admin surface.
-- `/qa-next/inspiration` is a read-only React operations surface for queue
+  assignment helpers used by the Admin tab.
+- The Inspiration Queue tab is a read-only React operations surface for queue
   counts, recent inspiration jobs, stale-claim detection, and worker registry
   heartbeat health.
 - `lib/domain/worker-queue.js` contains tested queue summarization, worker
   health, and stale-claim helpers.
-- `/qa-next/action-plan` is a read-only React Action Plan surface for manual
+- The Action Plan tab is a read-only React surface for manual
   action rows, linked ads, live status resolution, due-date risk, source links,
   and recent activity events.
 - `lib/domain/action-plan.js` contains the tested read-side manual-action/ad
   resolver. Mutating Action Plan controls and ClickUp writes remain on the
   legacy route until the write path has focused regression coverage.
-- `/qa-next/creative-tracker` is a read-only React Creative Tracker surface for
+- The Creative Tracker tab is a read-only React surface for
   visible ad inventory, production-task filtering, winner variations, tracker
   dimensions, links, and matrix usage counts.
 - `lib/domain/creative-tracker.js` contains the tested read-side ad normalizer,

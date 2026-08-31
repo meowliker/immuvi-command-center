@@ -184,6 +184,7 @@ export default function QaNextActionPlanClient({ supabaseUrl, supabaseAnonKey }:
           <span>Overdue</span>
         </div>
         <a href="/qa-next">Product switcher</a>
+        <a href="/qa-next/creative-tracker">Creative Tracker</a>
         <a href="/qa-next/inspiration">Inspiration Queue</a>
         {state.profile.role === 'admin' ? <a href="/qa-next/admin">Admin</a> : null}
         <button disabled={busy} type="button" onClick={() => reload()}>

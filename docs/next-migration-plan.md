@@ -94,6 +94,13 @@ Started in QA:
 - `lib/domain/action-plan.js` contains the tested read-side manual-action/ad
   resolver. Mutating Action Plan controls and ClickUp writes remain on the
   legacy route until the write path has focused regression coverage.
+- `/qa-next/creative-tracker` is a read-only React Creative Tracker surface for
+  visible ad inventory, production-task filtering, winner variations, tracker
+  dimensions, links, and matrix usage counts.
+- `lib/domain/creative-tracker.js` contains the tested read-side ad normalizer,
+  legacy visibility rules, filters, sorting, summary counts, variation counts,
+  and usage counts. Add/edit/delete/status mutations remain on the legacy route
+  until they are covered by focused persistence and ClickUp-sync tests.
 
 ## Phase 3: Legacy Retirement
 

@@ -172,6 +172,7 @@ export default function QaNextInspirationClient({ supabaseUrl, supabaseAnonKey }
         </div>
         <a href="/qa-next">Product switcher</a>
         <a href="/qa-next/action-plan">Action Plan</a>
+        <a href="/qa-next/creative-tracker">Creative Tracker</a>
         {state.profile.role === 'admin' ? <a href="/qa-next/admin">Admin</a> : null}
         <button disabled={busy} type="button" onClick={() => reload()}>
           {busy ? 'Refreshing...' : 'Refresh'}

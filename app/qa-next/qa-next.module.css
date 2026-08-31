@@ -304,7 +304,7 @@
 
 .adminToolbar {
   display: grid;
-  grid-template-columns: repeat(3, minmax(120px, 1fr)) repeat(4, auto);
+  grid-template-columns: repeat(3, minmax(120px, 1fr)) repeat(5, auto);
   align-items: stretch;
   gap: 10px;
   width: min(1160px, 100%);
@@ -607,7 +607,8 @@
 }
 
 .queueGrid,
-.actionGrid {
+.actionGrid,
+.creativeTrackerGrid {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 340px;
   gap: 18px;
@@ -650,14 +651,17 @@
 .queueRows,
 .workerRows,
 .actionRows,
-.eventRows {
+.eventRows,
+.creativeRows {
   display: grid;
 }
 
 .queueRow,
 .workerRow,
 .actionRow,
-.eventRow {
+.eventRow,
+.creativeRow,
+.productionCreativeRow {
   display: grid;
   gap: 12px;
   border-top: 1px solid #edf1f7;
@@ -673,6 +677,7 @@
 
 .jobTitle,
 .actionTitle,
+.creativeTitle,
 .workerRow > div:first-child {
   display: flex;
   align-items: center;
@@ -683,6 +688,7 @@
 
 .jobTitle strong,
 .actionTitle strong,
+.creativeTitle strong,
 .workerRow strong {
   min-width: 0;
   overflow: hidden;
@@ -700,6 +706,7 @@
 
 .queueFacts,
 .actionFacts,
+.creativeFacts,
 .workerRow dl {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -713,6 +720,7 @@
 
 .queueFacts div,
 .actionFacts div,
+.creativeFacts div,
 .workerRow dl div {
   display: grid;
   gap: 3px;
@@ -721,6 +729,7 @@
 
 .queueFacts dt,
 .actionFacts dt,
+.creativeFacts dt,
 .workerRow dt {
   color: #64748b;
   font-size: 11px;
@@ -730,6 +739,7 @@
 
 .queueFacts dd,
 .actionFacts dd,
+.creativeFacts dd,
 .workerRow dd {
   margin: 0;
   overflow-wrap: anywhere;
@@ -748,6 +758,87 @@
   font-size: 13px;
   font-weight: 800;
   overflow-wrap: anywhere;
+}
+
+.creativeTitle > div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.creativeTitle span:not(.roleAdmin):not(.roleMember):not(.activeBadge):not(.inactiveBadge):not(.pendingBadge) {
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 800;
+  overflow-wrap: anywhere;
+}
+
+.productionCreativeRow {
+  box-shadow: inset 3px 0 0 #4f46e5;
+}
+
+.trackerFilters {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px;
+  width: min(1160px, 100%);
+  margin: 0 auto 18px;
+  border: 1px solid #d9dee8;
+  border-radius: 8px;
+  padding: 14px;
+  background: #ffffff;
+}
+
+.trackerFilters select,
+.trackerFilters button,
+.sortButtons button {
+  min-height: 38px;
+  border: 1px solid #cfd6e2;
+  border-radius: 8px;
+  padding: 0 11px;
+  background: #fbfcff;
+  color: #172033;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.trackerFilters button,
+.sortButtons button {
+  cursor: pointer;
+}
+
+.segmented {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
+  border: 1px solid #d9dee8;
+  border-radius: 8px;
+  padding: 3px;
+  background: #edf1f7;
+}
+
+.segmented button {
+  min-width: 0;
+  border: 0;
+  background: transparent;
+}
+
+.segmented .segmentActive {
+  background: #ffffff;
+  color: #4338ca;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.12);
+}
+
+.sortButtons {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.creativeFacts {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
 .actionLinks {
@@ -898,7 +989,8 @@
   .grid,
   .adminGrid,
   .queueGrid,
-  .actionGrid {
+  .actionGrid,
+  .creativeTrackerGrid {
     grid-template-columns: 1fr;
   }
 
@@ -915,7 +1007,16 @@
   }
 
   .actionFacts,
+  .creativeFacts,
   .actionSummary {
     grid-template-columns: 1fr;
+  }
+
+  .sortButtons {
+    justify-content: stretch;
+  }
+
+  .sortButtons button {
+    width: 100%;
   }
 }

@@ -11,17 +11,17 @@ import {
   resolveActionDisplay,
   summarizeActionPlan,
   timestampMs,
-} from '../../lib/domain/action-plan.js';
+} from '../lib/domain/action-plan.js';
 import {
   normalizeProductIds,
   resolveAccessibleProducts,
   resolveActiveProductId,
-} from '../../lib/domain/auth-access.js';
+} from '../lib/domain/auth-access.js';
 import {
   normalizeAdminUser,
   productAssignmentLabel,
   toggleProductAssignment,
-} from '../../lib/domain/admin-users.js';
+} from '../lib/domain/admin-users.js';
 import {
   creativeFilterOptions,
   creativeStatusBucket,
@@ -31,18 +31,18 @@ import {
   summarizeCreativeTracker,
   usageCountForCreative,
   variationCountForCreative,
-} from '../../lib/domain/creative-tracker.js';
+} from '../lib/domain/creative-tracker.js';
 import {
   isClaimStale,
   normalizeQueueJob,
   normalizeWorker,
   summarizeQueue,
-} from '../../lib/domain/worker-queue.js';
+} from '../lib/domain/worker-queue.js';
 import {
   productClickUpListId,
   productClickUpListName,
   productRowToView,
-} from '../../lib/domain/product-config.js';
+} from '../lib/domain/product-config.js';
 import {
   deriveTaxonomyStatus,
   filterTaxonomyRows,
@@ -51,8 +51,8 @@ import {
   normalizeTaxonomyRow,
   summarizeTaxonomyRows,
   taxonomyStats,
-} from '../../lib/domain/taxonomy.js';
-import styles from './qa-next.module.css';
+} from '../lib/domain/taxonomy.js';
+import styles from './command-center.module.css';
 
 type Profile = {
   id: string;
@@ -179,7 +179,7 @@ const emptyCreateForm: CreateUserForm = {
   productIds: [],
 };
 
-export default function QaNextClient({ supabaseUrl, supabaseAnonKey }: QaNextClientProps) {
+export default function CommandCenterClient({ supabaseUrl, supabaseAnonKey }: QaNextClientProps) {
   const supabase = useMemo(
     () => createClient(supabaseUrl, supabaseAnonKey, {
       auth: {
@@ -360,7 +360,7 @@ export default function QaNextClient({ supabaseUrl, supabaseAnonKey }: QaNextCli
     <main className={styles.dashboard}>
       <header className={styles.topbar}>
         <div>
-          <span className={styles.eyebrow}>QA Next</span>
+          <span className={styles.eyebrow}>Command Center</span>
           <h1>Immuvi Command Center</h1>
         </div>
         <div className={styles.userPill}>

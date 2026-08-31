@@ -72,9 +72,10 @@ Migrate in this order:
 
 Started in QA:
 
-- `/qa-next` is a single React App Router Command Center surface with internal
-  tabs for Overview, Action Plan, Creative Tracker, Inspiration Queue, and Admin.
-- The QA page handles Supabase login, forced password change, profile
+- On the `qa` branch, `/` is the single React App Router Command Center surface
+  with internal tabs for Overview, Angles, Personas, Action Plan, Creative
+  Tracker, Inspiration Queue, and Admin.
+- The QA root page handles Supabase login, forced password change, profile
   active-state gating, product switching, and admin-only tab visibility.
 - It shares the legacy auth storage key and active product key so QA can compare
   the new command center with `/immuvi-command-center.html` using the same

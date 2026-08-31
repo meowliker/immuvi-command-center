@@ -11,44 +11,31 @@
 //  - No key is stored server-side.
 //  - Only api.clickup.com is contacted; no SSRF risk.
 
+import {
+  buildClickUpProxyTarget,
+  clickUpForwardHeaders,
+  clickUpProxyCorsHeaders,
+} from '../lib/services/clickup-proxy.js';
+
 export default async function handler(req, res) {
   // Basic CORS so the Vercel HTML can call this function
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type');
+  const corsHeaders = clickUpProxyCorsHeaders();
+  Object.entries(corsHeaders).forEach(([key, value]) => res.setHeader(key, value));
 
   if (req.method === 'OPTIONS') {
     return res.status(204).end();
   }
 
   try {
-    const url = new URL(req.url, 'http://x');
-    const path = url.searchParams.get('path');
-    const apiVersion = url.searchParams.get('v') === '3' ? 'v3' : 'v2';
-
-    if (!path || !path.startsWith('/')) {
-      return res.status(400).json({ error: 'Missing or invalid ?path= parameter (must start with /)' });
-    }
-
-    // Preserve any additional query params (other than path/v) for the target request
-    const passthrough = new URLSearchParams();
-    for (const [k, v] of url.searchParams) {
-      if (k !== 'path' && k !== 'v') passthrough.append(k, v);
-    }
-    const qs = passthrough.toString();
-    const target = `https://api.clickup.com/api/${apiVersion}${path}${qs ? '?' + qs : ''}`;
+    const target = buildClickUpProxyTarget(req.url);
 
     // Forward the user's ClickUp token
-    const auth = req.headers['authorization'] || req.headers['Authorization'];
-    if (!auth) {
-      return res.status(401).json({ error: 'Missing Authorization header (ClickUp personal token)' });
+    let forwardHeaders;
+    try {
+      forwardHeaders = clickUpForwardHeaders(req.headers);
+    } catch (err) {
+      return res.status(401).json({ error: err.message });
     }
-
-    const forwardHeaders = {
-      'Authorization': auth,
-      'Content-Type': 'application/json',
-      'Accept': 'application/json'
-    };
 
     // Read the request body for non-GET methods
     let body;

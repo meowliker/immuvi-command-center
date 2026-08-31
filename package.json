@@ -8,6 +8,7 @@
     "start": "next start",
     "typecheck": "tsc --noEmit",
     "test:domain": "node --test tests/domain/*.test.js",
+    "test:services": "node --test tests/services/*.test.js",
     "test:drive": "node tests/api/test_drive_endpoint.js",
     "test:db": "bash tests/db/test_video_winners.sh"
   },

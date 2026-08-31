@@ -44,6 +44,17 @@ Started in QA:
 - `tests/domain/*.test.js` covers the first bug-backlog invariants before these
   helpers are wired into React surfaces.
 
+Service extraction:
+
+- `lib/services/supabase-rest.js` centralizes service-role REST/Auth request
+  plumbing and PostgREST filter escaping.
+- `lib/services/clickup-proxy.js` centralizes ClickUp proxy target validation,
+  CORS headers, and user-token forwarding.
+- `api/clickup.js` now uses the shared ClickUp proxy helper while preserving
+  the existing browser-facing `/api/clickup?path=...` contract.
+- `tests/services/*.test.js` covers service URL construction, fail-closed
+  secret handling, ClickUp path validation, and header forwarding.
+
 ## Phase 2: React Surfaces
 
 Migrate in this order:

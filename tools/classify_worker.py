@@ -1132,7 +1132,66 @@ class Worker:
         log(f"[producer] picking up run id={run_id} "
             f"task={prod_run['task_id']} count={prod_run.get('count', 5)}")
         try:
+            def _safe_generation_task_name(value: str) -> str:
+                name = str(value or "").strip()
+                name = re.sub(r'[\\/:*?"<>|]+', "-", name)
+                name = re.sub(r"\s+", " ", name).strip(" .-")
+                return name or str(prod_run["task_id"])
+
+            def _variation_number_from_generation_text(
+                value: str,
+                task_name_base: str = "",
+                require_task_name: bool = False,
+            ) -> int:
+                raw = str(value or "")
+                decoded = urllib.parse.unquote(raw)
+                path_name = os.path.basename(urllib.parse.urlparse(decoded).path)
+                candidates = [decoded, path_name]
+                if task_name_base:
+                    exact = re.compile(
+                        re.escape(task_name_base) + r"-(\d{1,3})(?:\.[A-Za-z0-9]+)?(?:$|[?&#\s])",
+                        re.IGNORECASE,
+                    )
+                    for candidate in candidates:
+                        match = exact.search(candidate)
+                        if match:
+                            return int(match.group(1))
+                if require_task_name:
+                    return 9999
+                for candidate in candidates:
+                    match = re.search(r"-(\d{1,3})(?:\.[A-Za-z0-9]+)?(?:$|[?&#\s])", candidate)
+                    if match:
+                        return int(match.group(1))
+                    match = re.search(r"_V(\d{1,3})_final\b", candidate, re.IGNORECASE)
+                    if match:
+                        return int(match.group(1))
+                    match = re.search(r"\bV(\d{1,3})\b", candidate, re.IGNORECASE)
+                    if match:
+                        return int(match.group(1))
+                return 9999
+
             _instr = str(prod_run.get("instruction") or "").replace("\r\n", "\n").replace("\r", "\n").strip()
+            _task_name_for_generation = str(
+                prod_run.get("task_name")
+                or prod_run.get("taskName")
+                or prod_run.get("name")
+                or ""
+            ).strip()
+            if not _task_name_for_generation:
+                try:
+                    _cu_key = os.environ.get("CLICKUP_API_KEY", "")
+                    if _cu_key:
+                        _task_req = urllib.request.Request(
+                            f"https://api.clickup.com/api/v2/task/{prod_run['task_id']}",
+                            headers={"Authorization": _cu_key},
+                        )
+                        with urllib.request.urlopen(_task_req, timeout=10) as _task_resp:
+                            _task_row = json.loads(_task_resp.read().decode() or "{}")
+                        _task_name_for_generation = str(_task_row.get("name") or "").strip()
+                except Exception as _task_name_err:
+                    log(f"[producer] task name fetch failed for filename base: {_task_name_err}")
+            _generation_name_base = _safe_generation_task_name(_task_name_for_generation)
+            _generation_name_example = f"{_generation_name_base}-1"
             # Fetch strategist memory for the product (best-effort).
             _strategist_memory_blob = ""
             try:
@@ -1175,10 +1234,11 @@ class Worker:
                 "Use image quality: high.\n"
                 "Use image size/aspect ratio: match the inspiration image unless the task specifies another size. Do NOT hard-code 1024x1536. If inspiration dimensions are unavailable, fall back to the task/platform default, then 4:5 for static social ads.\n\n"
                 "Strict product/reference lock: parse any PRODUCT DIRECTIVES and REFERENCE LAYOUT QA blocks in the instruction exactly. Product/offer names must be anchored by the canonical product name. Forbidden aliases, orphan generic names, wrong aspect ratio, unrelated layouts, and visibly different text alignment/scale are quality-gate failures.\n\n"
-                "Output requirement: each variation must be generated/saved/uploaded as its own standalone final image file. Do NOT create or upload contact sheets, 2x2 grids, merged review boards, collages, multi-variation images, no-output placeholders, failed retry artifacts, rejected drafts, metadata files, prompt files, or duplicate copies. Final upload filenames must include "
-                f"RUN{run_id}_V##_final. If the native image tool returns a grid, split it into separate final files before upload and mark only the individual final files as outputs.\n\n"
+                "Output requirement: each variation must be generated/saved/uploaded as its own standalone final image file. Do NOT create or upload contact sheets, 2x2 grids, merged review boards, collages, multi-variation images, no-output placeholders, failed retry artifacts, rejected drafts, metadata files, prompt files, or duplicate copies. Final upload filenames must be named with this exact pattern: "
+                f"`{_generation_name_base}-<variation_number>.<ext>` — for example `{_generation_name_example}.png`, then `{_generation_name_base}-2.png`, `{_generation_name_base}-3.png`. Do not use RUN ids, V01 labels, or `_final` suffixes in the uploaded filenames. If the native image tool returns a grid, split it into separate final files before upload and mark only the individual final files as outputs.\n\n"
                 "Run producer job:\n"
                 f"- task_id: {prod_run['task_id']}\n"
+                f"- task_name_for_generation_filenames: {_generation_name_base}\n"
                 f"- product_id: {prod_run['product_id']}\n"
                 f"- producer_run_id: {run_id}\n"
                 f"- count: {prod_run.get('count', 5)}\n"
@@ -1198,17 +1258,17 @@ class Worker:
                 "7. Build a reference_anatomy note before generation: subject_type, subject_presence, setting, composition, overlay_system, copy_density, product_presence, edge_alignment, text_alignment, text_size_hierarchy, canvas_orientation, aspect_ratio, layout_zones, commercial_elements, product_element_map, and variation_1_lock. commercial_elements must list every visible offer badge, discount badge, CTA button, logo, product mark, decorative icon, underline, footer, and packshot in the reference; if an element is absent from both reference and task brief, do not invent it. product_element_map must list every source-product/category element from the reference — product names, logos, packshots, UI/app screens, workbook/activity names, icons, props, card titles, demonstrations, CTA wording, and offer badges — and the exact replacement anchored to the canonical product, angle, persona, and offer. variation_1_lock must capture the exact setting, subject pose, camera angle, crop, emotional mood, overlay geometry, left-edge/inset behavior, text alignment, line breaks, relative text scale, CTA treatment, and overall production finish that Variation 1 must copy.\n"
                 "8. Build a structured creative brief before image generation.\n"
                 "9. Use Creative Strategist data to reuse winning elements and avoid losing combos.\n"
-                f"10. Generate the requested number of standalone image files using your native image generation at high quality (same as Codex chat — do not hard-code a specific model name). Generate one variation per native image call in strict sequence: create V01 first, QA it, save/upload it as RUN{run_id}_V01_final, then create V02, then V03, etc. Variation 1 must be the reference-faithful version: same orientation/aspect ratio, setting, subject type, pose, camera angle, crop, overlay positions, edge alignment, text alignment, text-size hierarchy, line-flow, CTA treatment, and production finish while swapping only our task message/product/offer. Variations 2+ may explore new settings/executions while preserving the selected reference mechanic, orientation, layout zones, text alignment, approximate text scale, and commercial element structure. Never count a merged grid/contact sheet as a final output, and never reorder outputs by upload time, visual preference, attachment order, or newest-first UI order.\n"
+                f"10. Generate the requested number of standalone image files using your native image generation at high quality (same as Codex chat — do not hard-code a specific model name). Generate one variation per native image call in strict sequence: create variation 1 first, QA it, save/upload it as `{_generation_name_base}-1.<ext>`, then `{_generation_name_base}-2.<ext>`, `{_generation_name_base}-3.<ext>`, etc. Variation 1 must be the reference-faithful version: same orientation/aspect ratio, setting, subject type, pose, camera angle, crop, overlay positions, edge alignment, text alignment, text-size hierarchy, line-flow, CTA treatment, and production finish while swapping only our task message/product/offer. Variations 2+ may explore new settings/executions while preserving the selected reference mechanic, orientation, layout zones, text alignment, approximate text scale, and commercial element structure. Never count a merged grid/contact sheet as a final output, and never reorder outputs by upload time, attachment order, visual preference, or newest-first UI order.\n"
                 "11. Preserve reference anatomy, not just theme. Reference anatomy wins over offer/CTA prominence when they conflict, but PRODUCT DIRECTIVES are mandatory: the canonical product name and offer must be visibly featured and talent/faces must match the stated market. Product/offer names may add descriptive words only when anchored by the canonical product name, e.g. NCLEX Study Notes, NCLEX Bundle, or NCLEX Guide. Do not invent or substitute orphan/generic names such as CRAM KIT, CRAM BUNDLE, study kit, study plan, shortcut, workbook, or bundle when they do not include the canonical product name. Product adaptation is mandatory for visuals, not just text: keep the reference slots and style, but replace every source-product visual with the product_element_map equivalent for the canonical product. For example, if the reference is an art-therapy worksheet and the target product is Kids Mental Health, keep the listicle/card layout but replace art/coloring activities and art-supply props with mental-health calm tools, feeling check-ins, coping skills, breathing prompts, worry routines, parent/teacher support cues, and other product-relevant visuals. Do not keep source-category artifacts such as crayons, paintbrushes, mandalas, yoga poses, phonics letters, astrology/kundali symbols, NCLEX/medical imagery, unrelated app UI, or irrelevant packshots unless that category is the target product or the task explicitly asks for it. If the reference has a small logo, muted title, compact centered list, low-contrast text, hazy/raw background, and small CTA, keep those relative proportions; do not turn it into a polished poster with a huge bright headline, bold oversized list, large CTA, glossy city/airport backdrop, discount badge, premium seal, decorative crest, underline flourish, or extra footer unless those elements are present in the reference or explicitly required by the task. Preserve exact CTA intent and wording from the reference/task; do not change TAKE TEST into CHECK YOUR MATCH, TAKE KUNDALI TEST, or adjacent copy unless explicitly requested. If the reference has a human subject, include a comparable visible human subject in similar scale/role/pose region; do not replace them with a backpack, chair, desk, hallway, worksheet, empty classroom, playground, or product shot. For BREAKING NEWS references, make one full-bleed candid photo with compact overlays on top of the photo: a left-edge red/blue slanted BREAKING NEWS band around the lower third, about 50-65% canvas width and 7-10% canvas height, plus one compact left-edge white headline strip directly below, about 75-90% canvas width and 8-12% canvas height. Preserve the reference's left-edge/inset behavior and headline alignment. The red BREAKING box must be wider than the blue NEWS box, both with balanced padding; the diagonal join must sit between words and never through letters. Keep visible photo under and around the overlays. Keep the main headline about the angle/persona. If an offer is specified, show it as a small separate CTA tag/badge attached to the existing overlay, usually at the far right end of the headline strip or just below its right edge. Do not put the offer inside the headline sentence and do not omit it. No full-width TV-news bar, oversized CTA/footer bar, blank white bottom panel, product mockup, oversized poster headline, large white copy block, or icon/product row.\n"
                 "12. If a native image call errors or returns no output, retry with a materially simpler prompt under 900 characters, then one final ultra-simple prompt under 550 characters. Do not repeat the same failed prompt. Do not use any fallback renderer.\n"
                 "13. Quality gate each image before upload — persona match, required market/talent match, canonical product-name match, no forbidden aliases/invented product names, mandatory offer visible, readable typography, reference-anatomy match, product_element_map replacements applied, mechanic match, brand fit, not generic. Reject if aspect ratio/orientation differs from the reference, if a square/vertical reference becomes horizontal, if text alignment or relative text sizing clearly differs from the reference, if headline line breaks create unnatural gaps, if sentence casing/title casing is wrong, if CTA wording/treatment changes from the reference/task without explicit instruction, or if the output is an unrelated promo format. Reject any output that preserves only the theme while redesigning the template: over-branding, brighter/larger typography, polished poster finish, new discount/offer badges, new decorative icons, new footer sections, product mockups, or a different CTA/button treatment not present in the reference/task. Reject any output that changes only text/product name while leaving source-product visual artifacts, props, icons, category labels, demonstrations, packshots, app screens, activity names, or irrelevant source-product mechanics that do not belong to the canonical product. Reject Variation 1 if it changes the inspiration setting, subject pose, camera angle, overlay position, edge alignment, text alignment, line-flow, text-size hierarchy, commercial element structure, or production finish. For BREAKING NEWS references, reject any image with no comparable visible human subject when the reference has one, a left gap when the reference starts at the left edge, centered headline text when the reference is left-aligned, squeezed BREAKING box, oversized NEWS box, diagonal join through letters, distorted/glitched banner text, full-width TV-news banner, missing offer CTA, offer inside the main headline sentence, oversized CTA/footer/button, blank white bottom panel, bottom poster block, oversized headline text, photo missing below/around the overlays, or extra footer/poster sections beyond photo + compact news band + compact headline strip + small attached offer CTA.\n"
                 "14. Regenerate once if quality gate fails, using a simpler prompt that fixes the specific failed criterion. If no image passes the reference-anatomy quality gate after retry, PATCH the run failed instead of uploading a weak/non-matching image.\n"
-                f"15. Upload only final accepted images to ClickUp, exactly one attachment per accepted variation, with filenames containing RUN{run_id}_V##_final. Verify the local file exists, is non-empty, and opens as an image before upload.\n"
+                f"15. Upload only final accepted images to ClickUp, exactly one attachment per accepted variation, with filenames exactly following `{_generation_name_base}-<variation_number>.<ext>` such as `{_generation_name_example}.png`. Verify the local file exists, is non-empty, and opens as an image before upload.\n"
                 "16. Add ClickUp comment with summary and output links.\n"
                 "17. Set ClickUp task status to Ready to Launch only after upload succeeds.\n"
                 "18. PATCH producer_runs row "
                 f"{run_id} with status='done' and outputs as a JSON array of objects each "
-                "containing: variation_id, file_path, clickup_attachment_url, source_inspiration, "
+                "containing: variation_id, generation_name, file_name, file_path, clickup_attachment_url, source_inspiration, "
                 "inspiration_dimensions, aspect_ratio, reference_anatomy, variation_1_lock, canonical_product_name, forbidden_aliases_checked, prompt, image_model, quality_gate. "
                 "On failure PATCH status='failed' with a useful error string that includes native_generation_failed, reference_anatomy, and the final simplified prompt when image generation fails.\n\n"
                 f"Print 'OK {run_id}' on success or 'FAIL {run_id}: <reason>' on failure "
@@ -1289,10 +1349,13 @@ class Worker:
                         _outputs = (_vrows[0].get("outputs") if _vrows else None) or []
                         def _output_variation_number(o):
                             _haystack = " ".join(str((o or {}).get(k) or "") for k in (
-                                "variation_id", "file_path", "clickup_attachment_url"
+                                "variation_id", "generation_name", "file_name",
+                                "file_path", "clickup_attachment_url"
                             ))
-                            _m = re.search(r"_V(\d{1,3})_final\b", _haystack) or re.search(r"\bV(\d{1,3})\b", _haystack)
-                            return int(_m.group(1)) if _m else 9999
+                            return _variation_number_from_generation_text(
+                                _haystack,
+                                _generation_name_base,
+                            )
                         # Markers that indicate a fake / fallback image gen.
                         _bad_markers = (
                             "pillow", "fallback", "programmatic", "static graphic",
@@ -1347,23 +1410,40 @@ class Worker:
                     with urllib.request.urlopen(_req, timeout=15) as _tr:
                         _task_data = json.loads(_tr.read().decode())
                     _attachments = _task_data.get("attachments") or []
-                    _tag = f"RUN{run_id}"
+                    _recovery_name_base = _safe_generation_task_name(
+                        _task_data.get("name") or _generation_name_base
+                    )
+                    _legacy_tag = f"RUN{run_id}"
                     _matched = []
                     for a in _attachments:
                         _haystack = (a.get("title") or "") + " " + (a.get("url") or "")
-                        if _tag not in _haystack or "_final" not in _haystack:
+                        _variation_number = _variation_number_from_generation_text(
+                            _haystack,
+                            _recovery_name_base,
+                            require_task_name=True,
+                        )
+                        _legacy_match = _legacy_tag in _haystack and "_final" in _haystack
+                        if _variation_number == 9999 and not _legacy_match:
                             continue
                         _matched.append(a)
                     def _attachment_variation_number(a):
                         _haystack = (a.get("title") or "") + " " + (a.get("url") or "")
-                        _m = re.search(r"_V(\d{1,3})_final\b", _haystack)
-                        return int(_m.group(1)) if _m else 9999
+                        _number = _variation_number_from_generation_text(
+                            _haystack,
+                            _recovery_name_base,
+                            require_task_name=True,
+                        )
+                        if _number == 9999:
+                            _number = _variation_number_from_generation_text(_haystack)
+                        return _number
                     _matched.sort(key=_attachment_variation_number)
                     _expected = prod_run.get("count", 1)
                     if len(_matched) >= _expected:
                         _outputs = [
                             {
-                                "variation_id": f"V{str(i+1).zfill(2)}",
+                                "variation_id": f"{_recovery_name_base}-{_attachment_variation_number(a) if _attachment_variation_number(a) != 9999 else i + 1}",
+                                "generation_name": f"{_recovery_name_base}-{_attachment_variation_number(a) if _attachment_variation_number(a) != 9999 else i + 1}",
+                                "file_name": a.get("title"),
                                 "file_path": None,
                                 "clickup_attachment_url": a.get("url"),
                                 "image_model": "native Codex/ChatGPT image generation; recovered from ClickUp attachments because worker timed out before metadata writeback",

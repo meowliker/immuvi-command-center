@@ -8,7 +8,9 @@ import {
   normalizeTaxonomyName,
   normalizeTaxonomyRow,
   sameTaxonomyName,
+  findTaxonomyMergeSuggestions,
   summarizeTaxonomyRows,
+  taxonomySimilarityScore,
   taxonomyKey,
   taxonomyStats,
 } from '../../lib/domain/taxonomy.js';
@@ -107,4 +109,25 @@ test('taxonomy summary and archive filters mirror legacy tracker views', () => {
     untested: 1,
     totalCreatives: 2,
   });
+});
+
+test('taxonomy semantic scoring ignores shallow persona modifiers', () => {
+  assert.ok(taxonomySimilarityScore('Side-Hustle Sellers', 'Side-Hustle Sellers 22-45') >= 0.9);
+  assert.ok(taxonomySimilarityScore('ADHD Adults Seeking Tools', 'Adults Seeking Medication-Free ADHD Help') >= 0.72);
+});
+
+test('taxonomy merge suggestions choose the stronger canonical row', () => {
+  const rows = [
+    { id: 'per-1', name: 'Side-Hustle Sellers', archivedAt: '', createdAt: '2026-01-01T00:00:00Z' },
+    { id: 'per-2', name: 'Side-Hustle Sellers 22-45', archivedAt: '', createdAt: '2026-01-02T00:00:00Z' },
+    { id: 'per-3', name: 'Busy Parents', archivedAt: '', createdAt: '2026-01-03T00:00:00Z' },
+  ];
+  const creatives = [
+    { id: 'ad-1', persona: 'Side-Hustle Sellers', status: 'Winner' },
+    { id: 'ad-2', persona: 'Side-Hustle Sellers 22-45', status: 'Testing' },
+  ];
+
+  const suggestions = findTaxonomyMergeSuggestions('persona', rows, creatives);
+  assert.equal(suggestions[0].keep.name, 'Side-Hustle Sellers');
+  assert.equal(suggestions[0].merge.name, 'Side-Hustle Sellers 22-45');
 });

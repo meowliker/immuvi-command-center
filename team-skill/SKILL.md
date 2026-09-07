@@ -144,6 +144,14 @@ PGPASSWORD="$SUPABASE_DB_PASSWORD" psql "$SUPABASE_DB_URL" -At -c "
 "
 ```
 
+**Reuse existing taxonomy before creating anything new.** Angle/persona labels are product-level strategy buckets, not one-off descriptions. Match by meaning, not exact wording:
+- Ignore shallow modifiers such as age ranges (`22-45`, `25-40`), plural/singular wording, `Adult`/`Women`/`Male`/`Female` demographic filler, punctuation, casing, and status badges like `⭐ Winner`.
+- Treat small synonyms as the same bucket when the buyer/job/problem is the same, e.g. `tools`, `help`, `support`, `resources`, and `toolkit`.
+- Example: `Side-Hustle Sellers 22-45` should use existing `Side-Hustle Sellers`.
+- Example: `Adults Seeking Medication-Free ADHD Help` should use an existing ADHD help/tools persona when it describes the same buyer/job.
+- Create a new angle/persona only when it changes the buyer identity, buying context, core problem/objection, promise/mechanism, product use moment, or creative strategy.
+- If unsure between two existing labels, choose the broader existing label and mention the uncertainty in `notes`; do not invent a new near-duplicate.
+
 **Print status and stop early if nothing to do:**
 - Empty queue → tell user "No pending items in inspiration_queue. Queue some URLs from the dashboard." Stop.
 - All items already classified → "All queued items already processed. Nothing new to do." Stop.
@@ -430,8 +438,8 @@ Read each frame with the **Read tool** (up to 6 frames). You are a senior media 
 | creative_structure | UGC, Testimonial, Demo, Tutorial/How-To, Story/Narrative, Hook+Offer, Listicle, Static/Photo, Comparison, Interview, Skit/Roleplay, AI/Voiceover, Slideshow/Compilation |
 | production_style | Organic/Raw UGC, Polished UGC, Professional Studio, AI Generated, Screen Record, Animation/Motion, Static Graphic, Slideshow, Repurposed Organic, Competitor Inspired |
 | funnel_type | TOF, MOF, BOF |
-| persona | Exact name from personas list if match ≥60%, else short label (4–6 words) |
-| angle | Exact name from angles list if match ≥60%, else short label (2–5 words) |
+| persona | Exact name from personas list when the buyer/job/problem meaning already exists; only create a short new label when it is strategically distinct |
+| angle | Exact name from angles list when the promise/problem/mechanism meaning already exists; only create a short new label when it is strategically distinct |
 | creative_usp | "Format Name — scroll-stopping mechanic" in 20 words |
 | creative_hypothesis | 2 sentences: why made + why it works. Max 35 words. |
 | notes | What you literally see. Max 30 words. |

@@ -14815,6 +14815,264 @@ function _taxonomySimilarityScore(left, right) {
   return Math.min(1, Math.round(score * 1000) / 1000);
 }
 
+var _taxonomyEvidenceLastRefreshMs = 0;
+var _taxonomyEvidenceRefreshPromise = null;
+var _TAXONOMY_EVIDENCE_TTL_MS = 5 * 60 * 1000;
+var _taxonomyEvidenceProfilesCache = {};
+
+function _isWinningCreativeStatus(status) {
+  status = String(status || '').trim().toLowerCase();
+  return status === 'winner' || status === 'mild winner' || status === 'scale';
+}
+
+function _taxonomyProductName(productId) {
+  var p = (PRODUCTS || []).find(function(row) { return row && row.id === productId; });
+  return (p && p.name) || productId || '';
+}
+
+function _evidenceStringify(value, depth) {
+  if (value === null || value === undefined || value === false) return '';
+  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') return String(value);
+  if (Array.isArray(value)) {
+    return value.map(function(v) { return _evidenceStringify(v, (depth || 0) + 1); }).filter(Boolean).join(' ');
+  }
+  if (typeof value === 'object') {
+    if ((depth || 0) > 2) return '';
+    return Object.keys(value).map(function(k) {
+      if (/^(id|url|sourceUrl|adLink|driveLink|clickup|created|updated|deleted|_)/i.test(k)) return '';
+      return _evidenceStringify(value[k], (depth || 0) + 1);
+    }).filter(Boolean).join(' ');
+  }
+  return '';
+}
+
+function _taxonomyProductInspirations(productId) {
+  if (productId === activeProductId) return INSPIRATIONS || [];
+  return (_inspoByProductCache && _inspoByProductCache[productId]) || [];
+}
+
+function _findEvidenceInspirationForAd(ad, productId) {
+  if (!ad) return null;
+  var rows = _taxonomyProductInspirations(productId || ad.product_id || ad.productId || activeProductId);
+  if (!Array.isArray(rows) || !rows.length) return null;
+  var fromId = ad._fromInspoId || ad.fromInspoId || ad.inspirationId || '';
+  var srcUrl = ad.sourceUrl || ad.adLink || ad.originalUrl || '';
+  return rows.find(function(ins) {
+    if (!ins) return false;
+    if (fromId && ins.id === fromId) return true;
+    if (srcUrl && (ins.sourceUrl === srcUrl || ins.url === srcUrl || ins.adLink === srcUrl)) return true;
+    return false;
+  }) || null;
+}
+
+function _creativeEvidenceText(ad, ins) {
+  var fields = [];
+  function add(v) {
+    var s = _evidenceStringify(v, 0);
+    if (s) fields.push(s);
+  }
+  add(ad && ad.formatName);
+  add(ad && ad.creativeUSP);
+  add(ad && ad.creativeHypothesis);
+  add(ad && ad.notes);
+  add(ad && ad.variationNotes);
+  add(ad && ad.hookText);
+  add(ad && ad.bodyCopy);
+  add(ad && ad.adCopy);
+  add(ad && ad.captionTranscript);
+  add(ad && ad.voiceOver);
+  add(ad && ad.voiceOverTimeline);
+  add(ad && ad.nextAdScripts);
+  add(ad && ad.hookType);
+  add(ad && ad.creativeStructure);
+  add(ad && ad.productionStyle);
+  add(ad && ad.funnelStage);
+  add(ad && ad.adType);
+  add(ad && ad._customFields);
+  add(ins && ins.formatName);
+  add(ins && ins.creativeUSP);
+  add(ins && ins.creativeHypothesis);
+  add(ins && ins.notes);
+  add(ins && ins.hookType);
+  add(ins && ins.creativeStructure);
+  add(ins && ins.productionStyle);
+  add(ins && ins.bodyCopy);
+  add(ins && ins.adCopy);
+  add(ins && ins.captionTranscript);
+  add(ins && ins.voiceOver);
+  add(ins && ins.voiceOverTimeline);
+  add(ins && ins.nextAdScripts);
+  add(ins && ins.angle);
+  add(ins && ins.persona);
+  return fields.join(' ').slice(0, 24000);
+}
+
+function _creativeEvidenceTokens(text) {
+  var s = String(text || '').toLowerCase();
+  if (!s) return [];
+  s = s.replace(/https?:\/\/\S+/g, ' ');
+  s = s.replace(/[⭐★*_`~|<>[\]{}]/g, ' ');
+  s = s.replace(/\b(?:ins|ad|ads|ugc|tof|mof|bof|video|photo|image|static|graphic|reel|instagram|facebook|tiktok|youtube|clickup|winner|testing|tested|untested|scale|mild|ready|launch)\b/g, ' ');
+  s = s.replace(/\b(?:age|aged)\s*[-:]?\s*/g, ' ');
+  s = s.replace(/\b\d{1,4}(?:\s*(?:to|-)\s*\d{1,4})?\+?\b/g, ' ');
+  s = s.replace(/\b(?:male|female|women|woman|men|man|adult|adults|kids|kid|child|children|parent|parents|mom|moms|mother|dad|dads|father)\b/g, ' ');
+  s = s.replace(/\boverwelmed\b/g, 'overwhelmed');
+  s = s.replace(/[^a-z0-9]+/g, ' ').replace(/\s+/g, ' ').trim();
+  if (!s) return [];
+  var stop = {
+    the:1,a:1,an:1,and:1,or:1,of:1,in:1,for:1,to:1,is:1,are:1,was:1,were:1,be:1,been:1,by:1,with:1,from:1,that:1,this:1,it:1,as:1,at:1,on:1,into:1,about:1,around:1,who:1,when:1,while:1,using:1,use:1,uses:1,used:1,have:1,has:1,had:1,do:1,does:1,did:1,can:1,could:1,should:1,would:1,will:1,just:1,then:1,than:1,them:1,their:1,they:1,you:1,your:1,i:1,me:1,my:1,we:1,our:1,us:1,not:1,no:1,yes:1,get:1,got:1,give:1,gives:1,make:1,makes:1,made:1,take:1,takes:1,see:1,show:1,shows:1,open:1,opens:1,close:1,cut:1,cuts:1,shot:1,shots:1,frame:1,frames:1,scene:1,scenes:1,hook:1,bridge:1,proof:1,demo:1,cta:1,caption:1,voice:1,over:1,script:1,text:1,screen:1,timing:1,headline:1,one:1,two:1,three:1,first:1,second:1,third:1,free:1,today:1,download:1,comment:1,link:1,source:1,full:1,exact:1,available:1,unavailable:1
+  };
+  var syn = {
+    sellers:'seller', selling:'seller', sell:'seller',
+    hustlers:'hustler', hustles:'hustle',
+    tools:'tool', toolkit:'tool', toolkits:'tool', resources:'tool', resource:'tool',
+    worksheets:'worksheet', workbook:'worksheet', workbooks:'worksheet', printables:'printable', pages:'page',
+    helps:'help', supporting:'support', supports:'support', solutions:'solution',
+    medicationfree:'medication', meds:'medication',
+    adhders:'adhd', adhder:'adhd',
+    dysregulated:'dysregulation', dysregulate:'dysregulation',
+    procrastinating:'procrastination', procrastinate:'procrastination',
+    quilters:'quilter', quilting:'quilt', quilts:'quilt',
+    teachers:'teacher', classrooms:'classroom',
+    nurses:'nurse', nursing:'nurse'
+  };
+  var counts = {};
+  s.split(' ').forEach(function(raw) {
+    var token = syn[raw] || raw;
+    if (token.length > 5 && /ing$/.test(token)) token = token.slice(0, -3);
+    if (token.length > 4 && /ies$/.test(token)) token = token.slice(0, -3) + 'y';
+    else if (token.length > 3 && /s$/.test(token) && !/ss$/.test(token)) token = token.slice(0, -1);
+    token = syn[token] || token;
+    if (token.length <= 2 || stop[token]) return;
+    counts[token] = (counts[token] || 0) + 1;
+  });
+  return Object.keys(counts).sort(function(a, b) { return counts[b] - counts[a] || a.localeCompare(b); });
+}
+
+function _creativeEvidenceScore(leftText, rightText) {
+  var lt = _creativeEvidenceTokens(leftText);
+  var rt = _creativeEvidenceTokens(rightText);
+  if (!lt.length || !rt.length) return { score: 0, shared: [] };
+  var lset = {}, rset = {}, union = {}, shared = [];
+  lt.forEach(function(t){ lset[t] = true; union[t] = true; });
+  rt.forEach(function(t){ rset[t] = true; union[t] = true; if (lset[t]) shared.push(t); });
+  var unionCount = Object.keys(union).length || 1;
+  var coverage = shared.length / Math.min(lt.length, rt.length);
+  var jaccard = shared.length / unionCount;
+  var score = Math.max(jaccard * 1.15, coverage * 0.72);
+  if (shared.length >= 8) score += 0.08;
+  if (shared.length >= 14) score += 0.06;
+  return { score: Math.min(1, Math.round(score * 1000) / 1000), shared: shared.slice(0, 10) };
+}
+
+function _allWinnerCreativesForEvidence() {
+  var rows = [];
+  (PRODUCTS || []).forEach(function(product) {
+    if (!product || !product.id) return;
+    var pid = product.id;
+    var wins = getProductWinningFormats(pid) || [];
+    wins.forEach(function(ad) {
+      if (!ad || ad.parentAdId || !_isWinningCreativeStatus(ad.status)) return;
+      var copy = Object.assign({}, ad);
+      copy._evidenceProductId = pid;
+      copy._evidenceProductName = product.name || pid;
+      copy._evidenceInspiration = _findEvidenceInspirationForAd(copy, pid);
+      copy._evidenceText = _creativeEvidenceText(copy, copy._evidenceInspiration);
+      if (copy._evidenceText) rows.push(copy);
+    });
+  });
+  return rows;
+}
+
+function _taxonomyEvidenceProfile(kind, name) {
+  name = _normalizeTaxonomyName(name || '');
+  if (!name) return null;
+  var cacheKey = kind + '||' + _taxonomyLookupKey(name) + '||' + String(_taxonomyEvidenceLastRefreshMs || 0) + '||' + String((ADS || []).length) + '||' + String((INSPIRATIONS || []).length);
+  if (_taxonomyEvidenceProfilesCache[cacheKey]) return _taxonomyEvidenceProfilesCache[cacheKey];
+  var field = kind === 'persona' ? 'persona' : 'angle';
+  var key = _taxonomyLookupKey(name);
+  var winners = _allWinnerCreativesForEvidence().filter(function(ad) {
+    return _taxonomyLookupKey(ad && ad[field]) === key;
+  });
+  var text = winners.map(function(ad) { return ad._evidenceText || ''; }).filter(Boolean).join(' ');
+  var tokens = _creativeEvidenceTokens(text);
+  var products = {};
+  winners.forEach(function(ad) { if (ad._evidenceProductName) products[ad._evidenceProductName] = true; });
+  var profile = { name: name, winners: winners, text: text, tokens: tokens, products: Object.keys(products) };
+  _taxonomyEvidenceProfilesCache[cacheKey] = profile;
+  return profile;
+}
+
+function _taxonomyEvidenceCandidateMatches(kind, evidenceText, currentName, limit) {
+  var list = kind === 'persona' ? PERSONAS : ANGLES;
+  var currentKey = _taxonomyLookupKey(currentName || '');
+  var out = [];
+  (list || []).forEach(function(item) {
+    if (!item || !item.name) return;
+    if (!_taxonomyItemIsActive(kind, item.name, false)) return;
+    if (currentKey && _taxonomyLookupKey(item.name) === currentKey) return;
+    var profile = _taxonomyEvidenceProfile(kind, item.name);
+    if (!profile || !profile.text || !profile.winners.length) return;
+    var ev = _creativeEvidenceScore(evidenceText, profile.text);
+    var nameScore = _taxonomySimilarityScore(currentName || '', item.name || '') * 0.08;
+    var score = Math.min(1, Math.round((ev.score + nameScore) * 1000) / 1000);
+    if (score < 0.28 || ev.shared.length < 3) return;
+    out.push({
+      name: _normalizeTaxonomyName(item.name || ''),
+      score: score,
+      evidenceScore: ev.score,
+      shared: ev.shared,
+      status: kind === 'persona' ? derivePersonaStatus(item.name) : deriveAngleStatus(item.name),
+      creativeCount: _taxonomyCreativeCount(kind, item.name),
+      winnerCount: profile.winners.length,
+      products: profile.products
+    });
+  });
+  out.sort(function(a, b) {
+    return b.evidenceScore - a.evidenceScore ||
+      b.score - a.score ||
+      _taxonomyStatusRank({ status: b.status }) - _taxonomyStatusRank({ status: a.status }) ||
+      b.winnerCount - a.winnerCount ||
+      String(a.name).localeCompare(String(b.name));
+  });
+  return out.slice(0, limit || 4);
+}
+
+function _taxonomyEvidenceSuggestionForCreative(kind, creative, currentName) {
+  if (!creative) return null;
+  var text = _creativeEvidenceText(creative, creative._evidenceInspiration || null);
+  if (!text) return null;
+  var list = _taxonomyEvidenceCandidateMatches(kind, text, currentName, 1);
+  return list[0] || null;
+}
+
+function _taxonomyEvidenceSuggestionForInspiration(kind, ins, currentName) {
+  if (!ins) return null;
+  var text = _creativeEvidenceText(null, ins);
+  if (!text) return null;
+  var list = _taxonomyEvidenceCandidateMatches(kind, text, currentName, 1);
+  return list[0] || null;
+}
+
+async function refreshTaxonomyEvidenceSuggestions(force) {
+  if (!DB.ready) return;
+  var now = Date.now();
+  if (!force && _taxonomyEvidenceLastRefreshMs && now - _taxonomyEvidenceLastRefreshMs < _TAXONOMY_EVIDENCE_TTL_MS) return;
+  if (_taxonomyEvidenceRefreshPromise) return _taxonomyEvidenceRefreshPromise;
+  _taxonomyEvidenceRefreshPromise = Promise.all([
+    refreshWinnersCache(),
+    refreshInspoCache()
+  ]).then(function() {
+    _taxonomyEvidenceLastRefreshMs = Date.now();
+    _taxonomyEvidenceProfilesCache = {};
+  }).catch(function(e) {
+    console.warn('[taxonomy-evidence] refresh failed', e);
+  }).finally(function() {
+    _taxonomyEvidenceRefreshPromise = null;
+  });
+  return _taxonomyEvidenceRefreshPromise;
+}
+
 function _taxonomyItemIsActive(kind, name, includeArchived) {
   name = _normalizeTaxonomyName(name || '');
   if (!name) return false;
@@ -14858,7 +15116,11 @@ function _taxonomyTopMatches(kind, name, limit) {
 
 function _storeInspirationTaxonomySuggestions(ins, kind, incoming) {
   if (!ins) return [];
+  var evidenceTarget = _taxonomyEvidenceSuggestionForInspiration(kind, ins, incoming || (kind === 'persona' ? ins.persona : ins.angle));
   var suggestions = _taxonomyTopMatches(kind, incoming, 4);
+  if (evidenceTarget) {
+    suggestions = [evidenceTarget].concat(suggestions.filter(function(s) { return s && s.name !== evidenceTarget.name; }));
+  }
   if (kind === 'persona') {
     ins._personaSuggestions = suggestions;
     ins._suggestedPersona = suggestions[0] ? suggestions[0].name : '';
@@ -14874,11 +15136,9 @@ function _renderInspirationTaxonomySuggestion(ins, kind) {
   var current = kind === 'persona' ? ins.persona : ins.angle;
   var detected = kind === 'persona' ? (ins.detectedPersona || ins.persona || '') : (ins.detectedAngle || ins.angle || '');
   var list = kind === 'persona' ? (ins._personaSuggestions || []) : (ins._angleSuggestions || []);
+  var evidenceTarget = _taxonomyEvidenceSuggestionForInspiration(kind, ins, current || detected);
+  if (evidenceTarget) list = [evidenceTarget].concat(list.filter(function(s) { return s && s.name !== evidenceTarget.name; }));
   if (!list.length && detected) list = _taxonomyTopMatches(kind, detected, 4);
-  var mergeTarget = _taxonomyMergeTargetForName(kind, current);
-  if (mergeTarget) {
-    list = [mergeTarget].concat(list.filter(function(s) { return s && s.name !== mergeTarget.name; }));
-  }
   if (!list.length) return '';
   var top = list[0];
   if (!top || !top.name || top.name === current) return '';
@@ -14919,30 +15179,41 @@ function _taxonomyMergeSuggestions(kind, limit) {
   var rows = (kind === 'persona' ? PERSONAS : ANGLES).filter(function(row) {
     return row && row.name && !row.archivedAt && !_isBoundaryQuarantinedTaxonomy(kind, row.name);
   });
+  var profiles = {};
+  rows.forEach(function(row) {
+    profiles[row.name] = _taxonomyEvidenceProfile(kind, row.name);
+  });
   var out = [];
   for (var i = 0; i < rows.length; i++) {
     for (var j = i + 1; j < rows.length; j++) {
-      var score = _taxonomySimilarityScore(rows[i].name, rows[j].name);
-      if (score < 0.72) continue;
+      var leftProfile = profiles[rows[i].name];
+      var rightProfile = profiles[rows[j].name];
+      if (!leftProfile || !rightProfile || !leftProfile.winners.length || !rightProfile.winners.length) continue;
+      var evidence = _creativeEvidenceScore(leftProfile.text, rightProfile.text);
+      var labelScore = _taxonomySimilarityScore(rows[i].name, rows[j].name);
+      var score = Math.min(1, Math.round((evidence.score + (labelScore * 0.08)) * 1000) / 1000);
+      if (evidence.score < 0.31 || evidence.shared.length < 4) continue;
       var keep = _preferredTaxonomyMergeTarget(kind, rows[i], rows[j]);
       var merge = keep === rows[i] ? rows[j] : rows[i];
-      var leftTokens = _taxonomySemanticTokens(rows[i].name);
-      var rightTokens = _taxonomySemanticTokens(rows[j].name);
-      var rightSet = {};
-      rightTokens.forEach(function(t){ rightSet[t] = true; });
-      var shared = leftTokens.filter(function(t){ return rightSet[t]; });
       out.push({
         keep: keep,
         merge: merge,
         score: score,
-        shared: shared,
+        evidenceScore: evidence.score,
+        shared: evidence.shared,
         keepCount: _taxonomyCreativeCount(kind, keep.name),
-        mergeCount: _taxonomyCreativeCount(kind, merge.name)
+        mergeCount: _taxonomyCreativeCount(kind, merge.name),
+        keepWinnerCount: (profiles[keep.name] && profiles[keep.name].winners.length) || 0,
+        mergeWinnerCount: (profiles[merge.name] && profiles[merge.name].winners.length) || 0,
+        products: Array.from(new Set([].concat(
+          (leftProfile && leftProfile.products) || [],
+          (rightProfile && rightProfile.products) || []
+        )))
       });
     }
   }
   out.sort(function(a, b) {
-    return b.score - a.score || b.mergeCount - a.mergeCount;
+    return b.evidenceScore - a.evidenceScore || b.score - a.score || b.mergeWinnerCount - a.mergeWinnerCount || b.mergeCount - a.mergeCount;
   });
   return out.slice(0, limit || 8);
 }
@@ -14955,20 +15226,28 @@ function _taxonomyMergeTargetForName(kind, name) {
   });
   var current = list.find(function(row) { return _taxonomyLookupKey(row.name) === _taxonomyLookupKey(name); });
   if (!current) return null;
+  var currentProfile = _taxonomyEvidenceProfile(kind, current.name);
+  if (!currentProfile || !currentProfile.winners.length || !currentProfile.text) return null;
   var best = null;
   list.forEach(function(other) {
     if (!other || other === current) return;
-    var score = _taxonomySimilarityScore(current.name, other.name);
-    if (score < 0.72) return;
+    var otherProfile = _taxonomyEvidenceProfile(kind, other.name);
+    if (!otherProfile || !otherProfile.winners.length || !otherProfile.text) return;
+    var evidence = _creativeEvidenceScore(currentProfile.text, otherProfile.text);
+    var score = Math.min(1, Math.round((evidence.score + (_taxonomySimilarityScore(current.name, other.name) * 0.08)) * 1000) / 1000);
+    if (evidence.score < 0.31 || evidence.shared.length < 4) return;
     var keep = _preferredTaxonomyMergeTarget(kind, current, other);
     if (!keep || _taxonomyLookupKey(keep.name) === _taxonomyLookupKey(current.name)) return;
     var candidate = {
       name: _normalizeTaxonomyName(keep.name || ''),
       score: score,
+      evidenceScore: evidence.score,
+      shared: evidence.shared,
       status: kind === 'persona' ? derivePersonaStatus(keep.name) : deriveAngleStatus(keep.name),
-      creativeCount: _taxonomyCreativeCount(kind, keep.name)
+      creativeCount: _taxonomyCreativeCount(kind, keep.name),
+      winnerCount: (keep === current ? currentProfile : otherProfile).winners.length
     };
-    if (!best || candidate.score > best.score || candidate.creativeCount > best.creativeCount) best = candidate;
+    if (!best || candidate.evidenceScore > best.evidenceScore || candidate.creativeCount > best.creativeCount) best = candidate;
   });
   return best;
 }
@@ -14977,11 +15256,13 @@ function _renderTaxonomyMergeSuggestions(kind) {
   var label = kind === 'persona' ? 'Persona' : 'Angle';
   var suggestions = _taxonomyMergeSuggestions(kind, 8);
   var open = !!_taxonomyMergePanelOpen[kind];
+  var winnerCount = _allWinnerCreativesForEvidence().length;
+  var loading = !!_taxonomyEvidenceRefreshPromise;
   var html = '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 12px;background:var(--el);border-bottom:1px solid var(--b);font-size:.74rem">' +
-    '<button onclick="toggleTaxonomyMergeSuggestions(\'' + kind + '\')" ' + (!suggestions.length ? 'disabled ' : '') +
-      'style="padding:5px 10px;border:1px solid var(--b);border-radius:999px;background:' + (open ? 'var(--win)' : 'transparent') + ';color:' + (open ? '#fff' : 'var(--t1)') + ';cursor:' + (suggestions.length ? 'pointer' : 'not-allowed') + ';font-weight:700">' +
-      'Merge Suggestions <span style="opacity:.75">· ' + suggestions.length + '</span></button>' +
-    '<span style="color:var(--t3)">' + (suggestions.length ? 'Review likely duplicate ' + label.toLowerCase() + ' names before making more creatives.' : 'No likely duplicate ' + label.toLowerCase() + ' names found.') + '</span>' +
+    '<button onclick="toggleTaxonomyMergeSuggestions(\'' + kind + '\')" ' +
+      'style="padding:5px 10px;border:1px solid var(--b);border-radius:999px;background:' + (open ? 'var(--win)' : 'transparent') + ';color:' + (open ? '#fff' : 'var(--t1)') + ';cursor:pointer;font-weight:700">' +
+      (loading ? 'Analyzing Winners' : 'Winner Evidence Suggestions') + ' <span style="opacity:.75">· ' + suggestions.length + '</span></button>' +
+    '<span style="color:var(--t3)">' + (suggestions.length ? 'Based on actual winner creative evidence across products, not just similar names.' : 'No duplicate ' + label.toLowerCase() + ' buckets found from winner evidence yet.') + (winnerCount ? ' · ' + winnerCount + ' winners scanned' : '') + '</span>' +
   '</div>';
   if (open && suggestions.length) {
     html += '<div style="display:grid;gap:6px;padding:10px 12px;background:#fff;border-bottom:1px solid var(--b)">';
@@ -14989,17 +15270,24 @@ function _renderTaxonomyMergeSuggestions(kind) {
       html += '<div style="display:grid;grid-template-columns:70px 1.5fr 1fr 120px;gap:10px;align-items:center;padding:8px 10px;border:1px solid var(--b);border-radius:8px;background:#fbfdff">' +
         '<strong style="color:var(--t2)">' + Math.round(s.score * 100) + '%</strong>' +
         '<div><strong>' + esc(s.merge.name) + '</strong> → <strong>' + esc(s.keep.name) + '</strong></div>' +
-        '<div style="font-size:.7rem;color:var(--t3)">Shared: ' + esc((s.shared || []).slice(0, 4).join(', ') || 'similar wording') + '<br>' + s.mergeCount + ' row' + (s.mergeCount === 1 ? '' : 's') + ' to move</div>' +
+        '<div style="font-size:.7rem;color:var(--t3)">Shared creative evidence: ' + esc((s.shared || []).slice(0, 5).join(', ') || 'overlapping winner briefs') + '<br>' + s.mergeWinnerCount + ' winner' + (s.mergeWinnerCount === 1 ? '' : 's') + ' / ' + s.mergeCount + ' total row' + (s.mergeCount === 1 ? '' : 's') + ' to move</div>' +
         '<button class="btn-add btn-sm" onclick="confirmTaxonomySuggestionMerge(\'' + kind + '\',\'' + escJs(s.keep.name) + '\',\'' + escJs(s.merge.name) + '\')">Merge</button>' +
       '</div>';
     });
     html += '</div>';
+  } else if (open) {
+    html += '<div style="padding:10px 12px;background:#fff;border-bottom:1px solid var(--b);font-size:.74rem;color:var(--t3)">No merge candidate crossed the evidence threshold. This uses winner creative copy, USP, hypothesis, VO/captions, scripts, and linked inspiration context.</div>';
   }
   return html;
 }
 
 function toggleTaxonomyMergeSuggestions(kind) {
   _taxonomyMergePanelOpen[kind] = !_taxonomyMergePanelOpen[kind];
+  if (_taxonomyMergePanelOpen[kind]) {
+    refreshTaxonomyEvidenceSuggestions(true).then(function() {
+      if (kind === 'persona') renderPersonas(); else renderAngles();
+    });
+  }
   if (kind === 'persona') renderPersonas(); else renderAngles();
 }
 
@@ -35907,9 +36195,9 @@ window.addEventListener('load', async function () {
   // pre-v2 production-tagged AD into MANUAL_ACTIONS so the Action Plan
   // shows the team's full backlog from page load, not just app-pushed tasks.
   try { setTimeout(apRunLegacyBackfill, 800); } catch (e) {}
-  // Kick off cross-product caches so the product picker shows counts (non-blocking)
-  refreshWinnersCache().catch(function(){});
-  refreshInspoCache().catch(function(){});
+  // Kick off cross-product caches so the product picker and evidence suggestions
+  // have fresh winner/inspiration context (non-blocking).
+  refreshTaxonomyEvidenceSuggestions(true).catch(function(){});
   // (boot loader removed per user request)
 
   // Restore the last active tab (so refresh lands on the same page, not always Command HQ)
@@ -41929,17 +42217,21 @@ function _mxv4TaxonomySuggestion(ad, currentAngle, currentPersona) {
   var ins = _mxv4SourceInspiration(ad);
   function pick(kind, current, rawValues, storedSuggestions) {
     var best = null;
-    var mergeTarget = _taxonomyMergeTargetForName(kind, current);
-    if (mergeTarget) best = mergeTarget;
+    var evidenceCreative = Object.assign({}, ad || {});
+    evidenceCreative._evidenceInspiration = ins || null;
+    var evidenceTarget = _taxonomyEvidenceSuggestionForCreative(kind, evidenceCreative, current);
+    if (evidenceTarget) best = evidenceTarget;
     (storedSuggestions || []).forEach(function(s) {
       if (!s || !s.name) return;
-      if (!best || s.score > best.score) best = s;
+      if (!best || (s.score || 0) > (best.score || 0)) best = s;
     });
-    rawValues.forEach(function(v) {
-      _taxonomyTopMatches(kind, v, 2).forEach(function(s) {
-        if (!best || s.score > best.score) best = s;
+    if (!best) {
+      rawValues.forEach(function(v) {
+        _taxonomyTopMatches(kind, v, 2).forEach(function(s) {
+          if (!best || s.score > best.score) best = s;
+        });
       });
-    });
+    }
     if (!best || !best.name || best.name === current) return null;
     return best;
   }
@@ -46865,8 +47157,13 @@ function applyClassificationResults(results, isPolling) {
       ins._anglePromptDone = true;
       ins._needsAngleReview = false;
     } else {
+      var angleEvidence = angleSuggestions[0] && angleSuggestions[0].evidenceScore >= 0.38 && (angleSuggestions[0].shared || []).length >= 5 ? angleSuggestions[0] : null;
       var angleResult = matchToExisting(rawAngleName || '', ANGLES);
-      if (angleResult.match && angleResult.score >= 0.72) {
+      if (angleEvidence) {
+        ins.angle = angleEvidence.name;
+        ins._anglePromptDone = true;
+        ins._needsAngleReview = false;
+      } else if (angleResult.match && angleResult.score >= 0.72) {
         ins.angle = angleResult.match.name; // auto-map to confident match
         ins._anglePromptDone = true;
         ins._needsAngleReview = false;
@@ -46885,8 +47182,13 @@ function applyClassificationResults(results, isPolling) {
       ins._personaPromptDone = true;
       ins._needsPersonaReview = false;
     } else {
+      var personaEvidence = personaSuggestions[0] && personaSuggestions[0].evidenceScore >= 0.38 && (personaSuggestions[0].shared || []).length >= 5 ? personaSuggestions[0] : null;
       var personaResult = matchToExisting(rawPersonaName || '', PERSONAS);
-      if (personaResult.match && personaResult.score >= 0.72) {
+      if (personaEvidence) {
+        ins.persona = personaEvidence.name;
+        ins._personaPromptDone = true;
+        ins._needsPersonaReview = false;
+      } else if (personaResult.match && personaResult.score >= 0.72) {
         ins.persona = personaResult.match.name; // auto-map to confident match
         ins._personaPromptDone = true;
         ins._needsPersonaReview = false;

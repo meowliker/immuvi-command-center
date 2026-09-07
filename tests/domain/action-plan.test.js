@@ -75,6 +75,26 @@ test('findLinkedAd prefers source ad id and falls back to ClickUp id', () => {
   assert.equal(findLinkedAd({ _clickupId: 'cu-1' }, ads).id, 'AD-1');
 });
 
+test('findLinkedAd ignores stale source ad links when task identity disagrees', () => {
+  const ads = [
+    { id: 'AD-12816', formatName: 'AR-240-INS-109', clickupTaskId: '86d42xny0' },
+  ];
+
+  const display = resolveActionDisplay({
+    id: 'ma-local',
+    _dbId: 'ma-1',
+    title: 'AR-193-INS-056',
+    taskName: 'AR-193-INS-056',
+    sourceAdId: 'AD-12816',
+    _clickupId: '86d3rch91',
+    liveStatus: 'Testing',
+  }, ads);
+
+  assert.equal(display.title, 'AR-193-INS-056');
+  assert.equal(display.clickupUrl, 'https://app.clickup.com/t/86d3rch91');
+  assert.equal(display.linkedAdId, '');
+});
+
 test('resolveActionDisplay prefers live ad status over action snapshot', () => {
   const display = resolveActionDisplay({
     id: 'ma-local',

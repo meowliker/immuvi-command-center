@@ -29382,6 +29382,20 @@ async function importTasksFromClickUp(tasks) {
     if (localByClickupId[_act._clickupId]) continue; // already linked
     for (var si = 0; si < ADS.length; si++) {
       if (ADS[si].id === _maSrcAdId) {
+        if (typeof _apActionSourceLinkLooksCorrupt === 'function' &&
+            _apActionSourceLinkLooksCorrupt(_act, ADS[si])) {
+          try {
+            console.warn('[clickup-sync] skipped mismatched MA→AD repair', {
+              manualActionId: _act.id,
+              actionTitle: _act.title || _act.taskName,
+              actionClickupId: _act._clickupId || _act.clickupTaskId,
+              sourceAdId: _maSrcAdId,
+              sourceAdName: ADS[si].formatName,
+              sourceAdClickupId: ADS[si]._clickupId || ADS[si].clickupTaskId
+            });
+          } catch (e) {}
+          break;
+        }
         // Repair the link in memory so future syncs don't re-create duplicates
         ADS[si]._clickupId   = _act._clickupId;
         ADS[si].clickupTaskId = _act._clickupId;
@@ -29465,6 +29479,11 @@ async function importTasksFromClickUp(tasks) {
         for (var maiX = 0; maiX < MANUAL_ACTIONS.length; maiX++) {
           var _maX = MANUAL_ACTIONS[maiX];
           if (_maX.sourceAdId === existing.id || _maX.adId === existing.id || _maX._clickupId === existing._clickupId) {
+            if ((typeof _apActionSourceLinkLooksCorrupt === 'function') &&
+                (_maX.sourceAdId === existing.id || _maX.adId === existing.id) &&
+                _apActionSourceLinkLooksCorrupt(_maX, existing)) {
+              continue;
+            }
             _maX.title = existing.formatName;
           }
         }
@@ -31838,6 +31857,38 @@ function _apResolveCellIdentity(act, ad) {
   return { angle: angle || '', persona: persona || '' };
 }
 
+function _apNormalizeTaskNameForMatch(value) {
+  return String(value || '')
+    .replace(/\s*\([^)]*\)\s*$/, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+}
+
+function _apActionOwnClickUpId(act) {
+  return act ? String(act._clickupId || act.clickupTaskId || '').trim() : '';
+}
+
+function _apAdOwnClickUpId(ad) {
+  return ad ? String(ad._clickupId || ad.clickupTaskId || '').trim() : '';
+}
+
+function _apActionAdNamesAgree(act, ad) {
+  var actionName = _apNormalizeTaskNameForMatch((act && (act.title || act.taskName)) || '');
+  var adName = _apNormalizeTaskNameForMatch((ad && (ad.formatName || ad.taskName || ad.title)) || '');
+  if (!actionName || !adName) return true;
+  return actionName === adName ||
+         actionName.indexOf(adName) === 0 ||
+         adName.indexOf(actionName) === 0;
+}
+
+function _apActionSourceLinkLooksCorrupt(act, ad) {
+  var actionCu = _apActionOwnClickUpId(act);
+  var adCu = _apAdOwnClickUpId(ad);
+  if (!act || !ad || !actionCu || !adCu || actionCu === adCu) return false;
+  return !_apActionAdNamesAgree(act, ad);
+}
+
 function apResolveCard(act) {
   if (!act) return null;
   // Locate the source AD using all known link fields, in priority order.
@@ -31847,6 +31898,19 @@ function apResolveCard(act) {
     for (var i = 0; i < ADS.length; i++) {
       if (ADS[i].id === lookupId) { ad = ADS[i]; break; }
     }
+  }
+  if (ad && _apActionSourceLinkLooksCorrupt(act, ad)) {
+    try {
+      console.warn('[apResolveCard] ignoring mismatched action source link', {
+        manualActionId: act.id,
+        actionTitle: act.title || act.taskName,
+        actionClickupId: _apActionOwnClickUpId(act),
+        sourceAdId: lookupId,
+        sourceAdName: ad.formatName,
+        sourceAdClickupId: _apAdOwnClickUpId(ad)
+      });
+    } catch (e) {}
+    ad = null;
   }
   // Fallback: match by ClickUp id.
   var _actClickupIdForLookup = act._clickupId || act.clickupTaskId || '';

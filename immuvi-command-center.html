@@ -14815,6 +14815,20 @@ function _taxonomySimilarityScore(left, right) {
   return Math.min(1, Math.round(score * 1000) / 1000);
 }
 
+function _taxonomyItemIsActive(kind, name, includeArchived) {
+  name = _normalizeTaxonomyName(name || '');
+  if (!name) return false;
+  var list = kind === 'persona' ? PERSONAS : ANGLES;
+  var item = (Array.isArray(list) ? list : []).find(function(row) {
+    return row && _taxonomyLookupKey(row.name) === _taxonomyLookupKey(name);
+  });
+  if (!item) return false;
+  if (_isBoundaryQuarantinedTaxonomy(kind, item.name)) return false;
+  if (typeof activeProductId !== 'undefined' && activeProductId && _isTaxonomyTombstoned(kind, activeProductId, item.name)) return false;
+  if (!includeArchived && item.archivedAt) return false;
+  return true;
+}
+
 function _taxonomyTopMatches(kind, name, limit) {
   var list = kind === 'persona' ? PERSONAS : ANGLES;
   var clean = _normalizeTaxonomyName(name || '');

@@ -14815,6 +14815,67 @@ function _taxonomySimilarityScore(left, right) {
   return Math.min(1, Math.round(score * 1000) / 1000);
 }
 
+function _taxonomyTopMatches(kind, name, limit) {
+  var list = kind === 'persona' ? PERSONAS : ANGLES;
+  var clean = _normalizeTaxonomyName(name || '');
+  if (!clean || !Array.isArray(list)) return [];
+  var out = [];
+  list.forEach(function(item) {
+    if (!item || !item.name) return;
+    if (!_taxonomyItemIsActive(kind, item.name, false)) return;
+    var score = _taxonomySimilarityScore(clean, item.name);
+    if (score < 0.45) return;
+    var status = kind === 'persona' ? derivePersonaStatus(item.name) : deriveAngleStatus(item.name);
+    out.push({
+      name: _normalizeTaxonomyName(item.name || ''),
+      score: score,
+      status: status || item.status || 'Untested',
+      creativeCount: _taxonomyCreativeCount(kind, item.name)
+    });
+  });
+  out.sort(function(a, b) {
+    return b.score - a.score ||
+      _taxonomyStatusRank({ status: b.status }) - _taxonomyStatusRank({ status: a.status }) ||
+      b.creativeCount - a.creativeCount ||
+      String(a.name).localeCompare(String(b.name));
+  });
+  return out.slice(0, limit || 4);
+}
+
+function _storeInspirationTaxonomySuggestions(ins, kind, incoming) {
+  if (!ins) return [];
+  var suggestions = _taxonomyTopMatches(kind, incoming, 4);
+  if (kind === 'persona') {
+    ins._personaSuggestions = suggestions;
+    ins._suggestedPersona = suggestions[0] ? suggestions[0].name : '';
+  } else {
+    ins._angleSuggestions = suggestions;
+    ins._suggestedAngle = suggestions[0] ? suggestions[0].name : '';
+  }
+  return suggestions;
+}
+
+function _renderInspirationTaxonomySuggestion(ins, kind) {
+  if (!ins) return '';
+  var current = kind === 'persona' ? ins.persona : ins.angle;
+  var detected = kind === 'persona' ? (ins.detectedPersona || ins.persona || '') : (ins.detectedAngle || ins.angle || '');
+  var list = kind === 'persona' ? (ins._personaSuggestions || []) : (ins._angleSuggestions || []);
+  if (!list.length && detected) list = _taxonomyTopMatches(kind, detected, 4);
+  var mergeTarget = _taxonomyMergeTargetForName(kind, current);
+  if (mergeTarget) {
+    list = [mergeTarget].concat(list.filter(function(s) { return s && s.name !== mergeTarget.name; }));
+  }
+  if (!list.length) return '';
+  var top = list[0];
+  if (!top || !top.name || top.name === current) return '';
+  var label = kind === 'persona' ? 'Persona suggestion' : 'Angle suggestion';
+  return '<button type="button" title="' + escAttr(label + ': ' + top.name + ' (' + Math.round(top.score * 100) + '%)') + '" ' +
+    'onclick="event.stopPropagation();updateInsField(\'' + escAttr(ins.id) + '\',\'' + kind + '\',\'' + escJs(top.name) + '\')" ' +
+    'style="display:block;margin-top:3px;border:1px solid #bae6fd;background:#f0f9ff;color:#0369a1;border-radius:999px;padding:2px 6px;font-size:0.58rem;font-weight:700;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer">' +
+    'Suggested: ' + esc(top.name) + ' · ' + Math.round(top.score * 100) + '%' +
+  '</button>';
+}
+
 function _taxonomyCreativeCount(kind, name) {
   var field = kind === 'persona' ? 'persona' : 'angle';
   var count = 0;
@@ -14870,6 +14931,32 @@ function _taxonomyMergeSuggestions(kind, limit) {
     return b.score - a.score || b.mergeCount - a.mergeCount;
   });
   return out.slice(0, limit || 8);
+}
+
+function _taxonomyMergeTargetForName(kind, name) {
+  name = _normalizeTaxonomyName(name || '');
+  if (!name) return null;
+  var list = (kind === 'persona' ? PERSONAS : ANGLES).filter(function(row) {
+    return row && row.name && !row.archivedAt && !_isBoundaryQuarantinedTaxonomy(kind, row.name);
+  });
+  var current = list.find(function(row) { return _taxonomyLookupKey(row.name) === _taxonomyLookupKey(name); });
+  if (!current) return null;
+  var best = null;
+  list.forEach(function(other) {
+    if (!other || other === current) return;
+    var score = _taxonomySimilarityScore(current.name, other.name);
+    if (score < 0.72) return;
+    var keep = _preferredTaxonomyMergeTarget(kind, current, other);
+    if (!keep || _taxonomyLookupKey(keep.name) === _taxonomyLookupKey(current.name)) return;
+    var candidate = {
+      name: _normalizeTaxonomyName(keep.name || ''),
+      score: score,
+      status: kind === 'persona' ? derivePersonaStatus(keep.name) : deriveAngleStatus(keep.name),
+      creativeCount: _taxonomyCreativeCount(kind, keep.name)
+    };
+    if (!best || candidate.score > best.score || candidate.creativeCount > best.creativeCount) best = candidate;
+  });
+  return best;
 }
 
 function _renderTaxonomyMergeSuggestions(kind) {
@@ -38614,6 +38701,7 @@ var _mxv4 = {
   // Add tab
   addSource: 'tracker',            // 'tracker' | 'inspiration' | 'blank'
   addSelected: {},                 // adId/inspoId → true
+  taxonomyDrafts: {},              // adId → { angle, persona } pending cell retag save
   // Bug 8: per-user sticky preference for the modal's "Push to Action Plan now"
   // checkbox. Falls back to true on first visit. Persisted in localStorage on
   // every toggle so the modal opens with the user's last choice next time.
@@ -38648,7 +38736,7 @@ var _mxv4 = {
         if (Array.isArray(arr) && arr.length) return arr;
       }
     } catch (e) {}
-    return ['source','name','type','funnel','origin','created','due','status','inspirationTrace','creativeUSP','notes','action','delete'];
+    return ['source','name','type','funnel','origin','created','due','status','taxonomy','inspirationTrace','creativeUSP','notes','action','delete'];
   })(),
   // Saved views — array of { id, name, columns: [...] }. Switchable from
   // a dropdown above the table. One global list shared across products.
@@ -41485,6 +41573,10 @@ function _mxv4ColumnRegistry() {
         STATUSES.map(function (s) { return '<option value="' + esc(s) + '"' + (a.status === s ? ' selected' : '') + '>' + esc(s) + '</option>'; }).join('') +
         '</select></td>';
     } };
+  cols['taxonomy'] = { id: 'taxonomy', label: 'Angle / Persona', source: 'app',
+    render: function (a, ad, ctx) {
+      return '<td style="min-width:260px">' + _mxv4RenderTaxonomyEditor(ad, ctx.angleName, ctx.personaName) + '</td>';
+    } };
   // F4 — Inspiration / source trace
   cols['inspirationTrace'] = { id: 'inspirationTrace', label: 'Inspiration', source: 'app',
     render: function (a, ad) { return '<td>' + _mxv4RenderInspirationTrace(ad) + '</td>'; } };
@@ -41807,6 +41899,174 @@ if (typeof window !== 'undefined' && !window._mxv4UsersPickerOutsideBound) {
     }
   });
   window._mxv4UsersPickerOutsideBound = true;
+}
+
+function _mxv4TaxonomyDraft(adId, field, fallback) {
+  var d = (_mxv4.taxonomyDrafts && _mxv4.taxonomyDrafts[adId]) || null;
+  return (d && d[field]) || fallback || '';
+}
+
+function _mxv4SourceInspiration(ad) {
+  if (!ad || !ad._fromInspoId || !Array.isArray(INSPIRATIONS)) return null;
+  return INSPIRATIONS.find(function(ins) { return ins && ins.id === ad._fromInspoId; }) || null;
+}
+
+function _mxv4TaxonomySuggestion(ad, currentAngle, currentPersona) {
+  var ins = _mxv4SourceInspiration(ad);
+  function pick(kind, current, rawValues, storedSuggestions) {
+    var best = null;
+    var mergeTarget = _taxonomyMergeTargetForName(kind, current);
+    if (mergeTarget) best = mergeTarget;
+    (storedSuggestions || []).forEach(function(s) {
+      if (!s || !s.name) return;
+      if (!best || s.score > best.score) best = s;
+    });
+    rawValues.forEach(function(v) {
+      _taxonomyTopMatches(kind, v, 2).forEach(function(s) {
+        if (!best || s.score > best.score) best = s;
+      });
+    });
+    if (!best || !best.name || best.name === current) return null;
+    return best;
+  }
+  var angle = pick('angle', currentAngle, [
+    ad && ad.angle,
+    ad && ad._customFields && (ad._customFields['angle tag'] || ad._customFields.angle),
+    ins && (ins.angle || ins.detectedAngle)
+  ].filter(Boolean), ins && ins._angleSuggestions);
+  var persona = pick('persona', currentPersona, [
+    ad && ad.persona,
+    ad && ad._customFields && (ad._customFields['persona tag'] || ad._customFields.persona || ad._customFields.audience),
+    ins && (ins.persona || ins.detectedPersona)
+  ].filter(Boolean), ins && ins._personaSuggestions);
+  return { angle: angle, persona: persona };
+}
+
+function _mxv4RenderTaxonomyEditor(ad, angleName, personaName) {
+  if (!ad || !ad.id) return '<span style="color:var(--b-ink3)">—</span>';
+  var curAngle = ad.angle || angleName || '';
+  var curPersona = ad.persona || personaName || '';
+  var draftAngle = _mxv4TaxonomyDraft(ad.id, 'angle', curAngle);
+  var draftPersona = _mxv4TaxonomyDraft(ad.id, 'persona', curPersona);
+  var angleOpts = (ANGLES || []).filter(function(a) { return a && a.name && _taxonomyItemIsActive('angle', a.name, false); })
+    .map(function(a) { return '<option value="' + escAttr(a.name) + '"' + (draftAngle === a.name ? ' selected' : '') + '>' + esc(a.name) + '</option>'; }).join('');
+  var personaOpts = (PERSONAS || []).filter(function(p) { return p && p.name && _taxonomyItemIsActive('persona', p.name, false); })
+    .map(function(p) { return '<option value="' + escAttr(p.name) + '"' + (draftPersona === p.name ? ' selected' : '') + '>' + esc(p.name) + '</option>'; }).join('');
+  if (draftAngle && !(ANGLES || []).some(function(a){ return a && a.name === draftAngle; })) {
+    angleOpts = '<option value="' + escAttr(draftAngle) + '" selected>' + esc(draftAngle) + '</option>' + angleOpts;
+  }
+  if (draftPersona && !(PERSONAS || []).some(function(p){ return p && p.name === draftPersona; })) {
+    personaOpts = '<option value="' + escAttr(draftPersona) + '" selected>' + esc(draftPersona) + '</option>' + personaOpts;
+  }
+  var changed = draftAngle !== curAngle || draftPersona !== curPersona;
+  var suggestion = _mxv4TaxonomySuggestion(ad, curAngle, curPersona);
+  var suggestionHtml = '';
+  if (suggestion.angle || suggestion.persona) {
+    var sugAngle = (suggestion.angle && suggestion.angle.name) || draftAngle || curAngle;
+    var sugPersona = (suggestion.persona && suggestion.persona.name) || draftPersona || curPersona;
+    var pct = Math.round(Math.max((suggestion.angle && suggestion.angle.score) || 0, (suggestion.persona && suggestion.persona.score) || 0) * 100);
+    suggestionHtml = '<button type="button" onclick="event.stopPropagation();setMxv4TaxonomyDraftBoth(\'' + escAttr(ad.id) + '\',\'' + escJs(sugAngle) + '\',\'' + escJs(sugPersona) + '\')" ' +
+      'style="border:1px solid #bae6fd;background:#f0f9ff;color:#0369a1;border-radius:999px;padding:2px 7px;font-size:0.6rem;font-weight:700;cursor:pointer;max-width:230px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" ' +
+      'title="Suggested cell: ' + escAttr(sugAngle + ' x ' + sugPersona) + '">' +
+      'Suggest: ' + esc(sugAngle) + ' x ' + esc(sugPersona) + (pct ? ' · ' + pct + '%' : '') +
+    '</button>';
+  }
+  return '<div style="display:grid;grid-template-columns:1fr 1fr auto;gap:5px;align-items:center;min-width:0">' +
+    '<select class="mxv4-cu-sel" title="Angle" onchange="setMxv4TaxonomyDraft(\'' + escAttr(ad.id) + '\',\'angle\',this.value)" style="max-width:118px">' + angleOpts + '</select>' +
+    '<select class="mxv4-cu-sel" title="Persona" onchange="setMxv4TaxonomyDraft(\'' + escAttr(ad.id) + '\',\'persona\',this.value)" style="max-width:118px">' + personaOpts + '</select>' +
+    '<button class="mxv4-detail-action" style="padding:4px 8px;font-size:0.68rem"' + (!changed ? ' disabled' : '') + ' onclick="event.stopPropagation();saveMxv4CreativeTaxonomy(\'' + escAttr(ad.id) + '\',\'' + escJs(angleName) + '\',\'' + escJs(personaName) + '\')">Save</button>' +
+    (suggestionHtml ? '<div style="grid-column:1 / -1;margin-top:2px">' + suggestionHtml + '</div>' : '') +
+  '</div>';
+}
+
+function setMxv4TaxonomyDraft(adId, field, value) {
+  if (!adId || (field !== 'angle' && field !== 'persona')) return;
+  if (!_mxv4.taxonomyDrafts) _mxv4.taxonomyDrafts = {};
+  if (!_mxv4.taxonomyDrafts[adId]) _mxv4.taxonomyDrafts[adId] = {};
+  _mxv4.taxonomyDrafts[adId][field] = value || '';
+  if (typeof renderMxv4Modal === 'function') renderMxv4Modal();
+}
+
+function setMxv4TaxonomyDraftBoth(adId, angleName, personaName) {
+  if (!adId) return;
+  if (!_mxv4.taxonomyDrafts) _mxv4.taxonomyDrafts = {};
+  _mxv4.taxonomyDrafts[adId] = { angle: angleName || '', persona: personaName || '' };
+  if (typeof renderMxv4Modal === 'function') renderMxv4Modal();
+}
+
+function saveMxv4CreativeTaxonomy(adId, fromAngle, fromPersona) {
+  var ad = (ADS || []).find(function(x) { return x && x.id === adId; });
+  if (!ad) { toast('Creative not found', 'err'); return; }
+  var draft = (_mxv4.taxonomyDrafts && _mxv4.taxonomyDrafts[adId]) || {};
+  var nextAngle = _ensureTaxonomyItem('angle', draft.angle || ad.angle || fromAngle || '', 'Added from matrix cell retag');
+  var nextPersona = _ensureTaxonomyItem('persona', draft.persona || ad.persona || fromPersona || '', 'Added from matrix cell retag');
+  if (!nextAngle || !nextPersona) { toast('Choose both angle and persona', 'warn'); return; }
+  var prevAngle = ad.angle || fromAngle || '';
+  var prevPersona = ad.persona || fromPersona || '';
+  if (prevAngle === nextAngle && prevPersona === nextPersona) {
+    if (_mxv4.taxonomyDrafts) delete _mxv4.taxonomyDrafts[adId];
+    renderMxv4Modal();
+    return;
+  }
+  ad.angle = nextAngle;
+  ad.persona = nextPersona;
+  if (!ad._customFields) ad._customFields = {};
+  if (!ad._customFieldsRaw) ad._customFieldsRaw = {};
+  ad._customFields['angle tag'] = nextAngle;
+  ad._customFieldsRaw['angle tag'] = nextAngle;
+  ad._customFields['persona tag'] = nextPersona;
+  ad._customFieldsRaw['persona tag'] = nextPersona;
+
+  if (typeof MANUAL_ACTIONS !== 'undefined' && Array.isArray(MANUAL_ACTIONS)) {
+    MANUAL_ACTIONS.forEach(function(ma) {
+      if (!ma) return;
+      var linked = ma.sourceAdId === adId || ma._sourceAdId === adId || ma.adId === adId ||
+        (ad._clickupId && ma._clickupId === ad._clickupId);
+      if (!linked) return;
+      ma.angle = nextAngle;
+      ma.persona = nextPersona;
+      ma.sourceAngle = nextAngle;
+      ma.sourcePersona = nextPersona;
+      ma._sourceAngle = nextAngle;
+      ma._sourcePersona = nextPersona;
+      ma.selectedAngle = nextAngle;
+      ma.selectedPersona = nextPersona;
+    });
+  }
+
+  if (typeof _syncCanonicalCellAssignmentForAd === 'function') _syncCanonicalCellAssignmentForAd(ad);
+  if (_mxv4.taxonomyDrafts) delete _mxv4.taxonomyDrafts[adId];
+  _mxv4.cell = nextAngle + '||' + nextPersona;
+  _mxv4.selectedAdId = adId;
+  matrixExpandedCell = _mxv4.cell;
+
+  try { P = process(ADS); } catch(e) {}
+  try { buildCreativeUsageIndex(); } catch(e) {}
+  try { deriveWinners(); } catch(e) {}
+  try { genActions(); } catch(e) {}
+  try { persistAdMetaDebounced(ad); } catch(e) {}
+  try { if (typeof _writeAdRowDirect === 'function') _writeAdRowDirect(ad); } catch(e) {}
+  try { saveState(); } catch(e) {}
+  try { if (ad._clickupId || ad.clickupTaskId) {
+    var cuProxy = Object.assign({}, ad, { _clickupId: ad._clickupId || ad.clickupTaskId });
+    pushFieldToClickUp(cuProxy, 'angle', nextAngle);
+    pushFieldToClickUp(cuProxy, 'persona', nextPersona);
+  }} catch(e) {}
+  if (typeof _rtChannel !== 'undefined' && _rtChannel) {
+    try {
+      _rtChannel.send({ type: 'broadcast', event: 'field-update',
+        payload: { adId: adId, field: 'angle', value: nextAngle, clientId: _myClientId } });
+      _rtChannel.send({ type: 'broadcast', event: 'field-update',
+        payload: { adId: adId, field: 'persona', value: nextPersona, clientId: _myClientId } });
+    } catch(e) {}
+  }
+  try { renderMatrix(); } catch(e) {}
+  try { renderCreatives(); } catch(e) {}
+  try { renderActionPlan(); } catch(e) {}
+  try { renderAngles(); } catch(e) {}
+  try { renderPersonas(); } catch(e) {}
+  try { renderMxv4Modal(); } catch(e) {}
+  toast('Moved creative to ' + nextAngle + ' x ' + nextPersona, 'ok');
 }
 
 // Push a due-date change back to ClickUp + update the local ad. Used by
@@ -42927,6 +43187,7 @@ function _mxv4SortAds(ads, col, dir) {
     if (col === 'name')                return _strCmp(a.ad.formatName, b.ad.formatName);
     if (col === 'angle')               return _strCmp(a.ad.angle, b.ad.angle);
     if (col === 'persona')             return _strCmp(a.ad.persona, b.ad.persona);
+    if (col === 'taxonomy')            return _strCmp((a.ad.angle || '') + ' ' + (a.ad.persona || ''), (b.ad.angle || '') + ' ' + (b.ad.persona || ''));
     if (col === 'brand')               return _strCmp(a.ad.brand, b.ad.brand);
     if (col === 'hookType')            return _strCmp(a.ad.hookType, b.ad.hookType);
     if (col === 'creativeStructure')   return _strCmp(a.ad.creativeStructure, b.ad.creativeStructure);
@@ -42972,6 +43233,12 @@ function _mxv4RenderTable(angleName, personaName, st) {
     _seenCols[id] = 1;
     return true;
   });
+  if (activeCols.indexOf('taxonomy') === -1) {
+    var insertAt = activeCols.indexOf('inspirationTrace');
+    if (insertAt === -1) insertAt = activeCols.indexOf('creativeUSP');
+    if (insertAt === -1) insertAt = activeCols.length;
+    activeCols.splice(insertAt, 0, 'taxonomy');
+  }
 
   // 2026-05-16: expanded whitelist to cover all rich columns. CF columns
   // (id starts with 'cf:') are sortable too — checked dynamically below.
@@ -42980,7 +43247,7 @@ function _mxv4RenderTable(angleName, personaName, st) {
     created: 1, due: 1, status: 1, updated: 1,
     angle: 1, persona: 1, brand: 1,
     hookType: 1, creativeStructure: 1, productionStyle: 1,
-    inspirationTrace: 1
+    inspirationTrace: 1, taxonomy: 1
   };
   // 2026-05-16: stamp data-fresh="1" on the freshly-added column header for
   // the slide-in animation (cleared by setMxv4ToggleColumn after 260ms).
@@ -46146,9 +46413,24 @@ function showNewEntityPrompt(type, detectedName, ins, callback) {
   if (old) old.remove();
 
   var accentColor = type === 'Angle' ? '#4F46E5' : '#059669';
-  var options = existing.map(function(e, i) {
+  var rankedExisting = existing.map(function(e, i) {
+    return {
+      item: e,
+      index: i,
+      score: (typeof _taxonomySimilarityScore === 'function') ? _taxonomySimilarityScore(detectedName, e && e.name) : 0
+    };
+  }).sort(function(a, b) {
+    return b.score - a.score ||
+      _taxonomyStatusRank(b.item) - _taxonomyStatusRank(a.item) ||
+      String((a.item && a.item.name) || '').localeCompare(String((b.item && b.item.name) || ''));
+  });
+  var options = rankedExisting.map(function(row) {
+    var e = row.item;
     var statusClass = (e.status||'untested').toLowerCase().replace(/\s+/g,'-');
-    return '<label class="ins-match-opt"><input type="radio" name="ins_match_opt" value="' + i + '"> Map to existing: <strong>' + esc(e.name) + '</strong><span class="bdg ' + statusClass + '" style="margin-left:auto;font-size:0.62rem">' + esc(e.status||'Untested') + '</span></label>';
+    var scoreBadge = row.score >= 0.45
+      ? '<span style="font-size:0.62rem;color:#0369a1;background:#e0f2fe;border:1px solid #bae6fd;border-radius:999px;padding:1px 6px;margin-left:6px">' + Math.round(row.score * 100) + '% similar</span>'
+      : '';
+    return '<label class="ins-match-opt"><input type="radio" name="ins_match_opt" value="' + row.index + '"> Map to existing: <strong>' + esc(e.name) + '</strong>' + scoreBadge + '<span class="bdg ' + statusClass + '" style="margin-left:auto;font-size:0.62rem">' + esc(e.status||'Untested') + '</span></label>';
   }).join('');
 
   var overlay = document.createElement('div');
@@ -46352,9 +46634,13 @@ function updateInsField(id, field, value) {
     if (field === 'angle') {
       ins._needsAngleReview = false;
       ins._anglePromptDone = true;
+      ins._angleSuggestions = [];
+      ins._suggestedAngle = '';
     } else {
       ins._needsPersonaReview = false;
       ins._personaPromptDone = true;
+      ins._personaSuggestions = [];
+      ins._suggestedPersona = '';
     }
   }
   if (field === 'addedBy') {
@@ -46554,43 +46840,48 @@ function applyClassificationResults(results, isPolling) {
       ins._inspoDocCreated    = true; // internal flag — not shown in UI
     }
 
+    var rawAngleName = data.angle || ins.detectedAngle || '';
+    var rawPersonaName = data.persona || ins.detectedPersona || '';
+    var angleSuggestions = _storeInspirationTaxonomySuggestions(ins, 'angle', rawAngleName);
+    var personaSuggestions = _storeInspirationTaxonomySuggestions(ins, 'persona', rawPersonaName);
+
     // Angle matching
     if (data.angle_matched) {
-      ins.angle = data.angle || '';
+      ins.angle = _canonicalTaxonomyName(data.angle || '', ANGLES) || data.angle || '';
       ins._anglePromptDone = true;
       ins._needsAngleReview = false;
     } else {
-      var angleResult = matchToExisting(data.angle || '', ANGLES);
-      if (angleResult.match && angleResult.score >= 0.4) {
+      var angleResult = matchToExisting(rawAngleName || '', ANGLES);
+      if (angleResult.match && angleResult.score >= 0.72) {
         ins.angle = angleResult.match.name; // auto-map to confident match
         ins._anglePromptDone = true;
         ins._needsAngleReview = false;
-      } else if (data.angle) {
-        ins.angle = data.angle;
+      } else if (rawAngleName) {
+        ins.angle = _normalizeTaxonomyName(rawAngleName);
         ins._angleScope = 'inspiration';
         ins._angleLocked = true;
         ins._anglePromptDone = true;
-        ins._needsAngleReview = false;
+        ins._needsAngleReview = angleSuggestions.length > 0;
       }
     }
 
     // Persona matching
     if (data.persona_matched) {
-      ins.persona = data.persona || '';
+      ins.persona = _canonicalTaxonomyName(data.persona || '', PERSONAS) || data.persona || '';
       ins._personaPromptDone = true;
       ins._needsPersonaReview = false;
     } else {
-      var personaResult = matchToExisting(data.persona || '', PERSONAS);
-      if (personaResult.match && personaResult.score >= 0.4) {
+      var personaResult = matchToExisting(rawPersonaName || '', PERSONAS);
+      if (personaResult.match && personaResult.score >= 0.72) {
         ins.persona = personaResult.match.name; // auto-map to confident match
         ins._personaPromptDone = true;
         ins._needsPersonaReview = false;
-      } else if (data.persona) {
-        ins.persona = data.persona;
+      } else if (rawPersonaName) {
+        ins.persona = _normalizeTaxonomyName(rawPersonaName);
         ins._personaScope = 'inspiration';
         ins._personaLocked = true;
         ins._personaPromptDone = true;
-        ins._needsPersonaReview = false;
+        ins._needsPersonaReview = personaSuggestions.length > 0;
       }
     }
 
@@ -46619,8 +46910,8 @@ function applyClassificationResults(results, isPolling) {
       showNewEntityPrompt(p.type, p.detectedName, p.ins, function(chosenName, isNew) {
         p.ins[p.type.toLowerCase()] = chosenName;
         // Mark as handled and clear review flags
-        if (p.type === 'Angle')   { p.ins._anglePromptDone = true;   p.ins._needsAngleReview = false; }
-        if (p.type === 'Persona') { p.ins._personaPromptDone = true; p.ins._needsPersonaReview = false; }
+        if (p.type === 'Angle')   { p.ins._anglePromptDone = true;   p.ins._needsAngleReview = false; p.ins._angleSuggestions = []; p.ins._suggestedAngle = ''; }
+        if (p.type === 'Persona') { p.ins._personaPromptDone = true; p.ins._needsPersonaReview = false; p.ins._personaSuggestions = []; p.ins._suggestedPersona = ''; }
         if (isNew) addEntityFromInspiration(p.type, chosenName, p.ins);
         saveInspirations();
         renderInspirations();
@@ -46675,8 +46966,8 @@ function remapInspirationFields(insId) {
     var p = prompts[idx];
     showNewEntityPrompt(p.type, p.detectedName, p.ins, function(chosenName, isNew) {
       p.ins[p.type.toLowerCase()] = chosenName;
-      if (p.type === 'Angle')   { p.ins._anglePromptDone = true;   p.ins._needsAngleReview = false; }
-      if (p.type === 'Persona') { p.ins._personaPromptDone = true; p.ins._needsPersonaReview = false; }
+      if (p.type === 'Angle')   { p.ins._anglePromptDone = true;   p.ins._needsAngleReview = false; p.ins._angleSuggestions = []; p.ins._suggestedAngle = ''; }
+      if (p.type === 'Persona') { p.ins._personaPromptDone = true; p.ins._needsPersonaReview = false; p.ins._personaSuggestions = []; p.ins._suggestedPersona = ''; }
       if (isNew) addEntityFromInspiration(p.type, chosenName, p.ins);
       saveInspirations();
       renderInspirations();
@@ -47115,11 +47406,13 @@ function renderInspirations() {
       '<td>' +
         (ins._needsAngleReview ? '<span title="Needs mapping" style="color:#f59e0b;font-size:0.6rem;margin-right:2px;cursor:pointer" onclick="remapInspirationFields('+insIdQ+')">⚠</span>' : '') +
         '<select class="ins-inline-select" onchange="updateInsField('+insIdQ+',\'angle\',this.value)">'+angleOpts+'</select>' +
+        _renderInspirationTaxonomySuggestion(ins, 'angle') +
       '</td>' +
       // 5. Persona
       '<td>' +
         (ins._needsPersonaReview ? '<span title="Needs mapping" style="color:#f59e0b;font-size:0.6rem;margin-right:2px;cursor:pointer" onclick="remapInspirationFields('+insIdQ+')">⚠</span>' : '') +
         '<select class="ins-inline-select" onchange="updateInsField('+insIdQ+',\'persona\',this.value)">'+personaOpts+'</select>' +
+        _renderInspirationTaxonomySuggestion(ins, 'persona') +
       '</td>' +
       // 6. Structure
       '<td><select class="ins-inline-select" onchange="updateInsField('+insIdQ+',\'creativeStructure\',this.value)">'+structureOpts+'</select></td>' +

@@ -1,10 +1,12 @@
 {
-  "generated_at": null,
+  "generated_at": "2026-09-07T18:00:36",
   "coverage": {
-    "winners_scanned": null,
-    "winners_with_downloaded_video_evidence": null,
+    "winners_scanned": 263,
+    "winners_with_downloaded_video_evidence": 192,
     "merge_suggestions": 36,
-    "move_suggestions": 76
+    "move_suggestions": 76,
+    "video_files_analyzed": 207,
+    "rows_with_errors": 10
   },
   "merge_suggestions": [
     {

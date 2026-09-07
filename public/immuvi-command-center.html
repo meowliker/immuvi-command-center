@@ -15408,33 +15408,7 @@ function _renderWinnerVideoAuditPanel(kind) {
 }
 
 function _renderTaxonomyMergeSuggestions(kind) {
-  var label = kind === 'persona' ? 'Persona' : 'Angle';
-  var suggestions = _taxonomyMergeSuggestions(kind, 8);
-  var open = !!_taxonomyMergePanelOpen[kind];
-  var winnerCount = _allWinnerCreativesForEvidence().length;
-  var loading = !!_taxonomyEvidenceRefreshPromise;
-  var html = _renderWinnerVideoAuditPanel(kind) +
-  '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 12px;background:var(--el);border-bottom:1px solid var(--b);font-size:.74rem">' +
-    '<button onclick="toggleTaxonomyMergeSuggestions(\'' + kind + '\')" ' +
-      'style="padding:5px 10px;border:1px solid var(--b);border-radius:999px;background:' + (open ? 'var(--win)' : 'transparent') + ';color:' + (open ? '#fff' : 'var(--t1)') + ';cursor:pointer;font-weight:700">' +
-      (loading ? 'Analyzing Winners' : 'Winner Evidence Suggestions') + ' <span style="opacity:.75">· ' + suggestions.length + '</span></button>' +
-    '<span style="color:var(--t3)">' + (suggestions.length ? 'Based on actual winner creative evidence across products, not just similar names.' : 'No duplicate ' + label.toLowerCase() + ' buckets found from winner evidence yet.') + (winnerCount ? ' · ' + winnerCount + ' winners scanned' : '') + '</span>' +
-  '</div>';
-  if (open && suggestions.length) {
-    html += '<div style="display:grid;gap:6px;padding:10px 12px;background:#fff;border-bottom:1px solid var(--b)">';
-    suggestions.forEach(function(s) {
-      html += '<div style="display:grid;grid-template-columns:70px 1.5fr 1fr 120px;gap:10px;align-items:center;padding:8px 10px;border:1px solid var(--b);border-radius:8px;background:#fbfdff">' +
-        '<strong style="color:var(--t2)">' + Math.round(s.score * 100) + '%</strong>' +
-        '<div><strong>' + esc(s.merge.name) + '</strong> → <strong>' + esc(s.keep.name) + '</strong></div>' +
-        '<div style="font-size:.7rem;color:var(--t3)">Shared creative evidence: ' + esc((s.shared || []).slice(0, 5).join(', ') || 'overlapping winner briefs') + '<br>' + s.mergeWinnerCount + ' winner' + (s.mergeWinnerCount === 1 ? '' : 's') + ' / ' + s.mergeCount + ' total row' + (s.mergeCount === 1 ? '' : 's') + ' to move</div>' +
-        '<button class="btn-add btn-sm" onclick="confirmTaxonomySuggestionMerge(\'' + kind + '\',\'' + escJs(s.keep.name) + '\',\'' + escJs(s.merge.name) + '\')">Merge</button>' +
-      '</div>';
-    });
-    html += '</div>';
-  } else if (open) {
-    html += '<div style="padding:10px 12px;background:#fff;border-bottom:1px solid var(--b);font-size:.74rem;color:var(--t3)">No merge candidate crossed the evidence threshold. This uses winner creative copy, USP, hypothesis, VO/captions, scripts, and linked inspiration context.</div>';
-  }
-  return html;
+  return _renderWinnerVideoAuditPanel(kind);
 }
 
 function toggleTaxonomyMergeSuggestions(kind) {

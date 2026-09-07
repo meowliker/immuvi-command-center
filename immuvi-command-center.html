@@ -14535,6 +14535,9 @@ let matrixDetailFunnel = 'All'; // funnel filter in detail panel
 let trackerSort = { col: 'id', dir: 1 };
 let trackerFilters = { angle: '', persona: '', format: '', adType: '', funnelStage: '', status: '', structure: '', hookType: '', productionStyle: '', taskType: '', dateRange: '' };
 let _taxonomyMergePanelOpen = { angle: false, persona: false };
+let _winnerVideoAuditPanelOpen = { angle: false, persona: false };
+let WINNER_VIDEO_TAXONOMY_AUDIT = null;
+let _winnerVideoTaxonomyAuditPromise = null;
 
 // Filter persistence — scoped per product so filters don't leak across.
 function _trackerFiltersKey() { return 'immuvi_tracker_filters_' + (activeProductId || 'default'); }
@@ -15252,13 +15255,166 @@ function _taxonomyMergeTargetForName(kind, name) {
   return best;
 }
 
+function _loadWinnerVideoTaxonomyAudit() {
+  if (WINNER_VIDEO_TAXONOMY_AUDIT) return Promise.resolve(WINNER_VIDEO_TAXONOMY_AUDIT);
+  if (_winnerVideoTaxonomyAuditPromise) return _winnerVideoTaxonomyAuditPromise;
+  _winnerVideoTaxonomyAuditPromise = fetch('/reports/winner-taxonomy-video-audit/suggestions.json?v=20260907', { cache: 'no-store' })
+    .then(function(r) {
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.json();
+    })
+    .then(function(data) {
+      WINNER_VIDEO_TAXONOMY_AUDIT = data || null;
+      return WINNER_VIDEO_TAXONOMY_AUDIT;
+    })
+    .catch(function(e) {
+      console.warn('[winner-video-audit] load failed', e);
+      WINNER_VIDEO_TAXONOMY_AUDIT = null;
+      return null;
+    })
+    .finally(function() {
+      _winnerVideoTaxonomyAuditPromise = null;
+    });
+  return _winnerVideoTaxonomyAuditPromise;
+}
+
+function _activeProductNameForAudit() {
+  try {
+    var p = typeof getActiveProduct === 'function' ? getActiveProduct() : null;
+    if (p && p.name) return p.name;
+  } catch (_) {}
+  for (var i = 0; i < (PRODUCTS || []).length; i++) {
+    if (PRODUCTS[i] && PRODUCTS[i].id === activeProductId) return PRODUCTS[i].name || '';
+  }
+  return '';
+}
+
+function _winnerVideoAuditMatchesActiveProduct(row) {
+  var productName = _activeProductNameForAudit();
+  return !!(row && productName && row.product === productName);
+}
+
+function _winnerVideoAuditSuggestions(kind, field) {
+  var audit = WINNER_VIDEO_TAXONOMY_AUDIT || {};
+  var rows = audit[field] || [];
+  return rows.filter(function(row) {
+    return row && row.kind === kind && _winnerVideoAuditMatchesActiveProduct(row);
+  });
+}
+
+function _winnerVideoAuditTaxonomyExists(kind, name) {
+  var rows = kind === 'persona' ? PERSONAS : ANGLES;
+  name = _normalizeTaxonomyName(name || '');
+  return rows.some(function(row) {
+    return row && _taxonomyLookupKey(row.name) === _taxonomyLookupKey(name) && !row.archivedAt;
+  });
+}
+
+function _findWinnerVideoAuditCreative(creativeId, creativeName) {
+  var id = String(creativeId || '');
+  var name = String(creativeName || '');
+  var best = null;
+  for (var i = 0; i < (ADS || []).length; i++) {
+    var ad = ADS[i];
+    if (!ad) continue;
+    if (id && (ad.id === id || ad._clickupId === id || ad.clickupTaskId === id)) return ad;
+    if (!best && name && ad.formatName === name) best = ad;
+  }
+  return best;
+}
+
+function applyWinnerVideoAuditMove(kind, creativeId, creativeName, toName) {
+  var label = kind === 'persona' ? 'persona' : 'angle';
+  var ad = _findWinnerVideoAuditCreative(creativeId, creativeName);
+  if (!ad) {
+    try { toast('Could not find that creative in this product', 'warn'); } catch (_) {}
+    return;
+  }
+  if (!_winnerVideoAuditTaxonomyExists(kind, toName)) {
+    try { toast('Suggested ' + label + ' is not active in this product', 'warn'); } catch (_) {}
+    return;
+  }
+  var current = kind === 'persona' ? ad.persona : ad.angle;
+  if (!confirm('Move "' + (ad.formatName || ad.id) + '" from ' + label + ' "' + (current || '-') + '" to "' + toName + '"?\n\nThis updates the creative row and shifts it to the correct matrix cell.')) return;
+  updateCreativeFieldInline(ad.id, kind, toName);
+  try {
+    if (typeof renderAll === 'function') renderAll();
+    toast('Moved creative to ' + toName, 'ok');
+  } catch (_) {}
+}
+
+function toggleWinnerVideoAuditPanel(kind) {
+  _winnerVideoAuditPanelOpen[kind] = !_winnerVideoAuditPanelOpen[kind];
+  if (_winnerVideoAuditPanelOpen[kind] && !WINNER_VIDEO_TAXONOMY_AUDIT) {
+    _loadWinnerVideoTaxonomyAudit().then(function() {
+      if (kind === 'persona') renderPersonas(); else renderAngles();
+    });
+  }
+  if (kind === 'persona') renderPersonas(); else renderAngles();
+}
+
+function _renderWinnerVideoAuditPanel(kind) {
+  var open = !!_winnerVideoAuditPanelOpen[kind];
+  var loading = !!_winnerVideoTaxonomyAuditPromise && !WINNER_VIDEO_TAXONOMY_AUDIT;
+  var audit = WINNER_VIDEO_TAXONOMY_AUDIT;
+  var merges = audit ? _winnerVideoAuditSuggestions(kind, 'merge_suggestions') : [];
+  var moves = audit ? _winnerVideoAuditSuggestions(kind, 'move_suggestions') : [];
+  var coverage = (audit && audit.coverage) || {};
+  var count = merges.length + moves.length;
+  var label = kind === 'persona' ? 'Persona' : 'Angle';
+  var title = audit ? 'Video Audit Suggestions' : (loading ? 'Loading Video Audit' : 'Load Video Audit');
+  var html = '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 12px;background:#fff7ed;border-bottom:1px solid var(--b);font-size:.74rem">' +
+    '<button onclick="toggleWinnerVideoAuditPanel(\'' + kind + '\')" style="padding:5px 10px;border:1px solid #fed7aa;border-radius:999px;background:' + (open ? '#ea580c' : '#fff') + ';color:' + (open ? '#fff' : '#9a3412') + ';cursor:pointer;font-weight:800">' +
+      title + (audit ? ' <span style="opacity:.75">· ' + count + '</span>' : '') + '</button>' +
+    '<span style="color:#9a3412">' + (audit ? (coverage.winners_with_downloaded_video_evidence || 0) + ' winners read from Drive video · ' + (coverage.winners_scanned || 0) + ' total winners scanned' : 'Reads the saved full-video audit report for this product.') +
+      ' · <a href="/reports/winner-taxonomy-video-audit/suggestions.md" target="_blank" rel="noopener" style="color:#9a3412;font-weight:700">Full report</a></span>' +
+  '</div>';
+  if (!open) return html;
+  html += '<div style="display:grid;gap:8px;padding:10px 12px;background:#fff;border-bottom:1px solid var(--b)">';
+  if (loading) {
+    html += '<div style="font-size:.74rem;color:var(--t3)">Loading audited video suggestions...</div>';
+  } else if (!audit) {
+    html += '<div style="font-size:.74rem;color:var(--t3)">Video audit report is not available in this deployment yet.</div>';
+  } else if (!count) {
+    html += '<div style="font-size:.74rem;color:var(--t3)">No audited ' + label.toLowerCase() + ' suggestions for ' + esc(_activeProductNameForAudit() || 'this product') + '.</div>';
+  } else {
+    if (merges.length) {
+      html += '<div style="font-size:.7rem;font-weight:800;color:var(--t2);text-transform:uppercase;letter-spacing:.04em">Merge whole ' + label.toLowerCase() + ' buckets</div>';
+      merges.slice(0, 8).forEach(function(s) {
+        var canMerge = _winnerVideoAuditTaxonomyExists(kind, s.merge) && _winnerVideoAuditTaxonomyExists(kind, s.keep);
+        html += '<div style="display:grid;grid-template-columns:64px 1.5fr 1fr 118px;gap:10px;align-items:center;padding:8px 10px;border:1px solid var(--b);border-radius:8px;background:#fffaf5">' +
+          '<strong style="color:#ea580c">' + Math.round((s.score || 0) * 100) + '%</strong>' +
+          '<div><strong>' + esc(s.merge) + '</strong> → <strong>' + esc(s.keep) + '</strong></div>' +
+          '<div style="font-size:.7rem;color:var(--t3)">Shared: ' + esc((s.shared || []).slice(0, 5).join(', ') || 'video evidence') + '<br>' + esc(String(s.merge_winners || 0)) + ' winner' + (s.merge_winners === 1 ? '' : 's') + ' to merge</div>' +
+          '<button class="btn-add btn-sm" ' + (canMerge ? '' : 'disabled ') + 'onclick="confirmTaxonomySuggestionMerge(\'' + kind + '\',\'' + escJs(s.keep) + '\',\'' + escJs(s.merge) + '\')">Merge</button>' +
+        '</div>';
+      });
+    }
+    if (moves.length) {
+      html += '<div style="font-size:.7rem;font-weight:800;color:var(--t2);text-transform:uppercase;letter-spacing:.04em;margin-top:4px">Move specific creatives</div>';
+      moves.slice(0, 10).forEach(function(s) {
+        var canMove = !!_findWinnerVideoAuditCreative(s.creative_id, s.creative_name) && _winnerVideoAuditTaxonomyExists(kind, s.to);
+        html += '<div style="display:grid;grid-template-columns:64px 1.5fr 1fr 118px;gap:10px;align-items:center;padding:8px 10px;border:1px solid var(--b);border-radius:8px;background:#f8fafc">' +
+          '<strong style="color:#0369a1">' + Math.round((s.score || 0) * 100) + '%</strong>' +
+          '<div><strong>' + esc(s.creative_name || s.creative_id) + '</strong><br><span style="font-size:.7rem;color:var(--t3)">' + esc(s.from || '-') + ' → ' + esc(s.to || '-') + '</span></div>' +
+          '<div style="font-size:.7rem;color:var(--t3)">Shared: ' + esc((s.shared || []).slice(0, 5).join(', ') || 'video evidence') + '<br>own score ' + Math.round((s.own_score || 0) * 100) + '%</div>' +
+          '<button class="btn-add btn-sm" ' + (canMove ? '' : 'disabled ') + 'onclick="applyWinnerVideoAuditMove(\'' + kind + '\',\'' + escJs(s.creative_id) + '\',\'' + escJs(s.creative_name || '') + '\',\'' + escJs(s.to) + '\')">Move</button>' +
+        '</div>';
+      });
+    }
+  }
+  html += '</div>';
+  return html;
+}
+
 function _renderTaxonomyMergeSuggestions(kind) {
   var label = kind === 'persona' ? 'Persona' : 'Angle';
   var suggestions = _taxonomyMergeSuggestions(kind, 8);
   var open = !!_taxonomyMergePanelOpen[kind];
   var winnerCount = _allWinnerCreativesForEvidence().length;
   var loading = !!_taxonomyEvidenceRefreshPromise;
-  var html = '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 12px;background:var(--el);border-bottom:1px solid var(--b);font-size:.74rem">' +
+  var html = _renderWinnerVideoAuditPanel(kind) +
+  '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 12px;background:var(--el);border-bottom:1px solid var(--b);font-size:.74rem">' +
     '<button onclick="toggleTaxonomyMergeSuggestions(\'' + kind + '\')" ' +
       'style="padding:5px 10px;border:1px solid var(--b);border-radius:999px;background:' + (open ? 'var(--win)' : 'transparent') + ';color:' + (open ? '#fff' : 'var(--t1)') + ';cursor:pointer;font-weight:700">' +
       (loading ? 'Analyzing Winners' : 'Winner Evidence Suggestions') + ' <span style="opacity:.75">· ' + suggestions.length + '</span></button>' +

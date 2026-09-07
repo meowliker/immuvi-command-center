@@ -1,0 +1,195 @@
+# Winner Taxonomy Video Audit
+
+Generated: 2026-09-07T18:00:36
+Winners scanned: 263
+Winners with downloaded video evidence: 192
+
+## Merge Whole Angle/Persona Buckets
+- **Canva · angle**: merge `Meme / Pattern-Interrupt Format` into `Free Bundle / Offer-Led` (78%). Shared evidence: canva, bundle, course, mastery, planner, template, complete, add; winners 6 -> 6.
+- **Quilting · persona**: merge `People Processing Life Changes & Recovery` into `Stressed Women 25-45` (78%). Shared evidence: art, therapy, pov, tool, change, emotion, heal, through; winners 2 -> 17.
+- **KIDS LIFE SKILL · persona**: merge `Overwhelmed Moms (Behaviour)` into `Moms Raising Kids 28-42` (77%). Shared evidence: life, skill, don, completely, what, teach, feel, know; winners 8 -> 14.
+- **Art Therapy · persona**: merge `People Processing Life Changes & Recovery` into `Stressed Women 25-45` (76%). Shared evidence: art, therapy, tool, pov, emotion, heal, through, emotional; winners 2 -> 5.
+- **Herbal Healing Handbook · persona**: merge `Budget-Conscious Health Buyers` into `Natural Wellness Beginners` (74%). Shared evidence: herbal, oil, drop, heal, small, essential, handbook, chakra; winners 2 -> 11.
+- **KIDS LIFE SKILL · angle**: merge `Overwhelmed Parent` into `School Doesn't Teach This` (74%). Shared evidence: life, skill, what, teach, completely, feel, brain, bundle; winners 6 -> 7.
+- **Herbal Healing Handbook · angle**: merge `Natural Alternatives To Pills` into `Beginner Herbal Education` (74%). Shared evidence: oil, essential, tree, its, vera, ashwagandha, property, tea; winners 2 -> 8.
+- **Sewing · angle**: merge `Free Sewing Notes Offer` into `Step-by-Step Learning` (72%). Shared evidence: sew, pattern, step, note, how, now, offer, skirt; winners 2 -> 3.
+- **Paramedic Notes · angle**: merge `Grade / Exam Confidence` into `Career Motivation` (72%). Shared evidence: paramedic, arrest, class, note, cardiac, dos, patient, primary; winners 3 -> 3.
+- **Therapy · persona**: merge `Young Adults Processing Grief` into `Creative Self-Care Adults` (70%). Shared evidence: symptom, ptsd, therapy, these, emotional, feel, disorder, hand; winners 3 -> 3.
+- **Patchwork · angle**: merge `Scarcity / WAR Angle` into `Free Value Hook` (70%). Shared evidence: patchwork, pattern, guide, now, beginner, fabric, simple, book; winners 2 -> 2.
+- **Herbal Healing Handbook · angle**: merge `Free Herbal Handbook Offer` into `Beginner Herbal Education` (68%). Shared evidence: heal, natural, oil, herbal, essential, tea, guide, remedy; winners 4 -> 8.
+- **ADHD · persona**: merge `Adults Seeking Medication-Free ADHD Help` into `Adult Women With ADHD` (67%). Shared evidence: adhd, tool, task, time, self, break, down, function; winners 4 -> 4.
+- **Canva · angle**: merge `Monetize Your Canva Skills` into `Free Bundle / Offer-Led` (67%). Shared evidence: canva, mastery, don, bundle, product, template, planner, digital; winners 5 -> 6.
+- **Paramedic Notes · angle**: merge `NREMT / EMS Meds` into `Grade / Exam Confidence` (67%). Shared evidence: dose, paramedic, amiodarone, dos, effect, indication, note, arrest; winners 2 -> 3.
+- **Paramedic Notes · angle**: merge `NREMT / EMS Meds` into `Career Motivation` (67%). Shared evidence: paramedic, amiodarone, dose, answer, dos, effect, ems, indication; winners 2 -> 3.
+- **Therapy · persona**: merge `Wellness-Seeking Women 25-45` into `Creative Self-Care Adults` (67%). Shared evidence: symptom, therapy, ptsd, these, book, feel, disorder, hand; winners 3 -> 3.
+- **Herbal Healing Handbook · angle**: merge `Everyday Home Remedies` into `Beginner Herbal Education` (66%). Shared evidence: oil, drop, essential, herbal, remedy, heal, flower, support; winners 2 -> 8.
+- **Therapy · persona**: merge `Wellness-Seeking Women 25-45` into `Young Adults Processing Grief` (66%). Shared evidence: symptom, ptsd, therapy, therapist, hand, said, didn, these; winners 3 -> 3.
+- **Herbal Healing Handbook · persona**: merge `Women Seeking Natural Remedies` into `Natural Wellness Beginners` (66%). Shared evidence: remedy, tree, oil, essential, natural, tea, chaste, herbal; winners 3 -> 11.
+- **Therapy · persona**: merge `Wellness-Seeking Women 25-45` into `Budget-Blocked Women 25-40` (66%). Shared evidence: therapy, therapist, until, said, believe, session, these, worth; winners 3 -> 6.
+- **Canva · persona**: merge `Content Creators 22-40` into `Side-Hustle Sellers` (65%). Shared evidence: canva, bundle, template, course, design, mastery, add, already; winners 4 -> 12.
+- **Diabetics · angle**: merge `Everyday Diabetic Meals` into `Easy Diabetic Recipe Swaps` (65%). Shared evidence: recipe, diabetic, friendly, sugar, salad, guide, food, meal; winners 4 -> 5.
+- **Couple Workbook · persona**: merge `Couples Seeking Reconnection 25-45` into `Married Women 30-45` (65%). Shared evidence: relationship, couple, worksheet, love, other, conflict, her, time; winners 3 -> 14.
+- **Diabetics · persona**: merge `Adults Managing Type 2 Diabetes` into `Health Conscious Home Cooks 35+` (64%). Shared evidence: diabetic, recipe, guide, friendly, food, meal, blood, diabete; winners 2 -> 8.
+- **Herbal Healing Handbook · persona**: merge `Side-Hustle Sellers` into `Content Creators 22-40` (63%). Shared evidence: canva, bundle, course, design, mastery, template, add, already; winners 3 -> 3.
+- **KIDS LIFE SKILL · angle**: merge `Raising Independent Kids` into `Overwhelmed Parent` (62%). Shared evidence: life, skill, don, know, bundle, feel, let, please; winners 4 -> 6.
+- **Therapy · persona**: merge `Creative Self-Care Adults` into `Budget-Blocked Women 25-40` (61%). Shared evidence: therapy, offer, these, book, feel, emotional, change, therapist; winners 3 -> 6.
+- **Quilting · persona**: merge `Parents of Emotional/Anxious Kids` into `Stressed Women 25-45` (60%). Shared evidence: art, therapy, emotional, heal, offer, through, ins, all; winners 3 -> 17.
+- **Herbal Healing Handbook · angle**: merge `Everyday Home Remedies` into `Free Herbal Handbook Offer` (60%). Shared evidence: oil, essential, herbal, heal, remedy, support, astragalu, its; winners 2 -> 4.
+- **Therapy · angle**: merge `Emotional Pain / Trauma` into `Therapist Authority` (60%). Shared evidence: cognitive, distortion, ptsd, symptom, emotional, think, anxiety, therapy; winners 3 -> 9.
+- **Therapy · persona**: merge `Emotionally Struggling Women 20-35` into `Young Adults Processing Grief` (59%). Shared evidence: therapy, ptsd, symptom, therapist, feel, distortion, emotional, brain; winners 3 -> 3.
+- **Therapy · angle**: merge `Transformation / Skeptic` into `Therapist Authority` (59%). Shared evidence: therapy, book, these, brain, until, believe, didn, her; winners 2 -> 9.
+- **KIDS LIFE SKILL · angle**: merge `Raising Independent Kids` into `School Doesn't Teach This` (59%). Shared evidence: life, skill, bundle, don, feel, let, rai, please; winners 4 -> 7.
+- **Canva · persona**: merge `Small-Business & Brand Owners 25-45` into `Side-Hustle Sellers` (59%). Shared evidence: canva, page, business, add, bundle, course, product, mastery; winners 3 -> 12.
+- **Therapy · angle**: merge `Free Value Hook` into `Therapist Authority` (59%). Shared evidence: therapy, feel, these, book, believe, session, therapist, worth; winners 4 -> 9.
+
+## Move Specific Creatives
+- **Therapy · therapy Bundle - 10949 (86d234j37) · persona**: move `Silently Scrolling Adults` -> `Stressed Women 25-45` (97% vs own 0%). Shared evidence: therapy, tool, self, cognitive, bundle, belief, distortion, emotional.
+- **Therapy · Therapy - 11454 (86d28vt53) · persona**: move `Stressed Women 25-45` -> `Silently Scrolling Adults` (97% vs own 0%). Shared evidence: therapy, tool, self, cognitive, bundle, belief, distortion, emotional.
+- **Yoga Notes · 12110 (86d2e101z) · angle**: move `Beginner Routine / Confidence` -> `Free Value Hook` (95% vs own 0%). Shared evidence: yoga, pose, study, start, step, how, note, client.
+- **Yoga Notes · 12110 (86d2e101z) · persona**: move `Structured Yoga Learners` -> `Wellness-Seeking Women 25-45` (95% vs own 0%). Shared evidence: yoga, pose, study, start, step, how, note, client.
+- **Yoga Notes · 13856 (86d30hk4d) · angle**: move `Free Value Hook` -> `Beginner Routine / Confidence` (95% vs own 0%). Shared evidence: yoga, pose, study, start, step, how, note, client.
+- **Yoga Notes · 13856 (86d30hk4d) · persona**: move `Wellness-Seeking Women 25-45` -> `Structured Yoga Learners` (95% vs own 0%). Shared evidence: yoga, pose, study, start, step, how, note, client.
+- **Herbal Healing Handbook · Herbal - 11040 (86d243agn) · angle**: move `Beginner Herbal Education` -> `Natural Alternatives To Pills` (86% vs own 57%). Shared evidence: tree, oil, chaste, essential, tea, vera, herbal, aloe.
+- **Quilting · AT-133-art therapy - 13099 (86d309jmy) · angle**: move `Regret Discovery angle` -> `Art as Therapy Alternative` (84% vs own 0%). Shared evidence: art, therapy, pov, tool, heal, angle, emotional, group.
+- **Quilting · AT-131-5773-1 old winner (86d309jn2) · persona**: move `Silently Scrolling Adults` -> `Stressed Women 25-45` (83% vs own 0%). Shared evidence: art, therapy, feel, heal, pov, through, check, emotion.
+- **Art Therapy · AT-133-art therapy - 13099 (AD-136) · persona**: move `Stressed Women 25-45` -> `People Processing Life Changes & Recovery` (82% vs own 29%). Shared evidence: art, therapy, pov, tool, heal, emotional, group, love.
+- **Art Therapy · AT-133-art therapy - 13099 (AD-136) · angle**: move `Regret Discovery angle` -> `Art as Therapy Alternative` (81% vs own 0%). Shared evidence: art, therapy, pov, tool, heal, emotional, group, love.
+- **Herbal Healing Handbook · Herbal - 11040 (86d243agn) · persona**: move `Natural Wellness Beginners` -> `Women Seeking Natural Remedies` (79% vs own 54%). Shared evidence: tree, oil, chaste, essential, tea, vera, herbal, aloe.
+- **Quilting · AT-132-art therapy - 13099 (86d309jmz) · persona**: move `People Processing Life Changes & Recovery` -> `Silently Scrolling Adults` (78% vs own 31%). Shared evidence: art, therapy, pov, emotion, heal, through, tool, now.
+- **Art Therapy · AT-132-art therapy - 13099 (AD-135) · persona**: move `People Processing Life Changes & Recovery` -> `Stressed Women 25-45` (77% vs own 23%). Shared evidence: art, therapy, pov, tool, emotion, heal, through, emotional.
+- **Therapy · Therapy - 11692 (86d2amz8c) · persona**: move `Creative Self-Care Adults` -> `Wellness-Seeking Women 25-45` (76% vs own 39%). Shared evidence: hand, ptsd, therapy, book, therapist, these, ball, feel.
+- **Canva · CA-281-INS-093 (AD-1785216614595) · angle**: move `Testimonial` -> `Free Bundle / Offer-Led` (75% vs own 0%). Shared evidence: canva, course, mastery, complete, add, bundle, copy, page.
+- **Canva · CA-195-INS-017 (86d329rqt) · angle**: move `Monetize Your Canva Skills` -> `Free Bundle / Offer-Led` (75% vs own 40%). Shared evidence: canva, course, mastery, don, planner, complete, easy, per.
+- **Herbal Healing Handbook · CA-226-INS-052 (86d3f25z6) · angle**: move `Meme / Pattern-Interrupt Format` -> `Testimonial` (75% vs own 34%). Shared evidence: canva, course, mastery, add, bundle, complete, copy, page.
+- **Art Therapy · AT-131-5773-1 old winner (AD-134) · persona**: move `Silently Scrolling Adults` -> `People Processing Life Changes & Recovery` (75% vs own 0%). Shared evidence: art, therapy, pov, emotion, heal, through, tool, love.
+- **Sewing · SE-034-INS-014 (86d37yfuh) · angle**: move `Free Sewing Notes Offer` -> `Step-by-Step Learning` (71% vs own 51%). Shared evidence: sew, pattern, note, step, how, add, keep, learn.
+- **Sewing · 10586 (86d1xzfm4) · angle**: move `Step-by-Step Learning` -> `Free Sewing Notes Offer` (68% vs own 48%). Shared evidence: pattern, sew, now, skirt, step, add, how, learn.
+- **Paramedic Notes · Paramedic Notes - 12102 (86d2dxy97) · angle**: move `NREMT / EMS Meds` -> `Grade / Exam Confidence` (67% vs own 17%). Shared evidence: dose, paramedic, amiodarone, dos, effect, indication, arrest, class.
+- **Herbal Healing Handbook · HHH - 11760 (86d2b2z0t) · persona**: move `Medication-Skeptical Adults` -> `Natural Wellness Beginners` (67% vs own 0%). Shared evidence: oil, essential, vera, its, ashwagandha, energy, heal, known.
+- **Herbal Healing Handbook · HHH - 11759 (86d2b2ytn) · persona**: move `Women Seeking Natural Remedies` -> `Medication-Skeptical Adults` (67% vs own 17%). Shared evidence: oil, essential, vera, its, ashwagandha, aloe, also, chakra.
+- **Herbal Healing Handbook · CA-226-INS-052 (86d3f25z6) · persona**: move `Content Creators 22-40` -> `Side-Hustle Sellers` (67% vs own 34%). Shared evidence: canva, course, mastery, template, bundle, add, already, complete.
+- **Herbal Healing Handbook · HHH - 10764 (86d202jc8) · persona**: move `Budget-Conscious Health Buyers` -> `Natural Wellness Beginners` (66% vs own 46%). Shared evidence: oil, herbal, drop, small, chakra, essential, heal, process.
+- **Canva · CA-226-INS-052 (AD-1781785866610) · persona**: move `Content Creators 22-40` -> `Side-Hustle Sellers` (65% vs own 40%). Shared evidence: canva, course, template, add, mastery, already, bundle, copy.
+- **Canva · CA-217-13469 (86d3cnrv1) · angle**: move `Free Bundle / Offer-Led` -> `Monetize Your Canva Skills` (65% vs own 36%). Shared evidence: bundle, job, canva, digital, don, earn, mastery, month.
+- **Kids Mental Health · NEW CONCEPT (PHOTO) 12873-2 (86d2n306v) · angle**: move `Dysregulated Kids` -> `WAR angle` (65% vs own 33%). Shared evidence: teacher, brain, dysregulation, tweet, copy, set, visual, angle.
+- **PHONICS · PH-039-INS-034 (AD-12341) · persona**: move `Female Teachers 25-44` -> `Preschool/Kindergarten Moms (child age 3–6, just starting)` (65% vs own 1%). Shared evidence: worksheet, all, blend, covered, digraph, don, pack, phonic.
+- **PHONICS · PH-079-INS-034 (AD-12381) · persona**: move `Preschool/Kindergarten Moms (child age 3–6, just starting)` -> `Female Teachers 25-44` (65% vs own 0%). Shared evidence: worksheet, all, blend, covered, digraph, don, pack, phonic.
+- **Herbal Healing Handbook · CA-281-INS-093 (86d42xq87) · angle**: move `Testimonial` -> `Meme / Pattern-Interrupt Format` (64% vs own 0%). Shared evidence: canva, course, mastery, add, bundle, complete, copy, page.
+- **Therapy · Therapy - 12405 (86d2xn68r) · persona**: move `Niche Segments` -> `Creative Self-Care Adults` (64% vs own 0%). Shared evidence: symptom, ptsd, these, disorder, book, therapist, dissociative, her.
+- **ADHD · ADHD - 13463 (86d2vcne9) · persona**: move `ADHD Adults Seeking Tools` -> `Adult Women With ADHD` (63% vs own 28%). Shared evidence: adhd, time, strategy, task, tool, break, bundle, down.
+- **Herbal Healing Handbook · HHH - 10766 (86d202k7k) · angle**: move `Safe Herbal Remedy Guidance` -> `Beginner Herbal Education` (62% vs own 0%). Shared evidence: oil, essential, small, heal, herbal, process, fee, rose.
+- **Canva · CA-250-INS-077 (AD-1785216614565) · persona**: move `Small-Business & Brand Owners 25-45` -> `Side-Hustle Sellers` (62% vs own 37%). Shared evidence: canva, page, add, time, bundle, mastery, course, don.
+- **Herbal Healing Handbook · HH-008-INS-005 (86d34uckj) · angle**: move `Free Herbal Handbook Offer` -> `Everyday Home Remedies` (61% vs own 33%). Shared evidence: oil, astragalu, essential, its, root, ashwagandha, body, herbal.
+- **KIDS LIFE SKILL · Kids life - 11991 (86d2cjqpx) · angle**: move `Raising Independent Kids` -> `School Doesn't Teach This` (60% vs own 34%). Shared evidence: skill, life, let, bundle, feel, big, body, brain.
+- **Couple Workbook · Couple - 10882 (86d21rc4y) · angle**: move `Communication Breakdown` -> `Save the Marriage` (60% vs own 32%). Shared evidence: couple, married, organic, pain, problem, raw.
+- **Astro Rekha IND · AR-136-INS-030 (86d2wka6m) · angle**: move `Soulmate Matching` -> `Marriage Prediction` (59% vs own 10%). Shared evidence: david, marry, june, beautiful, day, test, 14th, curiou.
+- **Astro Rekha IND · AR-136-INS-030 (86d2wka6m) · persona**: move `Young Couples` -> `Gen Z — Astrology Curious` (59% vs own 4%). Shared evidence: david, marry, june, beautiful, day, test, 14th, curiou.
+- **Canva · CA-12495 -2-INS-041 (86d3bt2g9) · persona**: move `Parents Teaching Early Readers` -> `Side-Hustle Sellers` (58% vs own 0%). Shared evidence: canva, course, page, mastery, template, add, complete, list.
+- **ADHD · ADHD - 13463 (86d2vcne9) · angle**: move `Free Offer / Limited-Time Offer` -> `Therapy Alternative Toolkit` (58% vs own 28%). Shared evidence: adhd, time, task, tool, break, bundle, down, visual.
+- **Sewing · SE-024-INS-010 (86d36dpcb) · persona**: move `Returning Sewists` -> `Beginner Sewists` (57% vs own 0%). Shared evidence: sew, pattern, step, note, seam, every, fabric, how.
+- **Herbal Healing Handbook · CA-250-INS-077 (86d3wh75q) · persona**: move `Small-Business & Brand Owners 25-45` -> `Side-Hustle Sellers` (57% vs own 0%). Shared evidence: canva, bundle, mastery, course, time, product, template, add.
+- **Herbal Healing Handbook · CA-250-INS-077 (86d3wh75q) · angle**: move `Free Bundle / Offer-Led` -> `Testimonial` (57% vs own 0%). Shared evidence: canva, mastery, course, add, bundle, complete, page, copy.
+- **Quilting · AT-248 (cr Dv) MOF V4 -INS-137 (86d40d6jn) · persona**: move `Parents of Emotional/Anxious Kids` -> `Stressed Women 25-45` (56% vs own 18%). Shared evidence: art, therapy, heal, through, emotional, all, color, down.
+- **Art Therapy · AT-248 (cr Dv) MOF V4 -INS-137 (AD-250) · persona**: move `Parents of Emotional/Anxious Kids` -> `Silently Scrolling Adults` (56% vs own 22%). Shared evidence: art, therapy, heal, through, color, love, printableswithlily, self.
+- **Couple Workbook · CW-035-INS-033 (86d39jjrt) · angle**: move `Lost the Spark` -> `Communication Breakdown` (55% vs own 0%). Shared evidence: love, other, conflict, each, emotion, resentment, self, emotional.
+- **Couple Workbook · CW-035-INS-033 (86d39jjrt) · persona**: move `Couples Seeking Reconnection 25-45` -> `Married Women 30-45` (55% vs own 33%). Shared evidence: love, other, conflict, each, emotion, resentment, self, emotional.
+- **Diabetics · DRG - 11196 (86d25ajpb) · angle**: move `Easy Diabetic Recipe Swaps` -> `Free Recipe Guide Offer` (54% vs own 35%). Shared evidence: recipe, friendly, diabete, diabetic, part, abundant, because, borrow.
+- **Diabetics · DFRG - 11446 (86d28ux12) · angle**: move `Free Recipe Guide Offer` -> `Everyday Diabetic Meals` (54% vs own 0%). Shared evidence: recipe, friendly, diabete, diabetic, keep, real, all, apple.
+- **Therapy · TH-042-INS-026 (86d39j9u8) · angle**: move `Transformation / Skeptic` -> `Free Value Hook` (54% vs own 20%). Shared evidence: therapy, these, believe, book, didn, her, opened, said.
+- **Canva · CA-259-INS-085 (AD-1785216614574) · angle**: move `side hustle / quick income angle` -> `Meme / Pattern-Interrupt Format` (53% vs own 0%). Shared evidence: canva, design, course, bundle, template, already, mastery, side.
+- **ADHD · ADHD - 13404 (86d30v3u8) · angle**: move `Organize, Focus, and stop Procrastinating` -> `Therapy Alternative Toolkit` (53% vs own 30%). Shared evidence: adhd, these, break, down, self, task, time, tool.
+- **Therapy · Therapy Bundle - 13549 (86d2w36x5) · persona**: move `Budget-Blocked Women 25-40` -> `Niche Segments` (52% vs own 31%). Shared evidence: therapist, ptsd, symptom, said, until, change, event, disorder.
+- **Kids Mental Health · KM-252-NEW CONCEPT (13452 PHOTO) (86d2n306v-PROD-WARANFEMAL537) · angle**: move `WAR angle` -> `Dysregulated Kids` (52% vs own 34%). Shared evidence: teacher, brain, dysregulation, research, tweet, angle, visual, classroom.
+- **Herbal Healing Handbook · CA-259-INS-085 (86d3zdxfq) · angle**: move `side hustle / quick income angle` -> `Meme / Pattern-Interrupt Format` (51% vs own 0%). Shared evidence: canva, design, course, bundle, template, already, mastery, after.
+- **Therapy · TH-037-INS-022 (86d38dv77) · persona**: move `Anxious Adults 35-55` -> `Emotionally Struggling Women 20-35` (50% vs own 0%). Shared evidence: therapy, symptom, these, change, cognitive, distortion, help, before.
+- **Sewing · 13014 (86d2pb0wv) · persona**: move `Hobby Sewists` -> `Beginner Sewists` (50% vs own 21%). Shared evidence: pattern, keep, offer, sew, wait, because, beginner, bib.
+- **Therapy · Therapy Bundle - 13771 (86d2y85pq) · angle**: move `Therapist Authority` -> `Free Value Hook` (50% vs own 32%). Shared evidence: therapy, therapist, feel, negative, change, worksheet, cognitive, bundle.
+- **Couple Workbook · Couple's Workbook - 12930 (86d2nxjvn) · angle**: move `Relationship Coach Alternative` -> `Communication Breakdown` (50% vs own 34%). Shared evidence: relationship, couple, worksheet, her, love, person, therapist, emotion.
+- **Kids Mental Health · KM-492-INS-189 (AD-12288) · angle**: move `dyregulated kids` -> `Dysregulated Kids` (49% vs own 0%). Shared evidence: circle, health, mental, tool, brain, bundle, what, social.
+- **NCLEX · 13699 (86d2xn7q5) · angle**: move `Embarased Angle` -> `Last-Minute Exam Prep Shortcut` (49% vs own 0%). Shared evidence: nurse, artery, care, patient, self, system, theory, blood.
+- **NCLEX · NC-017-INS-014 (86d30j39x) · angle**: move `Last-Minute Exam Prep Shortcut` -> `Embarased Angle` (49% vs own 0%). Shared evidence: nurse, artery, care, patient, self, system, theory, blood.
+- **Yoga Notes · 11547 (86d29pyw9) · angle**: move `Pose Progression / Flexibility` -> `Beginner Routine / Confidence` (49% vs own 0%). Shared evidence: pose, step, client, yoga, include, headstand, sirsasana, back.
+- **Yoga Notes · 11547 (86d29pyw9) · persona**: move `Deal-Seeking Yoga Beginners` -> `Structured Yoga Learners` (49% vs own 25%). Shared evidence: pose, step, client, yoga, include, headstand, sirsasana, back.
+- **ADHD · AD-074-INS-074 (86d3fztdj) · persona**: move `Adults Seeking Medication-Free ADHD Help` -> `Adult Women With ADHD` (48% vs own 31%). Shared evidence: down, task, these, break, self, tool, therapy, adhd.
+- **ADHD · ADHD - 13645 (86d2x4htx) · angle**: move `Executive Function Tools` -> `Therapy Alternative Toolkit` (48% vs own 31%). Shared evidence: adhd, function, tool, time, plan, ability, list, task.
+- **Sewing · 13014 (86d2pb0wv) · angle**: move `Pattern / Project Library` -> `Step-by-Step Learning` (48% vs own 0%). Shared evidence: pattern, side, keep, look, offer, sew, allowance, because.
+- **PHONICS · 12495-2 phon | dancing aunty (86d30fhnk) · persona**: move `Mom's POV` -> `Moms Raising Kids 35-44` (45% vs own 0%). Shared evidence: word, phonic, book, read, tool, activity, hand, printable.
+- **Therapy · Therapy - 11474 (86d28x0qe) · persona**: move `Young Adults Processing Grief` -> `Emotionally Struggling Women 20-35` (45% vs own 18%). Shared evidence: brain, emotional, therapy, anxiety, association, both, bundle, color.
+- **Canva Income Mastery · AD-049-INS-062 (86d3c6fvq) · angle**: move `Adult ADHD Validation` -> `Free ADHD Bundle Offer` (44% vs own 0%). Shared evidence: adhd, think, cognitive, distortion, calm, complete, learn, mind.
+- **Canva Income Mastery · AD-071-ADHD - 13404 (86d3e3f82) · angle**: move `Free ADHD Bundle Offer` -> `Adult ADHD Validation` (44% vs own 0%). Shared evidence: adhd, think, cognitive, distortion, calm, complete, learn, mind.
+- **KIDS LIFE SKILL · kids life-12838 (86d2mnmn3) · angle**: move `Screen Time` -> `Raising Independent Kids` (44% vs own 0%). Shared evidence: life, skill, real, thought, eat, time, all, good.
+- **Therapy · Therapy - 10948 (86d234hac) · angle**: move `Transformation / Skeptic` -> `Therapist Authority` (44% vs own 20%). Shared evidence: brain, example, emotional, place, sense, skill, symptom, therapy.
+
+## Media Coverage Notes
+- 71 winners did not have downloadable Drive video evidence in this run. They were scored from stored text only.
+  - Art Therapy · AT-126-INS-063 (AD-129)
+  - Art Therapy · AT-149-INS-071 (AD-148)
+  - Art Therapy · AT-206-INS-121 (AD-208)
+  - Art Therapy · AT-220-INS-128 (AD-222)
+  - Art Therapy · AT-221-INS-127 (AD-223)
+  - Art Therapy · AT-225-INS-125 (AD-227)
+  - Art Therapy · AT-242-INS-133 (AD-244)
+  - Astro Rekha IND · AR-155-INS-019 (86d3f21jx)
+  - Astro Rekha IND · AR-171-INS-031 (86d3h4vt0)
+  - Canva · 12882 (86d2ng379)
+  - Canva · New Angle #5: Personal Voice / "I" framing (4 static images) (86d2nxqhr)
+  - Canva · 13126 (86d2qnv5w)
+  - Canva · CA-207-INS-037 (86d39mafw)
+  - Couple Workbook · Winner variation 10192-1 (86d1tb2pm)
+  - Couple Workbook · 10450 (86d1w57p8)
+  - Couple Workbook · Couple - 10841 (86d2196a6)
+  - Couple Workbook · Couple - 10882 (86d21rc4y)
+  - Couple Workbook · Couple - 10999 (86d23pgxn)
+  - Couple Workbook · Couple - 11002 (86d23ph4v)
+  - Diabetics · DRG - 12020 (86d2d1fpd)
+  - Herbal Healing Handbook · New concepts from inspiration (86d1x2azh)
+  - Herbal Healing Handbook · NEW CONCEPT(PHOTO 2) (86d26qpfg)
+  - Herbal Healing Handbook · New Concept(PHOTO) (86d2a1yv9)
+  - KIDS LIFE SKILL · Whatsapp 10350-1 Winn (86d1txk92)
+  - KIDS LIFE SKILL · KLS New Concepts PHOTOS 1 (12815-1 winner)  (86d2mja1k)
+  - KIDS LIFE SKILL · 10350-1 old winner (86d2r9063)
+  - KIDS LIFE SKILL · KL-319-INS-096 (AD-12703)
+  - Kids Mental Health · Remake old winners (86d1xvk11)
+  - Kids Mental Health · 10805 (86d20fdtu)
+  - Kids Mental Health · KM-253-New Concepts (13454 PHOTO) (86d2bfa6c-PROD-WARANFEMAL346)
+  - Kids Mental Health · New Concept (PHOTO) (86d2d0w6c)
+  - Kids Mental Health · New Concept in WAR angle PHOTO (86d2hajcm)
+  - Kids Mental Health · NEW CONCEPT (PHOTO) 12873-2 (86d2n306v)
+  - Kids Mental Health · KM-252-NEW CONCEPT (13452 PHOTO) (86d2n306v-PROD-WARANFEMAL537)
+  - Kids Mental Health · 13018/11783-3 PHOTO (86d2pbhfe)
+  - Kids Mental Health · KM-241-13018/11783-3 PHOTO (86d2pbhfe-PROD-DYSREMOMSR509)
+  - Kids Mental Health · KM-203-INS-021 (13148-2 winner) (86d2qt7va)
+  - Kids Mental Health · KM-253-New Concepts (13454 PHOTO) (86d2vdvmj)
+  - Kids Mental Health · KM-335-13018/11783-3 PHOTO (AD-12131)
+  - Kids Mental Health · KM-336-KM-253-New Concepts (13454 PHOTO) (AD-12132)
+  - Kids Mental Health · KM-388-INS-130 (AD-12184)
+  - Medical · 13368 PHOTO (86d2uk1pj)
+  - Medical · ME-079-INS-036 (86d39jv97)
+  - NCLEX · 10456 (86d1w593t)
+  - NCLEX · 11080 (86d24d7yg)
+  - Paramedic Notes · 5 sets of New concepts using NCLEX and Medical Notes (86d1uk9n1)
+  - Paramedic Notes · 10452 (86d1w584z)
+  - Paramedic Notes · Meme style images (86d1ya5t5)
+  - Pharmacology · 13833 PHOTO (We're saying goodbye) (86d35ak71)
+  - PHONICS · 10351-1 WP | photo ad  (86d1u04pg)
+  - PHONICS · NEW CONCEPT (PHOTO 2) (86d2x6kh3)
+  - PHONICS · 10168-1 winner P old (86d33xh4p)
+  - Quilting · 6197-1 old winner (86d2qrf1m)
+  - Quilting · 10785-2 old winner (86d2qrfja)
+  - Quilting · AT-091-INS-021 (13427) (86d2v13pk)
+  - Quilting · AT-126-INS-063 (86d2zuexw)
+  - Quilting · AT-139-INS-074 (86d30hjyx)
+  - Quilting · AT-149-INS-071 (86d30mefh)
+  - Quilting · AT-091-INS-021 (13427 - 2) - V1 - Title (86d31ntpw)
+  - Quilting · AT-126-INS-063 - V1 - Production Style (86d33hwa9)
+  - Quilting · AT-126-INS-063 - V4 - Production Style (86d33hwaj)
+  - Quilting · AT-206-INS-121 (86d3bxgpb)
+  - Quilting · AT-220-INS-128 (86d3f18an)
+  - Quilting · AT-225-INS-125 (86d3f18dn)
+  - Quilting · AT-221-INS-127 (86d3f18ef)
+  - Quilting · AT-242-INS-133 (86d3tv2f2)
+  - Quilting · QU-002-INS-002 (AD-002)
+  - Sewing · New concepts photos (86d2057du)
+  - Therapy · 10451 (86d2xn8fx)
+  - Therapy · TH-100-INS-075 (AD-1782972263271)
+  - Yoga Notes · 2402/1202-1 (86d34vv24)

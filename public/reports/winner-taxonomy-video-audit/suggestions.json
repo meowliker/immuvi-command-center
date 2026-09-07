@@ -1,0 +1,2215 @@
+{
+  "generated_at": null,
+  "coverage": {
+    "winners_scanned": null,
+    "winners_with_downloaded_video_evidence": null,
+    "merge_suggestions": 36,
+    "move_suggestions": 76
+  },
+  "merge_suggestions": [
+    {
+      "product": "Canva",
+      "kind": "angle",
+      "merge": "Meme / Pattern-Interrupt Format",
+      "keep": "Free Bundle / Offer-Led",
+      "score": 0.784,
+      "merge_winners": 6,
+      "keep_winners": 6,
+      "shared": [
+        "canva",
+        "bundle",
+        "course",
+        "mastery",
+        "planner",
+        "template",
+        "complete",
+        "add"
+      ]
+    },
+    {
+      "product": "Quilting",
+      "kind": "persona",
+      "merge": "People Processing Life Changes & Recovery",
+      "keep": "Stressed Women 25-45",
+      "score": 0.782,
+      "merge_winners": 2,
+      "keep_winners": 17,
+      "shared": [
+        "art",
+        "therapy",
+        "pov",
+        "tool",
+        "change",
+        "emotion",
+        "heal",
+        "through"
+      ]
+    },
+    {
+      "product": "KIDS LIFE SKILL",
+      "kind": "persona",
+      "merge": "Overwhelmed Moms (Behaviour)",
+      "keep": "Moms Raising Kids 28-42",
+      "score": 0.771,
+      "merge_winners": 8,
+      "keep_winners": 14,
+      "shared": [
+        "life",
+        "skill",
+        "don",
+        "completely",
+        "what",
+        "teach",
+        "feel",
+        "know"
+      ]
+    },
+    {
+      "product": "Art Therapy",
+      "kind": "persona",
+      "merge": "People Processing Life Changes & Recovery",
+      "keep": "Stressed Women 25-45",
+      "score": 0.769,
+      "merge_winners": 2,
+      "keep_winners": 5,
+      "shared": [
+        "art",
+        "therapy",
+        "tool",
+        "pov",
+        "emotion",
+        "heal",
+        "through",
+        "emotional"
+      ]
+    },
+    {
+      "product": "Herbal Healing Handbook",
+      "kind": "persona",
+      "merge": "Budget-Conscious Health Buyers",
+      "keep": "Natural Wellness Beginners",
+      "score": 0.747,
+      "merge_winners": 2,
+      "keep_winners": 11,
+      "shared": [
+        "herbal",
+        "oil",
+        "drop",
+        "heal",
+        "small",
+        "essential",
+        "handbook",
+        "chakra"
+      ]
+    },
+    {
+      "product": "KIDS LIFE SKILL",
+      "kind": "angle",
+      "merge": "Overwhelmed Parent",
+      "keep": "School Doesn't Teach This",
+      "score": 0.741,
+      "merge_winners": 6,
+      "keep_winners": 7,
+      "shared": [
+        "life",
+        "skill",
+        "what",
+        "teach",
+        "completely",
+        "feel",
+        "brain",
+        "bundle"
+      ]
+    },
+    {
+      "product": "Herbal Healing Handbook",
+      "kind": "angle",
+      "merge": "Natural Alternatives To Pills",
+      "keep": "Beginner Herbal Education",
+      "score": 0.74,
+      "merge_winners": 2,
+      "keep_winners": 8,
+      "shared": [
+        "oil",
+        "essential",
+        "tree",
+        "its",
+        "vera",
+        "ashwagandha",
+        "property",
+        "tea"
+      ]
+    },
+    {
+      "product": "Sewing",
+      "kind": "angle",
+      "merge": "Free Sewing Notes Offer",
+      "keep": "Step-by-Step Learning",
+      "score": 0.726,
+      "merge_winners": 2,
+      "keep_winners": 3,
+      "shared": [
+        "sew",
+        "pattern",
+        "step",
+        "note",
+        "how",
+        "now",
+        "offer",
+        "skirt"
+      ]
+    },
+    {
+      "product": "Paramedic Notes",
+      "kind": "angle",
+      "merge": "Grade / Exam Confidence",
+      "keep": "Career Motivation",
+      "score": 0.72,
+      "merge_winners": 3,
+      "keep_winners": 3,
+      "shared": [
+        "paramedic",
+        "arrest",
+        "class",
+        "note",
+        "cardiac",
+        "dos",
+        "patient",
+        "primary"
+      ]
+    },
+    {
+      "product": "Therapy",
+      "kind": "persona",
+      "merge": "Young Adults Processing Grief",
+      "keep": "Creative Self-Care Adults",
+      "score": 0.707,
+      "merge_winners": 3,
+      "keep_winners": 3,
+      "shared": [
+        "symptom",
+        "ptsd",
+        "therapy",
+        "these",
+        "emotional",
+        "feel",
+        "disorder",
+        "hand"
+      ]
+    },
+    {
+      "product": "Patchwork",
+      "kind": "angle",
+      "merge": "Scarcity / WAR Angle",
+      "keep": "Free Value Hook",
+      "score": 0.703,
+      "merge_winners": 2,
+      "keep_winners": 2,
+      "shared": [
+        "patchwork",
+        "pattern",
+        "guide",
+        "now",
+        "beginner",
+        "fabric",
+        "simple",
+        "book"
+      ]
+    },
+    {
+      "product": "Herbal Healing Handbook",
+      "kind": "angle",
+      "merge": "Free Herbal Handbook Offer",
+      "keep": "Beginner Herbal Education",
+      "score": 0.686,
+      "merge_winners": 4,
+      "keep_winners": 8,
+      "shared": [
+        "heal",
+        "natural",
+        "oil",
+        "herbal",
+        "essential",
+        "tea",
+        "guide",
+        "remedy"
+      ]
+    },
+    {
+      "product": "ADHD",
+      "kind": "persona",
+      "merge": "Adults Seeking Medication-Free ADHD Help",
+      "keep": "Adult Women With ADHD",
+      "score": 0.678,
+      "merge_winners": 4,
+      "keep_winners": 4,
+      "shared": [
+        "adhd",
+        "tool",
+        "task",
+        "time",
+        "self",
+        "break",
+        "down",
+        "function"
+      ]
+    },
+    {
+      "product": "Canva",
+      "kind": "angle",
+      "merge": "Monetize Your Canva Skills",
+      "keep": "Free Bundle / Offer-Led",
+      "score": 0.676,
+      "merge_winners": 5,
+      "keep_winners": 6,
+      "shared": [
+        "canva",
+        "mastery",
+        "don",
+        "bundle",
+        "product",
+        "template",
+        "planner",
+        "digital"
+      ]
+    },
+    {
+      "product": "Paramedic Notes",
+      "kind": "angle",
+      "merge": "NREMT / EMS Meds",
+      "keep": "Grade / Exam Confidence",
+      "score": 0.676,
+      "merge_winners": 2,
+      "keep_winners": 3,
+      "shared": [
+        "dose",
+        "paramedic",
+        "amiodarone",
+        "dos",
+        "effect",
+        "indication",
+        "note",
+        "arrest"
+      ]
+    },
+    {
+      "product": "Paramedic Notes",
+      "kind": "angle",
+      "merge": "NREMT / EMS Meds",
+      "keep": "Career Motivation",
+      "score": 0.675,
+      "merge_winners": 2,
+      "keep_winners": 3,
+      "shared": [
+        "paramedic",
+        "amiodarone",
+        "dose",
+        "answer",
+        "dos",
+        "effect",
+        "ems",
+        "indication"
+      ]
+    },
+    {
+      "product": "Therapy",
+      "kind": "persona",
+      "merge": "Wellness-Seeking Women 25-45",
+      "keep": "Creative Self-Care Adults",
+      "score": 0.675,
+      "merge_winners": 3,
+      "keep_winners": 3,
+      "shared": [
+        "symptom",
+        "therapy",
+        "ptsd",
+        "these",
+        "book",
+        "feel",
+        "disorder",
+        "hand"
+      ]
+    },
+    {
+      "product": "Herbal Healing Handbook",
+      "kind": "angle",
+      "merge": "Everyday Home Remedies",
+      "keep": "Beginner Herbal Education",
+      "score": 0.669,
+      "merge_winners": 2,
+      "keep_winners": 8,
+      "shared": [
+        "oil",
+        "drop",
+        "essential",
+        "herbal",
+        "remedy",
+        "heal",
+        "flower",
+        "support"
+      ]
+    },
+    {
+      "product": "Therapy",
+      "kind": "persona",
+      "merge": "Wellness-Seeking Women 25-45",
+      "keep": "Young Adults Processing Grief",
+      "score": 0.669,
+      "merge_winners": 3,
+      "keep_winners": 3,
+      "shared": [
+        "symptom",
+        "ptsd",
+        "therapy",
+        "therapist",
+        "hand",
+        "said",
+        "didn",
+        "these"
+      ]
+    },
+    {
+      "product": "Herbal Healing Handbook",
+      "kind": "persona",
+      "merge": "Women Seeking Natural Remedies",
+      "keep": "Natural Wellness Beginners",
+      "score": 0.667,
+      "merge_winners": 3,
+      "keep_winners": 11,
+      "shared": [
+        "remedy",
+        "tree",
+        "oil",
+        "essential",
+        "natural",
+        "tea",
+        "chaste",
+        "herbal"
+      ]
+    },
+    {
+      "product": "Therapy",
+      "kind": "persona",
+      "merge": "Wellness-Seeking Women 25-45",
+      "keep": "Budget-Blocked Women 25-40",
+      "score": 0.664,
+      "merge_winners": 3,
+      "keep_winners": 6,
+      "shared": [
+        "therapy",
+        "therapist",
+        "until",
+        "said",
+        "believe",
+        "session",
+        "these",
+        "worth"
+      ]
+    },
+    {
+      "product": "Canva",
+      "kind": "persona",
+      "merge": "Content Creators 22-40",
+      "keep": "Side-Hustle Sellers",
+      "score": 0.659,
+      "merge_winners": 4,
+      "keep_winners": 12,
+      "shared": [
+        "canva",
+        "bundle",
+        "template",
+        "course",
+        "design",
+        "mastery",
+        "add",
+        "already"
+      ]
+    },
+    {
+      "product": "Diabetics",
+      "kind": "angle",
+      "merge": "Everyday Diabetic Meals",
+      "keep": "Easy Diabetic Recipe Swaps",
+      "score": 0.657,
+      "merge_winners": 4,
+      "keep_winners": 5,
+      "shared": [
+        "recipe",
+        "diabetic",
+        "friendly",
+        "sugar",
+        "salad",
+        "guide",
+        "food",
+        "meal"
+      ]
+    },
+    {
+      "product": "Couple Workbook",
+      "kind": "persona",
+      "merge": "Couples Seeking Reconnection 25-45",
+      "keep": "Married Women 30-45",
+      "score": 0.653,
+      "merge_winners": 3,
+      "keep_winners": 14,
+      "shared": [
+        "relationship",
+        "couple",
+        "worksheet",
+        "love",
+        "other",
+        "conflict",
+        "her",
+        "time"
+      ]
+    },
+    {
+      "product": "Diabetics",
+      "kind": "persona",
+      "merge": "Adults Managing Type 2 Diabetes",
+      "keep": "Health Conscious Home Cooks 35+",
+      "score": 0.649,
+      "merge_winners": 2,
+      "keep_winners": 8,
+      "shared": [
+        "diabetic",
+        "recipe",
+        "guide",
+        "friendly",
+        "food",
+        "meal",
+        "blood",
+        "diabete"
+      ]
+    },
+    {
+      "product": "Herbal Healing Handbook",
+      "kind": "persona",
+      "merge": "Side-Hustle Sellers",
+      "keep": "Content Creators 22-40",
+      "score": 0.636,
+      "merge_winners": 3,
+      "keep_winners": 3,
+      "shared": [
+        "canva",
+        "bundle",
+        "course",
+        "design",
+        "mastery",
+        "template",
+        "add",
+        "already"
+      ]
+    },
+    {
+      "product": "KIDS LIFE SKILL",
+      "kind": "angle",
+      "merge": "Raising Independent Kids",
+      "keep": "Overwhelmed Parent",
+      "score": 0.627,
+      "merge_winners": 4,
+      "keep_winners": 6,
+      "shared": [
+        "life",
+        "skill",
+        "don",
+        "know",
+        "bundle",
+        "feel",
+        "let",
+        "please"
+      ]
+    },
+    {
+      "product": "Therapy",
+      "kind": "persona",
+      "merge": "Creative Self-Care Adults",
+      "keep": "Budget-Blocked Women 25-40",
+      "score": 0.612,
+      "merge_winners": 3,
+      "keep_winners": 6,
+      "shared": [
+        "therapy",
+        "offer",
+        "these",
+        "book",
+        "feel",
+        "emotional",
+        "change",
+        "therapist"
+      ]
+    },
+    {
+      "product": "Quilting",
+      "kind": "persona",
+      "merge": "Parents of Emotional/Anxious Kids",
+      "keep": "Stressed Women 25-45",
+      "score": 0.609,
+      "merge_winners": 3,
+      "keep_winners": 17,
+      "shared": [
+        "art",
+        "therapy",
+        "emotional",
+        "heal",
+        "offer",
+        "through",
+        "ins",
+        "all"
+      ]
+    },
+    {
+      "product": "Herbal Healing Handbook",
+      "kind": "angle",
+      "merge": "Everyday Home Remedies",
+      "keep": "Free Herbal Handbook Offer",
+      "score": 0.6,
+      "merge_winners": 2,
+      "keep_winners": 4,
+      "shared": [
+        "oil",
+        "essential",
+        "herbal",
+        "heal",
+        "remedy",
+        "support",
+        "astragalu",
+        "its"
+      ]
+    },
+    {
+      "product": "Therapy",
+      "kind": "angle",
+      "merge": "Emotional Pain / Trauma",
+      "keep": "Therapist Authority",
+      "score": 0.6,
+      "merge_winners": 3,
+      "keep_winners": 9,
+      "shared": [
+        "cognitive",
+        "distortion",
+        "ptsd",
+        "symptom",
+        "emotional",
+        "think",
+        "anxiety",
+        "therapy"
+      ]
+    },
+    {
+      "product": "Therapy",
+      "kind": "persona",
+      "merge": "Emotionally Struggling Women 20-35",
+      "keep": "Young Adults Processing Grief",
+      "score": 0.597,
+      "merge_winners": 3,
+      "keep_winners": 3,
+      "shared": [
+        "therapy",
+        "ptsd",
+        "symptom",
+        "therapist",
+        "feel",
+        "distortion",
+        "emotional",
+        "brain"
+      ]
+    },
+    {
+      "product": "Therapy",
+      "kind": "angle",
+      "merge": "Transformation / Skeptic",
+      "keep": "Therapist Authority",
+      "score": 0.596,
+      "merge_winners": 2,
+      "keep_winners": 9,
+      "shared": [
+        "therapy",
+        "book",
+        "these",
+        "brain",
+        "until",
+        "believe",
+        "didn",
+        "her"
+      ]
+    },
+    {
+      "product": "KIDS LIFE SKILL",
+      "kind": "angle",
+      "merge": "Raising Independent Kids",
+      "keep": "School Doesn't Teach This",
+      "score": 0.594,
+      "merge_winners": 4,
+      "keep_winners": 7,
+      "shared": [
+        "life",
+        "skill",
+        "bundle",
+        "don",
+        "feel",
+        "let",
+        "rai",
+        "please"
+      ]
+    },
+    {
+      "product": "Canva",
+      "kind": "persona",
+      "merge": "Small-Business & Brand Owners 25-45",
+      "keep": "Side-Hustle Sellers",
+      "score": 0.592,
+      "merge_winners": 3,
+      "keep_winners": 12,
+      "shared": [
+        "canva",
+        "page",
+        "business",
+        "add",
+        "bundle",
+        "course",
+        "product",
+        "mastery"
+      ]
+    },
+    {
+      "product": "Therapy",
+      "kind": "angle",
+      "merge": "Free Value Hook",
+      "keep": "Therapist Authority",
+      "score": 0.59,
+      "merge_winners": 4,
+      "keep_winners": 9,
+      "shared": [
+        "therapy",
+        "feel",
+        "these",
+        "book",
+        "believe",
+        "session",
+        "therapist",
+        "worth"
+      ]
+    }
+  ],
+  "move_suggestions": [
+    {
+      "product": "Therapy",
+      "kind": "persona",
+      "creative_id": "86d234j37",
+      "creative_name": "therapy Bundle - 10949",
+      "from": "Silently Scrolling Adults",
+      "to": "Stressed Women 25-45",
+      "score": 0.976,
+      "own_score": 0.0,
+      "shared": [
+        "therapy",
+        "tool",
+        "self",
+        "cognitive",
+        "bundle",
+        "belief",
+        "distortion",
+        "emotional"
+      ]
+    },
+    {
+      "product": "Therapy",
+      "kind": "persona",
+      "creative_id": "86d28vt53",
+      "creative_name": "Therapy - 11454",
+      "from": "Stressed Women 25-45",
+      "to": "Silently Scrolling Adults",
+      "score": 0.976,
+      "own_score": 0.0,
+      "shared": [
+        "therapy",
+        "tool",
+        "self",
+        "cognitive",
+        "bundle",
+        "belief",
+        "distortion",
+        "emotional"
+      ]
+    },
+    {
+      "product": "Yoga Notes",
+      "kind": "angle",
+      "creative_id": "86d2e101z",
+      "creative_name": "12110",
+      "from": "Beginner Routine / Confidence",
+      "to": "Free Value Hook",
+      "score": 0.954,
+      "own_score": 0.0,
+      "shared": [
+        "yoga",
+        "pose",
+        "study",
+        "start",
+        "step",
+        "how",
+        "note",
+        "client"
+      ]
+    },
+    {
+      "product": "Yoga Notes",
+      "kind": "persona",
+      "creative_id": "86d2e101z",
+      "creative_name": "12110",
+      "from": "Structured Yoga Learners",
+      "to": "Wellness-Seeking Women 25-45",
+      "score": 0.954,
+      "own_score": 0.0,
+      "shared": [
+        "yoga",
+        "pose",
+        "study",
+        "start",
+        "step",
+        "how",
+        "note",
+        "client"
+      ]
+    },
+    {
+      "product": "Yoga Notes",
+      "kind": "angle",
+      "creative_id": "86d30hk4d",
+      "creative_name": "13856",
+      "from": "Free Value Hook",
+      "to": "Beginner Routine / Confidence",
+      "score": 0.954,
+      "own_score": 0.0,
+      "shared": [
+        "yoga",
+        "pose",
+        "study",
+        "start",
+        "step",
+        "how",
+        "note",
+        "client"
+      ]
+    },
+    {
+      "product": "Yoga Notes",
+      "kind": "persona",
+      "creative_id": "86d30hk4d",
+      "creative_name": "13856",
+      "from": "Wellness-Seeking Women 25-45",
+      "to": "Structured Yoga Learners",
+      "score": 0.954,
+      "own_score": 0.0,
+      "shared": [
+        "yoga",
+        "pose",
+        "study",
+        "start",
+        "step",
+        "how",
+        "note",
+        "client"
+      ]
+    },
+    {
+      "product": "Herbal Healing Handbook",
+      "kind": "angle",
+      "creative_id": "86d243agn",
+      "creative_name": "Herbal - 11040",
+      "from": "Beginner Herbal Education",
+      "to": "Natural Alternatives To Pills",
+      "score": 0.86,
+      "own_score": 0.574,
+      "shared": [
+        "tree",
+        "oil",
+        "chaste",
+        "essential",
+        "tea",
+        "vera",
+        "herbal",
+        "aloe"
+      ]
+    },
+    {
+      "product": "Quilting",
+      "kind": "angle",
+      "creative_id": "86d309jmy",
+      "creative_name": "AT-133-art therapy - 13099",
+      "from": "Regret Discovery angle",
+      "to": "Art as Therapy Alternative",
+      "score": 0.848,
+      "own_score": 0.0,
+      "shared": [
+        "art",
+        "therapy",
+        "pov",
+        "tool",
+        "heal",
+        "angle",
+        "emotional",
+        "group"
+      ]
+    },
+    {
+      "product": "Quilting",
+      "kind": "persona",
+      "creative_id": "86d309jn2",
+      "creative_name": "AT-131-5773-1 old winner",
+      "from": "Silently Scrolling Adults",
+      "to": "Stressed Women 25-45",
+      "score": 0.838,
+      "own_score": 0.0,
+      "shared": [
+        "art",
+        "therapy",
+        "feel",
+        "heal",
+        "pov",
+        "through",
+        "check",
+        "emotion"
+      ]
+    },
+    {
+      "product": "Art Therapy",
+      "kind": "persona",
+      "creative_id": "AD-136",
+      "creative_name": "AT-133-art therapy - 13099",
+      "from": "Stressed Women 25-45",
+      "to": "People Processing Life Changes & Recovery",
+      "score": 0.828,
+      "own_score": 0.299,
+      "shared": [
+        "art",
+        "therapy",
+        "pov",
+        "tool",
+        "heal",
+        "emotional",
+        "group",
+        "love"
+      ]
+    },
+    {
+      "product": "Art Therapy",
+      "kind": "angle",
+      "creative_id": "AD-136",
+      "creative_name": "AT-133-art therapy - 13099",
+      "from": "Regret Discovery angle",
+      "to": "Art as Therapy Alternative",
+      "score": 0.817,
+      "own_score": 0.0,
+      "shared": [
+        "art",
+        "therapy",
+        "pov",
+        "tool",
+        "heal",
+        "emotional",
+        "group",
+        "love"
+      ]
+    },
+    {
+      "product": "Herbal Healing Handbook",
+      "kind": "persona",
+      "creative_id": "86d243agn",
+      "creative_name": "Herbal - 11040",
+      "from": "Natural Wellness Beginners",
+      "to": "Women Seeking Natural Remedies",
+      "score": 0.797,
+      "own_score": 0.547,
+      "shared": [
+        "tree",
+        "oil",
+        "chaste",
+        "essential",
+        "tea",
+        "vera",
+        "herbal",
+        "aloe"
+      ]
+    },
+    {
+      "product": "Quilting",
+      "kind": "persona",
+      "creative_id": "86d309jmz",
+      "creative_name": "AT-132-art therapy - 13099",
+      "from": "People Processing Life Changes & Recovery",
+      "to": "Silently Scrolling Adults",
+      "score": 0.781,
+      "own_score": 0.311,
+      "shared": [
+        "art",
+        "therapy",
+        "pov",
+        "emotion",
+        "heal",
+        "through",
+        "tool",
+        "now"
+      ]
+    },
+    {
+      "product": "Art Therapy",
+      "kind": "persona",
+      "creative_id": "AD-135",
+      "creative_name": "AT-132-art therapy - 13099",
+      "from": "People Processing Life Changes & Recovery",
+      "to": "Stressed Women 25-45",
+      "score": 0.774,
+      "own_score": 0.235,
+      "shared": [
+        "art",
+        "therapy",
+        "pov",
+        "tool",
+        "emotion",
+        "heal",
+        "through",
+        "emotional"
+      ]
+    },
+    {
+      "product": "Therapy",
+      "kind": "persona",
+      "creative_id": "86d2amz8c",
+      "creative_name": "Therapy - 11692",
+      "from": "Creative Self-Care Adults",
+      "to": "Wellness-Seeking Women 25-45",
+      "score": 0.761,
+      "own_score": 0.39,
+      "shared": [
+        "hand",
+        "ptsd",
+        "therapy",
+        "book",
+        "therapist",
+        "these",
+        "ball",
+        "feel"
+      ]
+    },
+    {
+      "product": "Canva",
+      "kind": "angle",
+      "creative_id": "AD-1785216614595",
+      "creative_name": "CA-281-INS-093",
+      "from": "Testimonial",
+      "to": "Free Bundle / Offer-Led",
+      "score": 0.757,
+      "own_score": 0.0,
+      "shared": [
+        "canva",
+        "course",
+        "mastery",
+        "complete",
+        "add",
+        "bundle",
+        "copy",
+        "page"
+      ]
+    },
+    {
+      "product": "Canva",
+      "kind": "angle",
+      "creative_id": "86d329rqt",
+      "creative_name": "CA-195-INS-017",
+      "from": "Monetize Your Canva Skills",
+      "to": "Free Bundle / Offer-Led",
+      "score": 0.754,
+      "own_score": 0.403,
+      "shared": [
+        "canva",
+        "course",
+        "mastery",
+        "don",
+        "planner",
+        "complete",
+        "easy",
+        "per"
+      ]
+    },
+    {
+      "product": "Herbal Healing Handbook",
+      "kind": "angle",
+      "creative_id": "86d3f25z6",
+      "creative_name": "CA-226-INS-052",
+      "from": "Meme / Pattern-Interrupt Format",
+      "to": "Testimonial",
+      "score": 0.754,
+      "own_score": 0.345,
+      "shared": [
+        "canva",
+        "course",
+        "mastery",
+        "add",
+        "bundle",
+        "complete",
+        "copy",
+        "page"
+      ]
+    },
+    {
+      "product": "Art Therapy",
+      "kind": "persona",
+      "creative_id": "AD-134",
+      "creative_name": "AT-131-5773-1 old winner",
+      "from": "Silently Scrolling Adults",
+      "to": "People Processing Life Changes & Recovery",
+      "score": 0.752,
+      "own_score": 0.0,
+      "shared": [
+        "art",
+        "therapy",
+        "pov",
+        "emotion",
+        "heal",
+        "through",
+        "tool",
+        "love"
+      ]
+    },
+    {
+      "product": "Sewing",
+      "kind": "angle",
+      "creative_id": "86d37yfuh",
+      "creative_name": "SE-034-INS-014",
+      "from": "Free Sewing Notes Offer",
+      "to": "Step-by-Step Learning",
+      "score": 0.713,
+      "own_score": 0.519,
+      "shared": [
+        "sew",
+        "pattern",
+        "note",
+        "step",
+        "how",
+        "add",
+        "keep",
+        "learn"
+      ]
+    },
+    {
+      "product": "Sewing",
+      "kind": "angle",
+      "creative_id": "86d1xzfm4",
+      "creative_name": "10586",
+      "from": "Step-by-Step Learning",
+      "to": "Free Sewing Notes Offer",
+      "score": 0.685,
+      "own_score": 0.481,
+      "shared": [
+        "pattern",
+        "sew",
+        "now",
+        "skirt",
+        "step",
+        "add",
+        "how",
+        "learn"
+      ]
+    },
+    {
+      "product": "Paramedic Notes",
+      "kind": "angle",
+      "creative_id": "86d2dxy97",
+      "creative_name": "Paramedic Notes - 12102",
+      "from": "NREMT / EMS Meds",
+      "to": "Grade / Exam Confidence",
+      "score": 0.675,
+      "own_score": 0.175,
+      "shared": [
+        "dose",
+        "paramedic",
+        "amiodarone",
+        "dos",
+        "effect",
+        "indication",
+        "arrest",
+        "class"
+      ]
+    },
+    {
+      "product": "Herbal Healing Handbook",
+      "kind": "persona",
+      "creative_id": "86d2b2z0t",
+      "creative_name": "HHH - 11760",
+      "from": "Medication-Skeptical Adults",
+      "to": "Natural Wellness Beginners",
+      "score": 0.674,
+      "own_score": 0.0,
+      "shared": [
+        "oil",
+        "essential",
+        "vera",
+        "its",
+        "ashwagandha",
+        "energy",
+        "heal",
+        "known"
+      ]
+    },
+    {
+      "product": "Herbal Healing Handbook",
+      "kind": "persona",
+      "creative_id": "86d2b2ytn",
+      "creative_name": "HHH - 11759",
+      "from": "Women Seeking Natural Remedies",
+      "to": "Medication-Skeptical Adults",
+      "score": 0.671,
+      "own_score": 0.177,
+      "shared": [
+        "oil",
+        "essential",
+        "vera",
+        "its",
+        "ashwagandha",
+        "aloe",
+        "also",
+        "chakra"
+      ]
+    },
+    {
+      "product": "Herbal Healing Handbook",
+      "kind": "persona",
+      "creative_id": "86d3f25z6",
+      "creative_name": "CA-226-INS-052",
+      "from": "Content Creators 22-40",
+      "to": "Side-Hustle Sellers",
+      "score": 0.67,
+      "own_score": 0.345,
+      "shared": [
+        "canva",
+        "course",
+        "mastery",
+        "template",
+        "bundle",
+        "add",
+        "already",
+        "complete"
+      ]
+    },
+    {
+      "product": "Herbal Healing Handbook",
+      "kind": "persona",
+      "creative_id": "86d202jc8",
+      "creative_name": "HHH - 10764",
+      "from": "Budget-Conscious Health Buyers",
+      "to": "Natural Wellness Beginners",
+      "score": 0.663,
+      "own_score": 0.469,
+      "shared": [
+        "oil",
+        "herbal",
+        "drop",
+        "small",
+        "chakra",
+        "essential",
+        "heal",
+        "process"
+      ]
+    },
+    {
+      "product": "Canva",
+      "kind": "persona",
+      "creative_id": "AD-1781785866610",
+      "creative_name": "CA-226-INS-052",
+      "from": "Content Creators 22-40",
+      "to": "Side-Hustle Sellers",
+      "score": 0.657,
+      "own_score": 0.403,
+      "shared": [
+        "canva",
+        "course",
+        "template",
+        "add",
+        "mastery",
+        "already",
+        "bundle",
+        "copy"
+      ]
+    },
+    {
+      "product": "Canva",
+      "kind": "angle",
+      "creative_id": "86d3cnrv1",
+      "creative_name": "CA-217-13469",
+      "from": "Free Bundle / Offer-Led",
+      "to": "Monetize Your Canva Skills",
+      "score": 0.655,
+      "own_score": 0.366,
+      "shared": [
+        "bundle",
+        "job",
+        "canva",
+        "digital",
+        "don",
+        "earn",
+        "mastery",
+        "month"
+      ]
+    },
+    {
+      "product": "Kids Mental Health",
+      "kind": "angle",
+      "creative_id": "86d2n306v",
+      "creative_name": "NEW CONCEPT (PHOTO) 12873-2",
+      "from": "Dysregulated Kids",
+      "to": "WAR angle",
+      "score": 0.653,
+      "own_score": 0.332,
+      "shared": [
+        "teacher",
+        "brain",
+        "dysregulation",
+        "tweet",
+        "copy",
+        "set",
+        "visual",
+        "angle"
+      ]
+    },
+    {
+      "product": "PHONICS",
+      "kind": "persona",
+      "creative_id": "AD-12341",
+      "creative_name": "PH-039-INS-034",
+      "from": "Female Teachers 25-44",
+      "to": "Preschool/Kindergarten Moms (child age 3–6, just starting)",
+      "score": 0.653,
+      "own_score": 0.015,
+      "shared": [
+        "worksheet",
+        "all",
+        "blend",
+        "covered",
+        "digraph",
+        "don",
+        "pack",
+        "phonic"
+      ]
+    },
+    {
+      "product": "PHONICS",
+      "kind": "persona",
+      "creative_id": "AD-12381",
+      "creative_name": "PH-079-INS-034",
+      "from": "Preschool/Kindergarten Moms (child age 3–6, just starting)",
+      "to": "Female Teachers 25-44",
+      "score": 0.651,
+      "own_score": 0.0,
+      "shared": [
+        "worksheet",
+        "all",
+        "blend",
+        "covered",
+        "digraph",
+        "don",
+        "pack",
+        "phonic"
+      ]
+    },
+    {
+      "product": "Herbal Healing Handbook",
+      "kind": "angle",
+      "creative_id": "86d42xq87",
+      "creative_name": "CA-281-INS-093",
+      "from": "Testimonial",
+      "to": "Meme / Pattern-Interrupt Format",
+      "score": 0.644,
+      "own_score": 0.0,
+      "shared": [
+        "canva",
+        "course",
+        "mastery",
+        "add",
+        "bundle",
+        "complete",
+        "copy",
+        "page"
+      ]
+    },
+    {
+      "product": "Therapy",
+      "kind": "persona",
+      "creative_id": "86d2xn68r",
+      "creative_name": "Therapy - 12405",
+      "from": "Niche Segments",
+      "to": "Creative Self-Care Adults",
+      "score": 0.643,
+      "own_score": 0.0,
+      "shared": [
+        "symptom",
+        "ptsd",
+        "these",
+        "disorder",
+        "book",
+        "therapist",
+        "dissociative",
+        "her"
+      ]
+    },
+    {
+      "product": "ADHD",
+      "kind": "persona",
+      "creative_id": "86d2vcne9",
+      "creative_name": "ADHD - 13463",
+      "from": "ADHD Adults Seeking Tools",
+      "to": "Adult Women With ADHD",
+      "score": 0.639,
+      "own_score": 0.29,
+      "shared": [
+        "adhd",
+        "time",
+        "strategy",
+        "task",
+        "tool",
+        "break",
+        "bundle",
+        "down"
+      ]
+    },
+    {
+      "product": "Herbal Healing Handbook",
+      "kind": "angle",
+      "creative_id": "86d202k7k",
+      "creative_name": "HHH - 10766",
+      "from": "Safe Herbal Remedy Guidance",
+      "to": "Beginner Herbal Education",
+      "score": 0.621,
+      "own_score": 0.0,
+      "shared": [
+        "oil",
+        "essential",
+        "small",
+        "heal",
+        "herbal",
+        "process",
+        "fee",
+        "rose"
+      ]
+    },
+    {
+      "product": "Canva",
+      "kind": "persona",
+      "creative_id": "AD-1785216614565",
+      "creative_name": "CA-250-INS-077",
+      "from": "Small-Business & Brand Owners 25-45",
+      "to": "Side-Hustle Sellers",
+      "score": 0.62,
+      "own_score": 0.379,
+      "shared": [
+        "canva",
+        "page",
+        "add",
+        "time",
+        "bundle",
+        "mastery",
+        "course",
+        "don"
+      ]
+    },
+    {
+      "product": "Herbal Healing Handbook",
+      "kind": "angle",
+      "creative_id": "86d34uckj",
+      "creative_name": "HH-008-INS-005",
+      "from": "Free Herbal Handbook Offer",
+      "to": "Everyday Home Remedies",
+      "score": 0.611,
+      "own_score": 0.336,
+      "shared": [
+        "oil",
+        "astragalu",
+        "essential",
+        "its",
+        "root",
+        "ashwagandha",
+        "body",
+        "herbal"
+      ]
+    },
+    {
+      "product": "KIDS LIFE SKILL",
+      "kind": "angle",
+      "creative_id": "86d2cjqpx",
+      "creative_name": "Kids life - 11991",
+      "from": "Raising Independent Kids",
+      "to": "School Doesn't Teach This",
+      "score": 0.604,
+      "own_score": 0.347,
+      "shared": [
+        "skill",
+        "life",
+        "let",
+        "bundle",
+        "feel",
+        "big",
+        "body",
+        "brain"
+      ]
+    },
+    {
+      "product": "Couple Workbook",
+      "kind": "angle",
+      "creative_id": "86d21rc4y",
+      "creative_name": "Couple - 10882",
+      "from": "Communication Breakdown",
+      "to": "Save the Marriage",
+      "score": 0.603,
+      "own_score": 0.321,
+      "shared": [
+        "couple",
+        "married",
+        "organic",
+        "pain",
+        "problem",
+        "raw"
+      ]
+    },
+    {
+      "product": "Astro Rekha IND",
+      "kind": "angle",
+      "creative_id": "86d2wka6m",
+      "creative_name": "AR-136-INS-030",
+      "from": "Soulmate Matching",
+      "to": "Marriage Prediction",
+      "score": 0.596,
+      "own_score": 0.106,
+      "shared": [
+        "david",
+        "marry",
+        "june",
+        "beautiful",
+        "day",
+        "test",
+        "14th",
+        "curiou"
+      ]
+    },
+    {
+      "product": "Astro Rekha IND",
+      "kind": "persona",
+      "creative_id": "86d2wka6m",
+      "creative_name": "AR-136-INS-030",
+      "from": "Young Couples",
+      "to": "Gen Z — Astrology Curious",
+      "score": 0.596,
+      "own_score": 0.042,
+      "shared": [
+        "david",
+        "marry",
+        "june",
+        "beautiful",
+        "day",
+        "test",
+        "14th",
+        "curiou"
+      ]
+    },
+    {
+      "product": "Canva",
+      "kind": "persona",
+      "creative_id": "86d3bt2g9",
+      "creative_name": "CA-12495 -2-INS-041",
+      "from": "Parents Teaching Early Readers",
+      "to": "Side-Hustle Sellers",
+      "score": 0.588,
+      "own_score": 0.0,
+      "shared": [
+        "canva",
+        "course",
+        "page",
+        "mastery",
+        "template",
+        "add",
+        "complete",
+        "list"
+      ]
+    },
+    {
+      "product": "ADHD",
+      "kind": "angle",
+      "creative_id": "86d2vcne9",
+      "creative_name": "ADHD - 13463",
+      "from": "Free Offer / Limited-Time Offer",
+      "to": "Therapy Alternative Toolkit",
+      "score": 0.581,
+      "own_score": 0.29,
+      "shared": [
+        "adhd",
+        "time",
+        "task",
+        "tool",
+        "break",
+        "bundle",
+        "down",
+        "visual"
+      ]
+    },
+    {
+      "product": "Sewing",
+      "kind": "persona",
+      "creative_id": "86d36dpcb",
+      "creative_name": "SE-024-INS-010",
+      "from": "Returning Sewists",
+      "to": "Beginner Sewists",
+      "score": 0.575,
+      "own_score": 0.0,
+      "shared": [
+        "sew",
+        "pattern",
+        "step",
+        "note",
+        "seam",
+        "every",
+        "fabric",
+        "how"
+      ]
+    },
+    {
+      "product": "Herbal Healing Handbook",
+      "kind": "persona",
+      "creative_id": "86d3wh75q",
+      "creative_name": "CA-250-INS-077",
+      "from": "Small-Business & Brand Owners 25-45",
+      "to": "Side-Hustle Sellers",
+      "score": 0.573,
+      "own_score": 0.0,
+      "shared": [
+        "canva",
+        "bundle",
+        "mastery",
+        "course",
+        "time",
+        "product",
+        "template",
+        "add"
+      ]
+    },
+    {
+      "product": "Herbal Healing Handbook",
+      "kind": "angle",
+      "creative_id": "86d3wh75q",
+      "creative_name": "CA-250-INS-077",
+      "from": "Free Bundle / Offer-Led",
+      "to": "Testimonial",
+      "score": 0.572,
+      "own_score": 0.0,
+      "shared": [
+        "canva",
+        "mastery",
+        "course",
+        "add",
+        "bundle",
+        "complete",
+        "page",
+        "copy"
+      ]
+    },
+    {
+      "product": "Quilting",
+      "kind": "persona",
+      "creative_id": "86d40d6jn",
+      "creative_name": "AT-248 (cr Dv) MOF V4 -INS-137",
+      "from": "Parents of Emotional/Anxious Kids",
+      "to": "Stressed Women 25-45",
+      "score": 0.563,
+      "own_score": 0.188,
+      "shared": [
+        "art",
+        "therapy",
+        "heal",
+        "through",
+        "emotional",
+        "all",
+        "color",
+        "down"
+      ]
+    },
+    {
+      "product": "Art Therapy",
+      "kind": "persona",
+      "creative_id": "AD-250",
+      "creative_name": "AT-248 (cr Dv) MOF V4 -INS-137",
+      "from": "Parents of Emotional/Anxious Kids",
+      "to": "Silently Scrolling Adults",
+      "score": 0.56,
+      "own_score": 0.227,
+      "shared": [
+        "art",
+        "therapy",
+        "heal",
+        "through",
+        "color",
+        "love",
+        "printableswithlily",
+        "self"
+      ]
+    },
+    {
+      "product": "Couple Workbook",
+      "kind": "angle",
+      "creative_id": "86d39jjrt",
+      "creative_name": "CW-035-INS-033",
+      "from": "Lost the Spark",
+      "to": "Communication Breakdown",
+      "score": 0.552,
+      "own_score": 0.0,
+      "shared": [
+        "love",
+        "other",
+        "conflict",
+        "each",
+        "emotion",
+        "resentment",
+        "self",
+        "emotional"
+      ]
+    },
+    {
+      "product": "Couple Workbook",
+      "kind": "persona",
+      "creative_id": "86d39jjrt",
+      "creative_name": "CW-035-INS-033",
+      "from": "Couples Seeking Reconnection 25-45",
+      "to": "Married Women 30-45",
+      "score": 0.55,
+      "own_score": 0.337,
+      "shared": [
+        "love",
+        "other",
+        "conflict",
+        "each",
+        "emotion",
+        "resentment",
+        "self",
+        "emotional"
+      ]
+    },
+    {
+      "product": "Diabetics",
+      "kind": "angle",
+      "creative_id": "86d25ajpb",
+      "creative_name": "DRG - 11196",
+      "from": "Easy Diabetic Recipe Swaps",
+      "to": "Free Recipe Guide Offer",
+      "score": 0.547,
+      "own_score": 0.355,
+      "shared": [
+        "recipe",
+        "friendly",
+        "diabete",
+        "diabetic",
+        "part",
+        "abundant",
+        "because",
+        "borrow"
+      ]
+    },
+    {
+      "product": "Diabetics",
+      "kind": "angle",
+      "creative_id": "86d28ux12",
+      "creative_name": "DFRG - 11446",
+      "from": "Free Recipe Guide Offer",
+      "to": "Everyday Diabetic Meals",
+      "score": 0.541,
+      "own_score": 0.0,
+      "shared": [
+        "recipe",
+        "friendly",
+        "diabete",
+        "diabetic",
+        "keep",
+        "real",
+        "all",
+        "apple"
+      ]
+    },
+    {
+      "product": "Therapy",
+      "kind": "angle",
+      "creative_id": "86d39j9u8",
+      "creative_name": "TH-042-INS-026",
+      "from": "Transformation / Skeptic",
+      "to": "Free Value Hook",
+      "score": 0.541,
+      "own_score": 0.207,
+      "shared": [
+        "therapy",
+        "these",
+        "believe",
+        "book",
+        "didn",
+        "her",
+        "opened",
+        "said"
+      ]
+    },
+    {
+      "product": "Canva",
+      "kind": "angle",
+      "creative_id": "AD-1785216614574",
+      "creative_name": "CA-259-INS-085",
+      "from": "side hustle / quick income angle",
+      "to": "Meme / Pattern-Interrupt Format",
+      "score": 0.531,
+      "own_score": 0.0,
+      "shared": [
+        "canva",
+        "design",
+        "course",
+        "bundle",
+        "template",
+        "already",
+        "mastery",
+        "side"
+      ]
+    },
+    {
+      "product": "ADHD",
+      "kind": "angle",
+      "creative_id": "86d30v3u8",
+      "creative_name": "ADHD - 13404",
+      "from": "Organize, Focus, and stop Procrastinating",
+      "to": "Therapy Alternative Toolkit",
+      "score": 0.53,
+      "own_score": 0.301,
+      "shared": [
+        "adhd",
+        "these",
+        "break",
+        "down",
+        "self",
+        "task",
+        "time",
+        "tool"
+      ]
+    },
+    {
+      "product": "Therapy",
+      "kind": "persona",
+      "creative_id": "86d2w36x5",
+      "creative_name": "Therapy Bundle - 13549",
+      "from": "Budget-Blocked Women 25-40",
+      "to": "Niche Segments",
+      "score": 0.526,
+      "own_score": 0.314,
+      "shared": [
+        "therapist",
+        "ptsd",
+        "symptom",
+        "said",
+        "until",
+        "change",
+        "event",
+        "disorder"
+      ]
+    },
+    {
+      "product": "Kids Mental Health",
+      "kind": "angle",
+      "creative_id": "86d2n306v-PROD-WARANFEMAL537",
+      "creative_name": "KM-252-NEW CONCEPT (13452 PHOTO)",
+      "from": "WAR angle",
+      "to": "Dysregulated Kids",
+      "score": 0.52,
+      "own_score": 0.34,
+      "shared": [
+        "teacher",
+        "brain",
+        "dysregulation",
+        "research",
+        "tweet",
+        "angle",
+        "visual",
+        "classroom"
+      ]
+    },
+    {
+      "product": "Herbal Healing Handbook",
+      "kind": "angle",
+      "creative_id": "86d3zdxfq",
+      "creative_name": "CA-259-INS-085",
+      "from": "side hustle / quick income angle",
+      "to": "Meme / Pattern-Interrupt Format",
+      "score": 0.512,
+      "own_score": 0.0,
+      "shared": [
+        "canva",
+        "design",
+        "course",
+        "bundle",
+        "template",
+        "already",
+        "mastery",
+        "after"
+      ]
+    },
+    {
+      "product": "Therapy",
+      "kind": "persona",
+      "creative_id": "86d38dv77",
+      "creative_name": "TH-037-INS-022",
+      "from": "Anxious Adults 35-55",
+      "to": "Emotionally Struggling Women 20-35",
+      "score": 0.509,
+      "own_score": 0.0,
+      "shared": [
+        "therapy",
+        "symptom",
+        "these",
+        "change",
+        "cognitive",
+        "distortion",
+        "help",
+        "before"
+      ]
+    },
+    {
+      "product": "Sewing",
+      "kind": "persona",
+      "creative_id": "86d2pb0wv",
+      "creative_name": "13014",
+      "from": "Hobby Sewists",
+      "to": "Beginner Sewists",
+      "score": 0.507,
+      "own_score": 0.213,
+      "shared": [
+        "pattern",
+        "keep",
+        "offer",
+        "sew",
+        "wait",
+        "because",
+        "beginner",
+        "bib"
+      ]
+    },
+    {
+      "product": "Therapy",
+      "kind": "angle",
+      "creative_id": "86d2y85pq",
+      "creative_name": "Therapy Bundle - 13771",
+      "from": "Therapist Authority",
+      "to": "Free Value Hook",
+      "score": 0.507,
+      "own_score": 0.324,
+      "shared": [
+        "therapy",
+        "therapist",
+        "feel",
+        "negative",
+        "change",
+        "worksheet",
+        "cognitive",
+        "bundle"
+      ]
+    },
+    {
+      "product": "Couple Workbook",
+      "kind": "angle",
+      "creative_id": "86d2nxjvn",
+      "creative_name": "Couple's Workbook - 12930",
+      "from": "Relationship Coach Alternative",
+      "to": "Communication Breakdown",
+      "score": 0.505,
+      "own_score": 0.343,
+      "shared": [
+        "relationship",
+        "couple",
+        "worksheet",
+        "her",
+        "love",
+        "person",
+        "therapist",
+        "emotion"
+      ]
+    },
+    {
+      "product": "Kids Mental Health",
+      "kind": "angle",
+      "creative_id": "AD-12288",
+      "creative_name": "KM-492-INS-189",
+      "from": "dyregulated kids",
+      "to": "Dysregulated Kids",
+      "score": 0.499,
+      "own_score": 0.0,
+      "shared": [
+        "circle",
+        "health",
+        "mental",
+        "tool",
+        "brain",
+        "bundle",
+        "what",
+        "social"
+      ]
+    },
+    {
+      "product": "NCLEX",
+      "kind": "angle",
+      "creative_id": "86d2xn7q5",
+      "creative_name": "13699",
+      "from": "Embarased Angle",
+      "to": "Last-Minute Exam Prep Shortcut",
+      "score": 0.493,
+      "own_score": 0.0,
+      "shared": [
+        "nurse",
+        "artery",
+        "care",
+        "patient",
+        "self",
+        "system",
+        "theory",
+        "blood"
+      ]
+    },
+    {
+      "product": "NCLEX",
+      "kind": "angle",
+      "creative_id": "86d30j39x",
+      "creative_name": "NC-017-INS-014",
+      "from": "Last-Minute Exam Prep Shortcut",
+      "to": "Embarased Angle",
+      "score": 0.493,
+      "own_score": 0.0,
+      "shared": [
+        "nurse",
+        "artery",
+        "care",
+        "patient",
+        "self",
+        "system",
+        "theory",
+        "blood"
+      ]
+    },
+    {
+      "product": "Yoga Notes",
+      "kind": "angle",
+      "creative_id": "86d29pyw9",
+      "creative_name": "11547",
+      "from": "Pose Progression / Flexibility",
+      "to": "Beginner Routine / Confidence",
+      "score": 0.492,
+      "own_score": 0.0,
+      "shared": [
+        "pose",
+        "step",
+        "client",
+        "yoga",
+        "include",
+        "headstand",
+        "sirsasana",
+        "back"
+      ]
+    },
+    {
+      "product": "Yoga Notes",
+      "kind": "persona",
+      "creative_id": "86d29pyw9",
+      "creative_name": "11547",
+      "from": "Deal-Seeking Yoga Beginners",
+      "to": "Structured Yoga Learners",
+      "score": 0.492,
+      "own_score": 0.254,
+      "shared": [
+        "pose",
+        "step",
+        "client",
+        "yoga",
+        "include",
+        "headstand",
+        "sirsasana",
+        "back"
+      ]
+    },
+    {
+      "product": "ADHD",
+      "kind": "persona",
+      "creative_id": "86d3fztdj",
+      "creative_name": "AD-074-INS-074",
+      "from": "Adults Seeking Medication-Free ADHD Help",
+      "to": "Adult Women With ADHD",
+      "score": 0.483,
+      "own_score": 0.319,
+      "shared": [
+        "down",
+        "task",
+        "these",
+        "break",
+        "self",
+        "tool",
+        "therapy",
+        "adhd"
+      ]
+    },
+    {
+      "product": "ADHD",
+      "kind": "angle",
+      "creative_id": "86d2x4htx",
+      "creative_name": "ADHD - 13645",
+      "from": "Executive Function Tools",
+      "to": "Therapy Alternative Toolkit",
+      "score": 0.481,
+      "own_score": 0.313,
+      "shared": [
+        "adhd",
+        "function",
+        "tool",
+        "time",
+        "plan",
+        "ability",
+        "list",
+        "task"
+      ]
+    },
+    {
+      "product": "Sewing",
+      "kind": "angle",
+      "creative_id": "86d2pb0wv",
+      "creative_name": "13014",
+      "from": "Pattern / Project Library",
+      "to": "Step-by-Step Learning",
+      "score": 0.48,
+      "own_score": 0.0,
+      "shared": [
+        "pattern",
+        "side",
+        "keep",
+        "look",
+        "offer",
+        "sew",
+        "allowance",
+        "because"
+      ]
+    },
+    {
+      "product": "PHONICS",
+      "kind": "persona",
+      "creative_id": "86d30fhnk",
+      "creative_name": "12495-2 phon | dancing aunty",
+      "from": "Mom's POV",
+      "to": "Moms Raising Kids 35-44",
+      "score": 0.459,
+      "own_score": 0.0,
+      "shared": [
+        "word",
+        "phonic",
+        "book",
+        "read",
+        "tool",
+        "activity",
+        "hand",
+        "printable"
+      ]
+    },
+    {
+      "product": "Therapy",
+      "kind": "persona",
+      "creative_id": "86d28x0qe",
+      "creative_name": "Therapy - 11474",
+      "from": "Young Adults Processing Grief",
+      "to": "Emotionally Struggling Women 20-35",
+      "score": 0.455,
+      "own_score": 0.186,
+      "shared": [
+        "brain",
+        "emotional",
+        "therapy",
+        "anxiety",
+        "association",
+        "both",
+        "bundle",
+        "color"
+      ]
+    },
+    {
+      "product": "Canva Income Mastery",
+      "kind": "angle",
+      "creative_id": "86d3c6fvq",
+      "creative_name": "AD-049-INS-062",
+      "from": "Adult ADHD Validation",
+      "to": "Free ADHD Bundle Offer",
+      "score": 0.445,
+      "own_score": 0.0,
+      "shared": [
+        "adhd",
+        "think",
+        "cognitive",
+        "distortion",
+        "calm",
+        "complete",
+        "learn",
+        "mind"
+      ]
+    },
+    {
+      "product": "Canva Income Mastery",
+      "kind": "angle",
+      "creative_id": "86d3e3f82",
+      "creative_name": "AD-071-ADHD - 13404",
+      "from": "Free ADHD Bundle Offer",
+      "to": "Adult ADHD Validation",
+      "score": 0.445,
+      "own_score": 0.0,
+      "shared": [
+        "adhd",
+        "think",
+        "cognitive",
+        "distortion",
+        "calm",
+        "complete",
+        "learn",
+        "mind"
+      ]
+    },
+    {
+      "product": "KIDS LIFE SKILL",
+      "kind": "angle",
+      "creative_id": "86d2mnmn3",
+      "creative_name": "kids life-12838",
+      "from": "Screen Time",
+      "to": "Raising Independent Kids",
+      "score": 0.442,
+      "own_score": 0.0,
+      "shared": [
+        "life",
+        "skill",
+        "real",
+        "thought",
+        "eat",
+        "time",
+        "all",
+        "good"
+      ]
+    },
+    {
+      "product": "Therapy",
+      "kind": "angle",
+      "creative_id": "86d234hac",
+      "creative_name": "Therapy - 10948",
+      "from": "Transformation / Skeptic",
+      "to": "Therapist Authority",
+      "score": 0.44,
+      "own_score": 0.207,
+      "shared": [
+        "brain",
+        "example",
+        "emotional",
+        "place",
+        "sense",
+        "skill",
+        "symptom",
+        "therapy"
+      ]
+    }
+  ]
+}

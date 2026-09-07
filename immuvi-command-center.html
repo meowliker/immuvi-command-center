@@ -14534,6 +14534,7 @@ let matrixExpandedAd = null;   // ad id or null
 let matrixDetailFunnel = 'All'; // funnel filter in detail panel
 let trackerSort = { col: 'id', dir: 1 };
 let trackerFilters = { angle: '', persona: '', format: '', adType: '', funnelStage: '', status: '', structure: '', hookType: '', productionStyle: '', taskType: '', dateRange: '' };
+let _taxonomyMergePanelOpen = { angle: false, persona: false };
 
 // Filter persistence — scoped per product so filters don't leak across.
 function _trackerFiltersKey() { return 'immuvi_tracker_filters_' + (activeProductId || 'default'); }
@@ -14757,6 +14758,159 @@ function _personaSemanticKey(name) {
   return '';
 }
 
+function _taxonomySemanticTokens(name) {
+  var s = String(_normalizeTaxonomyName(name || '') || '').toLowerCase();
+  if (!s) return [];
+  s = s.replace(/[⭐★*]/g, ' ');
+  s = s.replace(/\b(?:mild\s+winner|winner|scale|testing|tested|untested|loser|killed|complete|approved)\b/g, ' ');
+  s = s.replace(/\bmedication\s*[- ]\s*free\b/g, ' ');
+  s = s.replace(/\b(?:age|aged)\s*[-:]?\s*/g, ' ');
+  s = s.replace(/\b\d{2}\s*(?:to|-)\s*\d{2}\b/g, ' ');
+  s = s.replace(/\b\d{2}\+?\b/g, ' ');
+  s = s.replace(/\boverwelmed\b/g, 'overwhelmed');
+  s = s.replace(/[^a-z0-9]+/g, ' ').replace(/\s+/g, ' ').trim();
+  if (!s) return [];
+  var stop = {
+    the:1,a:1,an:1,and:1,or:1,of:1,in:1,for:1,to:1,is:1,are:1,was:1,were:1,be:1,been:1,by:1,with:1,from:1,that:1,this:1,it:1,as:1,at:1,on:1,into:1,about:1,around:1,who:1,when:1,while:1,using:1,use:1,uses:1,used:1,seeking:1,seek:1,looking:1,look:1,need:1,needs:1,want:1,wants:1,people:1,person:1,audience:1,customer:1,customers:1,buyer:1,buyers:1,user:1,users:1,adult:1,adults:1,woman:1,women:1,man:1,men:1,male:1,female:1,age:1,aged:1,year:1,years:1,yr:1,yrs:1,old:1,free:1
+  };
+  var syn = {
+    sellers:'seller', selling:'seller', sell:'seller',
+    hustlers:'hustler', hustles:'hustle',
+    tools:'tool', toolkit:'tool', toolkits:'tool', resources:'tool', resource:'tool',
+    worksheets:'worksheet', printables:'printable', pages:'page',
+    help:'tool', helps:'tool', support:'tool', solutions:'tool', solution:'tool',
+    adhders:'adhd', adhder:'adhd'
+  };
+  var seen = {}, out = [];
+  s.split(' ').forEach(function(raw) {
+    var token = syn[raw] || raw;
+    if (token.length > 4 && /ies$/.test(token)) token = token.slice(0, -3) + 'y';
+    else if (token.length > 3 && /s$/.test(token) && !/ss$/.test(token)) token = token.slice(0, -1);
+    token = syn[token] || token;
+    if (token.length <= 2 || stop[token] || seen[token]) return;
+    seen[token] = true;
+    out.push(token);
+  });
+  return out;
+}
+
+function _taxonomySimilarityScore(left, right) {
+  var leftName = _normalizeTaxonomyName(left || '');
+  var rightName = _normalizeTaxonomyName(right || '');
+  if (!leftName || !rightName) return 0;
+  if (_taxonomyLookupKey(leftName) === _taxonomyLookupKey(rightName)) return 1;
+  var lt = _taxonomySemanticTokens(leftName);
+  var rt = _taxonomySemanticTokens(rightName);
+  if (!lt.length || !rt.length) return 0;
+  var rset = {}, union = {}, shared = 0;
+  rt.forEach(function(t){ rset[t] = true; union[t] = true; });
+  lt.forEach(function(t){ if (rset[t]) shared++; union[t] = true; });
+  var unionCount = Object.keys(union).length || 1;
+  var jaccard = shared / unionCount;
+  var coverage = shared / Math.min(lt.length, rt.length);
+  var score = Math.max(jaccard, coverage * 0.82);
+  var lstr = lt.join(' '), rstr = rt.join(' ');
+  if (lstr && rstr && (lstr.indexOf(rstr) !== -1 || rstr.indexOf(lstr) !== -1)) score = Math.max(score, 0.88);
+  if (coverage === 1 && Math.min(lt.length, rt.length) >= 2) score = Math.max(score, 0.9);
+  return Math.min(1, Math.round(score * 1000) / 1000);
+}
+
+function _taxonomyCreativeCount(kind, name) {
+  var field = kind === 'persona' ? 'persona' : 'angle';
+  var count = 0;
+  for (var i = 0; i < (ADS || []).length; i++) {
+    if (ADS[i] && ADS[i][field] === name && !ADS[i].parentAdId && !_isBoundaryQuarantinedAd(ADS[i])) count++;
+  }
+  return count;
+}
+
+function _preferredTaxonomyMergeTarget(kind, left, right) {
+  var leftStatus = kind === 'persona' ? derivePersonaStatus(left.name) : deriveAngleStatus(left.name);
+  var rightStatus = kind === 'persona' ? derivePersonaStatus(right.name) : deriveAngleStatus(right.name);
+  var priority = ['Winner', 'Scale', 'Mild Winner', 'Testing', 'Ready to Launch', 'In Production', 'Approved', 'Complete', 'Loser', 'Untested'];
+  var li = priority.indexOf(leftStatus); if (li === -1) li = 99;
+  var ri = priority.indexOf(rightStatus); if (ri === -1) ri = 99;
+  if (li !== ri) return li < ri ? left : right;
+  var lc = _taxonomyCreativeCount(kind, left.name);
+  var rc = _taxonomyCreativeCount(kind, right.name);
+  if (lc !== rc) return lc > rc ? left : right;
+  if (String(left.name || '').length !== String(right.name || '').length) {
+    return String(left.name || '').length < String(right.name || '').length ? left : right;
+  }
+  return (_taxonomyCreatedMs(left) || 0) <= (_taxonomyCreatedMs(right) || 0) ? left : right;
+}
+
+function _taxonomyMergeSuggestions(kind, limit) {
+  var rows = (kind === 'persona' ? PERSONAS : ANGLES).filter(function(row) {
+    return row && row.name && !row.archivedAt && !_isBoundaryQuarantinedTaxonomy(kind, row.name);
+  });
+  var out = [];
+  for (var i = 0; i < rows.length; i++) {
+    for (var j = i + 1; j < rows.length; j++) {
+      var score = _taxonomySimilarityScore(rows[i].name, rows[j].name);
+      if (score < 0.72) continue;
+      var keep = _preferredTaxonomyMergeTarget(kind, rows[i], rows[j]);
+      var merge = keep === rows[i] ? rows[j] : rows[i];
+      var leftTokens = _taxonomySemanticTokens(rows[i].name);
+      var rightTokens = _taxonomySemanticTokens(rows[j].name);
+      var rightSet = {};
+      rightTokens.forEach(function(t){ rightSet[t] = true; });
+      var shared = leftTokens.filter(function(t){ return rightSet[t]; });
+      out.push({
+        keep: keep,
+        merge: merge,
+        score: score,
+        shared: shared,
+        keepCount: _taxonomyCreativeCount(kind, keep.name),
+        mergeCount: _taxonomyCreativeCount(kind, merge.name)
+      });
+    }
+  }
+  out.sort(function(a, b) {
+    return b.score - a.score || b.mergeCount - a.mergeCount;
+  });
+  return out.slice(0, limit || 8);
+}
+
+function _renderTaxonomyMergeSuggestions(kind) {
+  var label = kind === 'persona' ? 'Persona' : 'Angle';
+  var suggestions = _taxonomyMergeSuggestions(kind, 8);
+  var open = !!_taxonomyMergePanelOpen[kind];
+  var html = '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 12px;background:var(--el);border-bottom:1px solid var(--b);font-size:.74rem">' +
+    '<button onclick="toggleTaxonomyMergeSuggestions(\'' + kind + '\')" ' + (!suggestions.length ? 'disabled ' : '') +
+      'style="padding:5px 10px;border:1px solid var(--b);border-radius:999px;background:' + (open ? 'var(--win)' : 'transparent') + ';color:' + (open ? '#fff' : 'var(--t1)') + ';cursor:' + (suggestions.length ? 'pointer' : 'not-allowed') + ';font-weight:700">' +
+      'Merge Suggestions <span style="opacity:.75">· ' + suggestions.length + '</span></button>' +
+    '<span style="color:var(--t3)">' + (suggestions.length ? 'Review likely duplicate ' + label.toLowerCase() + ' names before making more creatives.' : 'No likely duplicate ' + label.toLowerCase() + ' names found.') + '</span>' +
+  '</div>';
+  if (open && suggestions.length) {
+    html += '<div style="display:grid;gap:6px;padding:10px 12px;background:#fff;border-bottom:1px solid var(--b)">';
+    suggestions.forEach(function(s) {
+      html += '<div style="display:grid;grid-template-columns:70px 1.5fr 1fr 120px;gap:10px;align-items:center;padding:8px 10px;border:1px solid var(--b);border-radius:8px;background:#fbfdff">' +
+        '<strong style="color:var(--t2)">' + Math.round(s.score * 100) + '%</strong>' +
+        '<div><strong>' + esc(s.merge.name) + '</strong> → <strong>' + esc(s.keep.name) + '</strong></div>' +
+        '<div style="font-size:.7rem;color:var(--t3)">Shared: ' + esc((s.shared || []).slice(0, 4).join(', ') || 'similar wording') + '<br>' + s.mergeCount + ' row' + (s.mergeCount === 1 ? '' : 's') + ' to move</div>' +
+        '<button class="btn-add btn-sm" onclick="confirmTaxonomySuggestionMerge(\'' + kind + '\',\'' + escJs(s.keep.name) + '\',\'' + escJs(s.merge.name) + '\')">Merge</button>' +
+      '</div>';
+    });
+    html += '</div>';
+  }
+  return html;
+}
+
+function toggleTaxonomyMergeSuggestions(kind) {
+  _taxonomyMergePanelOpen[kind] = !_taxonomyMergePanelOpen[kind];
+  if (kind === 'persona') renderPersonas(); else renderAngles();
+}
+
+function confirmTaxonomySuggestionMerge(kind, keepName, mergeName) {
+  var label = kind === 'persona' ? 'persona' : 'angle';
+  if (!keepName || !mergeName || keepName === mergeName) return;
+  var moveCount = _taxonomyCreativeCount(kind, mergeName);
+  if (!confirm('Merge ' + label + ' "' + mergeName + '" into "' + keepName + '"?\n\nThis will retag ' + moveCount + ' creative row' + (moveCount === 1 ? '' : 's') + ', update inspirations/manual actions/matrix cells, and remove the duplicate taxonomy row.')) return;
+  if (kind === 'persona') executeMergePersonas([mergeName], keepName);
+  else executeMergeAngles([mergeName], keepName);
+}
+
 function _taxonomyCreatedMs(item) {
   if (!item) return 0;
   var raw = item.createdAt || item.created_at || 0;
@@ -14819,6 +14973,18 @@ function _canonicalTaxonomyName(name, items) {
         }
       }
     }
+  }
+  if (!best) {
+    var bestScore = 0;
+    for (var k = 0; k < items.length; k++) {
+      var candidateName = (items[k] && items[k].name) || '';
+      var score = _taxonomySimilarityScore(clean, candidateName);
+      if (score > bestScore) {
+        bestScore = score;
+        best = items[k];
+      }
+    }
+    if (bestScore < 0.72) best = null;
   }
   return best ? _normalizeTaxonomyName(best.name || '') : clean;
 }
@@ -17162,9 +17328,9 @@ function executeMergeAngles(losingNames, survivorName) {
 
   // 5. Update MANUAL_ACTIONS
   for (var i = 0; i < MANUAL_ACTIONS.length; i++) {
-    if (losingNames.indexOf(MANUAL_ACTIONS[i].angle) !== -1) {
-      MANUAL_ACTIONS[i].angle = survivorName;
-    }
+    ['angle', 'sourceAngle', '_sourceAngle', 'selectedAngle'].forEach(function(field) {
+      if (losingNames.indexOf(MANUAL_ACTIONS[i][field]) !== -1) MANUAL_ACTIONS[i][field] = survivorName;
+    });
   }
 
   // 6. Remove losing angles from ANGLES array (survivor stays)
@@ -17281,9 +17447,9 @@ function executeMergePersonas(losingNames, survivorName) {
 
   // 5. Update MANUAL_ACTIONS
   for (var i = 0; i < MANUAL_ACTIONS.length; i++) {
-    if (losingNames.indexOf(MANUAL_ACTIONS[i].persona) !== -1) {
-      MANUAL_ACTIONS[i].persona = survivorName;
-    }
+    ['persona', 'sourcePersona', '_sourcePersona', 'selectedPersona'].forEach(function(field) {
+      if (losingNames.indexOf(MANUAL_ACTIONS[i][field]) !== -1) MANUAL_ACTIONS[i][field] = survivorName;
+    });
   }
 
   // 6. Remove losing personas from PERSONAS array
@@ -18990,7 +19156,8 @@ function renderAngles() {
   for (var _i2 = 0; _i2 < ANGLES.length; _i2++) {
     if (ANGLES[_i2].archivedAt) _archivedCountA++; else _activeCountA++;
   }
-  var html = '<div class="tracker-view-bar" style="display:flex;gap:6px;align-items:center;padding:8px 12px;background:var(--el);border-radius:8px 8px 0 0;border-bottom:1px solid var(--b);font-size:.74rem">' +
+  var html = _renderTaxonomyMergeSuggestions('angle') +
+    '<div class="tracker-view-bar" style="display:flex;gap:6px;align-items:center;padding:8px 12px;background:var(--el);border-radius:8px 8px 0 0;border-bottom:1px solid var(--b);font-size:.74rem">' +
     '<span style="color:var(--t3);margin-right:6px">Show:</span>' +
     '<button onclick="_setAnglesTrackerView(\'active\')"   style="padding:4px 10px;border:1px solid var(--b);border-radius:999px;background:' + (_viewA==='active'?'var(--win)':'transparent') + ';color:' + (_viewA==='active'?'#fff':'var(--t1)') + ';cursor:pointer;font-weight:600">Active <span style="opacity:.7">· ' + _activeCountA + '</span></button>' +
     '<button onclick="_setAnglesTrackerView(\'archived\')" style="padding:4px 10px;border:1px solid var(--b);border-radius:999px;background:' + (_viewA==='archived'?'#475569':'transparent') + ';color:' + (_viewA==='archived'?'#fff':'var(--t1)') + ';cursor:pointer;font-weight:600">Archived <span style="opacity:.7">· ' + _archivedCountA + '</span></button>' +
@@ -20190,7 +20357,8 @@ function renderPersonas() {
     if (PERSONAS[_i].archivedAt) _archivedCount++; else _activeCount++;
   }
   function _pillCls(v) { return 'tr-view-pill' + (v === _view ? ' on' : ''); }
-  var html = '<div class="tracker-view-bar" style="display:flex;gap:6px;align-items:center;padding:8px 12px;background:var(--el);border-radius:8px 8px 0 0;border-bottom:1px solid var(--b);font-size:.74rem">' +
+  var html = _renderTaxonomyMergeSuggestions('persona') +
+    '<div class="tracker-view-bar" style="display:flex;gap:6px;align-items:center;padding:8px 12px;background:var(--el);border-radius:8px 8px 0 0;border-bottom:1px solid var(--b);font-size:.74rem">' +
     '<span style="color:var(--t3);margin-right:6px">Show:</span>' +
     '<button class="' + _pillCls('active')   + '" onclick="_setPersonasTrackerView(\'active\')"   style="padding:4px 10px;border:1px solid var(--b);border-radius:999px;background:' + (_view==='active'?'var(--win)':'transparent') + ';color:' + (_view==='active'?'#fff':'var(--t1)') + ';cursor:pointer;font-weight:600">Active <span style="opacity:.7">· ' + _activeCount + '</span></button>' +
     '<button class="' + _pillCls('archived') + '" onclick="_setPersonasTrackerView(\'archived\')" style="padding:4px 10px;border:1px solid var(--b);border-radius:999px;background:' + (_view==='archived'?'#475569':'transparent') + ';color:' + (_view==='archived'?'#fff':'var(--t1)') + ';cursor:pointer;font-weight:600">Archived <span style="opacity:.7">· ' + _archivedCount + '</span></button>' +
@@ -45959,8 +46127,11 @@ function matchToExisting(incoming, existingArray) {
       var jaccard = inter / allKeys.size;
       score = Math.max(score, jaccard);
       // Boost: all name tokens present in incoming (subset match)
-      if (nameTokens.length >= 2 && nameTokens.every(function(t){ return incSet.has(t); }))
-        score = Math.max(score, 0.75);
+	      if (nameTokens.length >= 2 && nameTokens.every(function(t){ return incSet.has(t); }))
+	        score = Math.max(score, 0.75);
+	    }
+    if (typeof _taxonomySimilarityScore === 'function') {
+      score = Math.max(score, _taxonomySimilarityScore(incoming, item.name));
     }
     if (score > bestScore) { best = item; bestScore = score; }
   });

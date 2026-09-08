@@ -13139,6 +13139,8 @@ const DB = {
     // DROP those from local state instead of upserting them back.
     const existingAngleIdSet = new Set((existingAngles.data || []).map(function(r){ return r.id; }));
     const survivingLocalAngles = _dedupeTaxonomyItems((state.ANGLES || []).filter(function(a){
+      if (!a || !a.name) return false;
+      if (_isBoundaryQuarantinedTaxonomy('angle', a.name)) return false;
       return existingAngleIdSet.has(a.id) || a._localNew === true;
     }), 'angle');
     const droppedAngleCount = (state.ANGLES || []).length - survivingLocalAngles.length;
@@ -13163,6 +13165,8 @@ const DB = {
     // Same DB-authoritative policy as ANGLES above.
     const existingPersonaIdSet = new Set((existingPersonas.data || []).map(function(r){ return r.id; }));
     const survivingLocalPersonas = _dedupeTaxonomyItems((state.PERSONAS || []).filter(function(p){
+      if (!p || !p.name) return false;
+      if (_isBoundaryQuarantinedTaxonomy('persona', p.name)) return false;
       return existingPersonaIdSet.has(p.id) || p._localNew === true;
     }), 'persona');
     const droppedPersonaCount = (state.PERSONAS || []).length - survivingLocalPersonas.length;
@@ -13198,6 +13202,13 @@ const DB = {
     } catch (e) { console.warn('[SB] flush tombstone fetch failed (proceeding without filter)', e); }
     const _filteredStateAds = (state.ADS || []).filter(function (a) {
       var _aCu = a && (a._clickupId || a.clickupTaskId);
+      if (a && !_adPassesProductBoundaryForTaxonomy(a, productId)) {
+        if (typeof ADS !== 'undefined' && Array.isArray(ADS)) {
+          ADS = ADS.filter(function (x) { return x.id !== a.id; });
+        }
+        console.log('[SB] flush blocked cross-product AD', a.id, a._productBoundaryReason || '');
+        return false;
+      }
       if (a && a.id && (_flushTomb.has(a.id) || (_aCu && _deletedAdClickUpIdsCache && _deletedAdClickUpIdsCache.has(_aCu)))) {
         // Stale-memory resurrection blocked at the save boundary.
         // Also drop from in-memory ADS so the UI doesn't keep showing it.
@@ -14729,6 +14740,35 @@ function _ensureTaxonomyItem(kind, name, notes) {
   return clean;
 }
 
+function _adPassesProductBoundaryForTaxonomy(ad, productId) {
+  if (!ad) return false;
+  var pid = productId || (typeof activeProductId !== 'undefined' ? activeProductId : '');
+  try {
+    if (typeof _isBoundaryQuarantinedAd === 'function' && _isBoundaryQuarantinedAd(ad)) return false;
+  } catch (e) {}
+  if (pid && ad._syncProductId && ad._syncProductId !== pid) return false;
+
+  var prod = null;
+  try {
+    prod = (typeof _productById === 'function' && pid) ? _productById(pid) : null;
+    if (!prod && typeof getActiveProduct === 'function') prod = getActiveProduct();
+  } catch (e) {}
+  var prodListId = '';
+  var adListId = '';
+  try { prodListId = typeof _productListId === 'function' ? _productListId(prod) : (prod && prod.clickupListId) || ''; } catch (e) {}
+  try { adListId = typeof _adSourceListId === 'function' ? _adSourceListId(ad) : (ad.clickupListId || ad.listId || ''); } catch (e) {}
+  if (prodListId && adListId && String(prodListId) !== String(adListId)) return false;
+
+  try {
+    var declaredName = typeof _adDeclaredProductName === 'function' ? _adDeclaredProductName(ad) : '';
+    if (declaredName && typeof _productNameMatchesDeclaredField === 'function' &&
+        !_productNameMatchesDeclaredField(prod, declaredName)) {
+      return false;
+    }
+  } catch (e) {}
+  return true;
+}
+
 function _commitEditableOnEnter(event, el) {
   if (event && event.key === 'Enter') {
     event.preventDefault();
@@ -15157,7 +15197,7 @@ function _taxonomyCreativeCount(kind, name) {
   var field = kind === 'persona' ? 'persona' : 'angle';
   var count = 0;
   for (var i = 0; i < (ADS || []).length; i++) {
-    if (ADS[i] && ADS[i][field] === name && !ADS[i].parentAdId && !_isBoundaryQuarantinedAd(ADS[i])) count++;
+    if (ADS[i] && ADS[i][field] === name && !ADS[i].parentAdId && _adPassesProductBoundaryForTaxonomy(ADS[i], activeProductId)) count++;
   }
   return count;
 }
@@ -29934,6 +29974,7 @@ function autoDiscoverTaxonomy(sourceAds) {
   for (var i = 0; i < (sourceAds || []).length; i++) {
     var ad = sourceAds[i];
     if (!ad) continue;
+    if (!_adPassesProductBoundaryForTaxonomy(ad, activeProductId)) continue;
 
     // 2026-05-17 — defensive normalize. parseClickUpTask already sanitizes,
     // but ads can also come from local edits / matrix-cell ingestion that
@@ -30345,6 +30386,17 @@ async function importTasksFromClickUp(tasks) {
   // ADS.find(a => a.id === 'AD-098') returns undefined.
   if (typeof _reconcileCellAssignments === 'function') { try { _reconcileCellAssignments(); } catch (e) {} }
   // Don't reset nextAdSerial — local serial IDs must remain unique and continuous
+
+  try {
+    await _applyProductBoundaryQuarantine(activeProductId, {
+      ADS: ADS,
+      MANUAL_ACTIONS: MANUAL_ACTIONS,
+      ANGLES: ANGLES,
+      PERSONAS: PERSONAS
+    });
+  } catch (e) {
+    console.warn('[importTasksFromClickUp] product-boundary quarantine failed before taxonomy discovery', e);
+  }
 
   // Scoped auto-discover: push any new angle/persona values found in ADS into
   // the active product's ANGLES / PERSONAS master lists. Scoped by the active
@@ -31693,6 +31745,16 @@ function pollFullSync() {
       // taxonomy. Guarded by `_adsProductId === _startProductId` at the top
       // of this .then() block, so ADS is confirmed product-scoped here.
       // Restored 2026-04-21 (option 3). Rollback tag: pre-scoped-autodiscover-2026-04-21.
+      try {
+        await _applyProductBoundaryQuarantine(_startProductId, {
+          ADS: ADS,
+          MANUAL_ACTIONS: MANUAL_ACTIONS,
+          ANGLES: ANGLES,
+          PERSONAS: PERSONAS
+        });
+      } catch (e) {
+        console.warn('[pollFullSync] product-boundary quarantine failed before taxonomy discovery', e);
+      }
       var _discovered = autoDiscoverTaxonomy(ADS);
       var _newTaxonomy = _discovered.addedAngles.length + _discovered.addedPersonas.length;
       if (_newTaxonomy > 0) changed = true;

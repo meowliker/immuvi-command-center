@@ -10371,9 +10371,10 @@ function pushAllToClickUp() {
 // Rollback: `git reset --hard pre-scoped-autodiscover-2026-04-21`
 // ─────────────────────────────────────────────────────────────────────────────
 function autoDiscoverTaxonomy(sourceAds) {
-  // Guard: if the global ANGLES/PERSONAS arrays are not yet bound to the active
-  // product (mid product-switch), do nothing. The next sync tick will pick it up.
-  if (_adsProductId && activeProductId && _adsProductId !== activeProductId) {
+  // Guard: bail out unless the global ANGLES/PERSONAS arrays are bound to the
+  // active product. Missing _adsProductId usually means a product switch/load is
+  // still in flight, so discovery must wait for the next safe sync tick.
+  if (!_adsProductId || !activeProductId || _adsProductId !== activeProductId) {
     return { addedAngles: [], addedPersonas: [] };
   }
 
@@ -10396,6 +10397,14 @@ function autoDiscoverTaxonomy(sourceAds) {
   for (var i = 0; i < (sourceAds || []).length; i++) {
     var ad = sourceAds[i];
     if (!ad) continue;
+    if (ad._productBoundaryQuarantined) continue;
+    if (ad._syncProductId && ad._syncProductId !== activeProductId) continue;
+    try {
+      var prod = typeof getActiveProduct === 'function' ? getActiveProduct() : null;
+      var prodListId = prod && (prod.clickupListId || (prod.config && prod.config.clickup_list_id)) || '';
+      var adListId = ad.clickupListId || ad.listId || ad._clickupListId || ad.clickup_list_id || '';
+      if (prodListId && adListId && String(prodListId) !== String(adListId)) continue;
+    } catch (e) {}
 
     var ang = (ad.angle || '').trim();
     if (ang && !angleSeen[ang.toLowerCase()] && !existingAngleNamesLC[ang.toLowerCase()]) {

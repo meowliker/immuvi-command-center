@@ -2434,3 +2434,39 @@ The latest media-kind guard fixed hard Photo/Video contradictions, but the worke
 - A transcribed audio track is not automatically voice-over; only deliberate ad narration belongs in `voiceOver`.
 - When `voiceOver` is `No voice over`, the Creative Breakdown `Caption / Voice Over` column should use visible captions/on-screen text or concise visual beats, not ambient audio.
 - Instagram/TikTok captions must stay plain Markdown text with real line breaks.
+
+---
+
+## Bug 62 — Wrong-product tasks left orphan angles/personas in Quilting
+**Status:** ✅ fixed + pushed 2026-09-08
+**Reported:** 2026-09-08
+**Surface:** Product switcher / ClickUp sync / Angles & Personas tabs / Creative Matrix suggestions
+
+### Symptom
+- Quilting showed Art Therapy, ADHD, Canva, and other non-Quilting personas/angles even though Quilting should only have its own taxonomy.
+- The leaked personas had `0 creatives`, so the visible task rows had already been moved away but the master taxonomy rows still remained.
+- Video Audit Suggestions briefly suggested moving an Art Therapy winner while Quilting was active.
+
+### Root Cause
+Earlier product-boundary fixes quarantined or moved wrong-product `ads` and `manual_actions`, but zero-use master taxonomy rows could survive after the leaked creatives were moved to their proper products. Sync also ran `autoDiscoverTaxonomy(ADS)` before the product-boundary quarantine pass in some ClickUp import paths, so a preserved stale/wrong-list row could seed a new Angle/Persona before being hidden.
+
+### Live Repair
+- Backed up all touched rows under `reports/product-leak-fix/20260908-111630/`.
+- Moved 455 active ad rows to the ClickUp-list-verified product.
+- Moved 12 inspiration rows to their verified product.
+- Created `Pro Architect Resource Vault` for ClickUp list `901614296143` and moved its 10 rows out of Quilting.
+- Deleted only zero-use leaked Quilting taxonomy: 18 angles and 7 personas.
+- Appended rollback SQL for the taxonomy cleanup to `reports/product-leak-fix/20260908-111630/rollback.sql`.
+
+### Fix
+1. Added a shared taxonomy boundary guard so taxonomy stats/discovery only consider ads that match the active product, active ClickUp list, and declared ClickUp Product field.
+2. Manual ClickUp sync now applies product-boundary quarantine before `autoDiscoverTaxonomy()`.
+3. Live ClickUp polling now applies product-boundary quarantine before `autoDiscoverTaxonomy()`.
+4. Supabase save now refuses to upsert quarantined Angle/Persona rows and drops quarantined AD rows from stale in-memory snapshots before writing.
+5. Refreshed the published Video Audit Suggestions report after the product cleanup so old cross-product suggestions are no longer served.
+
+### Prevention
+- Never let preserved local ClickUp-backed rows seed Angle/Persona taxonomy until they pass product/list boundary checks.
+- Save paths must be the final guardrail: a stale browser tab must not be able to re-save quarantined rows after a repair.
+- Product leak repairs must include four tables together: `ads`, `inspirations`, `manual_actions`, and `matrix_cells`, then prune zero-use leaked `angles`/`personas` with a rollback backup.
+- After moving rows between products, regenerate taxonomy/video suggestion artifacts so stale reports do not keep recommending old cross-product moves.

@@ -15163,6 +15163,119 @@ function _taxonomyNameFitsEvidence(kind, name, evidenceText) {
   return false;
 }
 
+function _taxonomyCleanNewName(kind, name, evidenceText) {
+  name = _normalizeTaxonomyName(name || '');
+  if (!name) return '';
+  name = name
+    .replace(/\b(?:ages?|aged|year(?:s)?\s*old|yrs?|yo)\b/gi, ' ')
+    .replace(/\b\d{1,3}\s*(?:-|to)\s*\d{1,3}\b/g, ' ')
+    .replace(/\b\d{1,3}\+\b/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!name) return '';
+  var fallback = _taxonomyFallbackNameFromEvidence(kind, evidenceText, '');
+  if (fallback && (
+    _taxonomySimilarityScore(name, fallback) >= 0.52 ||
+    _creativeAudienceSignals(name).some(function(sig) { return _creativeAudienceSignals(fallback).indexOf(sig) !== -1; })
+  )) return fallback;
+  return name;
+}
+
+function _taxonomyStrongExistingSuggestion(s) {
+  if (!s || !s.name || s.isNew) return false;
+  var shared = (s.shared || []).length;
+  if ((s.evidenceScore || 0) >= 0.38 && shared >= 5) return true;
+  if ((s.evidenceScore || 0) >= 0.34 && shared >= 4 && (s.score || 0) >= 0.72) return true;
+  return false;
+}
+
+function _taxonomySuggestedNameFromCluster(kind, evidenceText, incoming, peers) {
+  var combinedText = [evidenceText].concat((peers || []).slice(0, 6).map(function(p) { return p.text || ''; })).join(' ');
+  var fallback = _taxonomyCleanNewName(kind, _taxonomyFallbackNameFromEvidence(kind, combinedText, ''), combinedText);
+  if (fallback) return fallback;
+
+  var counts = {};
+  function addName(n, weight) {
+    n = _taxonomyCleanNewName(kind, n, combinedText);
+    if (!n || !_taxonomyNameFitsEvidence(kind, n, combinedText)) return;
+    var key = _taxonomyLookupKey(n);
+    if (!counts[key]) counts[key] = { name: n, count: 0 };
+    counts[key].count += weight || 1;
+  }
+  addName(incoming, 1);
+  (peers || []).forEach(function(p) { addName(p.name, 1); });
+  var best = Object.keys(counts).map(function(k) { return counts[k]; }).sort(function(a, b) {
+    return b.count - a.count || String(a.name).localeCompare(String(b.name));
+  })[0];
+  return best && best.count >= 2 ? best.name : '';
+}
+
+function _taxonomyNewSuggestionForInspiration(kind, ins, incoming) {
+  if (!ins) return null;
+  var evidenceText = _creativeEvidenceText(null, ins);
+  if (!evidenceText) return null;
+  var peers = [];
+  (INSPIRATIONS || []).forEach(function(peer) {
+    if (!peer || peer.id === ins.id) return;
+    if (!(peer.status === 'Classified' || peer.status === 'Approved')) return;
+    var peerText = _creativeEvidenceText(null, peer);
+    if (!peerText) return;
+    var ev = _taxonomyEvidenceScoreForKind(kind, evidenceText, peerText);
+    if (ev.score < 0.32 || (ev.shared || []).length < 3) return;
+    peers.push({
+      name: kind === 'persona' ? (peer.detectedPersona || peer.persona || '') : (peer.detectedAngle || peer.angle || ''),
+      text: peerText,
+      score: ev.score,
+      shared: ev.shared || []
+    });
+  });
+  peers.sort(function(a, b) { return b.score - a.score; });
+  var name = _taxonomySuggestedNameFromCluster(kind, evidenceText, incoming, peers);
+  if (!name) return null;
+  if (_taxonomyItemIsActive(kind, name, false)) return null;
+  var shared = [];
+  peers.slice(0, 4).forEach(function(p) {
+    (p.shared || []).forEach(function(t) { if (shared.indexOf(t) === -1) shared.push(t); });
+  });
+  if (!shared.length) shared = _creativeAudienceSignals(evidenceText);
+  var confidence = Math.min(0.84, 0.6 + Math.min(peers.length, 4) * 0.04 + (shared.length ? 0.08 : 0));
+  return {
+    name: name,
+    score: Math.round(confidence * 1000) / 1000,
+    evidenceScore: Math.round(confidence * 1000) / 1000,
+    shared: shared.slice(0, 8),
+    status: 'New',
+    creativeCount: 0,
+    winnerCount: 0,
+    products: [_taxonomyProductName(activeProductId)].filter(Boolean),
+    source: peers.length >= 2 ? 'new-cluster' : 'new-evidence',
+    isNew: true,
+    clusterCount: peers.length + 1
+  };
+}
+
+function _taxonomySuggestionsForInspiration(kind, ins, incoming, limit) {
+  if (!ins) return [];
+  var detected = incoming || (kind === 'persona' ? (ins.detectedPersona || ins.persona || '') : (ins.detectedAngle || ins.angle || ''));
+  var evidenceMatches = _taxonomyEvidenceCandidateMatches(kind, _creativeEvidenceText(null, ins), detected, 4).filter(_taxonomyStrongExistingSuggestion);
+  var nameMatches = _taxonomyTopMatches(kind, detected, 4).filter(function(s) {
+    return s && !s.isNew && (s.score || 0) >= 0.78;
+  });
+  var newSuggestion = _taxonomyNewSuggestionForInspiration(kind, ins, detected);
+  var out = [];
+  if (newSuggestion && !evidenceMatches.length) out.push(newSuggestion);
+  out = out.concat(evidenceMatches, nameMatches);
+  if (newSuggestion && evidenceMatches.length && newSuggestion.score > (evidenceMatches[0].score || 0) + 0.08) out.unshift(newSuggestion);
+  var seen = {};
+  return out.filter(function(s) {
+    if (!s || !s.name) return false;
+    var key = _taxonomyLookupKey(s.name);
+    if (seen[key]) return false;
+    seen[key] = true;
+    return true;
+  }).slice(0, limit || 4);
+}
+
 function _taxonomyCrossProductEvidenceMatches(kind, evidenceText, sourceProductId, sourceAdId, sourceName, limit) {
   if (!evidenceText) return [];
   var field = kind === 'persona' ? 'persona' : 'angle';
@@ -15350,11 +15463,7 @@ function _taxonomyTopMatches(kind, name, limit) {
 
 function _storeInspirationTaxonomySuggestions(ins, kind, incoming) {
   if (!ins) return [];
-  var evidenceTarget = _taxonomyEvidenceSuggestionForInspiration(kind, ins, incoming || (kind === 'persona' ? ins.persona : ins.angle));
-  var suggestions = _taxonomyTopMatches(kind, incoming, 4);
-  if (evidenceTarget) {
-    suggestions = [evidenceTarget].concat(suggestions.filter(function(s) { return s && s.name !== evidenceTarget.name; }));
-  }
+  var suggestions = _taxonomySuggestionsForInspiration(kind, ins, incoming, 4);
   if (kind === 'persona') {
     ins._personaSuggestions = suggestions;
     ins._suggestedPersona = suggestions[0] ? suggestions[0].name : '';
@@ -15370,17 +15479,19 @@ function _renderInspirationTaxonomySuggestion(ins, kind) {
   var current = kind === 'persona' ? ins.persona : ins.angle;
   var detected = kind === 'persona' ? (ins.detectedPersona || ins.persona || '') : (ins.detectedAngle || ins.angle || '');
   var list = kind === 'persona' ? (ins._personaSuggestions || []) : (ins._angleSuggestions || []);
-  var evidenceTarget = _taxonomyEvidenceSuggestionForInspiration(kind, ins, current || detected);
-  if (evidenceTarget) list = [evidenceTarget].concat(list.filter(function(s) { return s && s.name !== evidenceTarget.name; }));
-  if (!list.length && detected) list = _taxonomyTopMatches(kind, detected, 4);
+  var freshList = _taxonomySuggestionsForInspiration(kind, ins, current || detected, 4);
+  if (freshList.length) list = freshList.concat(list.filter(function(s) {
+    return s && !freshList.some(function(f) { return _taxonomyLookupKey(f.name) === _taxonomyLookupKey(s.name); });
+  }));
   if (!list.length) return '';
   var top = list[0];
   if (!top || !top.name || top.name === current) return '';
   var label = kind === 'persona' ? 'Persona suggestion' : 'Angle suggestion';
+  var prefix = top.isNew ? 'New: ' : 'Suggested: ';
   return '<button type="button" title="' + escAttr(label + ': ' + top.name + ' (' + Math.round(top.score * 100) + '%)') + '" ' +
     'onclick="event.stopPropagation();updateInsField(\'' + escAttr(ins.id) + '\',\'' + kind + '\',\'' + escJs(top.name) + '\')" ' +
     'style="display:block;margin-top:3px;border:1px solid #bae6fd;background:#f0f9ff;color:#0369a1;border-radius:999px;padding:2px 6px;font-size:0.58rem;font-weight:700;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer">' +
-    'Suggested: ' + esc(top.name) + ' · ' + Math.round(top.score * 100) + '%' +
+    prefix + esc(top.name) + ' · ' + Math.round(top.score * 100) + '%' +
   '</button>';
 }
 

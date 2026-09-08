@@ -14968,6 +14968,34 @@ function _creativeEvidenceScore(leftText, rightText) {
   return { score: Math.min(1, Math.round(score * 1000) / 1000), shared: shared.slice(0, 10) };
 }
 
+function _creativeAudienceSignals(text) {
+  var s = String(text || '').toLowerCase();
+  var out = [];
+  function add(sig, re) { if (re.test(s) && out.indexOf(sig) === -1) out.push(sig); }
+  add('mom', /\b(mom|moms|mother|mothers|mama|mamas|mum|mums)\b/);
+  add('parent', /\b(parent|parents|parenting|caregiver|caregivers)\b/);
+  add('teacher', /\b(teacher|teachers|classroom|students?|school|kindergarten|preschool)\b/);
+  add('child', /\b(child|children|kid|kids|toddler|toddlers)\b/);
+  add('adhd', /\badhd\b/);
+  add('nurse', /\b(nurse|nurses|nursing|nclex|rn)\b/);
+  add('quilter', /\b(quilt|quilting|quilter|quilters|fabric|patchwork)\b/);
+  add('designer', /\b(canva|template|templates|designer|designers|freelancer|freelancers)\b/);
+  add('seller', /\b(side\s*hustle|seller|sellers|digital\s*product|etsy|income)\b/);
+  add('therapy', /\b(therapy|therapist|therapists|mental\s*health|emotion|emotional|anxiety|anxious|calm)\b/);
+  return out;
+}
+
+function _taxonomyEvidenceScoreForKind(kind, leftText, rightText) {
+  var base = _creativeEvidenceScore(leftText, rightText);
+  if (kind !== 'persona') return base;
+  var leftSignals = _creativeAudienceSignals(leftText);
+  var rightSignals = _creativeAudienceSignals(rightText);
+  var sharedSignals = leftSignals.filter(function(sig) { return rightSignals.indexOf(sig) !== -1; });
+  if (!sharedSignals.length) return base;
+  var score = Math.min(1, (base.score || 0) + Math.min(0.24, 0.12 + sharedSignals.length * 0.04));
+  return { score: Math.round(score * 1000) / 1000, shared: sharedSignals.concat(base.shared || []).slice(0, 10) };
+}
+
 function _allWinnerCreativesForEvidence() {
   var rows = [];
   (PRODUCTS || []).forEach(function(product) {
@@ -15016,7 +15044,7 @@ function _taxonomyEvidenceCandidateMatches(kind, evidenceText, currentName, limi
     if (currentKey && _taxonomyLookupKey(item.name) === currentKey) return;
     var profile = _taxonomyEvidenceProfile(kind, item.name);
     if (!profile || !profile.text || !profile.winners.length) return;
-    var ev = _creativeEvidenceScore(evidenceText, profile.text);
+    var ev = _taxonomyEvidenceScoreForKind(kind, evidenceText, profile.text);
     var nameScore = _taxonomySimilarityScore(currentName || '', item.name || '') * 0.08;
     var score = Math.min(1, Math.round((ev.score + nameScore) * 1000) / 1000);
     if (score < 0.28 || ev.shared.length < 3) return;
@@ -15055,6 +15083,209 @@ function _taxonomyEvidenceSuggestionForInspiration(kind, ins, currentName) {
   if (!text) return null;
   var list = _taxonomyEvidenceCandidateMatches(kind, text, currentName, 1);
   return list[0] || null;
+}
+
+function _taxonomyCurrentSignalMatch(kind, evidenceText) {
+  var rows = kind === 'persona' ? PERSONAS : ANGLES;
+  var s = String(evidenceText || '').toLowerCase();
+  var patterns = kind === 'persona'
+    ? [
+        /\b(mom|moms|mother|mothers|mama|mamas|mum|mums)\b/,
+        /\b(parent|parents|parenting|caregiver|caregivers)\b/,
+        /\b(teacher|teachers|classroom|students?|school|kindergarten|preschool)\b/,
+        /\badhd\b/,
+        /\b(nurse|nurses|nursing|nclex|rn)\b/,
+        /\b(quilt|quilting|quilter|quilters|fabric|patchwork)\b/,
+        /\b(side\s*hustle|seller|sellers|digital\s*product|etsy|income)\b/
+      ]
+    : [
+        /\b(last\s*chance|deadline|ends?\s*today|closing|midnight|before\s+it\s+disappears|scarcity)\b/,
+        /\b(free|bundle|download|giveaway|lead\s*magnet)\b/,
+        /\b(testimonial|review|proof|result|results|before\s+and\s+after)\b/,
+        /\b(how\s*to|tutorial|step|steps|guide|walkthrough)\b/,
+        /\b(mistake|avoid|stop|wrong|problem|pain)\b/
+      ];
+  var best = null;
+  (rows || []).forEach(function(row) {
+    if (!row || !row.name || !_taxonomyItemIsActive(kind, row.name, false)) return;
+    var name = String(row.name || '').toLowerCase();
+    var hits = 0;
+    patterns.forEach(function(re) { if (re.test(s) && re.test(name)) hits++; });
+    if (hits && (!best || hits > best.hits || _taxonomyCreativeCount(kind, row.name) > best.count)) {
+      best = {
+        name: _normalizeTaxonomyName(row.name || ''),
+        score: Math.min(0.82, 0.58 + hits * 0.08),
+        evidenceScore: Math.min(0.82, 0.58 + hits * 0.08),
+        shared: _creativeAudienceSignals(s).slice(0, 6),
+        status: kind === 'persona' ? derivePersonaStatus(row.name) : deriveAngleStatus(row.name),
+        creativeCount: _taxonomyCreativeCount(kind, row.name),
+        count: _taxonomyCreativeCount(kind, row.name),
+        source: 'current-signal'
+      };
+    }
+  });
+  return best;
+}
+
+function _taxonomyFallbackNameFromEvidence(kind, evidenceText, sourceName) {
+  var s = String(evidenceText || '').toLowerCase();
+  if (kind === 'persona') {
+    if (/\b(mom|moms|mother|mothers|mama|mamas|mum|mums)\b/.test(s)) return 'Moms';
+    if (/\b(parent|parents|parenting|caregiver|caregivers)\b/.test(s) && /\b(child|children|kid|kids|toddler|toddlers)\b/.test(s)) return 'Parents of Kids';
+    if (/\b(teacher|teachers|classroom|students?|school|kindergarten|preschool)\b/.test(s)) return 'Teachers';
+    if (/\badhd\b/.test(s)) return 'ADHD Adults';
+    if (/\b(nurse|nurses|nursing|nclex|rn)\b/.test(s)) return 'Nursing Students';
+    if (/\b(quilt|quilting|quilter|quilters|fabric|patchwork)\b/.test(s)) return 'Beginner Quilter';
+  } else {
+    if (/\b(last\s*chance|deadline|ends?\s*today|closing|midnight|before\s+it\s+disappears|scarcity)\b/.test(s)) return 'Last-Chance Regret Avoidance';
+    if (/\b(free|bundle|download|giveaway|lead\s*magnet)\b/.test(s)) return 'Free Bundle / Offer-Led';
+    if (/\b(testimonial|review|proof|result|results|before\s+and\s+after)\b/.test(s)) return 'Social Proof';
+    if (/\b(how\s*to|tutorial|step|steps|guide|walkthrough)\b/.test(s)) return 'Tutorial / How-To';
+    if (/\b(mistake|avoid|stop|wrong|problem|pain)\b/.test(s)) return 'Problem / Mistake Avoidance';
+  }
+  return _normalizeTaxonomyName(sourceName || '');
+}
+
+function _taxonomyNameFitsEvidence(kind, name, evidenceText) {
+  name = _normalizeTaxonomyName(name || '');
+  if (!name || !evidenceText) return false;
+  var nameTokens = _taxonomySemanticTokens(name);
+  var evidenceTokens = _creativeEvidenceTokens(evidenceText);
+  var evidenceSet = {};
+  evidenceTokens.forEach(function(t) { evidenceSet[t] = true; });
+  var shared = nameTokens.filter(function(t) { return evidenceSet[t]; });
+  if (shared.length >= Math.min(2, nameTokens.length)) return true;
+  if (kind === 'persona') {
+    var labelSignals = _creativeAudienceSignals(name);
+    var evidenceSignals = _creativeAudienceSignals(evidenceText);
+    if (labelSignals.some(function(sig) { return evidenceSignals.indexOf(sig) !== -1; })) return true;
+  }
+  return false;
+}
+
+function _taxonomyCrossProductEvidenceMatches(kind, evidenceText, sourceProductId, sourceAdId, sourceName, limit) {
+  if (!evidenceText) return [];
+  var field = kind === 'persona' ? 'persona' : 'angle';
+  var sourceKey = _taxonomyLookupKey(sourceName || '');
+  var groups = {};
+  _allWinnerCreativesForEvidence().forEach(function(ad) {
+    if (!ad || !ad[field]) return;
+    if (sourceProductId && ad._evidenceProductId === sourceProductId && (ad.id === sourceAdId || ad._clickupId === sourceAdId || ad.clickupTaskId === sourceAdId)) return;
+    var name = _normalizeTaxonomyName(ad[field] || '');
+    if (!name) return;
+    if (sourceKey && _taxonomyLookupKey(name) === sourceKey) return;
+    var key = _taxonomyLookupKey(name);
+    if (!groups[key]) groups[key] = { name: name, text: '', winners: 0, products: {} };
+    groups[key].text += ' ' + (ad._evidenceText || _creativeEvidenceText(ad, ad._evidenceInspiration || null));
+    groups[key].winners++;
+    if (ad._evidenceProductName) groups[key].products[ad._evidenceProductName] = true;
+  });
+  var out = [];
+  Object.keys(groups).forEach(function(k) {
+    var g = groups[k];
+    var ev = _taxonomyEvidenceScoreForKind(kind, evidenceText, g.text);
+    if (ev.score < 0.31 || ev.shared.length < 3) return;
+    out.push({
+      name: g.name,
+      score: ev.score,
+      evidenceScore: ev.score,
+      shared: ev.shared,
+      status: 'New',
+      creativeCount: 0,
+      winnerCount: g.winners,
+      products: Object.keys(g.products),
+      source: 'cross-product-evidence'
+    });
+  });
+  out.sort(function(a, b) {
+    return b.evidenceScore - a.evidenceScore || b.winnerCount - a.winnerCount || String(a.name).localeCompare(String(b.name));
+  });
+  return out.slice(0, limit || 4);
+}
+
+function _taxonomyImportEvidence(sourceAd, row) {
+  var evidenceAd = Object.assign({}, sourceAd || {});
+  evidenceAd._evidenceProductId = row && row.productId;
+  evidenceAd._evidenceProductName = row && row.productName;
+  delete evidenceAd.angle;
+  delete evidenceAd.persona;
+  delete evidenceAd.detectedAngle;
+  delete evidenceAd.detectedPersona;
+  if (evidenceAd._customFields) {
+    evidenceAd._customFields = Object.assign({}, evidenceAd._customFields);
+    Object.keys(evidenceAd._customFields).forEach(function(k) {
+      if (/angle|persona|audience/i.test(k)) delete evidenceAd._customFields[k];
+    });
+  }
+  var sourceIns = _findEvidenceInspirationForAd(evidenceAd, row && row.productId);
+  var evidenceIns = sourceIns ? Object.assign({}, sourceIns) : null;
+  if (evidenceIns) {
+    delete evidenceIns.angle;
+    delete evidenceIns.persona;
+    delete evidenceIns.detectedAngle;
+    delete evidenceIns.detectedPersona;
+    delete evidenceIns._suggestedAngle;
+    delete evidenceIns._suggestedPersona;
+  }
+  evidenceAd._evidenceInspiration = evidenceIns || null;
+  return {
+    ad: evidenceAd,
+    inspiration: evidenceIns,
+    text: _creativeEvidenceText(evidenceAd, evidenceIns)
+  };
+}
+
+function _resolveImportedWinnerTaxonomy(kind, sourceAd, row, sourceName) {
+  var evidence = _taxonomyImportEvidence(sourceAd, row);
+  var evidenceText = evidence.text || '';
+  var sourceFitsEvidence = _taxonomyNameFitsEvidence(kind, sourceName, evidenceText);
+  var sourceKey = _taxonomyLookupKey(sourceName || '');
+  var currentMatches = _taxonomyEvidenceCandidateMatches(kind, evidenceText, '', 6).filter(function(match) {
+    return sourceFitsEvidence || !sourceKey || _taxonomyLookupKey(match && match.name) !== sourceKey;
+  }).slice(0, 4);
+  var currentBest = currentMatches[0] || null;
+  if (currentBest && currentBest.evidenceScore >= 0.34 && (currentBest.shared || []).length >= 4) {
+    return { name: currentBest.name, matchedCurrent: true, suggestions: currentMatches };
+  }
+  var signalMatch = _taxonomyCurrentSignalMatch(kind, evidenceText);
+  if (signalMatch) {
+    return { name: signalMatch.name, matchedCurrent: true, suggestions: [signalMatch].concat(currentMatches.filter(function(s) { return s.name !== signalMatch.name; })) };
+  }
+  var crossMatches = _taxonomyCrossProductEvidenceMatches(kind, evidenceText, row && row.productId, sourceAd && sourceAd.id, sourceName, 4);
+  var crossBest = crossMatches[0] || null;
+  if (crossBest && crossBest.evidenceScore >= 0.34 && (crossBest.shared || []).length >= 4) {
+    return { name: crossBest.name, matchedCurrent: false, suggestions: currentMatches.concat(crossMatches) };
+  }
+  var fallback = _taxonomyFallbackNameFromEvidence(kind, evidenceText, _taxonomyNameFitsEvidence(kind, sourceName, evidenceText) ? sourceName : '');
+  return {
+    name: fallback,
+    matchedCurrent: !!(fallback && _taxonomyItemIsActive(kind, fallback, false)),
+    suggestions: currentMatches.concat(crossMatches)
+  };
+}
+
+function _applyImportedWinnerTaxonomy(ins, sourceAd, row) {
+  if (!ins || !sourceAd) return;
+  ins.detectedAngle = _normalizeTaxonomyName(sourceAd.angle || '');
+  ins.detectedPersona = _normalizeTaxonomyName(sourceAd.persona || '');
+  ins._sourceAngle = ins.detectedAngle;
+  ins._sourcePersona = ins.detectedPersona;
+
+  var angle = _resolveImportedWinnerTaxonomy('angle', sourceAd, row, sourceAd.angle || '');
+  var persona = _resolveImportedWinnerTaxonomy('persona', sourceAd, row, sourceAd.persona || '');
+
+  ins.angle = angle.name || '';
+  ins.persona = persona.name || '';
+  ins._angleSuggestions = (angle.suggestions || []).slice(0, 4);
+  ins._personaSuggestions = (persona.suggestions || []).slice(0, 4);
+  ins._suggestedAngle = ins._angleSuggestions[0] ? ins._angleSuggestions[0].name : '';
+  ins._suggestedPersona = ins._personaSuggestions[0] ? ins._personaSuggestions[0].name : '';
+  ins._needsAngleReview = !!(ins.angle && !angle.matchedCurrent);
+  ins._needsPersonaReview = !!(ins.persona && !persona.matchedCurrent);
+  ins._anglePromptDone = true;
+  ins._personaPromptDone = true;
+  if (ins._needsAngleReview) { ins._angleScope = 'inspiration'; ins._angleLocked = true; }
+  if (ins._needsPersonaReview) { ins._personaScope = 'inspiration'; ins._personaLocked = true; }
 }
 
 async function refreshTaxonomyEvidenceSuggestions(force) {
@@ -42422,23 +42653,10 @@ function _mxv4RenderTaxonomyEditor(ad, angleName, personaName) {
     personaOpts = '<option value="' + escAttr(draftPersona) + '" selected>' + esc(draftPersona) + '</option>' + personaOpts;
   }
   var changed = draftAngle !== curAngle || draftPersona !== curPersona;
-  var suggestion = _mxv4TaxonomySuggestion(ad, curAngle, curPersona);
-  var suggestionHtml = '';
-  if (suggestion.angle || suggestion.persona) {
-    var sugAngle = (suggestion.angle && suggestion.angle.name) || draftAngle || curAngle;
-    var sugPersona = (suggestion.persona && suggestion.persona.name) || draftPersona || curPersona;
-    var pct = Math.round(Math.max((suggestion.angle && suggestion.angle.score) || 0, (suggestion.persona && suggestion.persona.score) || 0) * 100);
-    suggestionHtml = '<button type="button" onclick="event.stopPropagation();setMxv4TaxonomyDraftBoth(\'' + escAttr(ad.id) + '\',\'' + escJs(sugAngle) + '\',\'' + escJs(sugPersona) + '\')" ' +
-      'style="border:1px solid #bae6fd;background:#f0f9ff;color:#0369a1;border-radius:999px;padding:2px 7px;font-size:0.6rem;font-weight:700;cursor:pointer;max-width:230px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" ' +
-      'title="Suggested cell: ' + escAttr(sugAngle + ' x ' + sugPersona) + '">' +
-      'Suggest: ' + esc(sugAngle) + ' x ' + esc(sugPersona) + (pct ? ' · ' + pct + '%' : '') +
-    '</button>';
-  }
   return '<div style="display:grid;grid-template-columns:1fr 1fr auto;gap:5px;align-items:center;min-width:0">' +
     '<select class="mxv4-cu-sel" title="Angle" onchange="setMxv4TaxonomyDraft(\'' + escAttr(ad.id) + '\',\'angle\',this.value)" style="max-width:118px">' + angleOpts + '</select>' +
     '<select class="mxv4-cu-sel" title="Persona" onchange="setMxv4TaxonomyDraft(\'' + escAttr(ad.id) + '\',\'persona\',this.value)" style="max-width:118px">' + personaOpts + '</select>' +
     '<button class="mxv4-detail-action" style="padding:4px 8px;font-size:0.68rem"' + (!changed ? ' disabled' : '') + ' onclick="event.stopPropagation();saveMxv4CreativeTaxonomy(\'' + escAttr(ad.id) + '\',\'' + escJs(angleName) + '\',\'' + escJs(personaName) + '\')">Save</button>' +
-    (suggestionHtml ? '<div style="grid-column:1 / -1;margin-top:2px">' + suggestionHtml + '</div>' : '') +
   '</div>';
 }
 
@@ -48591,21 +48809,26 @@ function _doImportWins(idxs, rows) {
       brand:            row.productName,
       status:           'Classified',
       formatName:       ad.formatName || ad.id,
-      creativeUSP:      ad.formatName || '',
+      creativeUSP:      ad.creativeUSP || ad.formatName || '',
       hookType:         ad.hookType || '',
-      creativeStructure:'',
-      productionStyle:  '',
+      creativeStructure:ad.creativeStructure || '',
+      productionStyle:  ad.productionStyle || '',
       funnelStage:      ad.funnelStage || 'TOF',
       adType:           ad.adType || '',
-      angle:            ad.angle || '',
-      persona:          ad.persona || '',
-      creativeHypothesis: '',
+      angle:            '',
+      persona:          '',
+      creativeHypothesis: ad.creativeHypothesis || '',
       notes:            'Winning format imported from ' + row.productName,
-      bodyCopy:         '',
-      headline:         '',
-      ctaText:          '',
+      bodyCopy:         ad.bodyCopy || ad.adCopy || '',
+      headline:         ad.headline || '',
+      ctaText:          ad.ctaText || '',
       landingUrl:       ad.adLink || '',
-      duration_seconds: 0,
+      duration_seconds: ad.duration_seconds || ad.durationSeconds || 0,
+      hookText:         ad.hookText || '',
+      voiceOver:        ad.voiceOver || '',
+      voiceOverTimeline: ad.voiceOverTimeline || [],
+      captionTranscript: ad.captionTranscript || '',
+      nextAdScripts:    ad.nextAdScripts || [],
       importTags:       ['Winning Format', 'From: ' + row.productName],
       reusedIn:         [],
       _sourceProductId:  row.productId,
@@ -48618,6 +48841,7 @@ function _doImportWins(idxs, rows) {
       _clickupDocId:     '',
       _inspoDocCreated:  false
     };
+    _applyImportedWinnerTaxonomy(newIns, ad, row);
     INS_NEXT_ID++;
     INSPIRATIONS.unshift(newIns);
     crossProductMarkAdImported(row.productId, ad.id, activeProductId);

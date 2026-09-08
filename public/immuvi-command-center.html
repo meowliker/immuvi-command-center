@@ -15334,11 +15334,38 @@ function _winnerVideoAuditMatchesActiveProduct(row) {
   return !!(row && productName && row.product === productName);
 }
 
+function _winnerVideoAuditMoveIsActionable(kind, row) {
+  if (!row || row.kind !== kind) return false;
+  var ad = _findWinnerVideoAuditCreative(row.creative_id, row.creative_name);
+  if (!ad || ad.deletedAt || ad.deleted_at) return false;
+  if (!_adPassesProductBoundaryForTaxonomy(ad, activeProductId)) return false;
+  if (!_winnerVideoAuditTaxonomyExists(kind, row.to)) return false;
+
+  var current = _normalizeTaxonomyName(kind === 'persona' ? ad.persona : ad.angle);
+  var from = _normalizeTaxonomyName(row.from || '');
+  var to = _normalizeTaxonomyName(row.to || '');
+  if (!current || !to) return false;
+  if (_taxonomyLookupKey(current) === _taxonomyLookupKey(to)) return false;
+  if (from && _taxonomyLookupKey(current) !== _taxonomyLookupKey(from)) return false;
+  return true;
+}
+
+function _winnerVideoAuditMergeIsActionable(kind, row) {
+  if (!row || row.kind !== kind) return false;
+  var keep = _normalizeTaxonomyName(row.keep || '');
+  var merge = _normalizeTaxonomyName(row.merge || '');
+  if (!keep || !merge || _taxonomyLookupKey(keep) === _taxonomyLookupKey(merge)) return false;
+  return _winnerVideoAuditTaxonomyExists(kind, keep) && _winnerVideoAuditTaxonomyExists(kind, merge);
+}
+
 function _winnerVideoAuditSuggestions(kind, field) {
   var audit = WINNER_VIDEO_TAXONOMY_AUDIT || {};
   var rows = audit[field] || [];
   return rows.filter(function(row) {
-    return row && row.kind === kind && _winnerVideoAuditMatchesActiveProduct(row);
+    if (!row || row.kind !== kind || !_winnerVideoAuditMatchesActiveProduct(row)) return false;
+    if (field === 'move_suggestions') return _winnerVideoAuditMoveIsActionable(kind, row);
+    if (field === 'merge_suggestions') return _winnerVideoAuditMergeIsActionable(kind, row);
+    return true;
   });
 }
 

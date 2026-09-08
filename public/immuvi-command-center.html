@@ -5381,8 +5381,8 @@ button.mx-dt-action-sent .open { color:#0a84ff; font-weight:700; margin-left:4px
 .ins-status-badge.approved { background:#dbeafe; color:#1e40af; }
 
 /* New angle/persona prompt modal */
-.ins-match-modal { position:fixed; inset:0; background:rgba(0,0,0,0.4); display:flex; align-items:center; justify-content:center; z-index:9999; }
-.ins-match-box { background:#fff; border-radius:12px; padding:24px 28px; max-width:420px; width:90%; box-shadow:0 16px 48px rgba(0,0,0,0.18); }
+.ins-match-modal { position:fixed; inset:0; background:rgba(0,0,0,0.4); display:flex; align-items:flex-start; justify-content:center; z-index:9999; padding:24px 16px; overflow-y:auto; overscroll-behavior:contain; box-sizing:border-box; }
+.ins-match-box { background:#fff; border-radius:12px; padding:24px 28px; max-width:420px; width:90%; max-height:calc(100vh - 48px); overflow-y:auto; overscroll-behavior:contain; -webkit-overflow-scrolling:touch; box-shadow:0 16px 48px rgba(0,0,0,0.18); box-sizing:border-box; }
 .ins-match-box h4 { font-size:0.9rem; font-weight:700; color:var(--t1); margin:0 0 6px; }
 .ins-match-box p { font-size:0.76rem; color:var(--t2); margin:0 0 14px; line-height:1.5; }
 .ins-match-detected { background:var(--el); border-radius:7px; padding:8px 12px; font-size:0.75rem; color:var(--t1); margin-bottom:14px; font-style:italic; }
@@ -5390,7 +5390,7 @@ button.mx-dt-action-sent .open { color:#0a84ff; font-weight:700; margin-left:4px
 .ins-match-opt { display:flex; align-items:center; gap:8px; padding:8px 12px; border:1px solid var(--b); border-radius:7px; cursor:pointer; font-size:0.75rem; transition:all .15s; }
 .ins-match-opt:hover { border-color:var(--inprog); background:#f0f7ff; }
 .ins-match-opt input[type=radio] { accent-color:var(--inprog); }
-.ins-match-footer { display:flex; gap:8px; justify-content:flex-end; }
+.ins-match-footer { display:flex; gap:8px; justify-content:flex-end; position:sticky; bottom:-24px; margin:0 -28px -24px; padding:12px 28px 24px; background:linear-gradient(180deg, rgba(255,255,255,0.88), #fff 40%); }
 .ins-filter-bar { display:flex; gap:8px; flex-wrap:wrap; padding:10px 0; border-bottom:1px solid var(--b); margin-bottom:12px; }
 .ins-filter-bar select { padding:6px 10px; border:1px solid var(--b); border-radius:6px; font-size:0.73rem; background:var(--card); color:var(--t1); cursor:pointer; }
 
@@ -47292,10 +47292,23 @@ function matchToExisting(incoming, existingArray) {
 }
 
 // ── New entity prompt modal ─────────────────────────
+function closeInsMatchModal() {
+  var overlay = document.getElementById('insMatchModalOverlay');
+  if (overlay) overlay.remove();
+  if (window._insMatchPrevBodyOverflow !== undefined) {
+    document.body.style.overflow = window._insMatchPrevBodyOverflow || '';
+    delete window._insMatchPrevBodyOverflow;
+  }
+}
+
 function showNewEntityPrompt(type, detectedName, ins, callback) {
   var existing = type === 'Angle' ? ANGLES : PERSONAS;
   var old = document.getElementById('insMatchModalOverlay');
-  if (old) old.remove();
+  if (old) closeInsMatchModal();
+  if (window._insMatchPrevBodyOverflow === undefined) {
+    window._insMatchPrevBodyOverflow = document.body.style.overflow || '';
+  }
+  document.body.style.overflow = 'hidden';
 
   var accentColor = type === 'Angle' ? '#4F46E5' : '#059669';
   var rankedExisting = existing.map(function(e, i) {
@@ -47346,7 +47359,9 @@ function showNewEntityPrompt(type, detectedName, ins, callback) {
         '<button class="btn-primary btn-sm" onclick="confirmInsMatch(\'' + escAttr(type) + '\', \'' + escAttr(detectedName) + '\')">Confirm</button>' +
       '</div>' +
     '</div>';
-  overlay.addEventListener('click', function(e){ if(e.target===overlay) overlay.remove(); });
+  overlay.addEventListener('click', function(e){ if(e.target===overlay) closeInsMatchModal(); });
+  overlay.addEventListener('wheel', function(e){ e.stopPropagation(); }, { passive:true });
+  overlay.addEventListener('touchmove', function(e){ e.stopPropagation(); }, { passive:true });
   document.body.appendChild(overlay);
 
   window._insMatchCallback = callback;
@@ -47369,13 +47384,13 @@ function confirmInsMatch(type, detectedName) {
     chosenName = existing[parseInt(val)].name;
     isNew = false;
   }
-  document.getElementById('insMatchModalOverlay').remove();
+  closeInsMatchModal();
   if (window._insMatchCallback) window._insMatchCallback(chosenName, isNew);
 }
 
 // Skip = keep raw label as-is, but mark as handled so popup never re-fires
 function skipInsMatch(type, detectedName) {
-  document.getElementById('insMatchModalOverlay').remove();
+  closeInsMatchModal();
   // Call callback with raw label and isNew=false — marks _anglePromptDone/_personaPromptDone=true
   if (window._insMatchCallback) window._insMatchCallback(detectedName, false);
 }

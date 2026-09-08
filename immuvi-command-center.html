@@ -15187,7 +15187,6 @@ function _taxonomyPersonaFitsActiveProduct(name) {
 }
 
 function _taxonomySuggestionFitsActiveProduct(kind, suggestion) {
-  if (kind !== 'persona') return true;
   if (!suggestion || !suggestion.name) return false;
   return _taxonomyPersonaFitsActiveProduct(suggestion.name);
 }

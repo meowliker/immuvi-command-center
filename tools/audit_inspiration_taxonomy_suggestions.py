@@ -655,7 +655,7 @@ def new_suggestion(
             if token not in shared:
                 shared.append(token)
     if not shared:
-        shared = signals(ins.evidence)
+        shared = list(signals(ins.evidence))
     confidence = min(0.84, 0.60 + min(len(peers), 4) * 0.04 + (0.08 if shared else 0))
     return {
         "name": name,
@@ -792,7 +792,10 @@ def changed_patch(ins: Inspiration, angle_sugs: List[Dict[str, Any]], persona_su
         patch["_anglePromptDone"] = True
     if persona_sugs:
         patch["_personaPromptDone"] = True
-    if all(d.get(k) == v for k, v in patch.items()):
+    def canonical(value: Any) -> Any:
+        return json.loads(json.dumps(value, ensure_ascii=True, sort_keys=True))
+
+    if all(canonical(d.get(k)) == canonical(v) for k, v in patch.items()):
         return {}
     return patch
 

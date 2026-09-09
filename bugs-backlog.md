@@ -2470,3 +2470,29 @@ Earlier product-boundary fixes quarantined or moved wrong-product `ads` and `man
 - Save paths must be the final guardrail: a stale browser tab must not be able to re-save quarantined rows after a repair.
 - Product leak repairs must include four tables together: `ads`, `inspirations`, `manual_actions`, and `matrix_cells`, then prune zero-use leaked `angles`/`personas` with a rollback backup.
 - After moving rows between products, regenerate taxonomy/video suggestion artifacts so stale reports do not keep recommending old cross-product moves.
+
+---
+
+## Bug 63 — Valid inspiration classifications failed on duplicate static hook captions
+**Status:** ✅ fixed + pushed 2026-09-09
+**Reported:** 2026-09-09
+**Surface:** classify_worker.py verification / inspiration classifier retry loop
+
+### Symptom
+- A newly added Canva/Facebook inspiration such as `C-INS-135` could reach `Failed` even though re-adding the same source sometimes passed.
+- The live queue error was `skill returned without persisting: inspirations row duplicated hookText as the first caption`.
+- In batches of a few inspirations, one or two rows could fail intermittently after exhausting retries.
+
+### Root Cause
+The worker verifier correctly protected against the older brief-quality bug where a static hook card was copied into `captionTimeline`, but it only rejected the completed row. When the classifier produced an otherwise complete result with `hookText` duplicated as `captionTimeline[0]`, the worker spent the full retry budget recreating the same near-valid output, then marked the queue row failed.
+
+### Fix
+1. Added a worker repair step before verification that detects `hookText === captionTimeline[0].caption` after whitespace/quote normalization.
+2. The repair removes the duplicate first caption from `inspirations.data.captionTimeline` and trims the same duplicate from `captionTranscript` when it appears at the beginning.
+3. The same repair is applied to the pending `inspiration_results.metadata` / `brief` payload so the dashboard poller cannot re-import the duplicate.
+4. Verification still rejects true hard failures: missing dashboard-critical fields, bad media type mapping, placeholder audio/caption text, unreadable ClickUp pages, and invalid next-ad script structure.
+
+### Prevention
+- Verifiers should auto-repair small deterministic serialization mistakes when the source of truth is otherwise valid.
+- Retry budget should be reserved for real failures: inaccessible media, agent errors, missing required output, or bad brief structure.
+- Static hook cards belong in `hookText`; changing subtitles belong in `captionTimeline`.

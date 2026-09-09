@@ -1874,6 +1874,106 @@ class Worker:
 
     # ── Server-side verification of skill output ──
 
+    @staticmethod
+    def _norm_caption_guard_text(value) -> str:
+        return re.sub(r"\s+", " ", str(value or "").strip().strip("\"'“”‘’")).lower()
+
+    @staticmethod
+    def _drop_first_caption_from_transcript(transcript, caption_text, remaining_captions):
+        raw = str(transcript or "").strip()
+        cap = str(caption_text or "").strip()
+        if not raw:
+            return raw
+        if cap:
+            match = re.match(r"^\s*" + re.escape(cap) + r"[\s\n\r.,:;|/—-]*", raw, re.I)
+            if match:
+                return raw[match.end():].strip()
+        if not remaining_captions:
+            return ""
+        return raw
+
+    def _repair_static_hook_caption_duplication(self, ins_id: str, product_id: str, data: dict) -> tuple:
+        """Remove a recoverable hookText/captionTimeline duplication.
+
+        Static hook cards belong in hookText. The agent occasionally also
+        stores the exact same text as captionTimeline[0], which used to burn
+        all retries even though the row was otherwise valid.
+        """
+        if not isinstance(data, dict):
+            return data, False
+        hook_text_raw = str(data.get("hookText") or "").strip()
+        captions = data.get("captionTimeline") or []
+        if not hook_text_raw or not isinstance(captions, list) or not captions:
+            return data, False
+        first = captions[0] if isinstance(captions[0], dict) else {}
+        first_caption_raw = str((first or {}).get("caption") or "").strip()
+        if not first_caption_raw:
+            return data, False
+        if self._norm_caption_guard_text(first_caption_raw) != self._norm_caption_guard_text(hook_text_raw):
+            return data, False
+
+        repaired = dict(data)
+        repaired_captions = captions[1:]
+        repaired["captionTimeline"] = repaired_captions
+        repaired["captionTranscript"] = self._drop_first_caption_from_transcript(
+            repaired.get("captionTranscript"),
+            first_caption_raw,
+            repaired_captions,
+        )
+        try:
+            self.sb.update(
+                "inspirations",
+                f"id=eq.{urllib.parse.quote(ins_id)}&product_id=eq.{urllib.parse.quote(product_id)}",
+                {"data": repaired},
+            )
+            result_rows = self.sb.select(
+                "inspiration_results",
+                "select=metadata,brief&"
+                f"ins_id=eq.{urllib.parse.quote(ins_id)}&"
+                f"product_id=eq.{urllib.parse.quote(product_id)}&"
+                "limit=1",
+            )
+            if result_rows:
+                result = result_rows[0] or {}
+                result_patch = {}
+                metadata = dict(result.get("metadata") or {})
+                md_timeline = metadata.get("caption_timeline") or metadata.get("captionTimeline") or []
+                if isinstance(md_timeline, list) and md_timeline:
+                    md_first = md_timeline[0] if isinstance(md_timeline[0], dict) else {}
+                    md_caption = str(md_first.get("caption") or "").strip()
+                    if self._norm_caption_guard_text(md_caption) == self._norm_caption_guard_text(hook_text_raw):
+                        metadata["caption_timeline"] = md_timeline[1:]
+                        metadata["caption_transcript"] = self._drop_first_caption_from_transcript(
+                            metadata.get("caption_transcript") or metadata.get("captionTranscript"),
+                            md_caption,
+                            md_timeline[1:],
+                        )
+                        result_patch["metadata"] = metadata
+                brief = dict(result.get("brief") or {})
+                brief_timeline = brief.get("caption_timeline") or brief.get("captionTimeline") or []
+                if isinstance(brief_timeline, list) and brief_timeline:
+                    br_first = brief_timeline[0] if isinstance(brief_timeline[0], dict) else {}
+                    br_caption = str(br_first.get("caption") or "").strip()
+                    if self._norm_caption_guard_text(br_caption) == self._norm_caption_guard_text(hook_text_raw):
+                        brief["caption_timeline"] = brief_timeline[1:]
+                        brief["caption_transcript"] = self._drop_first_caption_from_transcript(
+                            brief.get("caption_transcript") or brief.get("captionTranscript"),
+                            br_caption,
+                            brief_timeline[1:],
+                        )
+                        result_patch["brief"] = brief
+                if result_patch:
+                    self.sb.update(
+                        "inspiration_results",
+                        f"ins_id=eq.{urllib.parse.quote(ins_id)}&product_id=eq.{urllib.parse.quote(product_id)}",
+                        result_patch,
+                    )
+            log(f"[{ins_id}] repaired duplicate hookText in captionTimeline before verification")
+            return repaired, True
+        except Exception as e:
+            log(f"[{ins_id}] duplicate hookText repair failed: {e}")
+            return data, False
+
     def _verify_inspirations_row(
         self,
         ins_id: str,
@@ -1910,6 +2010,7 @@ class Worker:
             if not rows:
                 return (False, f"no inspirations row for id={ins_id}")
             data = (rows[0] or {}).get("data") or {}
+            data, _ = self._repair_static_hook_caption_duplication(ins_id, product_id, data)
             missing = []
             for k in (
                 "_clickupDocPageUrl",

@@ -59,3 +59,4 @@ results.json
 .supabase-db-password.txt
 .vercel
 immuvi_localstorage_export.json
+strategist/data/

@@ -1,9 +1,21 @@
 {
+  "buildCommand": "npm run build:strategist",
   "rewrites": [
     { "source": "/", "destination": "/immuvi-command-center.html" },
     { "source": "/install-skill.sh", "destination": "/team-skill/install-skill.sh" }
   ],
   "headers": [
+    {
+      "source": "/strategist.html",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-cache" },
+        { "key": "X-Content-Type-Options", "value": "nosniff" }
+      ]
+    },
+    {
+      "source": "/strategist-assets/(.*)",
+      "headers": [{ "key": "Cache-Control", "value": "public, max-age=0, must-revalidate" }]
+    },
     {
       "source": "/install-skill.sh",
       "headers": [

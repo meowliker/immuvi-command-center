@@ -1,0 +1,95 @@
+-- These policies apply only to the new Strategist tables.
+create function public.strategist_can_read_list(list_id text) returns boolean
+language sql stable security definer set search_path = public as $$
+  select public.is_admin() or exists (
+    select 1 from public.products p
+    where p.config->>'clickup_list_id' = list_id and public.has_product(p.id)
+  );
+$$;
+revoke all on function public.strategist_can_read_list(text) from public;
+grant execute on function public.strategist_can_read_list(text) to authenticated, service_role;
+
+create function public.strategist_list_for_key(product_key text) returns text
+language sql immutable as $$
+  select list_id from (values
+    ('hh','901613416500'),('ad','901613119887'),('ca','901613035012'),
+    ('ig','901615920553'),('km','901613118174'),('kl','901613067126')
+  ) as product(key,list_id) where key = product_key;
+$$;
+
+alter table public.strategist_tasks enable row level security;
+alter table public.strategist_creatives enable row level security;
+alter table public.strategist_transcripts enable row level security;
+alter table public.strategist_frame_texts enable row level security;
+alter table public.strategist_observations enable row level security;
+alter table public.strategist_verdicts enable row level security;
+alter table public.strategist_keywords enable row level security;
+alter table public.strategist_research enable row level security;
+alter table public.strategist_synthesis enable row level security;
+alter table public.strategist_sync_runs enable row level security;
+
+create policy strategist_tasks_read on public.strategist_tasks for select to authenticated
+  using (public.strategist_can_read_list(list_id));
+create policy strategist_creatives_read on public.strategist_creatives for select to authenticated
+  using (exists (select 1 from public.strategist_tasks t where t.id = task_id));
+
+do $$
+declare tab text;
+begin
+  foreach tab in array array['strategist_transcripts','strategist_frame_texts','strategist_observations','strategist_verdicts','strategist_keywords','strategist_research'] loop
+    execute format('create policy %I on public.%I for select to authenticated using (exists (select 1 from public.strategist_creatives c where c.id = creative_id))', tab || '_read', tab);
+  end loop;
+end $$;
+
+create policy strategist_synthesis_read on public.strategist_synthesis for select to authenticated
+  using (public.strategist_can_read_list(public.strategist_list_for_key(product_key)));
+create policy strategist_sync_runs_read on public.strategist_sync_runs for select to authenticated
+  using (public.is_admin());
+
+create table public.strategist_jobs (
+  id uuid primary key default gen_random_uuid(),
+  request_id uuid not null,
+  kind text not null check (kind in ('sync','watch','enrich','synthesize','snapshot')),
+  product_key text,
+  requested_by uuid not null references auth.users(id),
+  status text not null default 'queued' check (status in ('queued','running','succeeded','failed','cancelled')),
+  created_at timestamptz not null default now(),
+  started_at timestamptz,
+  finished_at timestamptz,
+  heartbeat_at timestamptz,
+  lease_token uuid,
+  worker_id text,
+  attempts integer not null default 0,
+  cancel_requested boolean not null default false,
+  log jsonb not null default '[]',
+  error text,
+  exit_code integer,
+  unique(requested_by,request_id),
+  check (product_key is null or public.strategist_list_for_key(product_key) is not null)
+);
+create index strategist_jobs_queue_idx on public.strategist_jobs(status,created_at);
+create unique index strategist_jobs_active_idx on public.strategist_jobs(kind,coalesce(product_key,'')) where status in ('queued','running');
+alter table public.strategist_jobs enable row level security;
+create policy strategist_jobs_read on public.strategist_jobs for select to authenticated
+  using (public.is_admin() or requested_by = auth.uid());
+create policy strategist_jobs_insert on public.strategist_jobs for insert to authenticated
+  with check (requested_by = auth.uid() and status='queued' and attempts=0
+    and (public.is_admin() or (product_key is not null and public.strategist_can_read_list(public.strategist_list_for_key(product_key)))));
+create policy strategist_jobs_cancel on public.strategist_jobs for update to authenticated
+  using (requested_by = auth.uid() or public.is_admin())
+  with check (requested_by = auth.uid() or public.is_admin());
+
+revoke all on public.strategist_tasks, public.strategist_creatives, public.strategist_transcripts,
+  public.strategist_frame_texts, public.strategist_observations, public.strategist_verdicts,
+  public.strategist_keywords, public.strategist_research, public.strategist_synthesis,
+  public.strategist_sync_runs, public.strategist_jobs from anon, authenticated;
+grant select on public.strategist_tasks, public.strategist_creatives, public.strategist_transcripts,
+  public.strategist_frame_texts, public.strategist_observations, public.strategist_verdicts,
+  public.strategist_keywords, public.strategist_research, public.strategist_synthesis,
+  public.strategist_sync_runs, public.strategist_jobs to authenticated;
+grant insert (request_id,kind,product_key,requested_by) on public.strategist_jobs to authenticated;
+grant update (cancel_requested) on public.strategist_jobs to authenticated;
+grant all on public.strategist_tasks, public.strategist_creatives, public.strategist_transcripts,
+  public.strategist_frame_texts, public.strategist_observations, public.strategist_verdicts,
+  public.strategist_keywords, public.strategist_research, public.strategist_synthesis,
+  public.strategist_sync_runs, public.strategist_jobs to service_role;

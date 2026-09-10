@@ -1,0 +1,174 @@
+{
+  "source": "Strategist",
+  "importedAt": "2026-09-09T11:25:42.185Z",
+  "files": [
+    {
+      "path": "src/db/client.ts",
+      "sha256": "7291e4f56dc14a0e3fbaad62a28e6db88f3592fd469e0ceb8a69b782deed01fa"
+    },
+    {
+      "path": "src/db/persist.ts",
+      "sha256": "de0b6c14772f366661ecef7e40ca11f266e85eef83ec39ae5872df70c19ae723"
+    },
+    {
+      "path": "src/db/schema.ts",
+      "sha256": "226799560665b4109cf69bc276abb650785cb198682734a1f6ff409d6bdfc660"
+    },
+    {
+      "path": "src/lib/analysis/blind.ts",
+      "sha256": "f2c480a40629c2e8a8a35ae00e8fba455270fe98215df27b0b6dbb649c6d391b"
+    },
+    {
+      "path": "src/lib/analysis/deep.ts",
+      "sha256": "e8aa81ef5380fda85dc1199bb70ddf3e7f13ab58b933cc330b0a42d7b23a6b14"
+    },
+    {
+      "path": "src/lib/analysis/verdict.ts",
+      "sha256": "39e05cb8a74d0f92e8fc601a8ad3a1381b1e33a4c4166de9cf03a0a50c1007c3"
+    },
+    {
+      "path": "src/lib/clickup/client.ts",
+      "sha256": "1314ab538f62a8f2bfc3365ae259026e8bdff57e77344e4dca488a1b64998463"
+    },
+    {
+      "path": "src/lib/drive/client.ts",
+      "sha256": "b2cfa7a3bca98f8adaf6878a874fbdd51d59d5e120d218778629ab4488f90c1e"
+    },
+    {
+      "path": "src/lib/media/frames.ts",
+      "sha256": "1b495ef9d53eb132fca2b68f02e6a0450fef305703a1fca7e0b4f9f449a8a4c2"
+    },
+    {
+      "path": "src/lib/media/probe.ts",
+      "sha256": "6d6f0c617775eee3f9245fb93abeca1b4127ab92426914a95adbc437d04d0e22"
+    },
+    {
+      "path": "src/lib/media/transcribe.ts",
+      "sha256": "edbf8cc8fee3b9efa2a06b5a85165a8f78df68f2cac6b83cf0dfa7a70450bcf0"
+    },
+    {
+      "path": "src/lib/parse/brief.ts",
+      "sha256": "0255f23d7a3728603946b8c6479e6b9b68f58f38c00bd24bdce6076b65948f43"
+    },
+    {
+      "path": "src/lib/parse/taskName.ts",
+      "sha256": "517ebd0a44ace98f6347280828b6e0802e5facd63e8b4e507624a4366445226e"
+    },
+    {
+      "path": "src/lib/parse/winningVariant.ts",
+      "sha256": "92f7e01959cfd47319093d8bacd97081463e46508084c9305c98ef72820457f2"
+    },
+    {
+      "path": "src/lib/products.ts",
+      "sha256": "1219f882b29d55ee798db7412d47cb1798be5129581c635337e01e386f9df21a"
+    },
+    {
+      "path": "src/lib/data/build.ts",
+      "sha256": "5a81ebf480ab984dd6d8551acdfa83fa9c53bffe31b210098fca852d695e66be"
+    },
+    {
+      "path": "src/lib/data/load.ts",
+      "sha256": "c79037989ceee09aedf058d9f74f6f3251a5156486c969249d087898144159a6"
+    },
+    {
+      "path": "src/lib/data/project.ts",
+      "sha256": "4cac89f2543706d332eec1fbcfd975fb363562d5fa0d72d7d981f66d646c7d3d"
+    },
+    {
+      "path": "src/lib/data/research.ts",
+      "sha256": "aaa51ded4e817673047d576144ae97b7f0144771a9f4484fdf42e8c2c074bca4"
+    },
+    {
+      "path": "src/lib/data/select.ts",
+      "sha256": "eee88a9b7a5946054c3731cb4218c423f0e95dbd5c7fc132c8413d366aabe5de"
+    },
+    {
+      "path": "src/lib/data/trust.ts",
+      "sha256": "c8aeebf8dd8d16159453be1cce62d1cf9891dc1434a48fe88ee749f0bb86e91e"
+    },
+    {
+      "path": "src/lib/data/types.ts",
+      "sha256": "1d6b9ee82689d2d4492590a263c66e4252bfb54736ca21859ac8e92d7c354c13"
+    },
+    {
+      "path": "src/scripts/backfill.ts",
+      "sha256": "f0c91c542ed555efc6f2eef00261f26474a9504d4447ef181f4e8d8b416b6068"
+    },
+    {
+      "path": "src/scripts/coverage.ts",
+      "sha256": "2e187b1a323c4e38160a6976a30d4472e88d2b85ee9dc266f1a7e58fd4906b0d"
+    },
+    {
+      "path": "src/scripts/drive-preflight.ts",
+      "sha256": "c4d54fa6688d0d2d6d0deb44ad7a0f462f85cb55b46a8fa07e65ff4bcb936f3a"
+    },
+    {
+      "path": "src/scripts/enrich.ts",
+      "sha256": "c1c4a46506beabf059588c0135656af8812c8a1d1ce047919a2fb5c10393054e"
+    },
+    {
+      "path": "src/scripts/media-check.ts",
+      "sha256": "04b242f2c32982762dbc3780a775f29bca8e04fc6aadb1949ed0713ad8984c8f"
+    },
+    {
+      "path": "src/scripts/snapshot.ts",
+      "sha256": "d86b63d1dfc2a4db9babbd4f429573aa8f42ddbe3c0cb4347aeae81888ab1ddd"
+    },
+    {
+      "path": "src/scripts/sync.ts",
+      "sha256": "ecb9e2f22dd96f9720fcf93bdf5b4ce4965e8e39b411977731498010f695042d"
+    },
+    {
+      "path": "src/scripts/synthesize.ts",
+      "sha256": "46af81712c641f3313cc1b48ba6c1c11b4fd33b2274bafa02b4882665a91dc20"
+    },
+    {
+      "path": "src/scripts/variant-audit.ts",
+      "sha256": "db1a4692118078c10712bbeb0657bb8c1509005cce66c172b7453086975453c1"
+    },
+    {
+      "path": "tests/brief.test.ts",
+      "sha256": "d03ed93ba82a7032d2d2dcef9bb943ccaf090795ccb757296d25d9b4f20b9e39"
+    },
+    {
+      "path": "tests/drive.test.ts",
+      "sha256": "2aabf145e79b37c7d7fb6abaffe52a2160a8e9fa054d3d1a2d67fc9834c3909d"
+    },
+    {
+      "path": "tests/probe.test.ts",
+      "sha256": "77037fd2da0fb6947bfd7845c1fa7240f1e5408d3b71a8f6184ce9dc512b611f"
+    },
+    {
+      "path": "tests/taskName.test.ts",
+      "sha256": "bdae6615b9052767de0455a8fc86030f3f3699ec4457731dacc76e32b885cabd"
+    },
+    {
+      "path": "tests/verdict.test.ts",
+      "sha256": "b07bfa7102fe85b3d7337846c6811a04f31a98b65ba471bc94d8e6f4317c96b5"
+    },
+    {
+      "path": "tests/winningVariant.test.ts",
+      "sha256": "50dbb636a08042e6f43fdea5e1ad6536b6c49f3b80a58b12d6762d4c2576e98b"
+    },
+    {
+      "path": "src/components/CreativeModal.tsx",
+      "sha256": "0ca5ab71188d4af69bc98432fa8de719f530b7af1bc07ab1b1118ea6b398d870"
+    },
+    {
+      "path": "src/components/CreativesTable.tsx",
+      "sha256": "91c9008dfd0ced5828c0654e63b6ea580466233bb713231cc983cefdbffd56b4"
+    },
+    {
+      "path": "src/components/ResearchList.tsx",
+      "sha256": "f0e50f0aeb7f5b3a204bbc287f4ef7214ec6cb46d1286f0732530e280e1c159d"
+    },
+    {
+      "path": "src/components/HooksView.tsx",
+      "sha256": "bc70ed0ce0392072777e2395703b4b518831ce091898eb4022d1269a94d11b63"
+    },
+    {
+      "path": "src/app/globals.css",
+      "sha256": "dc83bb88debdd7c36a0d7b1946e0ff45caafd871bf7e2a15ae1ad441108232a8"
+    }
+  ]
+}

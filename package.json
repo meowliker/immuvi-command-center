@@ -3,7 +3,32 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
+    "build:strategist": "node scripts/build-strategist.mjs",
+    "dev:strategist": "node scripts/strategist-dev.mjs",
+    "worker:strategist": "node scripts/strategist-worker.mjs",
+    "test:strategist": "node --test tests/strategist/*.test.mjs",
     "test:drive": "node tests/api/test_drive_endpoint.js",
     "test:db": "bash tests/db/test_video_winners.sh"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.120.0",
+    "@supabase/supabase-js": "^2.57.0",
+    "drizzle-orm": "^0.45.2",
+    "googleapis": "^176.0.0",
+    "lucide-react": "^0.468.0",
+    "postgres": "^3.4.9",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "^26.2.0",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.4",
+    "drizzle-kit": "^0.31.10",
+    "esbuild": "^0.25.0",
+    "tsx": "^4.23.12",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.11"
   }
 }

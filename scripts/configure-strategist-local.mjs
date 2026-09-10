@@ -1,0 +1,21 @@
+import { mkdtemp,readFile,writeFile } from 'node:fs/promises';
+import { execFileSync } from 'node:child_process';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import { readEnv,targetEnv } from './strategist-env.mjs';
+
+const current=targetEnv();
+const env=readEnv('.env.strategist.local');
+const ref=new URL(current.SUPABASE_URL).hostname.split('.')[0];
+const direct=new URL(current.STRATEGIST_DATABASE_URL);
+const workspace=await mkdtemp(path.join(tmpdir(),'immuvi-strategist-link-'));
+const childEnv={...process.env,SUPABASE_DB_PASSWORD:decodeURIComponent(direct.password)};
+execFileSync('supabase',['init','--workdir',workspace],{env:childEnv,stdio:'ignore',timeout:30000});
+execFileSync('supabase',['link','--project-ref',ref,'--workdir',workspace],{env:childEnv,stdio:'ignore',timeout:60000});
+const pooler=new URL((await readFile(path.join(workspace,'supabase/.temp/pooler-url'),'utf8')).trim());
+if(!decodeURIComponent(pooler.username).endsWith(`.${ref}`))throw new Error('Pooler belongs to the wrong project');
+pooler.password=direct.password;pooler.port='6543';pooler.searchParams.set('sslmode','require');
+env.STRATEGIST_DATABASE_URL=pooler.href;
+env.STRATEGIST_WHISPER_PYTHON=execFileSync('python3',['-c','import whisper,sys; print(sys.executable)'],{encoding:'utf8',timeout:30000}).trim();
+await writeFile('.env.strategist.local',Object.entries(env).map(([k,v])=>`${k}='${String(v).replaceAll("'","\\'")}'`).join('\n')+'\n',{mode:0o600});
+console.log('Configured Immuvi transaction pooler and existing Whisper installation.');

@@ -163,6 +163,9 @@ For production, configure the four Vercel API environment variables above and
 deploy `main`. `vercel.json` builds the page/API bundle while preserving the
 existing root route and skill-download routes. No new hosting URL is required.
 Do not change the Vercel project to a Next.js framework preset.
+The static output directory is `public`. The build copies only the new
+Strategist page and browser assets into it; the existing public Immuvi shell
+retains its own fixes and is not overwritten with the root HTML copy.
 
 ## Verification
 

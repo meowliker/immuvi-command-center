@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import {createHash} from 'node:crypto';
+import {execFileSync} from 'node:child_process';
 import {targetEnv} from '../../scripts/strategist-env.mjs';
 
 test('analysis prompts and field comparison retain their original source hashes',async()=>{
@@ -17,8 +18,20 @@ test('Vercel root routing and skill downloads remain configured',async()=>{
   assert.ok(config.rewrites.some(r=>r.source==='/install-skill.sh'&&r.destination==='/team-skill/install-skill.sh'));
 });
 test('Strategist tab opens the new same-origin page',async()=>{
-  const html=await readFile('immuvi-command-center.html','utf8');
-  assert.match(html,/onclick="location\.href='\/strategist\.html'"/);
+  for(const path of ['immuvi-command-center.html','public/immuvi-command-center.html']){
+    const html=await readFile(path,'utf8');
+    assert.match(html,/onclick="location\.href='\/strategist\.html'"/,path);
+  }
+});
+test('production build publishes Strategist assets without replacing the existing public app',async()=>{
+  const config=JSON.parse(await readFile('vercel.json','utf8'));
+  assert.equal(config.outputDirectory,'public');
+  const shell=await readFile('public/immuvi-command-center.html');
+  execFileSync(process.execPath,['scripts/build-strategist.mjs'],{stdio:'pipe'});
+  for(const file of ['strategist.html','strategist-assets/app.js','strategist-assets/app.css']){
+    assert.deepEqual(await readFile(`public/${file}`),await readFile(file),file);
+  }
+  assert.deepEqual(await readFile('public/immuvi-command-center.html'),shell);
 });
 test('database configuration rejects a different Supabase project',()=>{
   const prior={SUPABASE_URL:process.env.SUPABASE_URL,STRATEGIST_DATABASE_URL:process.env.STRATEGIST_DATABASE_URL};

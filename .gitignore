@@ -60,3 +60,5 @@ results.json
 .vercel
 immuvi_localstorage_export.json
 strategist/data/
+public/strategist.html
+public/strategist-assets/

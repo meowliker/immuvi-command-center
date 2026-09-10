@@ -1,5 +1,6 @@
 {
   "buildCommand": "npm run build:strategist",
+  "outputDirectory": "public",
   "rewrites": [
     { "source": "/", "destination": "/immuvi-command-center.html" },
     { "source": "/install-skill.sh", "destination": "/team-skill/install-skill.sh" }

@@ -27167,6 +27167,65 @@ function saveNewCreative() {
 // ── Central delete: removes ONE task only — no cascade to clones or variations.
 // Every task (original, production clone, variation) is independent.
 // Deleting one task never touches any other task.
+function _isSupabaseAuthError(error) {
+  if (!error) return false;
+  var status = Number(error.status || error.statusCode || 0);
+  var code = String(error.code || '').toUpperCase();
+  var message = String(error.message || error.details || error).toLowerCase();
+  return status === 401 || status === 403 || code === 'PGRST301' ||
+    /jwt|token|auth|session|not authorized|permission denied/.test(message);
+}
+
+function _supabaseDeleteErrorText(error) {
+  if (!error) return 'unknown database error';
+  var message = String(error.message || error.details || error.code || error).replace(/\s+/g, ' ').trim();
+  if (!message || message === '[object Object]') message = 'database rejected the request';
+  return message.length > 140 ? message.slice(0, 137) + '...' : message;
+}
+
+async function _refreshSupabaseWriteSession() {
+  if (!SB || !SB.auth || typeof SB.auth.refreshSession !== 'function') return false;
+  try {
+    var result = await SB.auth.refreshSession();
+    var session = result && result.data && result.data.session;
+    if (result && result.error) {
+      console.warn('[SB] session refresh failed', result.error);
+      return false;
+    }
+    if (!session) return false;
+    try { SB.realtime.setAuth(session.access_token); } catch (_) {}
+    if (typeof AUTH !== 'undefined' && AUTH) AUTH.user = session.user;
+    return true;
+  } catch (error) {
+    console.warn('[SB] session refresh threw', error);
+    return false;
+  }
+}
+
+async function _softDeleteAdWithSessionRetry(adId, deletedAt) {
+  // A tab can remain open beyond the JWT lifetime. Refresh proactively near
+  // expiry, and retry once if PostgREST still rejects the token.
+  try {
+    var current = await SB.auth.getSession();
+    var session = current && current.data && current.data.session;
+    var expiresAt = session && Number(session.expires_at || 0);
+    if (session && expiresAt && expiresAt <= Math.floor(Date.now() / 1000) + 60) {
+      await _refreshSupabaseWriteSession();
+    }
+  } catch (error) {
+    console.warn('[SB] pre-delete session check failed', error);
+  }
+
+  var response = await SB.from('ads').update({ deleted_at: deletedAt }).eq('id', adId);
+  if (response && response.error && _isSupabaseAuthError(response.error)) {
+    var refreshed = await _refreshSupabaseWriteSession();
+    if (refreshed) {
+      response = await SB.from('ads').update({ deleted_at: deletedAt }).eq('id', adId);
+    }
+  }
+  return response;
+}
+
 async function deleteAdEverywhere(adId) {
   var ad = null;
   for (var i = 0; i < ADS.length; i++) {
@@ -27209,10 +27268,10 @@ async function deleteAdEverywhere(adId) {
     // enough to keep the row deleted across all peers/tabs. Await it; if
     // it fails, abort — local state stays intact, user sees an error.
     try {
-      var _softResp = await SB.from('ads').update({ deleted_at: _delAd_now }).eq('id', adId);
+      var _softResp = await _softDeleteAdWithSessionRetry(adId, _delAd_now);
       if (_softResp && _softResp.error) {
         console.error('[SB] ads soft delete failed', _softResp.error);
-        try { toast('Delete failed — Supabase unreachable. Try again.', 'err'); } catch (_) {}
+        try { toast('Delete failed — ' + _supabaseDeleteErrorText(_softResp.error), 'err'); } catch (_) {}
         return;
       }
     } catch (e) {

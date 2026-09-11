@@ -2496,3 +2496,33 @@ The worker verifier correctly protected against the older brief-quality bug wher
 - Verifiers should auto-repair small deterministic serialization mistakes when the source of truth is otherwise valid.
 - Retry budget should be reserved for real failures: inaccessible media, agent errors, missing required output, or bad brief structure.
 - Static hook cards belong in `hookText`; changing subtitles belong in `captionTimeline`.
+# Bug 64 - Duplicate cleanup hid surviving Art Therapy winners
+
+**Status:** fixed in production database 2026-09-10.
+
+`AT-206-INS-121` and `AT-242-INS-133` existed as Art Therapy Winners but were
+affected by shared ClickUp deletion markers on retired duplicates and a stale
+Quilting sync stamp. Duplicate retirement now tombstones only the obsolete row
+ID, preserves its original ClickUp ID as audit metadata, and remaps matrix/action
+references to the surviving record. A source-list-checked database guard repairs
+stale sync stamps and prevents old tabs from reattaching deletion identities.
+Explicit user deletions and foreign-product quarantine remain protected.
+
+Both tasks were repaired with a full before/after checkpoint; briefs, taxonomy,
+media links, and Winner status were preserved. See
+`docs/repairs/2026-09-10-art-therapy-winners.md` and the rollback-only regression
+test `tests/db/test_duplicate_ad_tombstones.mjs`.
+
+# Bug 65 - Delete falsely reported Supabase as unreachable
+
+**Status:** fixed 2026-09-11.
+
+Long-lived signed-in tabs could submit an expired Supabase JWT when deleting a
+task. The database correctly rejected the write, but the delete handler labeled
+every returned error as "Supabase unreachable," hiding the actual cause.
+
+Deletes now refresh sessions that are close to expiry and retry once when
+PostgREST returns an authentication error. A failed retry leaves the task
+untouched and displays the real database message. Non-auth errors are not
+retried. `tests/delete-session-retry.test.mjs` covers both HTML entry points,
+the refresh-and-retry path, and the non-auth error path.

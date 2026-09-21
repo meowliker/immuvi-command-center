@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+<script src="/product-display.js"></script>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Immuvi Command Center</title>
@@ -11103,7 +11104,7 @@ async function _applyUserProductFilter() {
   if (activeProductId) {
     var p = PRODUCTS.find(function(p){ return p.id === activeProductId; });
     var nameEl = document.getElementById('hdrProdName');
-    if (nameEl && p) nameEl.textContent = p.name || p.id;
+    if (nameEl && p) nameEl.textContent = displayProductText(p.name || p.id);
   } else {
     var nameEl2 = document.getElementById('hdrProdName');
     if (nameEl2) nameEl2.textContent = PRODUCTS.length ? 'Select product' : 'No products assigned';
@@ -11279,7 +11280,7 @@ async function _adminLoad() {
   var createBox = document.getElementById('adminCreateProducts');
   if (createBox) {
     createBox.innerHTML = products.map(function(p){
-      return '<label class="admin-prod-chip"><input type="checkbox" value="' + _authEsc(p.id) + '"> ' + _authEsc(p.name || p.id) + '</label>';
+      return '<label class="admin-prod-chip"><input type="checkbox" value="' + _authEsc(p.id) + '"> ' + _authEsc(displayProductText(p.name || p.id)) + '</label>';
     }).join('') || '<em style="color:var(--t3)">No products in this workspace.</em>';
   }
 
@@ -11303,7 +11304,7 @@ function _adminRenderUsersTable(users, prodMap) {
     if (u.role === 'admin') prodTags = '<em style="color:var(--t3)">all (admin)</em>';
     else if (!u.product_ids || !u.product_ids.length) prodTags = '<em style="color:var(--t3)">none</em>';
     else prodTags = u.product_ids.map(function(pid){
-      return '<span class="admin-prod-tag">' + _authEsc(prodMap[pid] || pid) + '</span>';
+      return '<span class="admin-prod-tag">' + _authEsc(displayProductText(prodMap[pid] || pid)) + '</span>';
     }).join('');
 
     var actions =
@@ -11383,7 +11384,7 @@ async function _adminEditProducts(userId) {
     (prodRes.data || []).map(function(p){
       return '<label class="admin-prod-chip">' +
         '<input type="checkbox" value="' + _authEsc(p.id) + '"' + (assigned[p.id] ? ' checked' : '') + '>' +
-        ' ' + _authEsc(p.name || p.id) + '</label>';
+        ' ' + _authEsc(displayProductText(p.name || p.id)) + '</label>';
     }).join('') +
     '</div>';
   openModal('Edit products for user', html,
@@ -17387,7 +17388,7 @@ function _producerOpenModal(taskId, productId) {
           'placeholder="e.g. US / American faces (not Indian)" ' +
           'style="width:100%;padding:7px 8px;border:1px solid var(--b);border-radius:8px;font-size:0.88rem;box-sizing:border-box;margin-bottom:10px">' +
           '<label style="display:block;font-size:0.74rem;color:var(--t2);margin-bottom:4px">Exact product name</label>' +
-          '<input id="producerProductName" type="text" value="' + escAttr(_pd.productName) + '" ' +
+          '<input id="producerProductName" type="text" data-product-original="' + escAttr(_pd.productName) + '" value="' + escAttr(displayProductText(_pd.productName)) + '" ' +
           'placeholder="e.g. NCLEX" ' +
           'style="width:100%;padding:7px 8px;border:1px solid var(--b);border-radius:8px;font-size:0.88rem;box-sizing:border-box;margin-bottom:10px">' +
           '<label style="display:block;font-size:0.74rem;color:var(--t2);margin-bottom:4px">Forbidden generated names</label>' +
@@ -17637,7 +17638,7 @@ async function _producerSubmit() {
   var userInstr = (document.getElementById('producerInstruction') || {}).value || '';
   var offer  = (document.getElementById('producerOffer')  || {}).value || '';
   var market = (document.getElementById('producerMarket') || {}).value || '';
-  var productName = (document.getElementById('producerProductName') || {}).value || _producerDefaultProductName(productId);
+  var productName = readProductDisplayInput(document.getElementById('producerProductName')) || _producerDefaultProductName(productId);
   var forbiddenAliases = (document.getElementById('producerForbiddenAliases') || {}).value || '';
   // Persist the product defaults so they're remembered next time (fire-and-forget
   // is fine, but await so the in-memory cache + DB are consistent before insert).
@@ -19427,7 +19428,7 @@ function toast(msg, type, durationMs) {
   if (typeof msg === 'string' && /<[a-z][\s\S]*>/i.test(msg)) {
     div.innerHTML = msg;
   } else {
-    div.textContent = msg;
+    div.textContent = displayProductText(msg);
   }
   wrap.appendChild(div);
   setTimeout(function () {
@@ -19440,7 +19441,7 @@ function toast(msg, type, durationMs) {
 }
 
 function showLoading(text) {
-  document.getElementById('loadingText').textContent = text || 'Loading...';
+  document.getElementById('loadingText').textContent = displayProductText(text || 'Loading...');
   document.getElementById('loadingOverlay').classList.add('on');
 }
 
@@ -34920,8 +34921,8 @@ async function unlinkProductClickUp(productId) {
     if (PRODUCTS[i].id === productId) { prod = PRODUCTS[i]; break; }
   }
   if (!prod) { toast('Product not found', 'err'); return; }
-  var msg = 'Disconnect "' + (prod.name || productId) + '" from its ClickUp list ("' +
-            (prod.clickupListName || prod.clickupListId) + '")?\n\n' +
+  var msg = 'Disconnect "' + displayProductText(prod.name || productId) + '" from its ClickUp list ("' +
+            displayProductText(prod.clickupListName || prod.clickupListId) + '")?\n\n' +
             'You can re-link it any time. Existing imported tasks stay in the dashboard — only the sync link is removed.';
   if (!confirm(msg)) return;
 
@@ -35283,7 +35284,7 @@ async function cleanStaleAds(productId) {
   // soft-delete.
   if (liveTasks.length === 0) {
     await _showCleanStaleInfoModal('Cleanup Aborted',
-      '<p style="font-size:0.86rem;color:var(--t1);margin:0 0 10px">ClickUp returned <strong>0 tasks</strong> from <strong>' + esc(prod.clickupListName || prod.clickupListId) + '</strong>.</p>' +
+      '<p style="font-size:0.86rem;color:var(--t1);margin:0 0 10px">ClickUp returned <strong>0 tasks</strong> from <strong>' + esc(displayProductText(prod.clickupListName || prod.clickupListId)) + '</strong>.</p>' +
       '<p style="font-size:0.78rem;color:var(--t2);line-height:1.55;margin:0">This is usually a transient API error or rate limit. Running cleanup with 0 fetched tasks would delete all imported ads. Try again in 30 seconds, or click Sync Now first to verify the list is reachable.</p>'
     );
     return;
@@ -35383,7 +35384,7 @@ async function cleanStaleAds(productId) {
       return;
     }
     var taxonomyOnlyBody =
-      '<p style="font-size:0.86rem;color:var(--t1);line-height:1.5;margin:0 0 12px">No stale ads were found for <strong>' + esc(prod.name || '') + '</strong>, but the product still has Angle/Persona rows that are only tied to stale cleanup data and are not used by remaining local/current work.</p>' +
+      '<p style="font-size:0.86rem;color:var(--t1);line-height:1.5;margin:0 0 12px">No stale ads were found for <strong>' + esc(displayProductText(prod.name || '')) + '</strong>, but the product still has Angle/Persona rows that are only tied to stale cleanup data and are not used by remaining local/current work.</p>' +
       '<p style="font-size:0.76rem;color:var(--t2);line-height:1.5;margin:0 0 12px">Current product rows are kept whenever they still appear on any remaining local ad or current ClickUp task.</p>' +
       '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:12px 0">' +
         '<div style="background:var(--el);border:1px solid var(--b);border-radius:8px;padding:10px"><div style="font-size:0.68rem;text-transform:uppercase;letter-spacing:.08em;color:var(--t3);font-weight:800">Stale-only angles to remove</div>' + _cleanStaleListHtml(taxonomyPlan.angles, 'No angle rows will be removed') + '</div>' +
@@ -35453,7 +35454,7 @@ async function cleanStaleAds(productId) {
     '</div>';
   }).join('');
   var confirmBody =
-    '<p style="font-size:0.86rem;color:var(--t1);line-height:1.5;margin:0 0 12px">Remove <strong>' + stale.length + '</strong> stale ads from <strong>' + esc(prod.name || '') + '</strong>? These were imported from a previous ClickUp list and are no longer in <strong>' + esc(prod.clickupListName || prod.clickupListId) + '</strong>.</p>' +
+    '<p style="font-size:0.86rem;color:var(--t1);line-height:1.5;margin:0 0 12px">Remove <strong>' + stale.length + '</strong> stale ads from <strong>' + esc(displayProductText(prod.name || '')) + '</strong>? These were imported from a previous ClickUp list and are no longer in <strong>' + esc(displayProductText(prod.clickupListName || prod.clickupListId)) + '</strong>.</p>' +
     '<p style="font-size:0.76rem;color:var(--t2);line-height:1.5;margin:0 0 12px">Angle/Persona rows below are removed only when they are tied to stale ads and are not used by remaining local/current work.</p>' +
     '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:12px 0">' +
       '<div style="background:var(--el);border:1px solid var(--b);border-radius:8px;padding:10px"><div style="font-size:0.68rem;text-transform:uppercase;letter-spacing:.08em;color:var(--t3);font-weight:800">Stale-only angles to remove</div>' + _cleanStaleListHtml(taxonomyPlan.angles, 'No angle rows will be removed') + '</div>' +
@@ -35635,8 +35636,8 @@ function openLinkClickUpModal(productId) {
     '<summary style="font-size:0.75rem;color:var(--t3);cursor:pointer;user-select:none;padding:4px 0">Manual entry (fallback)</summary>' +
     '<div style="margin-top:10px;display:flex;gap:8px">' +
     '<input type="text" class="f-inp" id="linkListId" value="' + escAttr(prod ? prod.clickupListId : '') + '" placeholder="List ID" style="flex:1">' +
-    '<input type="text" class="f-inp" id="linkListName" value="' + escAttr(prod ? prod.clickupListName : '') + '" placeholder="List Name" style="flex:1.5">' +
-    '<button class="btn-primary btn-sm" onclick="saveProductClickUpLink(\'' + escAttr(productId) + '\', document.getElementById(\'linkListId\').value, document.getElementById(\'linkListName\').value)">Save</button>' +
+    '<input type="text" class="f-inp" id="linkListName" data-product-original="' + escAttr(prod ? prod.clickupListName : '') + '" value="' + escAttr(displayProductText(prod ? prod.clickupListName : '')) + '" placeholder="List Name" style="flex:1.5">' +
+    '<button class="btn-primary btn-sm" onclick="saveProductClickUpLink(\'' + escAttr(productId) + '\', document.getElementById(\'linkListId\').value, readProductDisplayInput(document.getElementById(\'linkListName\')))">Save</button>' +
     '</div></details>' +
     '</div>';
 
@@ -35733,7 +35734,7 @@ function fetchAndRenderCUHierarchy(productId) {
     spaceDetails.forEach(function(sd) {
       html += '<div class="cu-space-row">' +
         '<span class="cu-space-icon">&#9632;</span>' +
-        '<span class="cu-space-name">' + esc(sd.space.name) + '</span>' +
+        '<span class="cu-space-name">' + esc(displayProductText(sd.space.name)) + '</span>' +
         '</div>';
 
       // Folders with their lists
@@ -35741,7 +35742,7 @@ function fetchAndRenderCUHierarchy(productId) {
       spaceFolders.forEach(function(fd) {
         html += '<div class="cu-folder-row">' +
           '<span class="cu-folder-icon">&#9654;</span>' +
-          '<span class="cu-folder-name">' + esc(fd.folder.name) + '</span>' +
+          '<span class="cu-folder-name">' + esc(displayProductText(fd.folder.name)) + '</span>' +
           '</div>';
         fd.lists.forEach(function(list) {
           html += renderCUListRow(list, productId);
@@ -35765,7 +35766,7 @@ function fetchAndRenderCUHierarchy(productId) {
 function renderCUListRow(list, productId) {
   return '<div class="cu-list-row" onclick="selectCUList(\'' + escJs(productId) + '\',\'' + escJs(list.id) + '\',\'' + escJs(list.name) + '\')">' +
     '<span class="cu-list-icon">&#9679;</span>' +
-    '<span class="cu-list-name">' + esc(list.name) + '</span>' +
+    '<span class="cu-list-name">' + esc(displayProductText(list.name)) + '</span>' +
     '<span class="cu-list-id">' + esc(list.id) + '</span>' +
     '<button class="btn-primary btn-xs cu-list-select-btn">Select</button>' +
     '</div>';
@@ -35888,7 +35889,7 @@ function renderProductProfile() {
     var p = PRODUCTS[i];
     var isActive = p.id === activeProductId;
     html += '<div class="pp-chip' + (isActive ? ' active' : '') + '" onclick="switchProduct(\'' + escAttr(p.id) + '\')" style="--pp-color:' + escAttr(p.color) + '">';
-    html += '<span class="pp-chip-dot"></span><span class="pp-chip-name">' + esc(p.name) + '</span>';
+    html += '<span class="pp-chip-dot"></span><span class="pp-chip-name">' + esc(displayProductText(p.name)) + '</span>';
     html += p.clickupListId ? '<span class="pp-chip-linked">&#10003; ClickUp</span>' : '<span class="pp-chip-unlinked">No ClickUp</span>';
     html += '</div>';
   }
@@ -35898,10 +35899,10 @@ function renderProductProfile() {
   var activeProd = getActiveProduct();
   if (activeProd) {
     html += '<div class="pp-active-details">';
-    html += '<span class="pp-active-name">' + esc(activeProd.name) + '</span>';
+    html += '<span class="pp-active-name">' + esc(displayProductText(activeProd.name)) + '</span>';
 
     if (activeProd.clickupListId) {
-      html += '<span class="pp-linked-badge">&#10003; ' + esc(activeProd.clickupListName || activeProd.clickupListId) + '</span>';
+      html += '<span class="pp-linked-badge">&#10003; ' + esc(displayProductText(activeProd.clickupListName || activeProd.clickupListId)) + '</span>';
       html += '<button class="btn-ghost btn-xs" onclick="openLinkClickUpModal(\'' + escAttr(activeProd.id) + '\')" style="margin-left:4px">Change</button>';
       // Explicit Unlink — calls the unlink_product_clickup RPC which bypasses
       // the products_preserve_clickup_link trigger (the trigger blocks
@@ -36468,7 +36469,7 @@ function updateHeaderProductName() {
   var nameEl = document.getElementById('hdrProdName');
   var activeProd = getActiveProduct();
   if (dot) dot.style.background = activeProd ? (activeProd.color || '#4F46E5') : '#94A3B8';
-  if (nameEl) nameEl.textContent = activeProd ? activeProd.name : 'No Product';
+  if (nameEl) nameEl.textContent = activeProd ? displayProductText(activeProd.name) : 'No Product';
   // Also re-render dropdown if it's open
   var dd = document.getElementById('hdrProdDd');
   if (dd && dd.classList.contains('open')) renderHdrProdDropdown();
@@ -36483,7 +36484,7 @@ function renderHdrProdDropdown() {
     var isActive = p.id === activeProductId;
     html += '<div class="hdr-prod-dd-item' + (isActive ? ' active' : '') + '" onclick="hdrSwitchProduct(\'' + escAttr(p.id) + '\')">';
     html += '<span class="hdr-prod-dd-dot" style="background:' + escAttr(p.color || '#4F46E5') + '"></span>';
-    html += '<span class="hdr-prod-dd-name">' + esc(p.name) + '</span>';
+    html += '<span class="hdr-prod-dd-name">' + esc(displayProductText(p.name)) + '</span>';
     if (p.clickupListId) html += '<span class="hdr-prod-dd-badge">&#10003; ClickUp</span>';
     if (isActive) html += '<svg width="10" height="8" viewBox="0 0 10 8" fill="none" style="color:var(--win)"><path d="M1 4L3.5 6.5L9 1" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
     html += '</div>';
@@ -43010,7 +43011,7 @@ function _mxv4RenderTaxonomyEditor(ad, angleName, personaName) {
   var angleOpts = (ANGLES || []).filter(function(a) { return a && a.name && _taxonomyItemIsActive('angle', a.name, false); })
     .map(function(a) { return '<option value="' + escAttr(a.name) + '"' + (draftAngle === a.name ? ' selected' : '') + '>' + esc(a.name) + '</option>'; }).join('');
   var personaOpts = (PERSONAS || []).filter(function(p) { return p && p.name && _taxonomyItemIsActive('persona', p.name, false); })
-    .map(function(p) { return '<option value="' + escAttr(p.name) + '"' + (draftPersona === p.name ? ' selected' : '') + '>' + esc(p.name) + '</option>'; }).join('');
+    .map(function(p) { return '<option value="' + escAttr(p.name) + '"' + (draftPersona === p.name ? ' selected' : '') + '>' + esc(displayProductText(p.name)) + '</option>'; }).join('');
   if (draftAngle && !(ANGLES || []).some(function(a){ return a && a.name === draftAngle; })) {
     angleOpts = '<option value="' + escAttr(draftAngle) + '" selected>' + esc(draftAngle) + '</option>' + angleOpts;
   }
@@ -46283,7 +46284,7 @@ function openAddFormatsPopup(angleName, personaName) {
         ' onchange="toggleInspoInCell(this,\''+escAttr(ins.id)+'\',\''+escJs(angleName)+'\',\''+escJs(personaName)+'\')"' +
         (alreadyAdded ? ' style="accent-color:var(--win)"' : '') + '></td>';
       bodyHtml += '<td style="font-family:\'JetBrains Mono\',monospace;font-size:0.62rem;color:var(--t3);white-space:nowrap">'+esc(ins.id)+'</td>';
-      bodyHtml += '<td style="font-weight:600;font-size:0.73rem;white-space:nowrap">'+esc(ins.brand||'—')+'</td>';
+      bodyHtml += '<td style="font-weight:600;font-size:0.73rem;white-space:nowrap">'+esc(displayProductText(ins.brand||'—'))+'</td>';
       bodyHtml += '<td style="font-size:0.7rem;color:var(--t2);max-width:200px">'+esc(fmtName)+'</td>';
       bodyHtml += '<td><span style="font-size:0.65rem;color:var(--t2)">'+esc(ins.hookType||'—')+'</span></td>';
       bodyHtml += '<td><span style="font-size:0.65rem;color:var(--t2)">'+esc(ins.creativeStructure||'—')+'</span></td>';
@@ -48407,7 +48408,7 @@ function renderInspirations() {
 
     // Build persona select
     var personaOpts = PERSONAS.map(function(p){
-      return '<option value="'+escAttr(p.name)+'"'+(ins.persona===p.name?' selected':'')+'>'+esc(p.name)+'</option>';
+      return '<option value="'+escAttr(p.name)+'"'+(ins.persona===p.name?' selected':'')+'>'+esc(displayProductText(p.name))+'</option>';
     }).join('') + '<option value="__custom__"'+(ins.persona && !PERSONAS.some(function(p){return p.name===ins.persona;})?' selected':'')+'>— custom —</option>';
 
     // Build structure select
@@ -48438,7 +48439,7 @@ function renderInspirations() {
     // Build tags pills
     var tagPills = '';
     if (ins.importTags && ins.importTags.length > 0) {
-      tagPills = ins.importTags.map(function(t){ return '<span class="ins-tag-pill imported">'+esc(t)+'</span>'; }).join('');
+      tagPills = ins.importTags.map(function(t){ return '<span class="ins-tag-pill imported">'+esc(displayProductText(t))+'</span>'; }).join('');
     } else {
       tagPills = '\u2014';
     }
@@ -48472,7 +48473,7 @@ function renderInspirations() {
           '<td>\u2014</td><td>\u2014</td><td>\u2014</td><td><a href="'+escAttr(ins.sourceUrl)+'" target="_blank" class="ins-link">'+esc(srcUrlDisp)+'&#8599;</a></td><td>\u2014</td>'
         :
       // 3. Brand
-      '<td style="font-size:0.73rem;font-weight:500;white-space:nowrap">'+esc(ins.brand||'\u2014')+'</td>' +
+      '<td style="font-size:0.73rem;font-weight:500;white-space:nowrap">'+esc(displayProductText(ins.brand||'\u2014'))+'</td>' +
       // 4. Angle
       '<td>' +
         (ins._needsAngleReview ? '<span title="Needs mapping" style="color:#f59e0b;font-size:0.6rem;margin-right:2px;cursor:pointer" onclick="remapInspirationFields('+insIdQ+')">⚠</span>' : '') +
@@ -48770,7 +48771,7 @@ function openProductPicker() {
     var winCount  = getProductWinningFormats(p.id).length;
     return '<label class="ins-product-item" data-product-id="'+escAttr(p.id)+'">' +
       '<input type="checkbox" value="'+escAttr(p.id)+'" onchange="refreshPickerPreview()"> ' +
-      esc(p.name) +
+      esc(displayProductText(p.name)) +
       '<span class="ins-product-count" title="'+insCount+' inspos · '+winCount+' winners">'+insCount+' / 🏆'+winCount+'</span>' +
     '</label>';
   }).join('');
@@ -49001,7 +49002,7 @@ function refreshPickerPreview() {
         '<td style="font-size:0.7rem;white-space:nowrap">'+esc(ad.creativeStructure||'—')+'</td>' +
         '<td style="font-size:0.7rem"><span style="font-weight:700;color:'+funnelColor(ad.funnelStage)+'">'+esc(ad.funnelStage||'—')+'</span></td>' +
         '<td><span class="ins-status-badge '+statusCls+'">'+esc(ad.status)+'</span></td>' +
-        '<td><span class="ins-tag-pill imported">'+esc(row.productName)+'</span></td>' +
+        '<td><span class="ins-tag-pill imported">'+esc(displayProductText(row.productName))+'</span></td>' +
         '<td style="font-size:0.7rem;color:var(--t2);white-space:nowrap" title="'+esc(_pickerFmtDate(winDate,true))+'">'+esc(_pickerFmtDate(winDate))+'</td>' +
       '</tr>';
     } else {
@@ -49011,14 +49012,14 @@ function refreshPickerPreview() {
         '<td><input type="checkbox" class="ins-picker-row-cb" data-idx="'+i+'" onchange="updatePickerSelectedCount();_updatePickerImportLabel()"></td>' +
         '<td style="font-size:0.7rem;color:var(--t2);font-family:var(--mono,monospace)">'+esc(ins.id||'—')+'</td>' +
         '<td style="font-weight:500;max-width:160px">'+esc(ins.formatName || ins.creativeUSP || '—')+'</td>' +
-        '<td style="font-size:0.7rem">'+esc(ins.brand||'—')+'</td>' +
+        '<td style="font-size:0.7rem">'+esc(displayProductText(ins.brand||'—'))+'</td>' +
         '<td style="font-size:0.7rem;max-width:100px">'+esc(ins.angle||'—')+'</td>' +
         '<td style="font-size:0.7rem;max-width:100px">'+esc(ins.persona||'—')+'</td>' +
         '<td style="font-size:0.7rem;white-space:nowrap">'+esc(ins.hookType||'—')+'</td>' +
         '<td style="font-size:0.7rem;white-space:nowrap">'+esc(ins.creativeStructure||'—')+'</td>' +
         '<td style="font-size:0.7rem"><span style="font-weight:700;color:'+funnelColor(ins.funnelStage)+'">'+esc(ins.funnelStage||'—')+'</span></td>' +
         '<td><span class="ins-status-badge '+(ins.status||'saved').toLowerCase()+'">'+esc(ins.status||'Saved')+'</span></td>' +
-        '<td><span class="ins-tag-pill imported">'+esc(row.productName)+'</span></td>' +
+        '<td><span class="ins-tag-pill imported">'+esc(displayProductText(row.productName))+'</span></td>' +
         '<td style="font-size:0.7rem;color:var(--t2);white-space:nowrap" title="'+esc(_pickerFmtDate(insDate,true))+'">'+esc(_pickerFmtDate(insDate))+'</td>' +
       '</tr>';
     }
@@ -52095,7 +52096,7 @@ window._clearPendingCu = _clearPendingCu;
     var body = document.getElementById('insoDrwBody');
     if (!t || !body) return;
     t.textContent = ins.formatName || ins.title || ins.id;
-    sub.textContent = (ins.brand || '—') + ' · ' + (ins.platform || '—') + ' · ' + (ins.id || '');
+    sub.textContent = displayProductText(ins.brand || '—') + ' · ' + (ins.platform || '—') + ' · ' + (ins.id || '');
 
     // Inline rename: click title to edit. Enter commits, Esc cancels, blur commits.
     // Wires through updateInsFormatName which cascades to children + ClickUp.
@@ -52185,7 +52186,7 @@ window._clearPendingCu = _clearPendingCu;
     if (ins.notes) {
       html += '<div class="ins-drw-section">';
       html += '<div class="ins-drw-section-hdr">NOTES</div>';
-      html += '<div class="ins-drw-prose">' + esc(ins.notes) + '</div>';
+      html += '<div class="ins-drw-prose">' + esc(displayProductText(ins.notes)) + '</div>';
       html += '</div>';
     }
 

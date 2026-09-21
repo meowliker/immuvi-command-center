@@ -1,3 +1,4 @@
+import { displayProductText } from '../../../product-display.cjs'
 import type { Snapshot } from '../lib/data/types'
 import { searchLinks } from '../lib/data/types'
 
@@ -45,7 +46,7 @@ export default function Keywords({ snap }: { snap: Snapshot }) {
                     <div className={`d-stripe ${k.product}`} />
                     <div className="d-nm">{k.term}</div>
                     <div className="d-fmt">{k.wins} winner{k.wins === 1 ? '' : 's'}</div>
-                    <div className="d-ds">{k.productName}</div>
+                    <div className="d-ds">{displayProductText(k.productName)}</div>
                     <div className="d-links">
                       <a className="d-lnk" href={l.adLibrary} target="_blank" rel="noopener">Ad Lib</a>
                       <a className="d-lnk" href={l.instagram} target="_blank" rel="noopener">IG</a>

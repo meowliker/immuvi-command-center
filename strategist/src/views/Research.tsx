@@ -1,3 +1,4 @@
+import { displayProductText } from '../../../product-display.cjs'
 import type { ResearchCard, SynthesisCard, CombinationInsights } from '../lib/data/research'
 import ResearchList from '../components/ResearchList'
 
@@ -30,7 +31,7 @@ export default function Research({ cards, syntheses, combos }: { cards: Research
           {s.topPattern && (
             <div className="sy-top">
               <div className="sy-top-l">
-                {s.productName} · the pattern to replicate ·
+                {displayProductText(s.productName)} · the pattern to replicate ·
                 {' '}{s.winnersAnalysed} winning / {s.losersAnalysed} losing creatives
               </div>
               <div className="sy-top-v">{s.topPattern}</div>

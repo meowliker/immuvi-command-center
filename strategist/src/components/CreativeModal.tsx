@@ -1,4 +1,5 @@
 'use client'
+import { displayProductText } from '../../../product-display.cjs'
 import { useEffect, useRef, useState } from 'react'
 import { searchLinks } from '../lib/data/types'
 import { api } from '../browser/api'
@@ -196,7 +197,7 @@ export default function CreativeModal({
               {d && (
                 <div className="mdl-sub">
                   <span>{TIER[d.category] ?? d.category}</span>
-                  <span>{d.product_name}</span>
+                  <span>{displayProductText(d.product_name)}</span>
                   {d.duration_sec != null && <span>{d.duration_sec.toFixed(1)}s</span>}
                   {d.aspect_ratio && <span>{d.aspect_ratio}</span>}
                   {d.cuts_per_minute != null && <span>{d.cuts_per_minute.toFixed(0)} cuts/min</span>}

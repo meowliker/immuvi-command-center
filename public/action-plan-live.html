@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+<script src="/product-display.js"></script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Action Plan · Live</title>
@@ -2252,7 +2253,7 @@ async function loadProducts() {
 
   const sel = $('productSel');
   sel.innerHTML = STATE.products.map(p =>
-    `<option value="${escAttr(p.id)}" ${p.id === STATE.activeProductId ? 'selected' : ''}>${esc(p.name)}</option>`
+    `<option value="${escAttr(p.id)}" ${p.id === STATE.activeProductId ? 'selected' : ''}>${esc(displayProductText(p.name))}</option>`
   ).join('');
   sel.onchange = () => {
     STATE.activeProductId = sel.value;
@@ -5010,7 +5011,7 @@ function renderDebug() {
   const key = getClickUpKey();
   const listId = getProductListId();
 
-  $('dbgProduct').textContent = 'Product: ' + (prod ? prod.name : '?') + ' (' + (STATE.activeProductId || '—') + ')';
+  $('dbgProduct').textContent = 'Product: ' + (prod ? displayProductText(prod.name) : '?') + ' (' + (STATE.activeProductId || '—') + ')';
   $('dbgActions').textContent = 'Actions: ' + STATE.actions.length;
   $('dbgStamps').textContent = 'Stamps → approved: ' + approvedStamped + ' · launched: ' + stamped;
   $('dbgKey').textContent = 'ClickUp key: ' + (key ? '✓ set (' + key.slice(0, 6) + '…)' : '✗ MISSING');

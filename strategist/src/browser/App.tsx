@@ -1,3 +1,4 @@
+import { displayProductText } from '../../../product-display.cjs'
 import { useCallback,useEffect,useRef,useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import { ArrowLeft,RefreshCw,Play,ScanText,Layers,CloudDownload,X,ExternalLink,AlertCircle } from 'lucide-react'
@@ -150,7 +151,7 @@ function App() {
         <select aria-label="Product" value={product} onChange={e=>navigate(view,e.target.value)}>
           <option value="">All products</option>
           {product&&!selected&&<option value={product}>Product not configured</option>}
-          {session.products.map(p=><option value={p.key} key={p.key}>{p.name}</option>)}
+          {session.products.map(p=><option value={p.key} key={p.key}>{displayProductText(p.name)}</option>)}
         </select>
       </label>
       <span className="header-user">{session.user.name || 'Immuvi account'}</span>
@@ -176,7 +177,7 @@ function App() {
       </div>
       {logOpen&&<section className="job-history" aria-label="Job history">
         {jobs.length===0?<p>No jobs yet.</p>:jobs.slice(0,10).map(j=><div className="job-entry" key={j.id}>
-          <div className="job-entry-head"><strong>{j.kind}</strong><span>{session.products.find(p=>p.key===j.product_key)?.name||'All products'}</span><span className={`job-state ${j.status}`}>{j.cancel_requested&&active(j)?'Cancelling':j.status}</span>
+          <div className="job-entry-head"><strong>{j.kind}</strong><span>{displayProductText(session.products.find(p=>p.key===j.product_key)?.name||'All products')}</span><span className={`job-state ${j.status}`}>{j.cancel_requested&&active(j)?'Cancelling':j.status}</span>
             {active(j)&&<button className="icon-action" disabled={j.cancel_requested} title="Cancel job" aria-label="Cancel job" onClick={()=>cancel(j.id)}><X size={14}/></button>}</div>
           {j.log.length>0&&<pre>{j.log.slice(-6).join('\n')}</pre>}{j.error&&<p className="job-error">{j.error}</p>}
         </div>)}
@@ -206,7 +207,7 @@ function Overview({snap,navigate}:{snap:Snapshot;navigate:(view:View)=>void}) {
         const winners=new Set(rows.filter(c=>['win','mild','scale'].includes(c.status)).map(c=>c.taskId))
         const analyzed=new Set(rows.filter(c=>c.analysed&&winners.has(c.taskId)).map(c=>c.taskId))
         const pct=winners.size?Math.round(analyzed.size/winners.size*100):0
-        return <div className="coverage-row" key={product}><strong>{rows[0].productName}</strong><span>{winners.size}</span><span>{analyzed.size}</span><div className="coverage-value"><div className="coverage-track"><i style={{width:`${pct}%`}}/></div><span>{pct}%</span></div></div>
+        return <div className="coverage-row" key={product}><strong>{displayProductText(rows[0].productName)}</strong><span>{winners.size}</span><span>{analyzed.size}</span><div className="coverage-value"><div className="coverage-track"><i style={{width:`${pct}%`}}/></div><span>{pct}%</span></div></div>
       })}
       {!products.length&&<p className="empty">No synced creatives in this product.</p>}
     </section>

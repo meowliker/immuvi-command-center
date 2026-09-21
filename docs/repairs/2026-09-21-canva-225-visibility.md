@@ -65,4 +65,7 @@ Restoring the shared deletion IDs will intentionally reintroduce the visibility 
 A read-only audit found 220 automatic markers with shared ClickUp IDs across
 10 products. This is not a count of confirmed missing tasks. Some have no live
 survivor or coexist with other deletion reasons. Cross-product historical repair
-is pending explicit user approval; none was performed in this change.
+required explicit user approval; none was performed in this change. The user
+subsequently authorized the all-product follow-up when reporting CA-227-INS-054.
+See `2026-09-21-all-product-task-visibility.md` for the completed verified backfill
+and the ambiguous deletions the user explicitly chose to preserve for review.

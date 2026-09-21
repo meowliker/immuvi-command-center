@@ -7,6 +7,26 @@ Status legend: 🆕 just-flagged · 📐 plan-locked · 🛠 in-progress · ✅ 
 
 ---
 
+## Historical duplicate cleanup hides surviving ClickUp tasks
+**Status:** Fixed for verified automatic-cleanup cases, 2026-09-21.
+**Reported:** CA-225-INS-051 and CA-227-INS-054 missing from Action Plan and Creative Matrix.
+
+Retired duplicate rows and automatic deletion markers retained shared ClickUp IDs,
+causing the app to hide live canonical tasks. The database now keeps automatic
+retirement row-scoped, including stale client writes. An all-26-product audit and
+ClickUp-verified backfill repaired 212 tasks, 81 stale routing flags and one matrix
+reference, with private backups and transaction-level preservation assertions.
+
+21 planner tests and a full rollback rehearsal passed; a fresh database check
+verified all repaired tasks. Deliberate deletions remain unchanged. At the user's
+request, 23 ambiguous self-heal deletions remain preserved for review. Access and
+identity exceptions are documented rather than silently restored.
+
+See `docs/repairs/2026-09-21-all-product-task-visibility.md` for scope, tooling,
+verification, unresolved records, and recovery instructions.
+
+---
+
 ## Bug 1.1 — Cell data should respect active date filter (Scope vs Highlight)
 **Status:** ✅ done — shipped 2026-05-01 (local only, no git push)
 **Reported:** 2026-05-01

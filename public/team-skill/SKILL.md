@@ -103,6 +103,29 @@ done
 
 ## Step 1 — Pull the queue from Supabase
 
+### No Brief / classification-only contract
+
+Read `inspiration_queue.no_brief` for each item. Only boolean `true` enables
+classification-only mode; missing/false keeps the existing full-brief behavior.
+The choice belongs to the individual row, not the entire batch.
+
+For `no_brief=true`, perform the full media inspection and classification in
+Steps 3-4 and BOTH result/inspiration writes in Steps 5 and 5b. Keep factual media
+type, source caption, narration/caption evidence, taxonomy and concise hypothesis.
+Do **not** generate the 8-section brief, creative breakdown, replication plan,
+competitor intel, what-to-test plans, script skeleton or next-ad scripts.
+Do **not** execute Steps 6, 6.5 or 6.7 for that item: no ClickUp document creation,
+update, lookup, tracker update or missing-brief repair.
+
+Persist `metadata.no_brief=true` in the result and `data.noBrief=true` in the
+inspiration. New results use `brief={}` and null ClickUp document fields; new
+inspirations have empty brief links and `nextAdScripts=[]`. Merge factual fields
+without deleting any pre-existing brief or unrelated data. Verification requires
+all classification/media fields but does not require a brief URL or scripts.
+When the worker invoked this skill, it owns queue status. For manual runs, mark
+the row classified after verifying both writes. Do not retry a successful
+classification-only item just because it has no brief.
+
 ```bash
 # Portable env loader — reads from ~/.classify-inspiration.env (set by installer).
 # Fallback chain: ~/.classify-inspiration.env → $PWD/.env → ~/.env.
@@ -112,7 +135,7 @@ done
 
 # Get pending items — all of them, across products. Each row has product_id, ins_id, url, platform.
 PGPASSWORD="$SUPABASE_DB_PASSWORD" psql "$SUPABASE_DB_URL" -At -F$'\t' -c "
-  select q.ins_id, q.product_id, q.url, q.platform, p.name as product_name, p.config->>'doc_id' as doc_id
+  select q.ins_id, q.product_id, q.url, q.platform, p.name as product_name, p.config->>'doc_id' as doc_id, q.no_brief
   from public.inspiration_queue q
   join public.products p on p.id = q.product_id
   where q.status = 'pending'
@@ -120,7 +143,7 @@ PGPASSWORD="$SUPABASE_DB_PASSWORD" psql "$SUPABASE_DB_URL" -At -F$'\t' -c "
 " 2>/dev/null
 ```
 
-Parse the TSV: each line is `ins_id\tproduct_id\turl\tplatform\tproduct_name\tdoc_id`.
+Parse the TSV: each line is `ins_id\tproduct_id\turl\tplatform\tproduct_name\tdoc_id\tno_brief`.
 
 **Exclude items already classified** — skip any queue row whose `ins_id` + `product_id` combo already exists in `inspiration_results`:
 
@@ -177,6 +200,7 @@ YOUR ITEM:
 - PRODUCT_ID: [prod-XXX]
 - URL:        [url]
 - Platform:   [facebook/instagram/tiktok/etc]
+- NO_BRIEF:   [true/false from this queue row; follow classification-only contract when true]
 
 CONTEXT:
 - Angles:   [comma-separated list or "none provided"]
@@ -466,7 +490,7 @@ Read each frame with the **Read tool** (up to 6 frames). You are a senior media 
 - `media_kind=video` → `photo_video` must not be `Photo` or `Carousel`.
 - Do not use `duration_seconds` alone to decide media kind; TikTok photo posts can have a duration and Instagram reels can sometimes probe as `0`.
 
-**Also build the full 8-section brief data**:
+**Only for no_brief=false, also build the full 8-section brief data**:
 
 ```
 FRAME_BY_FRAME: timestamped breakdown with label (HOOK/TENSION/PROOF/BRIDGE/CTA) + one caption/voice-over line + what happens + emotion triggered. Time ranges should follow the spoken ad narration when true voice-over exists, and split only when a new creative beat starts. If there is no true ad voice-over, use visible caption text/on-screen text or a concise visual beat in the Caption / Voice Over column; never use background conversation, kids shouting, classroom/game chatter, music, song lyrics, crowd noise, incidental dialogue, or placeholders such as "audio present; exact transcript not verified".
@@ -713,6 +737,7 @@ elif media_kind == 'video' and ad_type in ('', 'Photo', 'Carousel'):
   ad_type = 'Video'
 
 patch = {
+  'noBrief': md.get('no_brief') is True,
   'brand': brand,
   'hookType': cls.get('hook_type') or '',
   'creativeStructure': cls.get('creative_structure') or '',
@@ -771,6 +796,9 @@ The dashboard sees this within 1–2 s via its realtime subscription on `public.
 ---
 
 ## Step 6 — Create or UPDATE ClickUp Doc Page (8-section brief)
+
+Skip this entire step for `no_brief=true`. Successful classification-only items
+must not create or update a document.
 
 Uses the `doc_id` from `products.config->>'doc_id'` (pulled in Step 1). **IMPORTANT:** always list existing pages first. If a page already starts with `[INS_ID]` (same ins_id, regardless of old/stale title), UPDATE it instead of creating a duplicate.
 
@@ -1052,6 +1080,11 @@ cur.execute("""
   from public.inspirations i
   join public.products p on p.id = i.product_id
   where i.status = 'Classified'
+    and coalesce(i.data->>'noBrief','false') <> 'true'
+    and not exists (
+      select 1 from public.inspiration_queue q
+      where q.ins_id = i.id and q.product_id = i.product_id and q.no_brief
+    )
     and coalesce(i.data->>'_clickupDocPageUrl','') = ''
     and coalesce(p.config->>'doc_id','') <> ''
 """)

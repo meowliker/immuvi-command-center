@@ -5285,6 +5285,8 @@ button.mx-dt-action-sent .open { color:#0a84ff; font-weight:700; margin-left:4px
 
 /* ── Inspiration Tab ─────────────────────────── */
 .ins-toolbar { display:flex; align-items:center; gap:10px; padding:16px 0 12px; flex-wrap:wrap; }
+.ins-no-brief { display:inline-flex; align-items:center; gap:6px; flex-shrink:0; font-size:0.8rem; color:var(--t1); cursor:pointer; white-space:nowrap; }
+.ins-no-brief input { width:16px; height:16px; margin:0; accent-color:var(--inprog); }
 .ins-url-input { flex:1; min-width:280px; padding:9px 14px; border:1px solid var(--b); border-radius:8px; font-size:0.8rem; font-family:inherit; background:var(--card); color:var(--t1); outline:none; transition:border-color .2s; }
 .ins-url-input:focus { border-color:var(--inprog); box-shadow:0 0 0 3px rgba(37,99,235,0.08); }
 .ins-classify-btn { padding:9px 18px; background:var(--inprog); color:#fff; border:none; border-radius:8px; font-size:0.78rem; font-weight:600; cursor:pointer; display:flex; align-items:center; gap:6px; transition:opacity .2s; white-space:nowrap; }
@@ -10570,6 +10572,7 @@ body:not(.booting) #__bootLoader {
   <section id="panel-inspiration" class="panel" role="tabpanel">
     <div class="ins-toolbar">
       <input type="text" id="insUrlInput" class="ins-url-input" placeholder="Paste Facebook / Instagram / TikTok / YouTube URL..." onkeydown="if(event.key==='Enter')addToInsQueue()" />
+      <label class="ins-no-brief"><input type="checkbox" id="insNoBrief" />No Brief</label>
       <button class="ins-classify-btn" id="insAddBtn" onclick="addToInsQueue()">
         <span class="btn-label">+ Add to Queue</span>
       </button>
@@ -13710,6 +13713,7 @@ const DB = {
         product_id: productId,
         url: it.url,
         platform: it.platform || null,
+        no_brief: it.noBrief === true,
         status: workerBlockMessage ? 'blocked' : 'pending',
         attempts: 0,
         claimed_by: null,
@@ -47079,6 +47083,7 @@ function platformClass(platform) {
 // Add a single URL to the queue (instant, no processing)
 function addToInsQueue() {
   var url = document.getElementById('insUrlInput').value.trim();
+  var noBrief = !!(document.getElementById('insNoBrief') || {}).checked;
   if (!url) { showInsStatus('error', 'Please paste a URL first'); return; }
   if (!url.startsWith('http')) { showInsStatus('error', 'Invalid URL — must start with http'); return; }
 
@@ -47092,6 +47097,7 @@ function addToInsQueue() {
     id: getProductInsPrefix() + '-INS-' + String(INS_NEXT_ID).padStart(3,'0'),
     sourceUrl: url,
     platform: detectPlatform(url),
+    noBrief: noBrief,
     brand: '',
     formatName: '',
     creativeUSP: '',
@@ -47151,7 +47157,7 @@ async function autoPushToBridge() {
     if (toPush.length === 0) return;
 
     var res = await DB.enqueueInspirations(activeProductId, toPush.map(function (i) {
-      return { id: i.id, url: i.sourceUrl, platform: i.platform };
+      return { id: i.id, url: i.sourceUrl, platform: i.platform, noBrief: i.noBrief === true };
     }));
     if (res && res.blocked) showInsStatus('error', res.error_message || 'No healthy classifier worker is online');
   } catch (e) { console.error('[SB] autoPushToBridge', e); }
@@ -47220,7 +47226,7 @@ async function processAllWithClaude() {
   try {
     if (DB.ready && activeProductId) {
       var res = await DB.enqueueInspirations(activeProductId, queued.map(function (i) {
-        return { id: i.id, url: i.sourceUrl, platform: i.platform };
+        return { id: i.id, url: i.sourceUrl, platform: i.platform, noBrief: i.noBrief === true };
       }));
       cloudOk = !!(res && res.ok && !res.blocked);
       if (res && res.blocked) showInsStatus('error', res.error_message || 'No healthy classifier worker is online');
@@ -47785,6 +47791,7 @@ function applyClassificationResults(results, isPolling) {
       return (data.ins_id && i.id === data.ins_id) || i.sourceUrl === data.source_url;
     });
     if (!ins) return;
+    if (data.no_brief === true || data.noBrief === true) ins.noBrief = true;
     // Skip only if fully classified and the incoming result doesn't carry
     // newer brief-only fields we still lack. This lets rerenders repair
     // hook/caption/voice-over data without reopening old taxonomy prompts.
@@ -51380,7 +51387,7 @@ window._clearPendingCu = _clearPendingCu;
     if (f === 'classifying') return queueRow && queueRow.status === 'classifying';
     if (f === 'blocked')     return queueRow && (queueRow.status === 'blocked' || _insQueueIsWorkerBlocked(queueRow));
     if (f === 'failed')      return queueRow && queueRow.status === 'failed' && !_insQueueIsWorkerBlocked(queueRow);
-    if (f === 'classified')  return ins && (ins.status === 'Saved' || ins.status === 'Classified') && !!ins._clickupDocPageUrl;
+    if (f === 'classified')  return ins && (ins.status === 'Saved' || ins.status === 'Classified') && (ins.noBrief === true || !!ins._clickupDocPageUrl);
     if (f === 'placed')      return ins && Array.isArray(ADS) && ADS.some(function(a){ return a._fromInspoId === ins.id; });
     // TODAY-scoped
     if (f === 'today_classified') {

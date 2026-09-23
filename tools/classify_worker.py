@@ -171,6 +171,61 @@ WORKER_UPDATE_URL = WORKER_UPDATE_MANIFEST[0]["url"]
 
 # ── Helpers ─────────────────────────────────────────────────
 
+def classification_only_prompt(job: dict) -> str:
+    """Keep the No Brief request separate from the full brief-generation prompt."""
+    target = json.dumps({
+        key: job.get(key) for key in ("id", "ins_id", "product_id", "url", "platform")
+    })
+    return (
+        "Run /classify-inspiration for this SINGLE queue row in CLASSIFICATION-ONLY mode. "
+        "The user selected No Brief (no_brief=true). Do not batch-scan or process other rows.\n"
+        f"Target: {target}\n\n"
+        "Read the skill's classification-only contract and media/classification steps. "
+        "Do NOT generate creative brief content, frame-by-frame creative breakdowns, "
+        "replication briefs, what-to-test plans, competitor intel, our-next-ad content, "
+        "inspiration script skeletons, or next-ad variation scripts. Do not create, update, "
+        "discover, or repair ClickUp documents or Master Tracker pages for this item. "
+        "Do not run the brief creation or missing-brief self-heal steps.\n"
+        "1. Load the target product name/config and its active angles and personas. "
+        "Analyze the actual creative; reuse semantically equivalent product taxonomy. "
+        "Do not copy a foreign product's audience or invent age/wording near-duplicates. "
+        "Only suggest a new label if the creative has a materially different buyer or strategy.\n"
+        "2. Download and inspect the actual media, including the complete video and audio. "
+        "Use the skill's platform downloaders; TikTok must use the non-browser downloader chain. "
+        "Record factual media_kind: image, carousel, or video. Never classify a video preview as Photo. "
+        "Extract frames and use local audio transcription for spoken narration. "
+        "Background chatter, children shouting, music and song lyrics are not voice-over. "
+        "Use exactly 'No voice over' if there is no ad narration. Never invent unverified narration.\n"
+        "3. Produce all classification fields: brand, angle, persona, hook_type, creative_structure, "
+        "production_style, funnel_type, ad_type/photo_video, media_kind; plus creative_usp/formatName, "
+        "a concise creative_hypothesis, notes, real source body copy/caption, headline, CTA, "
+        "duration_seconds, hook_text, visible caption_transcript/caption_timeline and "
+        "verifiable voice_over/voice_over_timeline. Static hook cards are not changing captions. "
+        "Keep the real Instagram/TikTok post caption as bodyCopy, with real newlines, not <br> "
+        "or a placeholder. Video must not have Photo/Carousel ad_type.\n"
+        "4. UPSERT public.inspiration_results on (ins_id,product_id), with source_url, platform, "
+        "metadata (including no_brief:true), classification and the factual media evidence. "
+        "For a new result use brief={}, clickup_doc_page_url=null and clickup_doc_id=null. "
+        "Do not generate next_ad_scripts. Preserve an existing brief/link if one already exists; "
+        "No Brief must not delete previous work.\n"
+        "5. Also UPSERT public.inspirations using id=the target ins_id and product_id=the target product. "
+        "Set url, title=formatName, platform, status='Classified'. Merge into existing data, preserving "
+        "unrelated fields, with noBrief:true, classifiedAt (epoch milliseconds), brand, angle, persona, "
+        "hookType, creativeStructure, productionStyle, funnelStage, adType, mediaKind, formatName, "
+        "creativeUSP, creativeHypothesis, notes, sourceUrl, bodyCopy, headline, ctaText, duration_seconds, "
+        "hookText, captionTranscript, captionTimeline, voiceOver, voiceOverTimeline, "
+        "detectedAngle, detectedPersona, _angleScope, _personaScope, _angleLocked, _personaLocked. "
+        "For a new inspiration leave nextAdScripts=[] and ClickUp brief fields empty. "
+        "Use the Supabase service-role credentials from ~/.classify-inspiration.env.\n"
+        "6. Verify BOTH stored rows by exact product_id and ins_id/id. The inspiration must have "
+        "noBrief:true, all nine classification fields non-empty, consistent mediaKind/adType, "
+        "and verified voiceOver or 'No voice over' for video. No brief URL or nextAdScripts is required. "
+        "Do NOT modify inspiration_queue; the worker owns its status and retries.\n"
+        f"Print only a short summary and finish with OK {job.get('ins_id')} on success, "
+        f"or FAIL {job.get('ins_id')}: <reason> if verification fails.\n"
+    )
+
+
 def log(msg: str) -> None:
     LOG_DIR.mkdir(parents=True, exist_ok=True)
     line = f"[{datetime.now(timezone.utc).isoformat()}] {msg}"
@@ -253,6 +308,7 @@ def probe_capabilities() -> dict:
         "claude_code_version": _safe_run(["claude", "--version"]),
         "codex": _resolve_codex_bin() is not None,
         "worker_contract": "inspiration-brief-8-section-page-verified",
+        "classification_only": True,
     }
 
 
@@ -804,7 +860,7 @@ class Worker:
         try:
             rows = self.sb.select(
                 "inspiration_queue",
-                "select=id,ins_id,product_id,status,attempts,processed_at"
+                "select=id,ins_id,product_id,status,attempts,processed_at,no_brief"
                 "&status=eq.classified"
                 "&order=processed_at.desc.nullslast"
                 f"&limit={INCOMPLETE_CLASSIFIED_AUDIT_LIMIT}",
@@ -819,7 +875,9 @@ class Worker:
             job_id = row.get("id")
             if not ins_id or not product_id or not job_id:
                 continue
-            ok, msg = self._verify_inspirations_row(ins_id, product_id)
+            ok, msg = self._verify_inspirations_row(
+                ins_id, product_id, no_brief=row.get("no_brief") is True,
+            )
             if ok:
                 continue
             try:
@@ -1045,6 +1103,7 @@ class Worker:
                 ins_id,
                 product_id,
                 require_next_script_format=True,
+                no_brief=job.get("no_brief") is True,
             )
             if pre_ok:
                 log(f"[{queue_id}] inspirations row already complete — skipping skill run")
@@ -1630,6 +1689,9 @@ class Worker:
             f"  If the verification SELECT shows the row missing or fields blank, that is a FAIL.\n"
         )
 
+        if job.get("no_brief") is True:
+            prompt = classification_only_prompt(job)
+
         # Auto-route: use the configured/preferred agent first, but if that
         # installed agent is logged out (Claude 401, stale credentials, etc.),
         # retry once through the other installed agent before burning a queue
@@ -1694,6 +1756,7 @@ class Worker:
                 ins_id,
                 product_id,
                 require_next_script_format=True,
+                no_brief=job.get("no_brief") is True,
             )
             if not verify_ok:
                 return {"success": False, "error": f"skill returned without persisting: {verify_msg}"}
@@ -1979,6 +2042,7 @@ class Worker:
         ins_id: str,
         product_id: str,
         require_next_script_format: bool = False,
+        no_brief: bool = False,
     ) -> tuple:
         """Confirm the skill actually wrote a usable row to public.inspirations.
 
@@ -2010,6 +2074,8 @@ class Worker:
             if not rows:
                 return (False, f"no inspirations row for id={ins_id}")
             data = (rows[0] or {}).get("data") or {}
+            if no_brief and data.get("noBrief") is not True:
+                return (False, "classification-only result missing noBrief mode")
             data, _ = self._repair_static_hook_caption_duplication(ins_id, product_id, data)
             missing = []
             for k in (
@@ -2024,6 +2090,8 @@ class Worker:
                 "adType",
                 "mediaKind",
             ):
+                if no_brief and k == "_clickupDocPageUrl":
+                    continue
                 if not data.get(k):
                     missing.append(k)
             if missing:
@@ -2049,9 +2117,9 @@ class Worker:
             if media_kind == "video" and not voice_over:
                 return (False, "video inspiration row has blank voiceOver")
             next_scripts = data.get("nextAdScripts")
-            if not isinstance(next_scripts, list) or len(next_scripts) != 3:
+            if not no_brief and (not isinstance(next_scripts, list) or len(next_scripts) != 3):
                 return (False, "inspirations row missing exactly 3 nextAdScripts")
-            for idx, script in enumerate(next_scripts, start=1):
+            for idx, script in enumerate([] if no_brief else next_scripts, start=1):
                 if require_next_script_format:
                     source_match = (
                         (script or {}).get("source_format_match")
@@ -2093,6 +2161,8 @@ class Worker:
                 first_caption = str((captions[0] or {}).get("caption") or "").strip().lower()
                 if first_caption and first_caption == hook_text:
                     return (False, "inspirations row duplicated hookText as the first caption")
+            if no_brief:
+                return (True, "verified classification only")
             page_ok, page_msg = self._verify_clickup_brief_page(
                 data,
                 require_next_script_format=require_next_script_format,

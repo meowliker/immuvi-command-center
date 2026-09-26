@@ -15562,12 +15562,13 @@ function _storeInspirationTaxonomySuggestions(ins, kind, incoming) {
 function _renderInspirationTaxonomySuggestion(ins, kind) {
   if (!ins) return '';
   var current = kind === 'persona' ? ins.persona : ins.angle;
-  var detected = kind === 'persona' ? (ins.detectedPersona || ins.persona || '') : (ins.detectedAngle || ins.angle || '');
   var list = kind === 'persona' ? (ins._personaSuggestions || []) : (ins._angleSuggestions || []);
-  var freshList = _taxonomySuggestionsForInspiration(kind, ins, current || detected, 4);
-  if (freshList.length) list = freshList.concat(list.filter(function(s) {
-    return s && !freshList.some(function(f) { return _taxonomyLookupKey(f.name) === _taxonomyLookupKey(s.name); });
-  }));
+  // Temporary performance mitigation: render saved suggestions only. Recomputing
+  // every inspiration against every peer here blocked the UI for 20+ seconds.
+  list = list.filter(function(s) {
+    return s && s.name && s.name !== current && _taxonomySuggestionFitsActiveProduct(kind, s) &&
+      (s.isNew || _taxonomyItemIsActive(kind, s.name, false));
+  });
   if (!list.length) return '';
   var top = list[0];
   if (!top || !top.name || top.name === current) return '';
@@ -19756,23 +19757,20 @@ function _userIsActivelyEditing() {
 }
 
 function _renderAllInternal() {
-  renderHQ();
+  // Hidden tabs are invalidated, then refreshed when opened by showTab().
+  _renderedTabs = {};
   renderProductProfile();
-  renderAngles();
-  renderPersonas();
-  renderCreatives();
   renderWinners();
-  renderActionPlan();
-  renderProduction();
-  renderMatrix();
-  renderInspirations();
+  var panel = document.querySelector('.panel.on');
+  var tabId = panel && panel.id ? panel.id.replace(/^panel-/, '') : 'hq';
+  _renderTabIfNeeded(tabId);
   updateTabCounts();
 }
 
 // ── 2026-05-13 perf: lazy tab rendering ──────────────────────────
 // Boot used to render EVERY tab synchronously (~1-2s on big products).
-// Now we render only the visible tab on boot + defer the rest to idle
-// time. showTab() also re-checks and renders on-demand if the user
+// Now we render only the visible tab on boot. showTab() re-checks and
+// renders on-demand if the user
 // clicks a tab that hasn't been rendered yet.
 
 var _renderedTabs = {}; // id → true once rendered at least once
@@ -19797,7 +19795,9 @@ function _renderTabIfNeeded(tabId) {
   if (!tabId || _renderedTabs[tabId]) return;
   var fnName = _TAB_RENDERERS[tabId];
   if (fnName && typeof window[fnName] === 'function') {
-    try { window[fnName](); } catch (e) { console.warn('[lazy-render] ' + fnName + ' failed', e); }
+    try {
+      if (window[fnName]() === false) return;
+    } catch (e) { console.warn('[lazy-render] ' + fnName + ' failed', e); return; }
   }
   _renderedTabs[tabId] = true;
 }
@@ -19805,28 +19805,15 @@ function _renderTabIfNeeded(tabId) {
 // Replaces the boot-time _renderAllInternal with a lazy variant:
 //   - Always render chrome (product profile + winners derivation + tab counts)
 //   - Render ONLY the currently-visible tab
-//   - Schedule the rest via requestIdleCallback (or setTimeout fallback)
+//   - Leave hidden tabs unrendered until opened
 function _renderBootTabOnly(activeTabId) {
   // Cheap, always-on chrome — needed regardless of which tab is showing
   try { renderProductProfile(); } catch (e) {}
   try { renderWinners(); } catch (e) {}  // pure data derivation, ~ms
   try { updateTabCounts(); } catch (e) {}
-  // Render just the visible tab
+  _renderedTabs = {};
+  // Render just the visible tab; idle callbacks still block the main thread.
   _renderTabIfNeeded(activeTabId || 'hq');
-  // Defer the rest to idle time so they're ready when user clicks
-  var pendingTabs = Object.keys(_TAB_RENDERERS).filter(function (id) {
-    return !_renderedTabs[id] && _TAB_RENDERERS[id];
-  });
-  var scheduleIdle = (typeof requestIdleCallback === 'function')
-    ? function (fn) { return requestIdleCallback(fn, { timeout: 2000 }); }
-    : function (fn) { return setTimeout(fn, 50); };
-  function renderNext() {
-    if (!pendingTabs.length) return;
-    var id = pendingTabs.shift();
-    _renderTabIfNeeded(id);
-    if (pendingTabs.length) scheduleIdle(renderNext);
-  }
-  scheduleIdle(renderNext);
 }
 
 // 2026-05-19 — View Transitions wrapper. If the browser supports
@@ -48249,6 +48236,11 @@ window._insTableSort = function (col) {
 };
 
 function renderInspirations() {
+  var panel = document.getElementById('panel-inspiration');
+  if (!panel || !panel.classList.contains('on')) {
+    _renderedTabs.inspiration = false;
+    return false;
+  }
   var platform = (document.getElementById('insFiltPlatform')||{}).value || '';
   var format   = (document.getElementById('insFiltFormat')||{}).value || '';
   var status   = (document.getElementById('insFiltStatus')||{}).value || '';
@@ -52693,6 +52685,7 @@ window._clearPendingCu = _clearPendingCu;
     var _origRI = window.renderInspirations;
     window.renderInspirations = function () {
       var r = _origRI.apply(this, arguments);
+      if (r === false) return false;
       if (_insSubView !== 'table') {
         var host = document.getElementById('insSubViewHost');
         if (host) {

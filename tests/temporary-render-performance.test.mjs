@@ -12,7 +12,7 @@ for (const file of ['immuvi-command-center.html', 'public/immuvi-command-center.
   }
   function renderContext() {
     const calls = [];
-    const c = vm.createContext({console, document: {querySelector: () => ({id: 'panel-actions'})},
+    const c = vm.createContext({console, document: {querySelector: () => ({id: 'panel-actions'}), querySelectorAll: () => []},
       setTimeout() {throw new Error('Hidden work scheduled');},
       requestIdleCallback() {throw new Error('Hidden work scheduled');}});
     c.window = c;
@@ -68,6 +68,7 @@ for (const file of ['immuvi-command-center.html', 'public/immuvi-command-center.
   test(file + ': saved suggestions render without peer comparisons or mutations', () => {
     const c = vm.createContext({
       _taxonomySuggestionsForInspiration() {throw new Error('Expensive calculation during render');},
+      _cachedInspirationSuggestions: () => undefined,
       _taxonomySuggestionFitsActiveProduct: (_, s) => s.name !== 'Foreign',
       _taxonomyItemIsActive: (_, name) => name === 'Existing',
       escAttr: String, esc: String, escJs: String

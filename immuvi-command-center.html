@@ -12966,8 +12966,8 @@ const DB = {
 
   async listProducts() {
     if (!SB) return [];
-    const { data, error } = await SB.from('products').select('*').order('name');
-    if (error) { console.error('[SB] listProducts', error); return []; }
+    const { data, error } = await _withCloudTimeout(SB.from('products').select('*').order('name'), 'Products');
+    if (error) throw error;
     return (data || []).map(function (p) {
       const c = p.config || {};
       return {
@@ -13061,13 +13061,16 @@ const DB = {
 
   async loadProductData(productId) {
     if (!SB || !productId) return null;
-    const [angles, personas, ads, cells, actions] = await Promise.all([
+    const [angles, personas, ads, cells, actions] = await _withCloudTimeout(Promise.all([
       SB.from('angles').select('*').eq('product_id', productId),
       SB.from('personas').select('*').eq('product_id', productId),
       SB.from('ads').select('*').eq('product_id', productId).is('deleted_at', null),
       SB.from('matrix_cells').select('*').eq('product_id', productId),
       SB.from('manual_actions').select('*').eq('product_id', productId)
-    ]);
+    ]), 'Product data');
+    [angles, personas, ads, cells, actions].forEach(function(result) {
+      if (result.error) throw result.error;
+    });
     const meta = {}, assigns = {};
     // Build ANGLE_PERSONAS from the matrix_cells rows themselves: every cell
     // row implies "this persona is assigned to this angle" — including empty
@@ -13556,8 +13559,8 @@ const DB = {
 
   async listInspirations(productId) {
     if (!SB) return [];
-    const { data, error } = await SB.from('inspirations').select('*').eq('product_id', productId).order('created_at');
-    if (error) { console.error('[SB] listInspirations', error); return []; }
+    const { data, error } = await _withCloudTimeout(SB.from('inspirations').select('*').eq('product_id', productId).order('created_at'), 'Inspirations');
+    if (error) throw error;
     // Merge the jsonb `data` blob with top-level columns so all fields
     // (sourceUrl, angle, persona, hookType, creativeStructure, _clickupDocPageUrl,
     // importTags, etc.) are present — restoring full parity with localStorage.
@@ -14924,7 +14927,154 @@ function _creativeEvidenceText(ad, ins) {
   return fields.join(' ').slice(0, 24000);
 }
 
+// UI work is disposable; product records are not. Never persist these caches.
+var _cloudLoadFailed = false;
+var _inspirationsProductId = null;
+var _inspirationLoadGeneration = 0;
+var _suggestionContext = '';
+var _suggestionCache = new Map();
+var _evidenceTokenCache = new Map();
+var _suggestionJob = null;
+var _suggestionPaintVersion = 0;
+var _classificationImportBusy = false;
+var _resultPollBusy = false;
+var _productSwitchPending = false;
+var _uiProductGeneration = 0;
+
+function _withCloudTimeout(promise, label, milliseconds) {
+  var timer;
+  return Promise.race([
+    promise,
+    new Promise(function(_, reject) {
+      timer = setTimeout(function() { reject(new Error(label + ' timed out')); }, milliseconds || 20000);
+    })
+  ]).finally(function() { clearTimeout(timer); });
+}
+
+function _showCloudLoadFailure() {
+  _cloudLoadFailed = true;
+  _adsProductId = null;
+  document.body.classList.remove('booting');
+  var status = document.getElementById('statusLbl');
+  if (status) status.textContent = 'Cloud load failed';
+  if (document.getElementById('cloudLoadFailure')) return;
+  var overlay = document.createElement('div');
+  overlay.id = 'cloudLoadFailure';
+  overlay.setAttribute('role', 'alertdialog');
+  overlay.setAttribute('aria-modal', 'true');
+  overlay.setAttribute('aria-labelledby', 'cloudLoadFailureTitle');
+  overlay.style.cssText = 'position:fixed;inset:0;z-index:2147483647;background:rgba(15,23,42,.45);display:grid;place-items:center;padding:20px';
+  overlay.innerHTML = '<div style="max-width:420px;width:100%;box-sizing:border-box;background:white;color:#172033;padding:24px;border-radius:8px">' +
+    '<h2 id="cloudLoadFailureTitle" style="margin:0 0 12px;font-size:20px">Could not load your data</h2>' +
+    '<p>The cloud request failed or took too long. No reset or deletion was performed. Retry to reload.</p>' +
+    '<button type="button" id="cloudLoadRetry" style="padding:10px 18px;border:0;border-radius:6px;background:#172033;color:white;cursor:pointer">Retry</button></div>';
+  Array.from(document.body.children || []).forEach(function(child) { child.inert = true; });
+  document.body.appendChild(overlay);
+  var retry = document.getElementById('cloudLoadRetry');
+  retry.onclick = function() { window.location.reload(); };
+  retry.focus();
+}
+
+function _shouldRenderTab(tabId) {
+  var panel = document.getElementById('panel-' + tabId);
+  if (!_cloudLoadFailed && panel && panel.classList.contains('on')) return true;
+  _renderedTabs[tabId] = false;
+  return false;
+}
+
+function _backgroundUiTurn() {
+  // One small unit per timer turn leaves the browser time for input and paint.
+  return new Promise(function(resolve) { setTimeout(resolve, 16); });
+}
+
+function _syncSuggestionContext() {
+  var context = JSON.stringify([
+    activeProductId,
+    (PRODUCTS || []).find(function(p) { return p.id === activeProductId; }),
+    ANGLES, PERSONAS, _taxonomyEvidenceLastRefreshMs,
+    (ADS || []).map(function(ad) {
+      return [ad.id, ad.status, ad.angle, ad.persona, _creativeEvidenceText(ad, null)];
+    }),
+    (INSPIRATIONS || []).map(function(ins) {
+      return [ins.id, ins.product_id, ins.status, ins.detectedAngle, ins.detectedPersona, _creativeEvidenceText(null, ins)];
+    })
+  ]);
+  if (context !== _suggestionContext) {
+    _suggestionContext = context;
+    _suggestionCache.clear();
+    _taxonomyEvidenceProfilesCache = {};
+    if (_suggestionJob) _suggestionJob.cancelled = true;
+    _suggestionJob = null;
+  }
+  return context;
+}
+
+function _suggestionCacheKey(kind, ins, incoming) {
+  return JSON.stringify([activeProductId, kind, ins.id, incoming || '', _creativeEvidenceText(null, ins)]);
+}
+
+function _taxonomySuggestionsForInspiration(kind, ins, incoming, limit) {
+  if (!ins || !activeProductId || (ins.product_id && ins.product_id !== activeProductId)) return [];
+  var key = _suggestionCacheKey(kind, ins, incoming);
+  if (!_suggestionCache.has(key)) {
+    if (_suggestionCache.size >= 1200) _suggestionCache.delete(_suggestionCache.keys().next().value);
+    _suggestionCache.set(key, _calculateTaxonomySuggestionsForInspiration(kind, ins, incoming, 4));
+  }
+  return _suggestionCache.get(key).slice(0, limit || 4);
+}
+
+function _cachedInspirationSuggestions(ins, kind) {
+  var incoming = kind === 'persona' ? (ins.detectedPersona || ins.persona || '') : (ins.detectedAngle || ins.angle || '');
+  return _suggestionCache.get(_suggestionCacheKey(kind, ins, incoming));
+}
+
+function _queueInspirationSuggestions() {
+  if (!activeProductId || _cloudLoadFailed || _productSwitchPending || _inspirationsProductId !== activeProductId) return;
+  _syncSuggestionContext();
+  if (_suggestionJob) return;
+  var jobs = [];
+  (INSPIRATIONS || []).forEach(function(ins) {
+    if (!ins || (ins.product_id && ins.product_id !== activeProductId)) return;
+    if (['Classified', 'Approved', 'Testing', 'Winner'].indexOf(ins.status) < 0) return;
+    ['angle', 'persona'].forEach(function(kind) {
+      if (_cachedInspirationSuggestions(ins, kind) === undefined) jobs.push({ins: ins, kind: kind});
+    });
+  });
+  if (!jobs.length) return;
+  var job = {productId: activeProductId, cancelled: false};
+  _suggestionJob = job;
+  (async function() {
+    try {
+      for (var i = 0; i < jobs.length; i++) {
+        await _backgroundUiTurn();
+        if (job.cancelled || activeProductId !== job.productId || _inspirationsProductId !== job.productId || !_shouldRenderTab('inspiration')) return;
+        var item = jobs[i];
+        if (INSPIRATIONS.indexOf(item.ins) < 0) continue;
+        var incoming = item.kind === 'persona' ? (item.ins.detectedPersona || item.ins.persona || '') : (item.ins.detectedAngle || item.ins.angle || '');
+        _taxonomySuggestionsForInspiration(item.kind, item.ins, incoming, 4);
+      }
+      if (!job.cancelled && activeProductId === job.productId) {
+        _suggestionPaintVersion++;
+        renderInspirations();
+      }
+    } catch (e) {
+      console.warn('[suggestions] background calculation failed');
+    } finally {
+      if (_suggestionJob === job) _suggestionJob = null;
+    }
+  })();
+}
+
 function _creativeEvidenceTokens(text) {
+  var key = JSON.stringify([activeProductId, String(text || '')]);
+  if (!_evidenceTokenCache.has(key)) {
+    if (_evidenceTokenCache.size >= 800) _evidenceTokenCache.delete(_evidenceTokenCache.keys().next().value);
+    _evidenceTokenCache.set(key, _calculateCreativeEvidenceTokens(text));
+  }
+  return _evidenceTokenCache.get(key).slice();
+}
+
+function _calculateCreativeEvidenceTokens(text) {
   var s = String(text || '').toLowerCase();
   if (!s) return [];
   s = s.replace(/https?:\/\/\S+/g, ' ');
@@ -15032,7 +15182,7 @@ function _allWinnerCreativesForEvidence() {
 function _taxonomyEvidenceProfile(kind, name) {
   name = _normalizeTaxonomyName(name || '');
   if (!name) return null;
-  var cacheKey = kind + '||' + _taxonomyLookupKey(name) + '||' + String(_taxonomyEvidenceLastRefreshMs || 0) + '||' + String((ADS || []).length) + '||' + String((INSPIRATIONS || []).length);
+  var cacheKey = activeProductId + '||' + kind + '||' + _taxonomyLookupKey(name) + '||' + String(_taxonomyEvidenceLastRefreshMs || 0) + '||' + String((ADS || []).length) + '||' + String((INSPIRATIONS || []).length);
   if (_taxonomyEvidenceProfilesCache[cacheKey]) return _taxonomyEvidenceProfilesCache[cacheKey];
   var field = kind === 'persona' ? 'persona' : 'angle';
   var key = _taxonomyLookupKey(name);
@@ -15297,7 +15447,7 @@ function _taxonomyNewSuggestionForInspiration(kind, ins, incoming) {
   };
 }
 
-function _taxonomySuggestionsForInspiration(kind, ins, incoming, limit) {
+function _calculateTaxonomySuggestionsForInspiration(kind, ins, incoming, limit) {
   if (!ins) return [];
   var detected = incoming || (kind === 'persona' ? (ins.detectedPersona || ins.persona || '') : (ins.detectedAngle || ins.angle || ''));
   var evidenceMatches = _taxonomyEvidenceCandidateMatches(kind, _creativeEvidenceText(null, ins), detected, 4)
@@ -15508,6 +15658,7 @@ function _taxonomyTopMatches(kind, name, limit) {
 
 function _storeInspirationTaxonomySuggestions(ins, kind, incoming) {
   if (!ins) return [];
+  _syncSuggestionContext();
   var suggestions = _taxonomySuggestionsForInspiration(kind, ins, incoming, 4);
   if (kind === 'persona') {
     ins._personaSuggestions = suggestions;
@@ -15523,8 +15674,9 @@ function _renderInspirationTaxonomySuggestion(ins, kind) {
   if (!ins) return '';
   var current = kind === 'persona' ? ins.persona : ins.angle;
   var list = kind === 'persona' ? (ins._personaSuggestions || []) : (ins._angleSuggestions || []);
-  // Temporary performance mitigation: render saved suggestions only. Recomputing
-  // every inspiration against every peer here blocked the UI for 20+ seconds.
+  var cached = _cachedInspirationSuggestions(ins, kind);
+  if (cached !== undefined) list = cached;
+  // Render saved or cached suggestions only; peer comparisons run in small batches.
   list = list.filter(function(s) {
     return s && s.name && s.name !== current && _taxonomySuggestionFitsActiveProduct(kind, s) &&
       (s.isNew || _taxonomyItemIsActive(kind, s.name, false));
@@ -19767,6 +19919,10 @@ function _renderTabIfNeeded(tabId) {
 //   - Render ONLY the currently-visible tab
 //   - Leave hidden tabs unrendered until opened
 function _renderBootTabOnly(activeTabId) {
+  activeTabId = Object.prototype.hasOwnProperty.call(_TAB_RENDERERS, activeTabId) ? activeTabId : 'hq';
+  document.querySelectorAll('.panel').forEach(function(panel) {
+    panel.classList.toggle('on', panel.id === 'panel-' + activeTabId);
+  });
   // Cheap, always-on chrome — needed regardless of which tab is showing
   try { renderProductProfile(); } catch (e) {}
   try { renderWinners(); } catch (e) {}  // pure data derivation, ~ms
@@ -19813,6 +19969,7 @@ function _renderAllSilent() {
 // ── 4a. COMMAND HQ ──
 
 function renderHQ() {
+  if (!_shouldRenderTab('hq')) return false;
   if (!P) return;
   var s = P.s;
 
@@ -20014,6 +20171,7 @@ function renderHQ() {
 // ── 4b. ANGLES ──
 
 function renderAngles() {
+  if (!_shouldRenderTab('angles')) return false;
   // Build per-angle stats from ADS and PERSONAS
   function getAngleStats(angleName) {
     var ads = ADS.filter(function(a) { return !_isBoundaryQuarantinedAd(a) && a.angle === angleName && !a.parentAdId; });
@@ -20217,6 +20375,7 @@ async function _compLoad() {
 }
 
 async function renderCompetitors() {
+  if (!_shouldRenderTab('competitors')) return false;
   // Lazy-load if first time (the lazy-render flag is per-tab not per-product)
   if (!COMPETITORS.length || _compNeedsReload) {
     _compNeedsReload = false;
@@ -21217,6 +21376,7 @@ function _strategistRenderHook() {
 })();
 
 function renderPersonas() {
+  if (!_shouldRenderTab('personas')) return false;
   function getPersonaStats(personaName) {
     var ads = ADS.filter(function(a) { return !_isBoundaryQuarantinedAd(a) && a.persona === personaName && !a.parentAdId; });
     var angleSet = {};
@@ -21372,6 +21532,7 @@ function renderPersonas() {
 // ── 4d. CREATIVE TRACKER ──
 
 function renderCreatives() {
+  if (!_shouldRenderTab('creatives')) return false;
   // Apply filters — show tracker ads + winner variations; skip only matrix-cell clones
   var filtered = [];
   for (var i = 0; i < ADS.length; i++) {
@@ -23598,6 +23759,7 @@ function _apStartColResize(e, key) {
 }
 
 function renderActionPlan() {
+  if (!_shouldRenderTab('actions')) return false;
   var container = document.getElementById('actionsContainer');
   if (!container) return;
   // Dedup MANUAL_ACTIONS at the very top of every render. Catches duplicates
@@ -26263,6 +26425,7 @@ function rebuildProdFromManual() {
 // ── 4g. PRODUCTION ──
 
 function renderProduction() {
+  if (!_shouldRenderTab('production')) return false;
   var queueBody = document.getElementById('prodQueueBody');
   var progressBody = document.getElementById('prodProgressBody');
   var doneBody = document.getElementById('prodDoneBody');
@@ -34361,7 +34524,7 @@ async function _flushStateToSupabase(productIdArg) {
     console.log('[SB] skip flush — fresh load in progress for', pid);
     return;
   }
-  if (_adsProductId && _adsProductId !== pid) {
+  if (_cloudLoadFailed || !_adsProductId || _adsProductId !== pid) {
     console.warn('[SB] abort save: in-memory data belongs to', _adsProductId, 'but tried to save as', pid);
     return;
   }
@@ -34431,9 +34594,9 @@ async function loadState() {
     _bootResults = await Promise.all([_productsP, _stateP]);
   } catch (e) {
     console.error('[SB] boot queries failed', e);
-    PRODUCTS = [];
     return false;
   }
+  if (_cloudLoadFailed) return false;
   PRODUCTS = _bootResults[0] || [];
   var _speculativeState = _bootResults[1] || null;
 
@@ -34471,7 +34634,7 @@ async function loadState() {
       return false;
     }
   }
-  if (!state) return false;
+  if (!state || _cloudLoadFailed) return false;
 
   // BUG-005: scrub tombstoned names from EVERY hydration source so a
   // persona/angle the user just deleted can't re-enter via cache or
@@ -34550,7 +34713,11 @@ async function switchProduct(productId) {
   for (var i = 0; i < PRODUCTS.length; i++) {
     if (PRODUCTS[i].id === productId) { prod = PRODUCTS[i]; break; }
   }
-  if (!prod || productId === activeProductId) return;
+  if (!prod || productId === activeProductId || _cloudLoadFailed) return;
+  var switchGeneration = ++_uiProductGeneration;
+  _productSwitchPending = true;
+  if (_suggestionJob) _suggestionJob.cancelled = true;
+  _suggestionJob = null;
 
   // 2026-05-20 — Reset Competitors tab cache when switching products
   if (typeof _compResetForProductSwitch === 'function') _compResetForProductSwitch();
@@ -34567,6 +34734,8 @@ async function switchProduct(productId) {
       await DB.saveInspirations(activeProductId, INSPIRATIONS.slice()).catch(function(e){ console.error('[SB] ins flush', e); });
     }
   }
+
+  if (switchGeneration !== _uiProductGeneration) return;
 
   // Stash current product's data into the cross-product cache so when the
   // user switches back, render is instant (no 200-500ms DB round-trip wait).
@@ -34589,6 +34758,8 @@ async function switchProduct(productId) {
   }
 
   activeProductId = productId;
+  _inspirationsProductId = null;
+  _suggestionCache.clear();
   PRODUCT_BOUNDARY_QUARANTINE = { ads: {}, actions: {}, angles: {}, personas: {}, reasons: {} };
   // CRITICAL: clear the guard BEFORE loadProductData completes. Any sync / save /
   // realtime merge that fires during the load window will now bail (because
@@ -34638,9 +34809,15 @@ async function switchProduct(productId) {
   // switch is aborted).
   _freshLoadInProgress = true;
   var st = null;
-  try { st = await DB.loadProductData(productId); } catch (e) { console.error('[SB] switchProduct load', e); }
+  try { st = await _withCloudTimeout(DB.loadProductData(productId), 'Switch product'); } catch (e) { console.error('[SB] switchProduct load', e); }
   // Abort fresh-apply if the user switched AGAIN during this load.
-  if (productId !== activeProductId) { _freshLoadInProgress = false; return; }
+  if (productId !== activeProductId || switchGeneration !== _uiProductGeneration) return;
+  _productSwitchPending = false;
+  if (!st) {
+    _freshLoadInProgress = false;
+    _showCloudLoadFailure();
+    return;
+  }
   if (st) {
     ANGLES = st.ANGLES || []; PERSONAS = st.PERSONAS || []; ADS = st.ADS || [];
     // BUG-005: scrub tombstoned names so a persona the user just deleted
@@ -36730,13 +36907,15 @@ window.addEventListener('load', async function () {
   } catch(e) {}
 
   var loaded = false;
-  try { loaded = await loadState(); } catch (e) { console.error('[SB] loadState threw', e); }
+  try { loaded = await _withCloudTimeout(loadState(), 'Startup', 30000); } catch (e) { console.error('[SB] loadState threw', e); }
+  if (!loaded) { _showCloudLoadFailure(); return; }
   // 2026-05-12 perf: remove instant boot loader once Supabase data has
   // landed and the UI is about to be rendered. Triggers the 240ms CSS
   // fade-out defined in the <style> block. Done before loadInspirations
   // so the user sees the dashboard while inspirations stream in.
   try { document.body.classList.remove('booting'); } catch(e) {}
-  await loadInspirations(); // now loads with correct productId from Supabase
+  try { await loadInspirations(activeProductId, true); }
+  catch (e) { _showCloudLoadFailure(); return; }
 
   if (!loaded) {
     // No product data yet — start empty, user should link a ClickUp list and sync
@@ -37302,6 +37481,7 @@ function _wirePersonaHeaderTooltip() {
 }
 
 function renderMatrix() {
+  if (!_shouldRenderTab('matrix')) return false;
   var el = document.getElementById('matrixGrid');
   if (!el) return;
   // Tag the container so v3 + v4 CSS overrides apply.
@@ -46977,7 +47157,7 @@ function getCurrentInspirationAddedBy() {
 // mid-debounce can't move rows to the wrong product.
 var _insSaveTimer = null;
 function saveInspirations() {
-  if (!DB.ready || !activeProductId) return;
+  if (!DB.ready || !activeProductId || _cloudLoadFailed || _inspirationsProductId !== activeProductId) return;
   if (_insSaveTimer) clearTimeout(_insSaveTimer);
   var capturedProductId = activeProductId;
   var capturedInspos = INSPIRATIONS.slice(); // shallow snapshot; items are upserted by id
@@ -46992,22 +47172,24 @@ function saveInspirations() {
   }, 600);
 }
 
-async function loadInspirations(expectedProductId) {
+async function loadInspirations(expectedProductId, strict) {
   var requestedProductId = expectedProductId || activeProductId;
   if (!requestedProductId) return;
-  INSPIRATIONS = [];
-  INS_NEXT_ID = 1;
+  var loadGeneration = ++_inspirationLoadGeneration;
+  var productGeneration = _uiProductGeneration;
   if (DB.ready && requestedProductId) {
     try {
       var rows = await DB.listInspirations(requestedProductId);
-      if (activeProductId !== requestedProductId) return;
+      if (activeProductId !== requestedProductId || _cloudLoadFailed || loadGeneration !== _inspirationLoadGeneration || productGeneration !== _uiProductGeneration) return;
       INSPIRATIONS = rows || [];
+      _inspirationsProductId = requestedProductId;
       try {
-        window.INSPIRATION_QUEUE = await DB.getQueue(requestedProductId);
-        if (activeProductId !== requestedProductId) return;
+        var queueRows = await _withCloudTimeout(DB.getQueue(requestedProductId), 'Inspiration queue');
+        if (activeProductId !== requestedProductId || loadGeneration !== _inspirationLoadGeneration || productGeneration !== _uiProductGeneration) return;
+        window.INSPIRATION_QUEUE = queueRows;
       } catch (qe) {
+        if (activeProductId !== requestedProductId || loadGeneration !== _inspirationLoadGeneration || productGeneration !== _uiProductGeneration) return;
         console.warn('[SB] load inspiration queue failed', qe);
-        window.INSPIRATION_QUEUE = [];
       }
       // Keep INS_NEXT_ID roughly in sync with highest numeric suffix we've seen
       var maxN = 0;
@@ -47019,6 +47201,10 @@ async function loadInspirations(expectedProductId) {
       INS_NEXT_ID = maxN + 1;
     } catch (e) {
       console.error('[SB] loadInspirations', e);
+      if (loadGeneration !== _inspirationLoadGeneration || productGeneration !== _uiProductGeneration || activeProductId !== requestedProductId) return;
+      if (strict) throw e;
+      _showCloudLoadFailure();
+      return;
     }
   }
   // Backfill _clickupDocId and _clickupDocPageUrl on existing inspirations that don't have them
@@ -47278,14 +47464,18 @@ function startResultPolling() {
 }
 
 async function pollCloudResults() {
-  if (!DB.ready || !activeProductId) return;
+  if (!DB.ready || !activeProductId || _resultPollBusy || _classificationImportBusy || _cloudLoadFailed || _productSwitchPending || _inspirationsProductId !== activeProductId || document.hidden) return;
+  var productId = activeProductId;
+  var generation = _uiProductGeneration;
+  _resultPollBusy = true;
   try {
-    var results = await DB.getResults(activeProductId);
-    if (!results || !results.length) return;
+    var results = await _withCloudTimeout(DB.getResults(productId), 'Classification results');
+    if (activeProductId !== productId || generation !== _uiProductGeneration || !results || !results.length) return;
     // Transform Supabase row → legacy result shape expected by applyClassificationResults
-    var legacy = results.map(_resultRowToLegacy);
-    applyClassificationResults(legacy, true);
-  } catch (e) { /* transient network issue is fine */ }
+    var legacy = results.filter(function(row) { return row.product_id === productId; }).map(_resultRowToLegacy);
+    await applyClassificationResults(legacy, true, productId);
+  } catch (e) { /* Results remain available for retry. */ }
+  finally { _resultPollBusy = false; }
 }
 
 // Map Supabase inspiration_results row → the shape applyClassificationResults expects
@@ -47309,6 +47499,7 @@ function _resultRowToLegacy(r) {
     nextAdScripts: brief.next_ad_scripts || [],
     mediaKind: r.media_kind || r.mediaKind || ''
   }, meta, cls);
+  out._resultProductId = r.product_id;
   out.cta_type = out.cta_type || meta.cta_type || cls.cta_type || '';
   out.cta_text = normalizeInspirationCta(out.cta_text, out.cta_type);
   return out;
@@ -47320,11 +47511,14 @@ async function importClassificationResults() {
     showInsStatus('error', 'Not connected to cloud');
     return;
   }
+  var productId = activeProductId;
+  var generation = _uiProductGeneration;
   try {
-    var results = await DB.getResults(activeProductId);
+    var results = await _withCloudTimeout(DB.getResults(productId), 'Classification results');
+    if (activeProductId !== productId || generation !== _uiProductGeneration) return;
     if (results && results.length > 0) {
-      var legacy = results.map(_resultRowToLegacy);
-      var count = applyClassificationResults(legacy, false);
+      var legacy = results.filter(function(row) { return row.product_id === productId; }).map(_resultRowToLegacy);
+      var count = await applyClassificationResults(legacy, false, productId);
       if (count > 0) {
         showInsStatus('success', count + ' inspiration' + (count > 1 ? 's' : '') + ' classified and imported');
         return;
@@ -47768,36 +47962,54 @@ function getApprovedInspirations() {
   return INSPIRATIONS.filter(function(i){ return i.status === 'Approved'; });
 }
 
-function applyClassificationResults(results, isPolling) {
+async function applyClassificationResults(results, isPolling, expectedProductId) {
+  var productId = expectedProductId || activeProductId;
+  var generation = _uiProductGeneration;
+  if (_classificationImportBusy || _cloudLoadFailed || _productSwitchPending || !productId || activeProductId !== productId || _inspirationsProductId !== productId) return 0;
+  _classificationImportBusy = true;
   var updated = 0;
   var pendingPrompts = [];
 
-  results.forEach(function(data) {
-    // Find by ins_id or sourceUrl
+  try {
+  for (var resultIndex = 0; resultIndex < results.length; resultIndex++) {
+    await _backgroundUiTurn();
+    if (_cloudLoadFailed || _productSwitchPending || activeProductId !== productId || generation !== _uiProductGeneration || _inspirationsProductId !== productId) break;
+    var beforeCount = updated;
+    (function(data) {
+    if (data._resultProductId && data._resultProductId !== productId) return;
+    // Prefer the exact id; URLs can occur more than once.
     var ins = INSPIRATIONS.find(function(i){
-      return (data.ins_id && i.id === data.ins_id) || i.sourceUrl === data.source_url;
+      return data.ins_id ? i.id === data.ins_id : !!data.source_url && i.sourceUrl === data.source_url;
     });
-    if (!ins) return;
+    if (!ins || (ins.product_id && ins.product_id !== productId)) return;
+    var resultSignature = JSON.stringify(data);
+    if (ins._lastImportedResult === resultSignature) return;
+    // Replayed results must not reset manual taxonomy, placement, or testing status.
+    var completed = ['Classified', 'Approved', 'Testing', 'Winner', 'Loser', 'Placed', 'Killed', 'Rejected'].indexOf(ins.status) !== -1;
+    if (completed) {
+      var changed = false;
+      var briefFields = {
+        hookText: sanitizeInspirationText(data.hook_text || data.hookText || ''),
+        captionTranscript: sanitizeInspirationText(data.caption_transcript || data.captionTranscript || ''),
+        voiceOver: normalizeInspirationVoiceOver(data.voice_over || data.voiceOver || ''),
+        voiceOverTimeline: data.voice_over_timeline || data.voiceOverTimeline || [],
+        nextAdScripts: data.next_ad_scripts || data.nextAdScripts || [],
+        _clickupDocPageUrl: data.clickup_doc_page_url || '',
+        _clickupDocId: data.clickup_doc_id || ''
+      };
+      Object.keys(briefFields).forEach(function(key) {
+        var value = briefFields[key];
+        var missing = !ins[key] || (Array.isArray(ins[key]) && !ins[key].length);
+        if (missing && value && (!Array.isArray(value) || value.length)) {
+          ins[key] = value;
+          changed = true;
+        }
+      });
+      if (ins._clickupDocPageUrl && !ins._inspoDocCreated) { ins._inspoDocCreated = true; changed = true; }
+      if (changed) { ins._lastImportedResult = resultSignature; updated++; }
+      return;
+    }
     if (data.no_brief === true || data.noBrief === true) ins.noBrief = true;
-    // Skip only if fully classified and the incoming result doesn't carry
-    // newer brief-only fields we still lack. This lets rerenders repair
-    // hook/caption/voice-over data without reopening old taxonomy prompts.
-    var hasFreshBriefFields = !!(
-      data.hookText || data.hook_text ||
-      data.captionTranscript || data.caption_transcript ||
-      data.voiceOverTimeline || data.voice_over_timeline ||
-      data.nextAdScripts || data.next_ad_scripts
-    );
-    var lacksFreshBriefFields = !ins.hookText ||
-      !ins.captionTranscript ||
-      !(Array.isArray(ins.voiceOverTimeline) && ins.voiceOverTimeline.length) ||
-      !(Array.isArray(ins.nextAdScripts) && ins.nextAdScripts.length);
-    if (
-      ins.status === 'Classified' &&
-      !ins._needsAngleReview &&
-      !ins._needsPersonaReview &&
-      !(hasFreshBriefFields && lacksFreshBriefFields)
-    ) return;
 
     ins.brand             = data.page_name || ins.brand || '';
     ins.formatName        = extractFormatName(data.creative_usp || '');
@@ -47888,18 +48100,17 @@ function applyClassificationResults(results, isPolling) {
       }
     }
 
+    ins._lastImportedResult = resultSignature;
     updated++;
-  });
+    })(results[resultIndex]);
+    if (updated > beforeCount) saveInspirations();
+  }
 
-  if (updated > 0) {
-    saveInspirations();
+  if (updated > 0 && activeProductId === productId && generation === _uiProductGeneration && !_productSwitchPending) {
     renderInspirations();
     if (isPolling) {
       showInsStatus('success', updated + ' inspiration' + (updated>1?'s':'') + ' classified');
-      // Clean up consumed results from Supabase so we don't re-apply them
-      if (DB.ready && activeProductId) {
-        DB.clearResults(activeProductId).catch(function(){});
-      }
+      // Keep source results for recovery. The import signature makes replay idempotent.
     }
     // Re-run dupe checks for all classified (picks up newly classified + existing)
     refreshAllDupeChecks(true);
@@ -47924,6 +48135,7 @@ function applyClassificationResults(results, isPolling) {
   }
 
   return updated;
+  } finally { _classificationImportBusy = false; }
 }
 
 // ── Auto-add new Angle or Persona from inspiration ──────────────
@@ -48175,10 +48387,11 @@ window._insTableSort = function (col) {
 
 function renderInspirations() {
   var panel = document.getElementById('panel-inspiration');
-  if (!panel || !panel.classList.contains('on')) {
+  if (!panel || !panel.classList.contains('on') || _cloudLoadFailed || _inspirationsProductId !== activeProductId) {
     _renderedTabs.inspiration = false;
     return false;
   }
+  _queueInspirationSuggestions();
   var platform = (document.getElementById('insFiltPlatform')||{}).value || '';
   var format   = (document.getElementById('insFiltFormat')||{}).value || '';
   var status   = (document.getElementById('insFiltStatus')||{}).value || '';
@@ -49814,6 +50027,7 @@ window._clearPendingCu = _clearPendingCu;
     if (typeof orig !== 'function') { setTimeout(tryWrap, 100); return; }
     if (orig.__apDedupWrapped) return;
     var wrapped = function () {
+      if (!_shouldRenderTab('actions')) return false;
       try { dedup(); } catch (e) {}
       return orig.apply(this, arguments);
     };
@@ -51182,7 +51396,7 @@ window._clearPendingCu = _clearPendingCu;
     var ss = window._insTableSortState || {};
     s += '#sort=' + (ss.col || '') + ':' + (ss.dir || '');
     // Pipeline / performance filter chips (when added)
-    s += '#pipe=' + (window._insPipeFilter || '');
+    s += '#pipe=' + (window._insPipeFilter || '') + '#suggestions=' + _suggestionPaintVersion;
     return s;
   }
   var _fpComputers = {
@@ -51200,6 +51414,9 @@ window._clearPendingCu = _clearPendingCu;
     if (typeof orig !== 'function') return;
     if (orig.__preserveWrapped) return;
     var wrapped = function () {
+      var tabId = Object.keys(_TAB_RENDERERS).find(function(id) { return _TAB_RENDERERS[id] === name; });
+      if (tabId && !_shouldRenderTab(tabId)) { delete _lastFp[name]; return false; }
+      if (name === 'renderInspirations') _queueInspirationSuggestions();
       // No-op suppression: if the data this renderer consumes hasn't changed
       // since last call, skip the entire render. Eliminates the flash on
       // sync polls that brought no actual changes (matrix was the worst

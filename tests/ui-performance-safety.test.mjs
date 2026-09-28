@@ -43,22 +43,16 @@ for (const file of ['immuvi-command-center.html', 'public/immuvi-command-center.
       assert.equal(c._renderedTabs[tab], false);
     }
   });
-  test(file + ': suggestion cache is product scoped and invalidates changed evidence', () => {
+  test(file + ': inspiration suggestions use verified review results, never legacy keyword calculations', () => {
     const {c, calls} = context();
     const ins = {id:'same-id', product_id:'A', text:'quilting', status:'Classified'};
     c.INSPIRATIONS = [ins];
-    c._syncSuggestionContext();
-    c._taxonomySuggestionsForInspiration('angle', ins, '', 4);
-    c._taxonomySuggestionsForInspiration('angle', ins, '', 4);
-    assert.equal(calls.computed, 1);
-    ins.text = 'changed evidence';
-    c._syncSuggestionContext();
-    c._taxonomySuggestionsForInspiration('angle', ins, '', 4);
-    assert.equal(calls.computed, 2);
-    c.activeProductId = 'B'; c._syncSuggestionContext();
     assert.equal(c._taxonomySuggestionsForInspiration('angle', ins, '', 4).length, 0);
-    c._taxonomySuggestionsForInspiration('angle', {...ins, product_id:'B'}, '', 4);
-    assert.equal(calls.computed, 3);
+    c.ImmuviTaxonomyReview = {assessment: () => ({name:'Beginner', verified:'semantic-taxonomy-v1'})};
+    assert.equal(c._taxonomySuggestionsForInspiration('angle', ins, '', 4)[0].name, 'Beginner');
+    c.activeProductId = 'B';
+    assert.equal(c._taxonomySuggestionsForInspiration('angle', ins, '', 4).length, 0);
+    assert.equal(calls.computed, 0);
   });
   test(file + ': token cache preserves results without sharing mutable arrays', () => {
     const {c} = context();
@@ -70,31 +64,27 @@ for (const file of ['immuvi-command-center.html', 'public/immuvi-command-center.
     c.activeProductId = 'B'; c._creativeEvidenceTokens('fabric');
     assert.equal(count, 2);
   });
-  test(file + ': background suggestions yield, cancel on switch, and never persist or mutate records', async () => {
-    const {c, calls, turn} = context();
+  test(file + ': background review is delegated without synchronous calculation or record writes', () => {
+    const {c, calls} = context();
     c.INSPIRATIONS = [{id:'1', product_id:'A', text:'fabric', status:'Classified'}];
     const before = JSON.stringify(c.INSPIRATIONS);
+    let queued = 0;
+    c.ImmuviTaxonomyReview = {queue: () => {queued++;}};
     c._queueInspirationSuggestions();
     assert.equal(calls.computed, 0);
-    await turn();
-    assert.equal(calls.computed, 1);
-    c.activeProductId = 'B';
-    await turn();
-    assert.equal(calls.computed, 1);
+    assert.equal(queued, 1);
     assert.equal(calls.saved, 0);
     assert.equal(calls.rendered, 0);
     assert.equal(JSON.stringify(c.INSPIRATIONS), before);
   });
-  test(file + ': completed suggestion batches repaint once and reuse cache', async () => {
-    const {c, calls, turn} = context();
-    c.INSPIRATIONS = [{id:'1', product_id:'A', text:'fabric', status:'Classified'}];
-    c._queueInspirationSuggestions();
-    await turn(); await turn();
-    assert.equal(calls.computed, 2);
-    assert.equal(calls.rendered, 1);
-    c._queueInspirationSuggestions();
-    assert.equal(c._suggestionJob, null);
-    assert.equal(calls.saved, 0);
+  test(file + ': review context is scoped and unavailable during a product switch', () => {
+    const {c} = context();
+    c.AUTH = {user:{id:'user'}}; c.SB = {};
+    c._taxonomyItemIsActive = () => true;
+    c.INSPIRATIONS = [{id:'a', product_id:'A'}, {id:'b', product_id:'B'}];
+    assert.equal(c._taxonomyReviewContext().inspirations.length,1);
+    c._productSwitchPending = true;
+    assert.equal(c._taxonomyReviewContext(),null);
   });
   test(file + ': timeout rejects, success remains usable', async () => {
     const {c, timers} = context();
@@ -180,7 +170,8 @@ for (const file of ['immuvi-command-center.html', 'public/immuvi-command-center.
     const {c,calls,turn} = context(); loadImporter(c);
     Object.assign(c, {extractFormatName:String, normalizeToOption:x=>x, HOOK_TYPES:[], CREATIVE_STRUCTURES:[], PRODUCTION_STYLES:[], FUNNEL_STAGES:[],
       deriveInspirationMediaKind:()=> 'video', normalizeInspirationAdType:()=> 'Video', normalizeInspirationCta:x=>x,
-      _storeInspirationTaxonomySuggestions:()=>[], _canonicalTaxonomyName:x=>x});
+      _storeInspirationTaxonomySuggestions:()=>[], _canonicalTaxonomyName:x=>x,
+      _normalizeTaxonomyName:x=>x, _taxonomyLookupKey:x=>x, _taxonomyItemIsActive:()=>true});
     c.INSPIRATIONS = [{id:'new', product_id:'A', status:'Queued', noBrief:true}];
     const result = {ins_id:'new', _resultProductId:'A', creative_usp:'Lesson', angle:'Beginner', persona:'Quilter', angle_matched:true, persona_matched:true};
     const work = c.applyClassificationResults([result], true, 'A');

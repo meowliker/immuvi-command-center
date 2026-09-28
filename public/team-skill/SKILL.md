@@ -168,12 +168,15 @@ PGPASSWORD="$SUPABASE_DB_PASSWORD" psql "$SUPABASE_DB_URL" -At -c "
 ```
 
 **Reuse existing taxonomy before creating anything new.** Angle/persona labels are product-level strategy buckets, not one-off descriptions. Match by meaning, not exact wording:
-- Ignore shallow modifiers such as age ranges (`22-45`, `25-40`), plural/singular wording, `Adult`/`Women`/`Male`/`Female` demographic filler, punctuation, casing, and status badges like `⭐ Winner`.
+- Ignore incidental age ranges (`22-45`, `25-40`), plural/singular wording, punctuation, casing, and status badges when the buyer, job and motivation are equivalent. Do not erase meaningful audience differences, such as a parent buying for a child versus a teacher buying for a classroom.
 - Treat small synonyms as the same bucket when the buyer/job/problem is the same, e.g. `tools`, `help`, `support`, `resources`, and `toolkit`.
 - Example: `Side-Hustle Sellers 22-45` should use existing `Side-Hustle Sellers`.
 - Example: `Adults Seeking Medication-Free ADHD Help` should use an existing ADHD help/tools persona when it describes the same buyer/job.
 - Create a new angle/persona only when it changes the buyer identity, buying context, core problem/objection, promise/mechanism, product use moment, or creative strategy.
-- If unsure between two existing labels, choose the broader existing label and mention the uncertainty in `notes`; do not invent a new near-duplicate.
+- Do not force the nearest or broadest existing label when its defining meaning is unsupported. If no existing label fits, propose a concise reusable new label; if the evidence itself is insufficient, record `needs_review` and explain the missing evidence instead of guessing.
+- Read source copy, the complete media, captions and verified narration before deciding. A persona is the addressed buyer and their motivation, not the actor or an incidental person mentioned in the ad. Fabric does not automatically imply a beginner; a woman on screen does not automatically imply a mother; a school reference does not automatically imply a teacher.
+- An angle is the core persuasive promise, problem, objection or mechanism, not merely a hook, format or CTA. Judge angle and persona separately. Include the currently assigned category as a valid candidate; do not suggest a change just because a different category is available.
+- For another product's reference, separate the observed source audience from the target-product strategy. Reuse only a transferable buyer/job or persuasive mechanism with a clear evidence-backed connection to the target offer. If that connection is unsupported, flag review rather than importing a foreign persona. Never use current labels, imported task names or generated next-ad scripts as evidence.
 
 **Print status and stop early if nothing to do:**
 - Empty queue → tell user "No pending items in inspiration_queue. Queue some URLs from the dashboard." Stop.
@@ -670,7 +673,7 @@ The dashboard's `applyClassificationResults` function expects these **camelCase*
 | `duration_seconds` | pipeline output |
 | `status` | `"Classified"` literal |
 | `classifiedAt` | `Date.now()` equivalent (epoch ms) |
-| `_needsAngleReview` | `true` if angle_matched=false and no fuzzy match ≥60%, else `false` |
+| `_needsAngleReview` | `true` when angle_matched is not true OR angle_needs_review=true; never override the analysis with fuzzy name matching |
 | `_needsPersonaReview` | same logic for persona |
 | `detectedAngle` / `detectedPersona` | raw detected labels before matching |
 | `_angleScope` / `_personaScope` | `"product"` for matched existing labels, `"inspiration"` for inspiration-local labels |
@@ -765,8 +768,8 @@ patch = {
   'duration_seconds': result.get('duration_seconds') or 0,
   'status': 'Classified',
   'classifiedAt': int(time.time() * 1000),
-  '_needsAngleReview': False,
-  '_needsPersonaReview': False,
+  '_needsAngleReview': cls.get('angle_matched') is not True or cls.get('angle_needs_review') is True,
+  '_needsPersonaReview': cls.get('persona_matched') is not True or cls.get('persona_needs_review') is True,
   'detectedAngle': cls.get('detected_angle') or cls.get('angle') or '',
   'detectedPersona': cls.get('detected_persona') or cls.get('persona') or '',
   '_angleScope': 'product' if cls.get('angle_matched', False) else 'inspiration',

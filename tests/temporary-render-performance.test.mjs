@@ -65,7 +65,7 @@ for (const file of ['immuvi-command-center.html', 'public/immuvi-command-center.
     assert.equal(c._renderedTabs.inspiration, false);
     assert.match(html, /var r = _origRI\.apply\(this, arguments\);\s*if \(r === false\) return false;/);
   });
-  test(file + ': saved suggestions render without peer comparisons or mutations', () => {
+  test(file + ': only verified review badges render without peer comparisons or mutations', () => {
     const c = vm.createContext({
       _taxonomySuggestionsForInspiration() {throw new Error('Expensive calculation during render');},
       _cachedInspirationSuggestions: () => undefined,
@@ -73,17 +73,16 @@ for (const file of ['immuvi-command-center.html', 'public/immuvi-command-center.
       _taxonomyItemIsActive: (_, name) => name === 'Existing',
       escAttr: String, esc: String, escJs: String
     });
+    c.window = c;
     load(c, 'function _renderInspirationTaxonomySuggestion(', 'function _taxonomyCreativeCount(');
     const ins = {id: 'INS-1', angle: 'Current', _angleSuggestions: [
       {name:'Current', score:1}, {name:'Foreign', score:0.9, isNew:true},
       {name:'Archived', score:0.8}, {name:'Existing', score:0.7}
     ]};
     const before = JSON.stringify(ins);
-    assert.match(c._renderInspirationTaxonomySuggestion(ins, 'angle'), /Suggested: Existing/);
+    assert.equal(c._renderInspirationTaxonomySuggestion(ins, 'angle'), '');
+    c.ImmuviTaxonomyReview = {render: () => 'Verified suggestion'};
+    assert.equal(c._renderInspirationTaxonomySuggestion(ins, 'angle'), 'Verified suggestion');
     assert.equal(JSON.stringify(ins), before);
-    assert.equal(c._renderInspirationTaxonomySuggestion({id:'empty'}, 'angle'), '');
-    assert.match(c._renderInspirationTaxonomySuggestion({id:'new', _personaSuggestions:[
-      {name:'New audience', score:0.8, isNew:true}
-    ]}, 'persona'), /New: New audience/);
   });
 }

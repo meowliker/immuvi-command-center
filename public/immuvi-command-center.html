@@ -15055,12 +15055,9 @@ function _suggestionCacheKey(kind, ins, incoming) {
 
 function _taxonomySuggestionsForInspiration(kind, ins, incoming, limit) {
   if (!ins || !activeProductId || (ins.product_id && ins.product_id !== activeProductId)) return [];
-  var key = _suggestionCacheKey(kind, ins, incoming);
-  if (!_suggestionCache.has(key)) {
-    if (_suggestionCache.size >= 1200) _suggestionCache.delete(_suggestionCache.keys().next().value);
-    _suggestionCache.set(key, _calculateTaxonomySuggestionsForInspiration(kind, ins, incoming, 4));
-  }
-  return _suggestionCache.get(key).slice(0, limit || 4);
+  // Keyword/label similarity is not evidence of the addressed buyer or angle.
+  var review = window.ImmuviTaxonomyReview && window.ImmuviTaxonomyReview.assessment(ins, kind);
+  return review && review.name && review.verified ? [review] : [];
 }
 
 function _cachedInspirationSuggestions(ins, kind) {
@@ -15068,41 +15065,27 @@ function _cachedInspirationSuggestions(ins, kind) {
   return _suggestionCache.get(_suggestionCacheKey(kind, ins, incoming));
 }
 
+function _taxonomyReviewContext() {
+  if (!activeProductId || _cloudLoadFailed || _productSwitchPending || _inspirationsProductId !== activeProductId || !_shouldRenderTab('inspiration')) return null;
+  return {
+    product: (PRODUCTS || []).find(function(p) { return p.id === activeProductId; }),
+    userId: AUTH.user && AUTH.user.id,
+    generation: _uiProductGeneration,
+    angles: ANGLES.filter(function(a) { return _taxonomyItemIsActive('angle', a.name, false); }),
+    personas: PERSONAS.filter(function(p) { return _taxonomyItemIsActive('persona', p.name, false); }),
+    inspirations: INSPIRATIONS.filter(function(i) { return !i.product_id || i.product_id === activeProductId; }),
+    sb: SB
+  };
+}
+
+function _taxonomyReviewPaint() {
+  if (!_taxonomyReviewContext()) return;
+  _suggestionPaintVersion++;
+  renderInspirations();
+}
+
 function _queueInspirationSuggestions() {
-  if (!activeProductId || _cloudLoadFailed || _productSwitchPending || _inspirationsProductId !== activeProductId) return;
-  _syncSuggestionContext();
-  if (_suggestionJob) return;
-  var jobs = [];
-  (INSPIRATIONS || []).forEach(function(ins) {
-    if (!ins || (ins.product_id && ins.product_id !== activeProductId)) return;
-    if (['Classified', 'Approved', 'Testing', 'Winner'].indexOf(ins.status) < 0) return;
-    ['angle', 'persona'].forEach(function(kind) {
-      if (_cachedInspirationSuggestions(ins, kind) === undefined) jobs.push({ins: ins, kind: kind});
-    });
-  });
-  if (!jobs.length) return;
-  var job = {productId: activeProductId, cancelled: false};
-  _suggestionJob = job;
-  (async function() {
-    try {
-      for (var i = 0; i < jobs.length; i++) {
-        await _backgroundUiTurn();
-        if (job.cancelled || activeProductId !== job.productId || _inspirationsProductId !== job.productId || !_shouldRenderTab('inspiration')) return;
-        var item = jobs[i];
-        if (INSPIRATIONS.indexOf(item.ins) < 0) continue;
-        var incoming = item.kind === 'persona' ? (item.ins.detectedPersona || item.ins.persona || '') : (item.ins.detectedAngle || item.ins.angle || '');
-        _taxonomySuggestionsForInspiration(item.kind, item.ins, incoming, 4);
-      }
-      if (!job.cancelled && activeProductId === job.productId) {
-        _suggestionPaintVersion++;
-        renderInspirations();
-      }
-    } catch (e) {
-      console.warn('[suggestions] background calculation failed');
-    } finally {
-      if (_suggestionJob === job) _suggestionJob = null;
-    }
-  })();
+  if (window.ImmuviTaxonomyReview) window.ImmuviTaxonomyReview.queue();
 }
 
 function _creativeEvidenceTokens(text) {
@@ -15711,26 +15694,7 @@ function _storeInspirationTaxonomySuggestions(ins, kind, incoming) {
 }
 
 function _renderInspirationTaxonomySuggestion(ins, kind) {
-  if (!ins) return '';
-  var current = kind === 'persona' ? ins.persona : ins.angle;
-  var list = kind === 'persona' ? (ins._personaSuggestions || []) : (ins._angleSuggestions || []);
-  var cached = _cachedInspirationSuggestions(ins, kind);
-  if (cached !== undefined) list = cached;
-  // Render saved or cached suggestions only; peer comparisons run in small batches.
-  list = list.filter(function(s) {
-    return s && s.name && s.name !== current && _taxonomySuggestionFitsActiveProduct(kind, s) &&
-      (s.isNew || _taxonomyItemIsActive(kind, s.name, false));
-  });
-  if (!list.length) return '';
-  var top = list[0];
-  if (!top || !top.name || top.name === current) return '';
-  var label = kind === 'persona' ? 'Persona suggestion' : 'Angle suggestion';
-  var prefix = top.isNew ? 'New: ' : 'Suggested: ';
-  return '<button type="button" title="' + escAttr(label + ': ' + top.name + ' (' + Math.round(top.score * 100) + '%)') + '" ' +
-    'onclick="event.stopPropagation();updateInsField(\'' + escAttr(ins.id) + '\',\'' + kind + '\',\'' + escJs(top.name) + '\')" ' +
-    'style="display:block;margin-top:3px;border:1px solid #bae6fd;background:#f0f9ff;color:#0369a1;border-radius:999px;padding:2px 6px;font-size:0.58rem;font-weight:700;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer">' +
-    prefix + esc(top.name) + ' · ' + Math.round(top.score * 100) + '%' +
-  '</button>';
+  return window.ImmuviTaxonomyReview ? window.ImmuviTaxonomyReview.render(ins, kind) : '';
 }
 
 function _taxonomyCreativeCount(kind, name) {
@@ -16081,37 +16045,11 @@ function _canonicalTaxonomyName(name, items) {
   var clean = _normalizeTaxonomyName(name || '');
   var key = _taxonomyLookupKey(clean);
   if (!key) return clean;
-  items = Array.isArray(items) ? items : [];
   var best = null;
-  for (var i = 0; i < items.length; i++) {
-    var itemName = (items[i] && items[i].name) || '';
-    if (_taxonomyLookupKey(itemName) === key) {
-      best = _preferredTaxonomyItem(items[i], best);
-    }
-  }
-  if (!best && typeof PERSONAS !== 'undefined' && items === PERSONAS) {
-    var semanticKey = _personaSemanticKey(clean);
-    if (semanticKey) {
-      for (var j = 0; j < items.length; j++) {
-        var semanticItemName = (items[j] && items[j].name) || '';
-        if (_personaSemanticKey(semanticItemName) === semanticKey) {
-          best = _preferredTaxonomyItem(items[j], best);
-        }
-      }
-    }
-  }
-  if (!best) {
-    var bestScore = 0;
-    for (var k = 0; k < items.length; k++) {
-      var candidateName = (items[k] && items[k].name) || '';
-      var score = _taxonomySimilarityScore(clean, candidateName);
-      if (score > bestScore) {
-        bestScore = score;
-        best = items[k];
-      }
-    }
-    if (bestScore < 0.72) best = null;
-  }
+  (Array.isArray(items) ? items : []).forEach(function(item) {
+    if (_taxonomyLookupKey(item && item.name || '') === key) best = _preferredTaxonomyItem(item, best);
+  });
+  // Semantic changes require evidence and confirmation, not fuzzy name overlap.
   return best ? _normalizeTaxonomyName(best.name || '') : clean;
 }
 
@@ -16125,7 +16063,7 @@ function _dedupeTaxonomyItems(items, label) {
     if (!item) continue;
     var clean = _normalizeTaxonomyName(item.name || '');
     var key = _taxonomyLookupKey(clean);
-    if (isPersonaLabel) key = _personaSemanticKey(clean) || key;
+    // Distinct persona meanings must not be auto-merged by keyword aliases.
     if (!key) {
       order.push(item);
       continue;
@@ -47878,6 +47816,8 @@ function updateInsField(id, field, value) {
     }
     value = _ensureTaxonomyItem(field, value, 'Manually added from inspiration');
     if (!value) { renderInspirations(); return; }
+    ins['_' + field + 'Scope'] = 'product';
+    ins['_' + field + 'Locked'] = true;
     touchedTaxonomy = true;
     if (field === 'angle') {
       ins._needsAngleReview = false;
@@ -48107,60 +48047,23 @@ async function applyClassificationResults(results, isPolling, expectedProductId)
       ins._inspoDocCreated    = true; // internal flag — not shown in UI
     }
 
-    var rawAngleName = data.angle || ins.detectedAngle || '';
-    var rawPersonaName = data.persona || ins.detectedPersona || '';
-    var angleSuggestions = _storeInspirationTaxonomySuggestions(ins, 'angle', rawAngleName);
-    var personaSuggestions = _storeInspirationTaxonomySuggestions(ins, 'persona', rawPersonaName);
-
-    // Angle matching
-    if (data.angle_matched) {
-      ins.angle = _canonicalTaxonomyName(data.angle || '', ANGLES) || data.angle || '';
-      ins._anglePromptDone = true;
-      ins._needsAngleReview = false;
-    } else {
-      var angleEvidence = angleSuggestions[0] && angleSuggestions[0].evidenceScore >= 0.38 && (angleSuggestions[0].shared || []).length >= 5 ? angleSuggestions[0] : null;
-      var angleResult = matchToExisting(rawAngleName || '', ANGLES);
-      if (angleEvidence) {
-        ins.angle = angleEvidence.name;
-        ins._anglePromptDone = true;
-        ins._needsAngleReview = false;
-      } else if (angleResult.match && angleResult.score >= 0.72) {
-        ins.angle = angleResult.match.name; // auto-map to confident match
-        ins._anglePromptDone = true;
-        ins._needsAngleReview = false;
-      } else if (rawAngleName) {
-        ins.angle = _normalizeTaxonomyName(rawAngleName);
-        ins._angleScope = 'inspiration';
-        ins._angleLocked = true;
-        ins._anglePromptDone = true;
-        ins._needsAngleReview = angleSuggestions.length > 0;
-      }
-    }
-
-    // Persona matching
-    if (data.persona_matched) {
-      ins.persona = _canonicalTaxonomyName(data.persona || '', PERSONAS) || data.persona || '';
-      ins._personaPromptDone = true;
-      ins._needsPersonaReview = false;
-    } else {
-      var personaEvidence = personaSuggestions[0] && personaSuggestions[0].evidenceScore >= 0.38 && (personaSuggestions[0].shared || []).length >= 5 ? personaSuggestions[0] : null;
-      var personaResult = matchToExisting(rawPersonaName || '', PERSONAS);
-      if (personaEvidence) {
-        ins.persona = personaEvidence.name;
-        ins._personaPromptDone = true;
-        ins._needsPersonaReview = false;
-      } else if (personaResult.match && personaResult.score >= 0.72) {
-        ins.persona = personaResult.match.name; // auto-map to confident match
-        ins._personaPromptDone = true;
-        ins._needsPersonaReview = false;
-      } else if (rawPersonaName) {
-        ins.persona = _normalizeTaxonomyName(rawPersonaName);
-        ins._personaScope = 'inspiration';
-        ins._personaLocked = true;
-        ins._personaPromptDone = true;
-        ins._needsPersonaReview = personaSuggestions.length > 0;
-      }
-    }
+    // Preserve the classifier's actual decision. Fuzzy name scores must not
+    // replace a distinct buyer/strategy or create a product taxonomy item.
+    ['angle', 'persona'].forEach(function(kind) {
+      var rawName = data[kind] || (kind === 'angle' ? ins.detectedAngle : ins.detectedPersona) || '';
+      var list = kind === 'angle' ? ANGLES : PERSONAS;
+      var existing = list.find(function(item) {
+        return item && _taxonomyLookupKey(item.name) === _taxonomyLookupKey(rawName) &&
+          _taxonomyItemIsActive(kind, item.name, false);
+      });
+      if (rawName) ins[kind] = existing ? existing.name : _normalizeTaxonomyName(rawName);
+      ins['_' + kind + 'Scope'] = existing ? 'product' : 'inspiration';
+      ins['_' + kind + 'Locked'] = true;
+      ins['_' + kind + 'PromptDone'] = true;
+      ins['_needs' + (kind === 'angle' ? 'Angle' : 'Persona') + 'Review'] = !existing || data[kind + '_needs_review'] === true;
+      ins['_' + kind + 'Suggestions'] = [];
+      ins['_suggested' + (kind === 'angle' ? 'Angle' : 'Persona')] = '';
+    });
 
     ins._lastImportedResult = resultSignature;
     updated++;
@@ -53011,5 +52914,6 @@ window._clearPendingCu = _clearPendingCu;
 })();
 
 </script>
+<script type="module" src="taxonomy-review-client.mjs"></script>
 </body>
 </html>

@@ -142,6 +142,16 @@ CLASSIFY_SKILL_DIRS = (
 # only need to be on disk (next strategist invocation imports the new code).
 WORKER_UPDATE_MANIFEST = [
     {
+        "url": f"{WORKER_UPDATE_BASE_URL}/taxonomy-review-core.mjs",
+        "rel_path": "tools/taxonomy-review-core.mjs",
+        "triggers_restart": True,
+    },
+    {
+        "url": f"{WORKER_UPDATE_BASE_URL}/taxonomy-review-worker.mjs",
+        "rel_path": "tools/taxonomy-review-worker.mjs",
+        "triggers_restart": True,
+    },
+    {
         "url": f"{WORKER_UPDATE_BASE_URL}/classify_worker.py",
         "rel_path": "__self__",
         "triggers_restart": True,
@@ -167,7 +177,7 @@ WORKER_UPDATE_MANIFEST = [
 ]
 # Backward-compat: kept as the primary URL for log lines + the single-file
 # check path used by older code that imported this name.
-WORKER_UPDATE_URL = WORKER_UPDATE_MANIFEST[0]["url"]
+WORKER_UPDATE_URL = f"{WORKER_UPDATE_BASE_URL}/classify_worker.py"
 
 # ── Helpers ─────────────────────────────────────────────────
 
@@ -189,7 +199,12 @@ def classification_only_prompt(job: dict) -> str:
         "1. Load the target product name/config and its active angles and personas. "
         "Analyze the actual creative; reuse semantically equivalent product taxonomy. "
         "Do not copy a foreign product's audience or invent age/wording near-duplicates. "
-        "Only suggest a new label if the creative has a materially different buyer or strategy.\n"
+        "Only suggest a new label if the creative has a materially different buyer or strategy. "
+        "Do not force the closest or broadest existing label. Judge the addressed buyer, not an actor "
+        "or incidental mention. Judge the persuasive problem/promise/mechanism, not the hook/format. "
+        "Ignore incidental ages and wording only when buyer, job and motivation are equivalent. "
+        "If the evidence is uncertain, set angle_needs_review/persona_needs_review truthfully and "
+        "keep the candidate inspiration-local rather than creating product taxonomy.\n"
         "2. Download and inspect the actual media, including the complete video and audio. "
         "Use the skill's platform downloaders; TikTok must use the non-browser downloader chain. "
         "Record factual media_kind: image, carousel, or video. Never classify a video preview as Photo. "
@@ -309,6 +324,11 @@ def probe_capabilities() -> dict:
         "codex": _resolve_codex_bin() is not None,
         "worker_contract": "inspiration-brief-8-section-page-verified",
         "classification_only": True,
+        "taxonomy_review": "semantic-taxonomy-v1" if (
+            shutil.which("node") and _resolve_codex_bin()
+            and (_project_root() / "tools/taxonomy-review-worker.mjs").exists()
+            and (_project_root() / "tools/taxonomy-review-core.mjs").exists()
+        ) else "",
     }
 
 
@@ -972,6 +992,58 @@ class Worker:
             log(f"claim failed for {cid}: {e}")
             return None
 
+    def claim_next_taxonomy_review(self):
+        """Review queue is isolated from classification/brief state and Mac-mini-only."""
+        if self.worker_id != "gp-mac-mini" or self._caps.get("taxonomy_review") != "semantic-taxonomy-v1":
+            return None
+        try:
+            self.sb.update(
+                "taxonomy_review_jobs",
+                f"status=eq.running&claimed_by=eq.{self.worker_id}&claimed_at=lt.{urllib.parse.quote(_now_iso(offset_minutes=-10))}",
+                {"status": "failed", "error_message": "Worker stopped before review completed. Retry the review."},
+            )
+            rows = self.sb.select(
+                "taxonomy_review_jobs",
+                f"status=eq.pending&worker_assignment=eq.{self.worker_id}&order=queued_at.asc&limit=1",
+            )
+            if not rows:
+                return None
+            job = rows[0]
+            updated = self.sb.update(
+                "taxonomy_review_jobs", f"id=eq.{job['id']}&status=eq.pending",
+                {"status": "running", "claimed_by": self.worker_id, "claimed_at": _now_iso(),
+                 "attempts": (job.get("attempts") or 0) + 1},
+            )
+            return updated[0] if updated else None
+        except Exception:
+            return None
+
+    def _execute_taxonomy_review(self, job):
+        try:
+            env = dict(os.environ)
+            env.update(self.env)
+            env["CODEX_BIN"] = _resolve_codex_bin() or "codex"
+            result = subprocess.run(
+                [shutil.which("node") or "node", str(_project_root() / "tools/taxonomy-review-worker.mjs"),
+                 job["id"], self.worker_id],
+                env=env, capture_output=True, text=True, timeout=240,
+            )
+            if result.returncode != 0:
+                raise RuntimeError("Review agent failed")
+            log(f"[taxonomy-review] completed {job['id']}")
+        except Exception:
+            try:
+                self.sb.update(
+                    "taxonomy_review_jobs",
+                    f"id=eq.{job['id']}&status=eq.running&claimed_by=eq.{self.worker_id}"
+                    f"&claimed_at=eq.{urllib.parse.quote(job['claimed_at'])}",
+                    {"status": "failed", "error_message": "Mac mini review failed. Update/restart Codex on the worker and retry.",
+                     "finished_at": _now_iso()},
+                )
+            except Exception:
+                pass
+            log(f"[taxonomy-review] failed {job['id']}; existing creatives unchanged")
+
     def claim_next_variation_brief_job(self):
         """Atomically claim a pending variation_brief_queue row. Mirrors
         claim_next_job (which is for inspiration_queue) — same pattern:
@@ -1606,9 +1678,9 @@ class Worker:
             f"       hook_type, creative_structure, production_style, funnel_type,\n"
             f"       persona, angle, ad_type, brand, media_kind.\n"
             f"     media_kind is factual downloaded media, not marketing style. ad_type must agree: image=>Photo, carousel=>Carousel/Photo, video=>Video/UGC/VSL/AI Style.\n"
-            f"     Before choosing angle/persona, load the existing active product rows from public.angles and public.personas. Reuse an existing canonical name whenever the meaning is equivalent or broader; do NOT create near-duplicates for age ranges, plural/singular changes, gender/adult wording, status badges such as Winner/Testing, punctuation, or small synonyms. "
+            f"     Before choosing angle/persona, load the existing active product rows from public.angles and public.personas. Reuse an existing canonical name only when buyer/job/motivation or persuasive problem/promise/mechanism is genuinely equivalent. Ignore incidental age/wording differences, but preserve meaningful differences in buyer context. Do not classify from actors, incidental keywords, generated scripts or current assignments. "
             f"Examples: map 'Side-Hustle Sellers 22-45' to existing 'Side-Hustle Sellers'; map 'Adults Seeking Medication-Free ADHD Help' to an existing ADHD-tools/help persona if it describes the same buyer/job. "
-            f"Create a new angle/persona only when the creative truly changes buyer identity, buying context, core problem/objection, promise/mechanism, product use moment, or creative strategy. If uncertain between two existing labels, choose the broader existing taxonomy label and note the uncertainty; do not invent a new one. "
+            f"Propose a new reusable angle/persona when the evidence does not fit any active candidate. Never force a broader or merely nearby bucket. If evidence is uncertain, set angle_needs_review/persona_needs_review and keep the candidate inspiration-local. For imported references, explain a supported adaptation to the current product, never import another product's audience without evidence. "
             f"When reusing an existing label, write angle/persona exactly as that existing row's name and set angle_matched/persona_matched truthfully when those fields are present.\n"
             f"     Plus: hook_text, caption_transcript, caption_timeline, voice_over_timeline, creative_hypothesis, duration_seconds (best-effort), and voice_over when verifiable.\n"
             f"     hook_text is the primary static hook overlay/card (for example a top bubble). Do not put static hook cards into caption_timeline.\n"
@@ -2625,6 +2697,14 @@ class Worker:
                         _active = self._active_classify_count()
                         log(f"[brief] dispatched {_brief_dispatched} new job(s); "
                             f"{_active}/{CLASSIFY_MAX_CONCURRENCY} slot(s) in use")
+
+                    # Run one read-only taxonomy review at a time, after user classification jobs.
+                    if self._active_classify_count() == 0 and self._classify_has_capacity():
+                        review_job = self.claim_next_taxonomy_review()
+                        if review_job:
+                            review_future = self._classify_pool.submit(self._execute_taxonomy_review, review_job)
+                            with self._classify_lock:
+                                self._classify_futures["taxonomy:" + review_job["id"]] = review_future
 
                     # Heartbeat-relevant busy flag: True if ANY classify slot is occupied.
                     self.is_busy = self._active_classify_count() > 0

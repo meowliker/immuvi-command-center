@@ -8,9 +8,22 @@ import {
   normalizeWorker,
   summarizeQueue,
   workerHealth,
+  inspirationWorkerSummary,
 } from '../../lib/domain/worker-queue.js';
 
 const nowMs = Date.parse('2026-08-31T10:00:00.000Z');
+
+test('inspiration worker summary names only a live device and counts each machine once', () => {
+  const privateWorker={name:"Anay's Mac",enabled:true,classifier_available:true,generation_available:true,heartbeat_at:new Date(nowMs).toISOString()};
+  const sharedWorker={...privateWorker,name:'Mac mini - QA',generation_available:false};
+  assert.deepEqual(inspirationWorkerSummary([privateWorker],nowMs),{count:1,label:"Anay's Mac · online"});
+  assert.deepEqual(inspirationWorkerSummary([privateWorker,sharedWorker],nowMs),{count:2,label:'2 workers online'});
+  assert.deepEqual(inspirationWorkerSummary([{...privateWorker,enabled:false},sharedWorker],nowMs),{count:1,label:'Mac mini - QA · online'});
+  for(const patch of [{enabled:false},{heartbeat_at:'invalid'},{heartbeat_at:new Date(nowMs-45000).toISOString()},{classifier_available:false,generation_available:false}]) {
+    assert.equal(inspirationWorkerSummary([{...privateWorker,...patch}],nowMs).count,0);
+  }
+  assert.equal(inspirationWorkerSummary([],nowMs).label,'No available worker');
+});
 
 test('normalizeQueueJob maps database fields to UI fields', () => {
   assert.deepEqual(normalizeQueueJob({

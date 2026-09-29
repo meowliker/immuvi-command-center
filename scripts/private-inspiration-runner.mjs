@@ -24,6 +24,11 @@ export async function extractLegacyMedia(config,url,directory,signal) {
   const output = await exec(config.pythonBin,[adapter,url,directory],{cwd:directory,env,signal,timeout:15*60_000,maxBuffer:2_000_000});
   const media = JSON.parse(output.stdout);
   if (media.error || !media.frames?.length) {
+    if (media.error_code === 'facebook_snapshot_unavailable') {
+      const error = new Error('Facebook did not provide the ad data after three page loads. No brief was generated. You can requeue this task; this does not mean the ad is private or requires login.');
+      error.code = 'FACEBOOK_SNAPSHOT_UNAVAILABLE';
+      throw error;
+    }
     const drive = ['drive.google.com','docs.google.com','drive.usercontent.google.com'].includes(new URL(url).hostname);
     throw new Error(drive
       ? 'The legacy downloader could not read this Google Drive video. Check that the file is a video, is viewable and downloadable without signing in, and has not reached its download limit. No brief was created.'

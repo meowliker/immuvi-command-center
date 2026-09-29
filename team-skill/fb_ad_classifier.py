@@ -665,7 +665,41 @@ def download_instagram_media(url: str, work_dir: str) -> dict:
 
 
 # ── Step 1: Fetch ad JSON from page ──────────────────────────────────────────
-async def fetch_ad_snapshot(ad_id: str) -> dict:
+async def _load_ad_page(page, ad_id: str, diagnostics: dict) -> str:
+    from playwright.async_api import TimeoutError as PlaywrightTimeoutError
+
+    url = f"https://www.facebook.com/ads/library/?id={ad_id}"
+    marker = f'"ad_archive_id":"{ad_id}"'
+    diagnostics.update({"stage": "facebook_page_parsing", "attempts": []})
+    for attempt in range(1, 4):
+        entry = {"attempt": attempt, "http_status": None, "navigation_timed_out": False,
+                 "marker_found": False, "checks": 0}
+        diagnostics["attempts"].append(entry)
+        try:
+            response = await page.goto(url, wait_until="domcontentloaded", timeout=30000)
+            entry["http_status"] = response.status if response else None
+        except PlaywrightTimeoutError:
+            entry["navigation_timed_out"] = True
+        # Facebook may render usable ad data after navigation, even after HTTP 403.
+        for check in range(11):
+            content = await page.content()
+            parsed = urllib.parse.urlsplit(page.url)
+            entry.update({"final_host": parsed.hostname, "final_path": parsed.path,
+                          "checks": check + 1, "marker_found": marker in content})
+            if entry["marker_found"]:
+                return content
+            if check < 10:
+                await asyncio.sleep(1)
+        if attempt < 3:
+            await asyncio.sleep(2)
+    diagnostics["error_code"] = "facebook_snapshot_unavailable"
+    raise RuntimeError(
+        f"Facebook ad data for {ad_id} was not found after 3 page loads. "
+        "This does not establish whether the ad is private, inactive, or requires login."
+    )
+
+
+async def fetch_ad_snapshot(ad_id: str, *, diagnostics=None) -> dict:
     """
     Use Playwright headless to load the Ads Library page and extract the
     embedded JSON snapshot for the target ad.
@@ -682,18 +716,14 @@ async def fetch_ad_snapshot(ad_id: str) -> dict:
         context = await browser.new_context(user_agent=USER_AGENT)
         page = await context.new_page()
 
-        await page.goto(url, wait_until="networkidle", timeout=30000)
-        content = await page.content()
-        await browser.close()
+        try:
+            content = await _load_ad_page(page, ad_id, diagnostics if diagnostics is not None else {})
+        finally:
+            await browser.close()
 
     # Locate the ad's JSON block — properly bounded to this ad's object only
     marker = f'"ad_archive_id":"{ad_id}"'
     idx = content.find(marker)
-    if idx == -1:
-        raise RuntimeError(
-            f"Ad ID {ad_id} not found in page. "
-            "The ad may be inactive or the page may require login."
-        )
 
     # Find the enclosing JSON object by scanning for matching braces
     # This prevents bleeding into neighboring ads on collated pages

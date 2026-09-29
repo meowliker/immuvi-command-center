@@ -96,7 +96,7 @@ async function processInspiration(job) {
     console.log(`Inspiration ${job.id} completed and ClickUp page verified.`);
   } catch(error) {
     const sourceUnavailable=String(error.message).startsWith('The legacy downloader could not');
-    const message=shared ? (sourceUnavailable ? 'The legacy downloader could not retrieve this public source. Check public download access; no generation or document was created.' : `Shared QA ${phase} failed; retained evidence requires review. No success was published.`) : String(error.message).slice(0,600);
+    const message=error.code==='FACEBOOK_SNAPSHOT_UNAVAILABLE' ? 'Facebook did not provide the ad data after three page loads. No brief was generated. You can requeue this task; this does not mean the ad is private or requires login.' : shared ? (sourceUnavailable ? 'The legacy downloader could not retrieve this public source. Check public download access; no generation or document was created.' : `Shared QA ${phase} failed; retained evidence requires review. No success was published.`) : String(error.message).slice(0,600);
     await checkpoint('failed',{error:message}).catch(()=>{});
     console.error(`Inspiration ${job.id} failed. ${message}`);
   } finally {

@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 import sys
+from functools import partial
 from private_inspiration_audio import transcribe_audio
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -39,6 +40,9 @@ else:
     os.environ['HOME'] = str(Path(directory) / 'home')
     Path(os.environ['HOME']).mkdir(exist_ok=True)
     sys.path.insert(0, str(ROOT / 'team-skill'))
+    import fb_ad_classifier
+    source_evidence = {}
+    fb_ad_classifier.fetch_ad_snapshot = partial(fb_ad_classifier.fetch_ad_snapshot, diagnostics=source_evidence)
     pipeline = skill.split('## Step 3', 1)[1].split('```python\n', 1)[1].split('\n```', 1)[0]
     audio_evidence = {}
 
@@ -64,12 +68,16 @@ else:
         exec(compile(tree, 'legacy-skill-media', 'exec'), namespace)
     result = namespace['result']
     result.setdefault('metadata', {})['transcription_evidence'] = audio_evidence
+    if source_evidence:
+        result['metadata']['source_fetch'] = source_evidence
+        if source_evidence.get('error_code'):
+            result['error_code'] = source_evidence['error_code']
     # Legacy prose expects factual media_kind, but its pipeline omits that key.
     kind = namespace.get('snapshot', {}).get('media_kind')
-    if not kind:
+    if not kind and result.get('frames'):
         downloaded = namespace.get('ig') or namespace.get('tt') or {}
         kind = 'video' if 'vp' in namespace or downloaded.get('media_path') else 'carousel' if len(result['frames']) > 1 else 'image'
-    result['media_kind'] = kind
+    result['media_kind'] = kind or 'unknown'
     if kind == 'video':
         from fb_ad_classifier import FRAME_INTERVAL_SEC
         result['frame_samples'] = [

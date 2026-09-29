@@ -46,6 +46,29 @@ test('private worker uses the exact legacy classification, worker instructions a
   assert.match(contract.worker,/Variations 2 and 3 may change wording 20-35%/);
   assert.doesNotMatch(Object.values(contract).join(''),/SUPABASE_SERVICE_ROLE_KEY|hdniumnkprkadlrrataz|90169348848/);
 });
+test('ClickUp may auto-link a bare domain without changing the brief',()=>{
+  const original='The supplied destination is sub.astroline.today.\n\n[Existing](https://example.com/ad)';
+  const saved='The supplied destination is [sub.astroline.today](http://sub.astroline.today).\n\n[Existing](https://example.com/ad)';
+  assert.equal(briefContentMatches(original,saved),true);
+  assert.equal(briefContentMatches(original,saved.replace('http://sub.astroline.today','http://sub.astroline.today/')),true);
+  for(const changed of [saved.replace('http://sub.astroline.today','http://evil.example'),
+    saved.replace('https://example.com/ad','https://example.com/other'),
+    saved.replace('http://sub.astroline.today','http://sub.astroline.today/tracking'),
+    saved.replace('supplied','invented'),saved.replace('destination','offer'),
+    saved.replace('http://sub.astroline.today','http://sub.astroline.today?x=1')]) {
+    assert.equal(briefContentMatches(original,changed),false);
+  }
+  const explicit='[sub.astroline.today](https://sub.astroline.today)';
+  assert.equal(briefContentMatches(explicit,explicit.replace('https:','http:')),false);
+  assert.equal(briefContentMatches(explicit,'sub.astroline.today'),false);
+  assert.equal(briefContentMatches(original,saved.replace('[Existing](https://example.com/ad)','Existing')),false);
+});
+test('domain auto-link handling preserves existing domain links, nesting and code blocks',()=>{
+  const expected='IMMUVIAUTOLINK0END\n\n> **Use sub.astroline.today.**\n\n| Source |\n| --- |\n| sub.astroline.today |\n\n[sub.astroline.today](http://sub.astroline.today)\n\n```text\nsub.astroline.today\n```';
+  const saved=expected.replace('Use sub.astroline.today.','Use [sub.astroline.today](http://sub.astroline.today).').replace('| sub.astroline.today |','| [sub.astroline.today](http://sub.astroline.today) |');
+  assert.equal(briefContentMatches(expected,saved),true);
+  assert.equal(briefContentMatches(expected,saved.replace('```text\nsub.astroline.today','```text\n[sub.astroline.today](http://sub.astroline.today)')),false);
+});
 test('ClickUp upload keeps separator-adjacent paragraphs from becoming headings',()=>{
   const original='## Snapshot\n\n**Evidence note:** Verified visuals.\n* * *\n\n## Breakdown\n\nNo proof beat is visible.\n***\n\n## Why it works\n';
   const rewrite=value=>value.replace(/^\* \* \*$|^\*\*\*$/gm,'---');
@@ -253,6 +276,19 @@ test('legacy library reuses existing inspiration pages and resumes known receipt
 test('uncertain library creation cannot be repeated just because a page is not listed',async()=>{
   const responses=[{id:TEST_LIST},libraryDoc,[trackerPage]];
   await assert.rejects(deliverPrivateBrief({job:{...libraryJob,delivery_started:true,doc_id:'qa-library'},result:{markdown},privateKey:pair.privateKey,checkpoint:async()=>assert.fail('no write'),fetchImpl:async(url,init)=>{assert.equal(init.method,'GET');return Response.json(responses.shift());}}),/uncertain outcome/);
+});
+test('saved brief recovery accepts ClickUp domain links and completes without a new page',async()=>{
+  const original=markdown+'\n\nDestination: sub.astroline.today.\n';
+  const saved=original.replace('Destination: sub.astroline.today.','Destination: [sub.astroline.today](http://sub.astroline.today).');
+  const calls=[],stages=[];
+  const responses=[{id:TEST_LIST},libraryDoc,[trackerPage,{id:'brief',name:'test immuvi brief-1'}],{}, {content:saved},{}];
+  const receipt=await deliverPrivateBrief({job:{...libraryJob,delivery_started:true,doc_id:'qa-library',page_id:'brief'},
+    result:{markdown:original},privateKey:pair.privateKey,
+    checkpoint:async(stage)=>{stages.push(stage);return stage==='tracker-rows'?[]:undefined;},
+    fetchImpl:async(url,init)=>{calls.push({url,...init});return Response.json(responses.shift());}});
+  assert.deepEqual(receipt,{docId:'qa-library',pageId:'brief'});
+  assert.equal(calls.some(call=>call.method==='POST'),false);
+  assert.deepEqual(stages,['result','tracker-rows','complete']);
 });
 test('altered ClickUp content cannot update the tracker or mark the inspiration complete',async()=>{
   const stages=[];

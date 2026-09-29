@@ -17,8 +17,8 @@ function fixture(options={}) {
   const calls=[];
   const worker={id:'private-worker',name:"Anay's Mac",enabled:true,classifier_available:true,heartbeat_at:new Date().toISOString()};
   const db={auth:{getSession:async()=>({data:{session:{access_token:'session-token',user:{id:'owner'}}}})},
-    rpc:async name=>{assert.equal(name,'qa_private_workers_list');return {data:options.offline?[]:[worker]};}};
-  const queue=load('queue-private-inspiration',{'./qa-clickup':{qaClickUpToken:()=>options.noKey?'':'test-token'}},{fetch:async(url,init)=>{
+    rpc:async name=>{assert.equal(name,'qa_inspiration_workers_list');return {data:options.offline?[]:[worker,...(options.shared?[{...worker,id:'shared-worker',name:'Mac mini - QA',scope:'shared'}]:[])]};}};
+  const queue=load('queue-private-inspiration',{'./qa-clickup':{qaClickUpToken:()=>options.noKey?'':'test-token'}},{localStorage:{getItem:()=>options.selected||null},fetch:async(url,init)=>{
     calls.push({url,input:JSON.parse(init.body)});
     if(options.networkError)throw new Error('Network unavailable');
     return {ok:true,json:async()=>({id:'create-request',inspirationId:'INS-2',status:'pending',...options.receipt})};
@@ -76,4 +76,19 @@ test('table and activity do not relabel an undispatched private inspiration as R
     assert.doesNotMatch(source,/status:'ready'/);
     assert.match(source,/Not queued on your private worker/);
   }
+});
+
+test('shared dispatch requires explicit selection and never falls back from an unavailable selected destination',async()=>{
+ const selected=fixture({shared:true,selected:'shared-worker'});
+ await selected.service.saveInspiration(selected.db,selected.request);
+ assert.equal(selected.calls[0].input.workerId,'shared-worker');
+ const defaults=fixture({shared:true});await defaults.service.saveInspiration(defaults.db,defaults.request);
+ assert.equal(defaults.calls[0].input.workerId,'private-worker');
+ const missing=fixture({shared:true,selected:'missing'});await missing.service.saveInspiration(missing.db,missing.request);
+ assert.equal(missing.calls.length,0);
+});
+test('saved delivery stays on its original worker even when the UI selection changes',async()=>{
+ const f=fixture({shared:true,selected:'shared-worker',receipt:{id:'saved-job'}});
+ await f.queue.queuePrivateInspiration(f.db,{productId:'qa-product',inspirationId:'INS-2',requestId:'retry-request',recoveryJobId:'saved-job',workerId:'private-worker'});
+ assert.equal(f.calls[0].input.workerId,'private-worker');
 });

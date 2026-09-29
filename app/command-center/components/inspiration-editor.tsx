@@ -4,6 +4,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Inspiration } from '../hooks/use-inspiration-library';
 import { INSPIRATION_FIELDS, inspirationDraft, inspirationRequest } from '../../../lib/domain/inspiration-editing.js';
 import { saveInspiration } from '../services/save-inspiration';
+import { InspirationWorkerSelect } from './inspiration-worker-select';
 import { TrackerDialog } from './tracker-dialog';
 import { ProductFieldInput } from './product-field-catalog';
 import styles from '../inspiration.module.css';
@@ -37,7 +38,7 @@ export function InspirationEditor({ db, productId, row, mode, run, close, done, 
   if(compact)return <>
     <form className={styles.queueToolbar} aria-label="Add inspiration to queue" onSubmit={(event)=>{event.preventDefault();void save();}}>
       <input aria-label="Source URL" type="url" required maxLength={4000} placeholder="Paste ad URL or Google Drive video link..." value={url} disabled={busy || uncertain} onChange={(event)=>setUrl(event.target.value)}/>
-      <label className={styles.runOn}><span>Run on</span><select aria-label="Run inspiration on" disabled><option>My private worker</option></select></label>
+      <InspirationWorkerSelect key={productId} db={db} productId={productId} disabled={busy || uncertain}/>
       <button className={styles.addQueue} type="submit" disabled={busy}>{busy?'Saving...':uncertain?'Retry same save':'+ Add to Queue'}</button>
       {children}
     </form>

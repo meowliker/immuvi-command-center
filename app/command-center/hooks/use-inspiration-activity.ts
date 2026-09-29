@@ -22,7 +22,7 @@ export function useInspirationActivity(db: SupabaseClient, productId: string) {
     }
     const results=await Promise.allSettled([
       readBriefs(),readProductRows(db,'qa_image_runs',productId,signal),
-      db.rpc('qa_private_workers_list').abortSignal(signal).then(result=>{if(result.error || !Array.isArray(result.data))throw new Error('Image worker unavailable');return result.data;}),
+      db.rpc('qa_inspiration_workers_list',{p_product_id:productId}).abortSignal(signal).then(result=>{if(result.error || !Array.isArray(result.data))throw new Error('Image worker unavailable');return result.data;}),
       db.rpc('qa_private_inspiration_status',{p_product_id:productId}).abortSignal(signal).then(result=>{if(result.error || !Array.isArray(result.data))throw new Error('Private queue unavailable');return result.data;}),
     ]);
     const names=['Variation briefs','Image tasks','Image worker','Private queue'];

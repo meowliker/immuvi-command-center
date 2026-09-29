@@ -46,7 +46,7 @@ export function InspirationTab({ supabase, activeProductId, activeProduct, produ
   const imageKnown=activity.loaded && !activity.errors.some(error=>error.includes('Image worker'));
   const imageOnline=imageKnown && activity.imageWorkers.some(worker=>imageWorkerOnline(worker,now));
   const privateBySource=new Map([...activity.privateJobs].reverse().map(job=>[job.inspiration_id,job]));
-  const queue=workers.jobs.map(row=>{const job=privateBySource.get(row.insId);return job?{...row,status:job.status,privateJobId:job.id,priority:job.priority,workerAssignment:job.worker_id || 'private',claimedBy:'',errorMessage:job.error||'',queuedAt:job.created_at,processedAt:job.finished_at}:row.workerAssignment==='blocked:qa-isolation'?{...row,status:'blocked',workerAssignment:'private',errorMessage:'Not queued on your private worker. Check your worker and ClickUp connection, then use Process All with Codex.'}:row;});
+  const queue=workers.jobs.map(row=>{const job=privateBySource.get(row.insId);return job?{...row,status:job.status,privateJobId:job.can_control===false?undefined:job.id,priority:job.priority,workerAssignment:job.worker_id || 'private',claimedBy:'',errorMessage:job.error||'',queuedAt:job.created_at,processedAt:job.finished_at}:row.workerAssignment==='blocked:qa-isolation'?{...row,status:'blocked',workerAssignment:'private',errorMessage:'Not queued on your private worker. Check your worker and ClickUp connection, then use Process All with Codex.'}:row;});
   const jobs=inspirationActivity({productId:activeProductId,queue,briefs:activity.briefs,images:activity.images,ads:activity.ads,inspirations:library.rows});
   const activityErrors=[...(workers.error?[workers.error]:[]),...activity.errors];
   const counts={running:jobs.filter(job=>job.status==='running').length,queued:jobs.filter(job=>job.status==='pending').length,blocked:jobs.filter(job=>job.status==='blocked').length};
@@ -79,7 +79,7 @@ export function InspirationTab({ supabase, activeProductId, activeProduct, produ
       <button type="button" disabled={!library.loaded || !!library.error} onClick={()=>setImporting(true)}><span aria-hidden="true">🔄</span> Other Products</button>
     </InspirationEditor>
     <div className={styles.workerBar}>
-      <button type="button" aria-label="Queue and worker health" onClick={()=>setPanel('workers')} title="Workers"><i data-online={classifierWorkers.length>0 || imageOnline}/>{!imageKnown?'Checking worker...':activity.imageWorkers.length?`${activity.imageWorkers[0].name} · ${classifierWorkers.length || imageOnline?'online':'offline'}`:'No private worker'}</button>
+      <button type="button" aria-label="Queue and worker health" onClick={()=>setPanel('workers')} title="Workers"><i data-online={classifierWorkers.length>0 || imageOnline}/>{!imageKnown?'Checking worker...':activity.imageWorkers.length?`${activity.imageWorkers[0].name} · ${classifierWorkers.length || imageOnline?'online':'offline'}`:'No available worker'}</button>
       <button type="button" className={styles.activityTrigger} aria-label="Open task activity" onClick={()=>setPanel('activity')}><ListChecks size={14}/>{activityErrors.length?'Activity · counts unavailable':!loaded?'Activity · loading...':counts.running || counts.queued || counts.blocked?`${counts.running} running · ${counts.queued} queued${counts.blocked?` · ${counts.blocked} blocked`:''}`:'Activity · idle'}</button>
     </div>
     <>

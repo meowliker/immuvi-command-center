@@ -25,7 +25,7 @@ export function useInspirationLibrary(db: SupabaseClient, productId: string) {
       const privateResult=await db.rpc('qa_private_inspiration_status',{p_product_id:productId}).abortSignal(signal);
       if(privateResult.error)throw new Error('Private inspiration queue is unavailable.');
       const privateJobs=new Map<string,Record<string,any>>([...(privateResult.data||[])].reverse().map((job:Record<string,any>)=>[job.inspiration_id,job]));
-      const displayQueue=queue.map(row=>{const job=privateJobs.get(row.ins_id);return job?{...row,status:job.status==='running'?'classifying':job.status,worker_assignment:'private',error_message:job.error||''}:row.worker_assignment==='blocked:qa-isolation'?{...row,status:'blocked',worker_assignment:'private',error_message:'Not queued on your private worker. Check your worker and ClickUp connection, then use Process All with Codex.'}:row;});
+      const displayQueue=queue.map(row=>{const job=privateJobs.get(row.ins_id);return job?{...row,status:job.status==='running'?'classifying':job.status,worker_assignment:job.scope || 'private',error_message:job.error||''}:row.worker_assignment==='blocked:qa-isolation'?{...row,status:'blocked',worker_assignment:'private',error_message:'Not queued on your private worker. Check your worker and ClickUp connection, then use Process All with Codex.'}:row;});
       const eligible=eligibleInspirationCreatives(productId,ads,deleted);
       const next = projectInspirationLibrary(productId, inspirations, displayQueue, ads, deleted, cells).map((row)=>({...row,...inspirationDuplicateState(row,eligible)}));
       const active={angle:activeInspirationTaxonomy(productId,angles),persona:activeInspirationTaxonomy(productId,personas)};

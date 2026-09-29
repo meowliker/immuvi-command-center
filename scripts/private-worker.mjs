@@ -10,12 +10,18 @@ import { classifierAvailable, classifyPrivateInspiration } from './private-inspi
 import { deliverPrivateBrief } from '../lib/services/private-inspiration.js';
 import { createPrivateJobPool } from '../lib/services/private-job-pool.js';
 
+import { validateSharedWorkerConfig, assertInspirationJob } from '../lib/services/shared-worker.js';
+
 process.umask(0o077);
 const path = process.argv[2];
 if (!path) throw new Error('A private device configuration path is required.');
 const permissions = await stat(path);
 if (permissions.uid !== process.getuid() || (permissions.mode & 0o077)) throw new Error('Worker configuration must be owner-only (0600).');
-const config = validatePrivateWorkerConfig(JSON.parse(await readFile(path, 'utf8')));
+const input = JSON.parse(await readFile(path, 'utf8'));
+const shared = input.scope === 'shared';
+const config = shared ? validateSharedWorkerConfig(input) : validatePrivateWorkerConfig(input);
+if(shared && (process.env.HOME !== config.runtimeHome || process.env.CODEX_HOME !== join(config.runtimeHome,'.codex'))) throw new Error('Shared worker requires isolated HOME and Codex configuration.');
+const capacity = shared ? 1 : 2;
 process.env.IMMUVI_CODEX_BIN = config.codexBin;
 function client(lease) {
   return createClient(config.url, config.anonKey, { auth: { persistSession: false, autoRefreshToken: false },
@@ -28,14 +34,18 @@ async function rpc(name, args = {}) {
   return data;
 }
 let stopped = false, available = false, current = null, enabled = false, classifier = false;
-const pool = createPrivateJobPool(2), inspirationJobs = new Map();
+const pool = createPrivateJobPool(capacity), inspirationJobs = new Map();
 const abort = new AbortController();
 process.on('SIGTERM', () => { stopped = true; abort.abort(); });
 process.on('SIGINT', () => { stopped = true; abort.abort(); });
 async function heartbeat() {
   const state = await rpc('qa_private_worker_heartbeat', { p_available: available && !stopped });
-  if (state.ownerId !== config.ownerId || state.workerId !== config.id) throw new Error('Worker owner pairing changed.');
+  if (state.ownerId !== config.ownerId || state.workerId !== config.id || (shared && state.scope !== 'shared')) throw new Error('Worker owner pairing changed.');
   enabled = state.enabled;
+  if(shared) {
+    try {enabled = enabled && (await readFile(join(dirname(path),'paused'),'utf8')).trim()==='0';}
+    catch {enabled=false;}
+  }
   await rpc('qa_private_runtime_heartbeat',{p_codex:(available || classifier) && !stopped,p_claude:false,p_classifier:classifier && !stopped});
   for (const job of inspirationJobs.values()) {
     try { await rpc('qa_private_inspiration_checkpoint',{p_id:job.id,p_lease:job.lease_id,p_stage:'heartbeat'}); }
@@ -47,12 +57,12 @@ async function heartbeat() {
 }
 await heartbeat();
 const probe = await mkdtemp(join(tmpdir(), 'immuvi-private-probe-'));
-try { available = await probeNative(probe, abort.signal); }
+try { available = shared ? false : await probeNative(probe, abort.signal); }
 catch { available = false; }
 finally { await rm(probe, { recursive: true, force: true }); }
 classifier = await classifierAvailable(config);
 await heartbeat();
-console.log(`Private QA worker online. Native images: ${available}. Inspiration classifier: ${classifier}. Shared/Auto queues: excluded.`);
+console.log(`${shared?'Shared':'Private'} QA worker online. Native images: ${available}. Inspiration classifier: ${classifier}. Slots: ${capacity}.`);
 let heartbeating = false;
 const timer = setInterval(async () => {
   if (heartbeating) return;
@@ -65,7 +75,7 @@ async function processInspiration(job) {
   const jobAbort = new AbortController();
   inspirationJobs.set(job.id,{...job,abort:jobAbort});
   const signal=AbortSignal.any([abort.signal,jobAbort.signal]);
-  let directory,completed=false;
+  let directory,completed=false,phase='classification';
   const checkpoint = (stage,value={}) => stage === 'delivery-rejected'
     ? rpc('qa_private_inspiration_delivery_rejected',{p_id:job.id,p_lease:job.lease_id,p_status:value.status,p_code:value.code})
     : stage === 'tracker-rows' ? rpc('qa_private_inspiration_tracker_rows',{p_id:job.id,p_lease:job.lease_id})
@@ -74,16 +84,19 @@ async function processInspiration(job) {
     directory=await mkdtemp(join(tmpdir(),'immuvi-private-inspiration-'));
     const result=job.result ?? await classifyPrivateInspiration(config,job,directory,signal);
     signal.throwIfAborted();
+    phase='saving the generated brief';
     await checkpoint('result',result);
     while (!await rpc('qa_private_inspiration_delivery_lock',{p_id:job.id,p_lease:job.lease_id})) {
       await sleep(1000,undefined,{signal});
     }
     signal.throwIfAborted();
+    phase='ClickUp delivery and readback';
     await deliverPrivateBrief({job,result,privateKey:config.deliveryPrivateKey,checkpoint,signal});
     completed=true;
     console.log(`Inspiration ${job.id} completed and ClickUp page verified.`);
   } catch(error) {
-    const message=String(error.message).slice(0,600);
+    const sourceUnavailable=String(error.message).startsWith('The legacy downloader could not');
+    const message=shared ? (sourceUnavailable ? 'The legacy downloader could not retrieve this public source. Check public download access; no generation or document was created.' : `Shared QA ${phase} failed; retained evidence requires review. No success was published.`) : String(error.message).slice(0,600);
     await checkpoint('failed',{error:message}).catch(()=>{});
     console.error(`Inspiration ${job.id} failed. ${message}`);
   } finally {
@@ -100,9 +113,10 @@ try {
   while (!stopped) {
     try {
       if (!enabled) { await sleep(3000); continue; }
-      const job = classifier && pool.size<2 ? await rpc('qa_private_inspiration_claim') : null;
+      if(shared) {try {if((await readFile(join(dirname(path),'paused'),'utf8')).trim()!=='0'){await sleep(2000);continue;}}catch{await sleep(2000);continue;}}
+      const job = classifier && pool.size<capacity ? await rpc('qa_private_inspiration_claim') : null;
       if (job) {
-        if (job.worker_id !== config.id || job.requested_by !== config.ownerId || job.status !== 'running') throw new Error('Private inspiration owner mismatch.');
+        assertInspirationJob(config,job);
         void pool.start(job.id,()=>processInspiration(job)).catch(()=>console.error(`Inspiration ${job.id} cleanup failed.`));
         continue;
       }

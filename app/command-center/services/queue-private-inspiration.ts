@@ -6,11 +6,12 @@ export async function queuePrivateInspiration(db:SupabaseClient, input:{productI
   if(error || !data.session)throw new Error('Sign in to QA first.');
   const token=qaClickUpToken(data.session.user.id);
   if(!token)throw new Error('Enter your ClickUp key first.');
-  const workers=await db.rpc('qa_private_workers_list');
-  if(workers.error || !Array.isArray(workers.data))throw new Error('Could not check your private worker.');
-  const worker=workers.data.find((row:Record<string,any>)=>(!input.workerId || row.id===input.workerId)
+  const workers=await db.rpc('qa_inspiration_workers_list',{p_product_id:input.productId});
+  if(workers.error || !Array.isArray(workers.data))throw new Error('Could not check available workers.');
+  const selected=input.workerId || (typeof localStorage!=='undefined' ? localStorage.getItem(`immuvi-worker:${data.session.user.id}:${input.productId}`) : null);
+  const worker=workers.data.find((row:Record<string,any>)=>(selected ? row.id===selected : row.scope!=='shared')
     && row.enabled && row.classifier_available && Date.now()-Date.parse(row.heartbeat_at)<45000);
-  if(!worker)throw new Error('Your private classifier is offline or paused.');
+  if(!worker)throw new Error('The selected classifier is offline or paused.');
   const response=await fetch('/api/workers/inspiration',{method:'POST',headers:{Authorization:`Bearer ${data.session.access_token}`,
     'X-ClickUp-Token':token,'Content-Type':'application/json'},body:JSON.stringify({...input,workerId:worker.id})});
   const body=await response.json();

@@ -14,9 +14,10 @@ export async function POST(request) {
     const auth = await db.auth.getUser(authorization.slice(7));
     if (auth.error || !auth.data.user) return Response.json({error:'QA session expired.'},{status:401,headers});
     const input = await request.json();
-    const workers = await db.rpc('qa_private_workers_list');
+    const workers = await db.rpc('qa_inspiration_workers_list',{p_product_id:input.productId});
     const worker = workers.data?.find(row=>row.id === input.workerId);
-    if (workers.error || !worker?.delivery_public_key || !worker.enabled || !worker.classifier_available) throw new Error('Your private classifier is unavailable.');
+    if (workers.error || !worker?.delivery_public_key || !worker.enabled || !worker.classifier_available) throw new Error('The selected classifier is unavailable.');
+    if(worker.scope==='shared' && input.productId!=='qa-sample-astrorekha') throw new Error('Shared worker is limited to the QA sample.');
     const source = await db.from('inspirations').select('url,data').eq('product_id',input.productId).eq('id',input.inspirationId).single();
     if (source.error || source.data?.data?._qaCreatedBy !== auth.data.user.id) throw new Error('Select an inspiration created by your account.');
     publicAdUrl(source.data.url);
@@ -25,6 +26,7 @@ export async function POST(request) {
     const token = request.headers.get('x-clickup-token');
     await createClickUpClient(token,{signal:AbortSignal.timeout(30000)}).inspect(TEST_LIST);
     const libraryId=product.data.config.qa_brief_doc_id;
+    if(worker.scope==='shared' && (libraryId!=='8cq1r3y-44896' || product.data.config.qa_brief_tracker_page_id!=='8cq1r3y-118036')) throw new Error('Shared QA library destination changed.');
     if (!/^[\w-]+$/.test(libraryId || '') || !product.data.config.qa_brief_tracker_page_id || product.data.config.qa_brief_visibility!=='PUBLIC') throw new Error('Set up this product\'s workspace-visible QA Inspiration Library through the ClickUp connector first.');
     const library=await fetch(`https://api.clickup.com/api/v3/workspaces/${TEST_WORKSPACE}/docs/${libraryId}`,{headers:{Authorization:token},redirect:'error',signal:AbortSignal.timeout(30000)});
     if(!library.ok)throw new Error(`Your ClickUp account cannot access the QA Inspiration Library (${library.status}). Ask its owner to grant you Doc access.`);

@@ -30,16 +30,16 @@ export function PrivateInspirationProcess({db,productId,workers,done}:{db:Supaba
         if(previous && !previous.can_retry_delivery)throw new Error('A saved brief has an uncertain delivery receipt. Review it before retrying to avoid a duplicate Doc.');
         if(!requests.current.has(key))requests.current.set(key,crypto.randomUUID());
         try {
-          await queuePrivateInspiration(db,{productId,inspirationId:row.id,workerId:worker.id,requestId:requests.current.get(key)!,...(previous?{recoveryJobId:previous.id}:{})});
+          await queuePrivateInspiration(db,{productId,inspirationId:row.id,requestId:requests.current.get(key)!,...(previous?{recoveryJobId:previous.id,workerId:previous.worker_id}:{})});
         } catch(error) {
           if(error instanceof Error && error.message.startsWith('Previous attempt failed.'))requests.current.delete(key);
           throw error;
         }
         requests.current.delete(key);count++;if(previous)recovered++;
       }
-      done(count?`${count} inspiration${count===1?'':'s'} queued on ${worker.name}.${recovered?' Saved briefs will be delivered without regenerating.':''}`:'No new inspirations to process.');
+      done(count?`${count} inspiration${count===1?'':'s'} queued.${recovered?' Saved briefs will be delivered without regenerating.':''}`:'No new inspirations to process.');
     } catch(error) { done(`${count?`${count} queued. `:''}${error instanceof Error?error.message:'Could not queue inspiration.'}`); }
     finally {lock.current=false;setBusy(false);}
   }
-  return <button type="button" className={styles.processQueue} disabled={!worker || busy} title={worker?worker.name:'Your private classifier is offline'} onClick={()=>void process()}><Zap size={14}/>{busy?'Queuing...':'Process All with Codex'}</button>;
+  return <button type="button" className={styles.processQueue} disabled={!worker || busy} title={worker?worker.name:'No classifier is online'} onClick={()=>void process()}><Zap size={14}/>{busy?'Queuing...':'Process All with Codex'}</button>;
 }

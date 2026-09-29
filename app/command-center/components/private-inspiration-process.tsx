@@ -3,13 +3,14 @@ import { useRef, useState } from 'react';
 import { Zap } from 'lucide-react';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { queuePrivateInspiration } from '../services/queue-private-inspiration';
+import { canQueueInspirationWorker, privateInspirationRetry } from '../../../lib/domain/private-inspiration-queue.js';
 import styles from '../inspiration.module.css';
 
 export function PrivateInspirationProcess({db,productId,workers,done}:{db:SupabaseClient;productId:string;workers:Record<string,any>[];done:(message:string)=>void}) {
   const [busy,setBusy]=useState(false);
   const requests=useRef(new Map<string,string>());
   const lock=useRef(false);
-  const worker=workers.find(row=>row.enabled && row.classifier_available && Date.now()-Date.parse(row.heartbeat_at)<45000);
+  const worker=workers.find(row=>canQueueInspirationWorker(row));
   async function process() {
     if (!worker || lock.current) return;
     lock.current=true;
@@ -26,11 +27,11 @@ export function PrivateInspirationProcess({db,productId,workers,done}:{db:Supaba
       for(const row of rows.data||[]) {
         if(active.has(row.id) || row.data?._clickupDocPageUrl)continue;
         const key=`${productId}:${row.id}`;
-        const previous=(jobs.data||[]).find((job:Record<string,any>)=>job.inspiration_id===row.id && job.has_result);
-        if(previous && !previous.can_retry_delivery)throw new Error('A saved brief has an uncertain delivery receipt. Review it before retrying to avoid a duplicate Doc.');
+        const recovery=privateInspirationRetry(jobs.data||[],row.id);
+        const previous=(jobs.data||[]).find((job:Record<string,any>)=>job.id===recovery.recoveryJobId && job.has_result);
         if(!requests.current.has(key))requests.current.set(key,crypto.randomUUID());
         try {
-          await queuePrivateInspiration(db,{productId,inspirationId:row.id,requestId:requests.current.get(key)!,...(previous?{recoveryJobId:previous.id,workerId:previous.worker_id}:{})});
+          await queuePrivateInspiration(db,{productId,inspirationId:row.id,requestId:requests.current.get(key)!,...recovery});
         } catch(error) {
           if(error instanceof Error && error.message.startsWith('Previous attempt failed.'))requests.current.delete(key);
           throw error;
@@ -41,5 +42,5 @@ export function PrivateInspirationProcess({db,productId,workers,done}:{db:Supaba
     } catch(error) { done(`${count?`${count} queued. `:''}${error instanceof Error?error.message:'Could not queue inspiration.'}`); }
     finally {lock.current=false;setBusy(false);}
   }
-  return <button type="button" className={styles.processQueue} disabled={!worker || busy} title={worker?worker.name:'No classifier is online'} onClick={()=>void process()}><Zap size={14}/>{busy?'Queuing...':'Process All with Codex'}</button>;
+  return <button type="button" className={styles.processQueue} disabled={!worker || busy} title={worker?worker.name:'No eligible classifier'} onClick={()=>void process()}><Zap size={14}/>{busy?'Queuing...':'Process All with Codex'}</button>;
 }

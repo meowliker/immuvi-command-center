@@ -7,6 +7,12 @@ test('reference links reject executable, relative and credential-bearing URLs', 
   for (const value of ['javascript:alert(1)', 'data:text/html,Hi', '//example.test', '/api/delete', 'https://name:secret@example.test', {}, null]) assert.equal(planLink(value), '');
   assert.equal(planLink('https://example.test/brief'), 'https://example.test/brief');
 });
+test('verified winner brief is shown without replacing the inspiration source',()=>{
+  const a=action({winnerBriefUrl:'https://app.clickup.com/9016762494/docs/8cq1r3y-44896/page',_sourceInspirationBriefUrl:'https://example.test/source'});
+  assert.equal(planPresentation(a).briefUrl,'https://app.clickup.com/9016762494/docs/8cq1r3y-44896/page');
+  assert.equal(a.linkedAdMeta._sourceInspirationBriefUrl,'https://example.test/source');
+  a.linkedAdMeta.winnerBriefUrl='javascript:alert(1)';assert.equal(planPresentation(a).briefUrl,'https://example.test/source');
+});
 test('brief/ref provenance only resolves exact eligible IDs in the task product', () => {
   const a = action({ sourceFormatId: 'source', _fromTrackerAdId: 'ref', _fromInspoId: 'inspo' });
   const ads = [{ productId: 'other', id: 'source', briefUrl: 'https://wrong.test' }, { productId: 'qa', id: 'source', briefUrl: 'https://right.test' },

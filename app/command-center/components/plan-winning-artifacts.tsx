@@ -30,7 +30,7 @@ export function PlanWinningArtifacts({ db, productId, adId, disabled, onBusy }: 
     {actions.notice ? <p role="status">{actions.notice}</p> : null}
     {live.error ? <button type="button" disabled={live.busy || saving} onClick={live.refresh}>Retry winning files</button> : null}
     {!creative && !live.error ? <p role="status">Loading winning files...</p> : null}
-    {creative ? <TrackerWinners creative={creative} busy={disabled || saving || !!live.error}
+    {creative ? <TrackerWinners db={db} creative={creative} busy={disabled || saving || !!live.error}
       save={live.mutate(async (...args: Parameters<typeof actions.winner>) => { setError(''); actions.setNotice(''); await actions.winner(...args); })}
       share={live.mutate(async (...args: Parameters<typeof actions.shareWinner>) => { setError(''); actions.setNotice(''); await actions.shareWinner(...args); })} /> : null}
   </>;

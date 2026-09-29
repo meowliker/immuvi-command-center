@@ -4,9 +4,12 @@ The Action Plan Producer column opens the native React generation dialog. It
 retains legacy winner-format ranking, persona fit, recency, product directives,
 reference layout checks, 1-10 sequential variations, and per-image visual QA.
 
-Delivery is intentionally different for QA: **private Supabase storage only**.
-No ClickUp requests, attachments, status updates, production queue jobs or live
-ad launches are made. Existing task statuses are unchanged after generation.
+Private-worker delivery remains **private Supabase storage only**. Shared Producer
+delivery is implemented locally for the approved QA list: accepted images go to
+QA storage and ClickUp attachments, followed by a verified summary and Ready to
+Launch status. Its migration/runtime is not deployed yet. Neither path launches
+an ad campaign or uses the production queue. See
+[the staged completion plan](shared-worker-completion-plan.md#3-shared-image-generation--producer).
 
 ## Running
 
@@ -16,7 +19,7 @@ Project: `entgcnlfsnysnwyadzzp` only. Migration:
 
 Workers now use a permanent, owner-only LaunchAgent. See
 [Personal Mac Worker](private-mac-worker.md) for pairing, controls and boundaries.
-The old shared-worker entry points are retired and fail closed. Starting the
+The old service-role shared-worker entry points are retired and fail closed. Starting the
 dev server no longer launches a shared service-role worker. The private worker
 probes native Codex image-tool availability before advertising readiness.
 Requires the signed-in local Codex CLI; no image API-key fallback is used.
@@ -27,19 +30,21 @@ Requires the signed-in local Codex CLI; no image API-key fallback is used.
   authenticated RPC creates runs. Product RLS protects their briefs and outputs.
 - One active job per creative; UUID idempotency prevents replayed submissions.
 - Worker claims are atomic, current user access is rechecked, native execution
-  has a 30-minute timeout. Interrupted jobs fail, never silently regenerate.
+  has a 30-minute timeout. Private interrupted jobs fail; shared jobs recover
+  accepted variations and receipts without blindly repeating generation.
 - Codex runs in a temporary workspace with its user configuration ignored and
   a whitelisted environment. It receives no Supabase or ClickUp credentials.
-- `QA-SKILL.md` preserves generation rules but excludes legacy auto-update,
+- The private `QA-SKILL.md` preserves generation rules but excludes legacy auto-update,
   credential discovery, ClickUp delivery and status transitions.
 - PNGs are fully decoded, dimension/size/quality-manifest checked and ordered.
   Complete batches go to `qa-producer-images/<run-id>/<variation>.png`; the
   database retains prompts, checks, dimensions and hashes. Private signed links
   open from the dialog. Only the paired worker's active lease permits uploads;
   ordinary browser sessions cannot write images.
-- QA references currently require public direct PNG/JPEG/WebP URLs. Private
-  Drive/ClickUp attachments cannot be resolved until the future delivery/source
-  integration is connected. Unsupported references fail explicitly.
+- Private references require public PNG/JPEG/WebP URLs. The shared adapter also
+  resolves public social sources and Drive image-file links, plus signed public
+  attachment URLs and approved QA brief pages. Drive folders need a specific file
+  link. Authenticated/private source downloads remain unsupported.
 - Generation is native AI output. Automated manifest checks supplement, not
   replace, the worker's visual quality inspection and human review.
 

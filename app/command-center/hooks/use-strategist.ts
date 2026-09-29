@@ -68,23 +68,6 @@ export function useStrategist({
     };
   }
 
-  async function queueRun() {
-    if (!window.confirm('Queue a manual strategist run for this product? A strategist worker must be running to process it.')) return;
-    setBusyAction('queue-run');
-    const result = await supabase.from('strategist_runs').insert({
-      product_id: activeProductId,
-      status: 'pending',
-      trigger: 'manual',
-      run_date: new Date().toISOString().slice(0, 10),
-    });
-    setBusyAction('');
-    if (result.error) {
-      setError(result.error.message);
-      return;
-    }
-    await reload({ notice: 'Strategist run queued.' });
-  }
-
   async function updateRecommendation(rec: StrategistRecommendation, status: 'approved' | 'rejected') {
     const reason = status === 'rejected' ? window.prompt('Reject reason (optional):', '') : '';
     if (reason === null) return;
@@ -175,7 +158,6 @@ export function useStrategist({
     run,
     busyAction: busyAction || (busy ? 'reload' : ''),
     reload,
-    queueRun: mutate(queueRun),
     notice,
     error: error || syncError,
     memory,

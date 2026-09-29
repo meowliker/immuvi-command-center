@@ -1,8 +1,10 @@
-const {test}=require('node:test');
+const {test,before}=require('node:test');
 const assert=require('node:assert/strict');
 const {readFileSync}=require('node:fs');
 const {runInNewContext}=require('node:vm');
 const ts=require('typescript');
+let queueDomain;
+before(async()=>{queueDomain=await import('../../lib/domain/private-inspiration-queue.js');});
 
 function load(file,dependencies,globals={}) {
   const module={exports:{}};
@@ -17,8 +19,8 @@ function fixture(options={}) {
   const calls=[];
   const worker={id:'private-worker',name:"Anay's Mac",enabled:true,classifier_available:true,heartbeat_at:new Date().toISOString()};
   const db={auth:{getSession:async()=>({data:{session:{access_token:'session-token',user:{id:'owner'}}}})},
-    rpc:async name=>{assert.equal(name,'qa_inspiration_workers_list');return {data:options.offline?[]:[worker,...(options.shared?[{...worker,id:'shared-worker',name:'Mac mini - QA',scope:'shared'}]:[])]};}};
-  const queue=load('queue-private-inspiration',{'./qa-clickup':{qaClickUpToken:()=>options.noKey?'':'test-token'}},{localStorage:{getItem:()=>options.selected||null},fetch:async(url,init)=>{
+    rpc:async name=>{assert.equal(name,'qa_inspiration_workers_list');return {data:options.offline?[]:[worker,...(options.shared?[{...worker,id:'shared-worker',name:'Mac mini - QA',scope:'shared',...options.sharedPatch}]:[])]};}};
+  const queue=load('queue-private-inspiration',{'./qa-clickup':{qaClickUpToken:()=>options.noKey?'':'test-token'},'../../../lib/domain/private-inspiration-queue.js':queueDomain},{localStorage:{getItem:()=>options.selected||null},fetch:async(url,init)=>{
     calls.push({url,input:JSON.parse(init.body)});
     if(options.networkError)throw new Error('Network unavailable');
     return {ok:true,json:async()=>({id:'create-request',inspirationId:'INS-2',status:'pending',...options.receipt})};
@@ -41,6 +43,14 @@ test('Add to Queue saves and dispatches the acknowledged inspiration automatical
   assert.deepEqual(f.calls[0].input,{productId:'qa-product',inspirationId:'INS-2',requestId:'create-request',workerId:'private-worker'});
   await f.service.saveInspiration(f.db,f.request);
   assert.deepEqual(f.calls[1].input,f.calls[0].input,'Retry of the same save preserves dispatch identity');
+});
+test('offline recovery-capable mini accepts a queue entry and reports waiting, without falling back',async()=>{
+  const f=fixture({shared:true,selected:'shared-worker',sharedPatch:{recovery_protocol:2,classifier_available:false,heartbeat_at:null}});
+  const message=await f.service.saveInspiration(f.db,f.request);
+  assert.equal(message,'Inspiration queued on Mac mini - QA. It will start when the worker is available.');
+  assert.equal(f.calls[0].input.workerId,'shared-worker');
+  const old=fixture({shared:true,selected:'shared-worker',sharedPatch:{recovery_protocol:1,classifier_available:false,heartbeat_at:null}});
+  await old.service.saveInspiration(old.db,old.request);assert.equal(old.calls.length,0);
 });
 test('intake acknowledges running and completed jobs without claiming they are pending',async()=>{
   for(const [status,notice] of [['running',"Inspiration is classifying on Anay's Mac."],['done','Inspiration already processed.']]) {

@@ -21,6 +21,7 @@ for (const entry of SOURCE_PATHS) {
   if (stat.isSymbolicLink()) throw new Error('Source symlinks are not allowed.');
   const files = stat.isDirectory() ? filesBelow(entry).map((file) => `${entry}/${file}`) : [entry];
   for (const file of files) {
+    if (file.split('/').at(-1) === '.DS_Store') continue;
     assertSourcePath(file);
     const target = join(source, file);
     mkdirSync(resolve(target, '..'), { recursive: true });
@@ -52,7 +53,8 @@ const manifest = {
   includesUncommittedWork: true, createdAt: new Date().toISOString(), platform: process.platform, arch: process.arch,
   node: process.version, sourceHashes: hashes, artifactHashes, routes: APP_ROUTES,
   runtime: 'Next.js standalone Node server; not Vercel build output',
-  liveClickUp: 'skipped at user request', workerAndOneScale: 'disabled', deploymentApproved: false,
+  liveClickUp: 'not exercised by packaging', workerAcceptance: 'requires Mac mini live verification',
+  oneScale: 'not enabled by this release', deploymentApproved: false,
 };
 writeFileSync(join(output, 'manifest.json'), JSON.stringify(manifest, null, 2), { mode: 0o600 });
 completed = true;

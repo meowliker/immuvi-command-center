@@ -1,13 +1,23 @@
 const assert=require('node:assert/strict');
 const sharp=require('sharp');
 module.exports=async function({page,data,control,tab,artifactDir,results}){
-  let online=true,runs=[],submissions=[];
+  let online=true,runs=[],submissions=[],sharedSubmissions=[];
   const fixture=await sharp({create:{width:256,height:256,channels:3,background:'#29a09a'}}).png().toBuffer();
   await page.route('**/storage/v1/**',route=>route.request().method()==='POST'
     ?route.fulfill({json:{signedURL:'/object/sign/qa-producer-images/fixture/1.png?token=fixture'}})
     :route.fulfill({contentType:'image/png',body:fixture}));
   await page.route('**/rest/v1/qa_image_runs*',route=>route.fulfill({json:runs}));
   await page.route('**/rest/v1/rpc/qa_private_workers_list',route=>route.fulfill({json:[{id:'private-fixture',name:'My Mac',enabled:true,generation_available:online,heartbeat_at:new Date().toISOString()}]}));
+  await page.route('**/rest/v1/rpc/qa_image_workers_list',route=>route.fulfill({json:[
+    {id:'private-fixture',name:'My Mac',scope:'private',enabled:true,generation_available:online,heartbeat_at:new Date().toISOString()},
+    {id:'shared-fixture',name:'Mac mini - QA',scope:'shared',enabled:true,image_protocol:1,generation_available:false,heartbeat_at:new Date(Date.now()-60000).toISOString()}
+  ]}));
+  await page.route('**/api/workers/images',route=>{
+    const body=route.request().postDataJSON();sharedSubmissions.push(body);
+    assert.equal(body.workerId,'shared-fixture');assert.equal(route.request().headers()['x-clickup-token'],'fixture-producer-token');
+    runs=[{id:body.recoveryId||body.requestId,ad_id:body.adId,private_worker_id:'shared-fixture',status:'pending',outputs:[],error:null,created_at:new Date().toISOString()}];
+    return route.fulfill({json:{id:runs[0].id,status:'pending'}});
+  });
   await page.route('**/rest/v1/rpc/qa_generate_images',route=>{
     const body=route.request().postDataJSON();submissions.push(body);
     runs=[{id:body.p_request_id,ad_id:body.p_ad_id,status:'pending',outputs:[],error:null,created_at:new Date().toISOString()}];
@@ -52,8 +62,22 @@ module.exports=async function({page,data,control,tab,artifactDir,results}){
   await page.waitForFunction(()=>document.querySelector('dialog img')?.naturalWidth===256);
   assert.match(await dialog.getByRole('link',{name:'Open 1.png',exact:true}).getAttribute('href'),/qa-producer-images/);
   await page.screenshot({path:`${artifactDir}/producer-completed-preview.png`});
-  online=false;await page.getByText('Worker offline',{exact:true}).waitFor();
+  online=false;await page.getByText('Worker unavailable',{exact:true}).waitFor();
   assert.equal(await dialog.getByRole('button',{name:'Generate',exact:true}).isDisabled(),true);
+  await dialog.getByLabel('Run on worker',{exact:true}).selectOption('shared-fixture');
+  await dialog.getByText('Waiting for worker',{exact:true}).waitFor();
+  await page.evaluate(()=>sessionStorage.setItem('immuvi:qa:entgcnlfsnysnwyadzzp:clickup:11111111-1111-4111-8111-111111111111','fixture-producer-token'));
+  assert.equal(await dialog.getByRole('button',{name:'Generate',exact:true}).isEnabled(),true);
+  await page.setViewportSize({width:390,height:844});
+  await page.screenshot({path:`${artifactDir}/producer-shared-selector-mobile.png`});
+  await dialog.getByRole('button',{name:'Generate',exact:true}).click();
+  await dialog.getByText('Queued...',{exact:true}).waitFor();
+  assert.equal(sharedSubmissions.length,1);assert.equal(submissions.length,2);
+  const sharedId=runs[0].id;
+  runs[0]={...runs[0],status:'failed',error:'Saved image delivery needs renewed authorization.'};
+  await dialog.getByRole('button',{name:'Resume saved run',exact:true}).click();
+  await dialog.getByText('Queued...',{exact:true}).waitFor();
+  assert.equal(sharedSubmissions.length,2);assert.equal(sharedSubmissions[1].recoveryId,sharedId);assert.equal(runs[0].id,sharedId);
   await page.keyboard.press('Escape');await dialog.waitFor({state:'detached'});
   await page.setViewportSize({width:1440,height:1000});
   await page.getByRole('button',{name:'View all-time totals (1)',exact:true}).click();
@@ -63,5 +87,5 @@ module.exports=async function({page,data,control,tab,artifactDir,results}){
   assert.equal(await page.locator('[data-pulse-key="today:created"] [data-pulse-count]').innerText(),'0');
   await page.screenshot({path:`${artifactDir}/pulse-all-time.png`});
   assert.equal(control.clickupCalls.length,0);
-  results.push('QA Producer default fields, native-worker readiness, scoped/idempotent request, pending lock, failure/retry feedback, signed preview rendering, offline guard, Escape, 320-1440px dialog and all-time historical counts. All generation calls mocked; zero ClickUp calls.');
+  results.push('QA Producer private/shared selection, offline shared queue without private fallback, resume saved run retaining its ID, default fields, native readiness, scoped request, pending lock, failure feedback, signed preview, Escape, 320-1440px dialog. All generation/delivery mocked; zero ClickUp calls.');
 };

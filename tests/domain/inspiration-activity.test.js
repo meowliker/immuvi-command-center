@@ -39,3 +39,11 @@ test('classified does not imply that a brief link exists',()=>{
   const [job]=inspirationActivity({productId:'p',queue:[{id:'q',insId:'i',productId:'p',status:'classified'}]});
   assert.equal(job.brief,'Brief not available');
 });
+test('recovery stages distinguish waiting, generation and delivery; cancel permission remains explicit',()=>{
+  const rows=[['pending','recovering','Recovery scheduled'],['running','recovering','Recovering saved progress'],
+    ['running','generating','Generating brief'],['running','delivery','Delivering saved brief']];
+  for(const [status,recoveryStage,expected] of rows) {
+    const [job]=inspirationActivity({productId:'qa',queue:[{id:'j',insId:'one',productId:'qa',status,recoveryStage,canCancel:true,workerAssignment:'mini'}]});
+    assert.equal(job.stage,expected);assert.equal(job.canCancel,true);
+  }
+});

@@ -35,7 +35,7 @@ test('normal status has no error popup and unavailable failure details have a fa
   assert.match(renderToStaticMarkup(fixture('Failed','').tree),/No error details were recorded/);
 });
 test('failed and blocked badges contain retry controls only inside the message box',()=>{
-  for(const status of ['Failed','Blocked']) {
+  for(const status of ['Failed','Blocked','Cancelled']) {
     const tree=fixture(status,'Error',React.createElement('button',null,'Requeue')).tree;
     const panel=nodes(tree).find(n=>n.props.popover);
     assert.match(renderToStaticMarkup(panel),/>Requeue</);

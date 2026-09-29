@@ -18,7 +18,8 @@ export function PrivateInspirationRetry({db,productId,inspirationId,done}:{db:Su
       request.current ||= crypto.randomUUID();
       await queuePrivateInspiration(db,{productId,inspirationId,requestId:request.current,...recovery});
       request.current='';
-      done(recovery.recoveryJobId?'Saved brief requeued for delivery.':'Inspiration requeued for processing.');
+      const hasResult=jobs.data.some((job:Record<string,any>)=>job.id===recovery.recoveryJobId && job.has_result);
+      done(hasResult?'Saved brief requeued for delivery.':'Inspiration requeued for processing.');
     } catch(error) {
       const message=error instanceof Error?error.message:'Could not requeue inspiration.';
       if(message.startsWith('Previous attempt failed.'))request.current='';

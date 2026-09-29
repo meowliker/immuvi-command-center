@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { producerSuggestions,producerBrief,producerInstruction,imageWorkerOnline } from '../../lib/domain/image-producer.js';
+import { producerSuggestions,producerBrief,producerInstruction,imageWorkerOnline,canQueueImageWorker } from '../../lib/domain/image-producer.js';
 import { nativeEnvironment,publicAddress } from '../../scripts/qa-native-image-runner.mjs';
 test('legacy suggestions stay product-local, rank persona evidence and never mutate source ads',()=>{
   const now=Date.now(),target={id:'target',productId:'qa',persona:'Parents'};
@@ -23,4 +23,13 @@ test('worker readiness expires and reference downloads reject private destinatio
   assert.equal(imageWorkerOnline({generation_available:true,heartbeat_at:new Date(now-46000).toISOString()},now),false);
   for(const address of ['127.0.0.1','10.0.0.1','169.254.169.254','172.31.1.2','192.168.1.1','::1','::ffff:127.0.0.1','fd00::1','100.64.1.1','2002:7f00:1::'])assert.equal(publicAddress(address),false,address);
   assert.equal(publicAddress('8.8.8.8'),true);
+});
+test('shared image queue waits for an enrolled offline device, never an online device missing native generation',()=>{
+  const now=Date.now(),worker={scope:'shared',enabled:true,image_protocol:1,generation_available:false,heartbeat_at:new Date(now).toISOString()};
+  assert.equal(canQueueImageWorker(worker,now),false);
+  assert.equal(canQueueImageWorker({...worker,generation_available:true},now),true);
+  assert.equal(canQueueImageWorker({...worker,heartbeat_at:new Date(now-60000).toISOString()},now),true);
+  assert.equal(canQueueImageWorker({...worker,image_protocol:0},now),false);
+  assert.equal(canQueueImageWorker({...worker,enabled:false},now),false);
+  assert.equal(canQueueImageWorker({...worker,scope:'private',heartbeat_at:new Date(now-60000).toISOString()},now),false);
 });

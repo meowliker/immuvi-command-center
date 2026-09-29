@@ -1,5 +1,9 @@
 # Mac Mini Worker Handoff
 
+Historical initial-setup handoff. For the already enrolled mini and the combined
+Stages 1-4 release, use [Stage 5 installation](mac-mini-stage5-install.md) instead.
+Do not repeat enrollment or initial shared-routing implementation below.
+
 ## What Is Being Connected
 
 The legacy architecture is:

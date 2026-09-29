@@ -24,7 +24,7 @@ for (const [path, method] of [['/api/onescale-launch-callback', 'POST'], ['/api/
   assert.equal(response.headers.get('cache-control'), 'no-store'); assert.equal((await response.json()).code, 'QA_INTEGRATION_DISABLED');
   results.push(`${path}: disabled`);
 }
-for (const path of ['/api/clickup/qa', '/api/clickup/qa-cleanup']) {
+for (const path of ['/api/clickup/qa', '/api/clickup/qa-cleanup', '/api/workers/inspiration', '/api/workers/images', '/api/workers/analysis']) {
   const unconfiguredCleanup = process.env.QA_RELEASE_REHEARSAL === '1' && path === '/api/clickup/qa-cleanup';
   const response = await probe(path, 'POST'); assert.equal(response.status, unconfiguredCleanup ? 503 : 401, path);
   if (unconfiguredCleanup) {

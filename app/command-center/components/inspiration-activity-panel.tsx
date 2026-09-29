@@ -6,6 +6,7 @@ import type { WorkerRow } from '../types';
 import { useModalDialog } from '../hooks/use-modal-dialog';
 import { PrivateWorkerControls } from './private-worker-controls';
 import { InspirationPriority } from './inspiration-priority';
+import { InspirationCancel } from './inspiration-cancel';
 import { activityEstimate, type inspirationActivity } from '../../../lib/domain/inspiration-activity.js';
 import { formatAge, formatDateTime } from '../helpers/format';
 import shared from '../../command-center.module.css';
@@ -47,6 +48,7 @@ export function InspirationActivityPanel({db,workerAdminId,mode,setMode,close,wo
               <header><span>{job.kind}</span><span className={styles.badge} data-state={job.status}>{job.status}</span></header>
               <h3>{job.title}</h3>{job.title!==job.target?<small>{job.target}</small>:null}
               {job.status==='pending' && job.privateJobId?<InspirationPriority db={db} jobId={job.privateJobId} refresh={refresh}/>:null}
+              {job.canCancel && job.privateJobId?<InspirationCancel db={db} jobId={job.privateJobId} refresh={refresh}/>:null}
               <dl><div><dt>Stage</dt><dd>{job.stage}</dd></div><div><dt>Estimated remaining</dt><dd title={estimate.basis}>{estimate.text}</dd></div><div><dt>Worker</dt><dd>{job.worker || 'Unassigned'}</dd></div><div><dt>{job.startedAt?'Elapsed':'Waiting'}</dt><dd>{since?formatAge(Math.max(0,(job.finishedAt || now)-since)):'Unknown'}</dd></div><div><dt>Queued</dt><dd>{job.queuedAt?formatDateTime(new Date(job.queuedAt).toISOString()):'Unknown'}</dd></div></dl>
               {estimate.basis?<p className={styles.activityNote}>{estimate.basis}</p>:null}
               {job.brief?<p>{job.brief}</p>:null}{job.error?<p className={styles.error}>{job.error}</p>:null}

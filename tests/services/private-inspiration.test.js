@@ -290,6 +290,32 @@ test('saved brief recovery accepts ClickUp domain links and completes without a 
   assert.equal(calls.some(call=>call.method==='POST'),false);
   assert.deepEqual(stages,['result','tracker-rows','complete']);
 });
+test('lost page-create response resumes by remote identity without a second POST',async()=>{
+  const persisted={...libraryJob},result={markdown};let remotePage=null,creates=0,completed=0;
+  const checkpoint=async(stage,value)=>{
+    if(stage==='result')persisted.result=value;
+    if(stage==='delivery-start')persisted.delivery_started=true;
+    if(stage==='doc')persisted.doc_id=value.id;
+    if(stage==='page')persisted.page_id=value.id;
+    if(stage==='complete')completed++;
+    if(stage==='tracker-rows')return [];
+  };
+  const fetchImpl=async(url,init)=>{
+    if(url.endsWith(`/v2/list/${TEST_LIST}`))return Response.json({id:TEST_LIST});
+    if(url.endsWith('/docs/qa-library'))return Response.json(libraryDoc);
+    if(url.includes('/page_listing'))return Response.json([trackerPage,...(remotePage?[remotePage]:[])]);
+    if(init.method==='POST'){
+      creates++;remotePage={id:'recovered-page',name:'test immuvi brief-1'};
+      throw new TypeError('fetch failed');
+    }
+    if(init.method==='GET')return Response.json({content:markdown});
+    return new Response(null,{status:200});
+  };
+  await assert.rejects(deliverPrivateBrief({job:{...persisted},result,privateKey:pair.privateKey,checkpoint,fetchImpl}),/fetch failed/);
+  assert.equal(persisted.delivery_started,true);assert.equal(persisted.page_id,undefined);assert.equal(completed,0);
+  const receipt=await deliverPrivateBrief({job:{...persisted},result:persisted.result,privateKey:pair.privateKey,checkpoint,fetchImpl});
+  assert.equal(creates,1);assert.equal(completed,1);assert.equal(receipt.pageId,'recovered-page');
+});
 test('altered ClickUp content cannot update the tracker or mark the inspiration complete',async()=>{
   const stages=[];
   const responses=[{id:TEST_LIST},libraryDoc,[trackerPage],{id:'brief'},{content:markdown.replace('No voice over','Changed narration')}];

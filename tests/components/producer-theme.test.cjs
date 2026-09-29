@@ -23,5 +23,5 @@ test('producer theme retains disabled and focus states and highlights selected s
   assert.equal(properties(css, '.producerDialog :is(input, textarea, select, button, a):focus-visible').outline, '2px solid var(--producer-primary)');
   assert.equal(properties(css, '.producerSuggestion:has(input:checked)').background, 'rgba(99,102,241,.07)');
   const dialog = readFileSync('app/command-center/components/plan-producer-dialog.tsx', 'utf8');
-  assert.ok(dialog.includes('disabled={busy||active||!producer.online}'));
+  assert.ok(dialog.includes('disabled={busy||active||!eligible}'));
 });

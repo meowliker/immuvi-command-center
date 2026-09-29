@@ -1,5 +1,6 @@
 import styles from '../../command-center.module.css';
 import { MarkdownLite, StrategistStructured } from '../components/strategist-memory';
+import { SharedAnalysisControl } from '../components/shared-analysis-control';
 import { isLikelyClickUpTaskId } from '../helpers/creatives';
 import { formatDateTime } from '../helpers/format';
 import { useStrategist } from '../hooks/use-strategist';
@@ -22,7 +23,6 @@ export function StrategistTab({
     run,
     busyAction,
     reload,
-    queueRun,
     notice,
     error,
     memory,
@@ -48,7 +48,7 @@ export function StrategistTab({
         <div><strong>{String(stats.scale ?? 0)}</strong><span>Scaled</span></div>
         <div className={run?.status === 'failed' ? styles.healthBad : styles.healthOk}><strong>{run?.status || 'No run'}</strong><span>Latest run</span></div>
         <button disabled={busyAction === 'reload'} type="button" onClick={() => reload()}>{busyAction === 'reload' ? 'Refreshing...' : 'Refresh'}</button>
-        <button disabled={busyAction === 'queue-run'} type="button" onClick={queueRun}>{busyAction === 'queue-run' ? 'Queueing...' : 'Run now'}</button>
+        <SharedAnalysisControl key={activeProductId} db={supabase} productId={activeProductId} kind="strategist" />
       </section>
       {notice ? <div className={styles.notice}>{notice}</div> : null}
       {error ? <div className={styles.error}>{error}</div> : null}

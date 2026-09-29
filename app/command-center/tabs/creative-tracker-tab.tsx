@@ -95,7 +95,7 @@ export function CreativeTrackerTab({ supabase, activeProductId, activeProduct,ta
         {actions.notice ? <p role="status" className={styles.notice}>{actions.notice}</p> : null}
         {actions.editor.kind === 'edit' ? <TrackerEditor creative={actions.editor.creative} taxonomy={taxonomy} schema={actions.schema} loadSchema={actions.loadSchema} save={actions.save} busy={!!actions.busyAction} /> : null}
         {actions.editor.kind === 'spawn' && actions.editor.creative ? <TrackerSpawn creative={actions.editor.creative} creatives={creatives} busy={!!actions.busyAction} spawn={actions.spawn} schema={actions.schema} loadSchema={actions.loadSchema} /> : null}
-        {actions.editor.kind === 'winners' && actions.editor.creative ? <TrackerWinners creative={actions.editor.creative} busy={!!actions.busyAction} save={actions.winner} share={actions.shareWinner} /> : null}
+        {actions.editor.kind === 'winners' && actions.editor.creative ? <TrackerWinners db={supabase} creative={actions.editor.creative} busy={!!actions.busyAction} save={actions.winner} share={actions.shareWinner} /> : null}
         {actions.editor.kind === 'delete' && actions.editor.creative ? <TrackerDelete creative={actions.editor.creative} busy={!!actions.busyAction} remove={actions.remove} /> : null}
       </TrackerDialog> : null}
     </div>

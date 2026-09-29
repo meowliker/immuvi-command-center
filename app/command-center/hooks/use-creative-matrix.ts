@@ -108,7 +108,7 @@ export function useCreativeMatrix({ supabase, activeProductId }: { supabase: Sup
   async function pushPlan(creative:Creative, taskId?:string) {
     setBusyAction('push-plan'); actions.setNotice(await pushPlanCreative(supabase,activeProductId,creative.id,taskId));
   }
-  return { ...preferences, angles:index.angles,personas:index.personas,visibleAngles,visiblePersonas,states,decisions,index,creatives,inspirations,
+  return { db:supabase, ...preferences, angles:index.angles,personas:index.personas,visibleAngles,visiblePersonas,states,decisions,index,creatives,inspirations,
     plannedIds,creationJobs,stage:run(stage),pushPlan:run(pushPlan),
     selectedAngle,selectedPersona,selectedCreatives,selectedCell,selection,setSelection,inspectorTab,setInspectorTab,reorder,
     selectCell:(angleId: string,personaId: string) => { setSelection({angleId,personaId}); setInspectorTab('creatives'); setError(''); actions.setNotice(''); },

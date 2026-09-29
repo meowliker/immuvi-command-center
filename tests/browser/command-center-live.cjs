@@ -199,6 +199,9 @@ async function makePage(role = 'admin', passwordChange = false, mobile = false) 
       }
       if (url.pathname === '/rest/v1/rpc/qa_admin_users_page') return json(adminAccess.page(data, request.postDataJSON().p_after));
       if (url.pathname === '/rest/v1/rpc/qa_private_workers_list') return json(data.qa_image_worker || []);
+      if (url.pathname === '/rest/v1/rpc/qa_image_workers_list') return json(data.qa_image_worker || []);
+      if (['qa_inspiration_workers_list','qa_private_inspiration_status','qa_analysis_workers','qa_analysis_status']
+        .some(name => url.pathname === `/rest/v1/rpc/${name}`)) return json([]);
       if (url.pathname === '/rest/v1/rpc/qa_workers_page') {
         if (control.failWorkersRead) return json({ code: 'P0001', message: 'Worker read unavailable' }, 409);
         const after = request.postDataJSON().p_after;
@@ -369,7 +372,7 @@ async function makePage(role = 'admin', passwordChange = false, mobile = false) 
       }
       const table = url.pathname.split('/')[3];
       requests.push({ table, method: request.method(), product: url.searchParams.get('product_id') });
-      if (!Object.hasOwn(data, table)) throw new Error(`Unmocked table: ${table}`);
+      if (!Object.hasOwn(data, table)) throw new Error(`Unmocked data request: ${url.pathname}`);
       let rows = data[table];
       if (table === 'profiles' && request.method() === 'PATCH' && control.visibilityConflicts > 0 && Object.hasOwn(request.postDataJSON(), 'ap_dismissed_ad_ids')) {
         data.profiles[0].ap_dismissed_ad_ids.push(`concurrent-${control.visibilityConflicts--}`);
@@ -556,6 +559,11 @@ async function tab(page, name) {
 }
 (async () => {
   browser = await chromium.launch({ headless: true, channel: process.env.BROWSER_CHANNEL || 'chrome' });
+  if (process.env.SHARED_ANALYSIS_ONLY) {
+    const analysis=await makePage();await require('./shared-analysis-flow.cjs')({...analysis,tab,artifactDir,results});
+    await analysis.context.close();assert.deepEqual(errors,[]);assert.deepEqual(external,[]);assert.deepEqual(writes,[]);
+    console.log(JSON.stringify({results,errors,external},null,2));return;
+  }
   if (process.env.MATRIX_ADD_INSIGHTS_ONLY) {
     const matrix = await makePage();
     await require('./matrix-add-insights-flow.cjs')({ ...matrix, tab, artifactDir, results });

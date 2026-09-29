@@ -11,7 +11,7 @@ export async function saveInspiration(db:SupabaseClient, request:ReturnType<type
       // Reuse the creation request identity if the save acknowledgement was lost.
       const queued=await queuePrivateInspiration(db,{productId:request.p_product_id,inspirationId:result.id,requestId:request.p_request_id});
       return queued.status==='done'?'Inspiration already processed.':queued.status==='running'
-        ?`Inspiration is classifying on ${queued.workerName}.`:`Inspiration queued on ${queued.workerName}.`;
+        ?`Inspiration is classifying on ${queued.workerName}.`:`Inspiration queued on ${queued.workerName}.${queued.waitingForWorker?' It will start when the worker is available.':''}`;
     } catch(error) {
       // Creation succeeded. Do not invite a second URL submission after a dispatch failure.
       return `Inspiration saved. ${error instanceof Error?error.message:'Could not confirm worker dispatch.'} Check Activity; use Process All with Codex to retry the existing inspiration.`;

@@ -57,3 +57,15 @@ test('priority failure is visible and does not pretend the move succeeded',async
   nodes(f.render()).find(n=>n.props['aria-label']==='Run next').props.onClick();await flush();
   assert.match(renderToStaticMarkup(f.render()),/role="alert">Task already started/);
 });
+test('cancel submits only the selected job, locks duplicate clicks and refreshes after acknowledgement',async()=>{
+  let finish;const calls=[];let refreshed=0;
+  const f=await fixture('inspiration-cancel',{db:{rpc:async(name,input)=>{calls.push({name,input});await new Promise(resolve=>{finish=resolve;});return {};}},jobId:'selected',refresh:()=>refreshed++});
+  const button=nodes(f.render()).find(n=>n.type==='button');button.props.onClick();button.props.onClick();
+  assert.equal(calls.length,1);assert.equal(calls[0].name,'qa_private_inspiration_cancel');assert.equal(calls[0].input.p_id,'selected');
+  assert.equal(refreshed,0);finish();await flush();assert.equal(refreshed,1);
+});
+test('cancel failure remains visible and does not report success',async()=>{
+  const f=await fixture('inspiration-cancel',{db:{rpc:async()=>({error:{message:'Access denied'}})},jobId:'selected',refresh:()=>assert.fail('not cancelled')});
+  nodes(f.render()).find(n=>n.type==='button').props.onClick();await flush();
+  assert.match(renderToStaticMarkup(f.render()),/role="alert">Access denied/);
+});

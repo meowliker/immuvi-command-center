@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 import { QA_SUPABASE_URL, QA_SUPABASE_ANON_KEY } from '../../../../lib/qa-supabase-env.js';
 import { createClickUpClient } from '../../../../lib/services/clickup-client.js';
 import { TEST_LIST, TEST_WORKSPACE, publicAdUrl, verifyLibraryDocument } from '../../../../lib/services/private-inspiration.js';
+import { canQueueInspirationWorker } from '../../../../lib/domain/private-inspiration-queue.js';
 
 export const maxDuration = 60;
 export async function POST(request) {
@@ -16,7 +17,7 @@ export async function POST(request) {
     const input = await request.json();
     const workers = await db.rpc('qa_inspiration_workers_list',{p_product_id:input.productId});
     const worker = workers.data?.find(row=>row.id === input.workerId);
-    if (workers.error || !worker?.delivery_public_key || !worker.enabled || !worker.classifier_available) throw new Error('The selected classifier is unavailable.');
+    if (workers.error || !worker?.delivery_public_key || !canQueueInspirationWorker(worker)) throw new Error('The selected classifier is unavailable.');
     if(worker.scope==='shared' && input.productId!=='qa-sample-astrorekha') throw new Error('Shared worker is limited to the QA sample.');
     const source = await db.from('inspirations').select('url,data').eq('product_id',input.productId).eq('id',input.inspirationId).single();
     if (source.error || source.data?.data?._qaCreatedBy !== auth.data.user.id) throw new Error('Select an inspiration created by your account.');

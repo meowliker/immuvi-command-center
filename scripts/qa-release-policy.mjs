@@ -6,6 +6,8 @@ export const QA_REF = 'entgcnlfsnysnwyadzzp';
 export const SOURCE_PATHS = ['app', 'lib', 'public/fonts', 'api/drive/list.js', 'package.json', 'package-lock.json', 'tsconfig.json'];
 export const APP_ROUTES = [
   '/_global-error/page', '/_not-found/page', '/page', '/action-plan-live.html/route',
+  '/api/app-version/route', '/api/workers/inspiration/route',
+  '/api/workers/images/route', '/api/workers/analysis/route',
   '/api/admin/[op]/route', '/api/clickup/qa-cleanup/route', '/api/clickup/qa/route',
   '/api/clickup/route', '/api/drive/list/route', '/api/install-skill/route',
   '/api/onescale-launch-callback/route', '/immuvi-command-center-v2.html/route',

@@ -2,12 +2,12 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
 import { fork } from 'node:child_process';
-import { mkdtemp, mkdir, writeFile, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, readFile, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createReleaseUpdater, validateWorkerRelease, validateReleaseState, rejectRelease, readReleaseState,
   atomicJson, releaseDirectory, fetchApprovedRelease, stageWorkerRelease, QA_WORKER_MANIFEST, QA_WORKER_REPOSITORY } from '../../lib/services/shared-worker-updates.js';
-import { superviseRelease } from '../../lib/services/shared-worker-supervisor.js';
+import { superviseRelease, watchSupervisorConnection, waitForWorkerActivation } from '../../lib/services/shared-worker-supervisor.js';
 
 const old='a'.repeat(40), next='b'.repeat(40);
 const release={schema:1,environment:'qa',protocol:1,commit:next};
@@ -61,6 +61,31 @@ test('concurrent updater polls cannot stage two candidates',async()=>{
   const first=update();assert.equal(await update(),false);unblock();assert.equal(await first,true);assert.equal(staged,1);
 });
 
+test('busy workers do not discover updates; shutdown during staging cannot activate a release',async()=>{
+  let idle=false, fetched=0, staged=0, saved=0;
+  const update=createReleaseUpdater({isIdle:()=>idle,readState:async()=>state,
+    fetchRelease:async()=>{fetched++;return release;},stageRelease:async()=>{staged++;idle=false;},
+    saveState:async()=>{saved++;}});
+  assert.equal(await update(),false);
+  assert.equal(fetched,0);
+  idle=true;
+  assert.equal(await update(),false);
+  assert.equal(fetched,1);
+  assert.equal(staged,1);
+  assert.equal(saved,0);
+});
+
+test('pending startup is not overwritten and a save failure leaves the current pointer intact',async()=>{
+  const pending=createReleaseUpdater({readState:async()=>({...state,current:next,previous:old,pending:true}),
+    fetchRelease:()=>assert.fail('pending release must finish startup first')});
+  assert.equal(await pending(),false);
+  let stored=state;
+  const update=createReleaseUpdater({readState:async()=>stored,fetchRelease:async()=>release,stageRelease:async()=>{},
+    saveState:async()=>{throw new Error('disk unavailable');}});
+  assert.equal(await update(),false);
+  assert.equal(stored.current,old);
+});
+
 test('release state is atomic and invalid state fails closed',async()=>{
   const directory=await mkdtemp(join(tmpdir(),'qa-release-test-'));
   try {
@@ -97,11 +122,38 @@ test('staging pins repository and SHA, blocks runtime drift and disables package
     const before=calls.length;await stageWorkerRelease({release,directory,bootstrapRoot:bootstrap,pythonBin:'/isolated/python',run});
     assert.equal(calls.length,before);
     await writeFile(join(bootstrap,'scripts/shared-qa-requirements.txt'),'different');
+    await assert.rejects(stageWorkerRelease({release,directory,bootstrapRoot:bootstrap,pythonBin:'/isolated/python',run}),/runtime upgrade/);
     const other={...release,commit:'c'.repeat(40)};
     await assert.rejects(stageWorkerRelease({release:other,directory,bootstrapRoot:bootstrap,pythonBin:'/isolated/python',run:async(command,args,options)=>{
       const result=await run(command,args,options);return args.includes('rev-parse')?{stdout:other.commit}:result;
     }}),/runtime upgrade/);
   } finally {await rm(directory,{recursive:true,force:true});}
+});
+
+test('failed release verification never leaves an installable candidate',async()=>{
+  for(const failure of ['commit','protocol','npm','node-test','python-test']) {
+    const directory=await mkdtemp(join(tmpdir(),'qa-rejected-staging-'));
+    const bootstrap=join(directory,'bootstrap');
+    await mkdir(join(bootstrap,'scripts'),{recursive:true});
+    await writeFile(join(bootstrap,'scripts/shared-qa-requirements.txt'),'pinned');
+    const run=async(command,args,options)=>{
+      if(command==='git' && args.includes('checkout')) {
+        await mkdir(join(options.cwd,'scripts'),{recursive:true});
+        await mkdir(join(options.cwd,'worker-releases'),{recursive:true});
+        await writeFile(join(options.cwd,'scripts/shared-qa-requirements.txt'),'pinned');
+        await writeFile(join(options.cwd,'worker-releases/contract.json'),JSON.stringify({schema:1,
+          environment:failure==='protocol'?'production':'qa',protocol:1,entry:'scripts/private-worker.mjs'}));
+      }
+      if((failure==='npm' && command==='npm') || (failure==='node-test' && args.includes('--test'))
+        || (failure==='python-test' && command==='/isolated/python')) throw new Error('verification failed');
+      return {stdout:args.includes('rev-parse')?(failure==='commit'?old:next):''};
+    };
+    try {
+      await assert.rejects(stageWorkerRelease({release,directory,bootstrapRoot:bootstrap,pythonBin:'/isolated/python',run}));
+      assert.deepEqual(await readdir(join(directory,'releases')),[]);
+      assert.equal((await readReleaseState(directory)).current,null);
+    } finally {await rm(directory,{recursive:true,force:true});}
+  }
 });
 
 class Child extends EventEmitter {
@@ -162,4 +214,64 @@ test('stopping during startup does not blacklist a valid candidate',async()=>{
   stop.abort();
   assert.deepEqual(await result,{code:1,rollback:false});
   assert.equal(child.messages.length,0);
+});
+
+test('worker activation handles cancellation, IPC errors and mismatched protocol without claiming',async()=>{
+  for(const mode of ['cancelled','disconnected','send-error','disconnect','activate']) {
+    const worker=new EventEmitter(),abort=new AbortController();
+    worker.connected=mode!=='disconnected';
+    const messages=[];
+    worker.send=(message,callback)=>{messages.push(message);callback(mode==='send-error'?new Error('closed'):null);};
+    if(mode==='cancelled')abort.abort();
+    const waiting=waitForWorkerActivation(worker,{classifier:true,signal:abort.signal});
+    if(mode==='activate') {
+      worker.emit('message',{type:'qa-worker-activate',protocol:2});
+      assert.equal(worker.listenerCount('message'),1);
+      worker.emit('message',{type:'qa-worker-activate',protocol:1});
+      await waiting;
+    } else {
+      if(mode==='disconnect')worker.emit('disconnect');
+      await assert.rejects(waiting);
+    }
+    assert.equal(worker.listenerCount('message'),0);
+    assert.equal(worker.listenerCount('disconnect'),0);
+    assert.equal(messages.length,['cancelled','disconnected'].includes(mode)?0:1);
+  }
+});
+
+test('an already orphaned worker stops immediately',()=>{
+  const worker=new EventEmitter();worker.connected=false;
+  let stopped=false;
+  const cleanup=watchSupervisorConnection(worker,()=>{stopped=true;});
+  assert.equal(stopped,true);
+  cleanup();assert.equal(worker.listenerCount('disconnect'),0);
+});
+
+test('real managed worker aborts when its launcher disconnects after activation',async()=>{
+  const directory=await mkdtemp(join(tmpdir(),'qa-orphan-process-'));
+  const script=join(directory,'worker.mjs');
+  const helper=new URL('../../lib/services/shared-worker-supervisor.js',import.meta.url).href;
+  await writeFile(script,`import {watchSupervisorConnection,waitForWorkerActivation} from ${JSON.stringify(helper)};
+const abort=new AbortController();
+const timer=setInterval(()=>{},1000);
+watchSupervisorConnection(process,()=>{abort.abort();clearInterval(timer);});
+await waitForWorkerActivation(process,{classifier:true,signal:abort.signal});
+process.send({type:'active-fixture'});\n`);
+  const child=fork(script,[],{stdio:['ignore','ignore','ignore','ipc']});
+  let active=false;
+  const exit=new Promise((resolve,reject)=>{
+    child.once('exit',resolve);child.once('error',reject);
+  });
+  const timeout=setTimeout(()=>child.kill('SIGKILL'),5000);
+  try {
+    child.on('message',message=>{
+      if(message.type==='qa-worker-ready')child.send({type:'qa-worker-activate',protocol:1});
+      if(message.type==='active-fixture'){active=true;child.disconnect();}
+    });
+    assert.equal(await exit,0);
+    assert.equal(active,true);
+  } finally {
+    clearTimeout(timeout);
+    await rm(directory,{recursive:true,force:true});
+  }
 });

@@ -32,7 +32,7 @@ export function MatrixInspector({ model:m }: { model:MatrixModel }) {
     {editor ? <>
       {editor.kind==='edit' ? <TrackerEditor creative={editor.creative} taxonomy={taxonomy} schema={m.actions.schema} loadSchema={m.actions.loadSchema} save={m.actions.save} busy={busy} /> : null}
       {editor.kind==='spawn' && editor.creative ? <TrackerSpawn creative={editor.creative} creatives={m.creatives} busy={busy} spawn={m.actions.spawn} schema={m.actions.schema} loadSchema={m.actions.loadSchema} /> : null}
-      {editor.kind==='winners' && editor.creative ? <TrackerWinners creative={editor.creative} busy={busy} save={m.actions.winner} share={m.actions.shareWinner} /> : null}
+      {editor.kind==='winners' && editor.creative ? <TrackerWinners db={m.db} creative={editor.creative} busy={busy} save={m.actions.winner} share={m.actions.shareWinner} /> : null}
       {editor.kind==='delete' && editor.creative ? <TrackerDelete creative={editor.creative} busy={busy} remove={m.actions.remove} /> : null}
     </> : <>
       <div className={styles.cellTabs} role="tablist" aria-label="Cell views">{(['creatives','add','insights'] as const).map(tab=><button key={tab} role="tab" id={`cell-tab-${tab}`} aria-controls={`cell-panel-${tab}`} aria-label={tab==='add' ? '+ Add Creative' : tab==='creatives' ? 'Creatives' : 'Insights'} aria-selected={m.inspectorTab===tab} type="button" onClick={()=>m.setInspectorTab(tab)}>{tab==='add' ? '+ Add Creative' : tab==='creatives' ? <>Creatives <span>{scope.total}</span></> : 'Insights'}</button>)}</div>

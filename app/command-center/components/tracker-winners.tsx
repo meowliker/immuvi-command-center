@@ -4,10 +4,12 @@ import { ExternalLink, Play, Plus, Star, Trash2, Upload } from 'lucide-react';
 import { WinningFilePreview } from './winning-file-preview';
 import { parseWinningFile } from '../../../lib/domain/tracker-editing.js';
 import type { Creative } from '../types';
+import type { SupabaseClient } from '@supabase/supabase-js';
+import { SharedAnalysisControl } from './shared-analysis-control';
 import styles from '../../command-center.module.css';
 
 type File = { id: string; name: string; mimeType?: string };
-export function TrackerWinners({ creative, busy, save, share }: { creative: Creative; busy: boolean;
+export function TrackerWinners({ creative, busy, save, share, db }: { creative: Creative; busy: boolean; db?: SupabaseClient;
   save: (creative: Creative, file: File, remove?: boolean) => Promise<unknown>; share: (creative: Creative, fileId: string) => Promise<unknown> }) {
   const [url, setUrl] = useState('');
   const [name, setName] = useState('');
@@ -39,7 +41,9 @@ export function TrackerWinners({ creative, busy, save, share }: { creative: Crea
       </div><button type="submit"><Plus size={16} />Save winning file</button></fieldset>
     </form>
     <ul className={styles.trackerFileList}>{creative.winningArtifacts.map((file: File) => <li key={file.id}>
-      <span>{file.name}</span><div className={styles.trackerButtons}>
+      <div style={{ minWidth: 0 }}><span>{file.name}</span>
+        {db ? <SharedAnalysisControl db={db} productId={creative.productId} kind="variation" parentId={creative.id} targetId={creative.id} fileId={file.id} /> : null}
+      </div><div className={styles.trackerButtons}>
         <button type="button" title="Preview winning file" aria-label={`Preview ${file.name}`} onClick={() => setPreview(file.id)}><Play size={16} /></button>
         <a href={`https://drive.google.com/file/d/${encodeURIComponent(file.id)}/view`} target="_blank" rel="noreferrer" title="Open in Drive" aria-label={`Open ${file.name} in Drive`}><ExternalLink size={16} /></a>
         {creative.clickupTaskId ? <button type="button" disabled={busy} title="Post winning file to ClickUp" aria-label={`Post ${file.name} to ClickUp`} onClick={() => void share(creative, file.id)}><Upload size={16} /></button> : null}

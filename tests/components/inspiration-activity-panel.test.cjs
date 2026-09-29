@@ -21,6 +21,7 @@ async function fixture() {
     if (id.endsWith('inspiration-priority')) return { InspirationPriority: () => React.createElement('button',null,'Run next') };
     if (id.endsWith('inspiration-activity.js')) return activity;
     if (id.endsWith('/format')) return { formatAge: String, formatDateTime: String };
+    if(id==='./inspiration-cancel')return {InspirationCancel:props=>React.createElement('button',{'data-cancel-job':props.jobId},'Cancel task')};
     return require(id);
   } });
   const jobs = ['pending', 'running', 'blocked', 'done', 'failed', 'ready', 'unknown'].map(status => ({
@@ -60,4 +61,12 @@ test('priority controls are available only for queued private jobs',async()=>{
   const html=renderToStaticMarkup(f.render());
   assert.equal((html.match(/Run next/g)||[]).length,1);
   f.filter('running');assert.ok(!renderToStaticMarkup(f.render()).includes('Run next'));
+});
+test('cancel appears only when the server grants control for that active job',async()=>{
+  const f=await fixture();
+  for(const job of f.jobs)job.privateJobId=job.id;
+  f.jobs.find(job=>job.status==='running').canCancel=true;
+  const html=renderToStaticMarkup(f.render());
+  assert.equal((html.match(/data-cancel-job=/g)||[]).length,1);
+  assert.match(html,/data-cancel-job="running"/);
 });

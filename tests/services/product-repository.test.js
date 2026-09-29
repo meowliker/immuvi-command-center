@@ -20,13 +20,13 @@ test('buildProductConfigForUpsert keeps existing ClickUp config when stale patch
   const config = buildProductConfigForUpsert(
     { clickupListId: '', clickupListName: '', lastSyncedCount: 0 },
     {
-      clickup_list_id: '901616718146',
+      clickup_list_id: '1301130000002447',
       clickup_list_name: 'Immuvi QA Test List',
       last_synced_count: 50,
     },
   );
 
-  assert.equal(config.clickup_list_id, '901616718146');
+  assert.equal(config.clickup_list_id, '1301130000002447');
   assert.equal(config.clickup_list_name, 'Immuvi QA Test List');
   assert.equal(config.last_synced_count, 50);
 });
@@ -35,7 +35,7 @@ test('buildProductConfigForUpsert supports explicit clear sentinel', () => {
   const config = buildProductConfigForUpsert(
     { clickupListId: '__clear__', clickupListName: '__clear__', lastSyncedCount: '__clear__' },
     {
-      clickup_list_id: '901616718146',
+      clickup_list_id: '1301130000002447',
       clickup_list_name: 'Immuvi QA Test List',
       last_synced_count: 50,
     },
@@ -54,7 +54,7 @@ test('product paths encode identifiers and preserve upsert contract', () => {
 test('productToUpsertRow builds the legacy-compatible row shape', () => {
   assert.deepEqual(
     productToUpsertRow(
-      { id: 'immuvi', name: 'Immuvi', clickupListId: '901616718146', color: '#fff' },
+      { id: 'immuvi', name: 'Immuvi', clickupListId: '1301130000002447', color: '#fff' },
       { doc_id: 'doc-1' },
     ),
     {
@@ -62,7 +62,7 @@ test('productToUpsertRow builds the legacy-compatible row shape', () => {
       name: 'Immuvi',
       config: {
         doc_id: 'doc-1',
-        clickup_list_id: '901616718146',
+        clickup_list_id: '1301130000002447',
         color: '#fff',
       },
     },
@@ -71,11 +71,11 @@ test('productToUpsertRow builds the legacy-compatible row shape', () => {
 
 test('listProducts maps Supabase rows through the view converter', async () => {
   const fetchImpl = async () => new Response(JSON.stringify([
-    { id: 'immuvi', name: 'Immuvi', config: { clickup_list_id: '901616718146' } },
+    { id: 'immuvi', name: 'Immuvi', config: { clickup_list_id: '1301130000002447' } },
   ]));
 
   const rows = await listProducts({ env: serviceEnv, fetchImpl });
-  assert.equal(rows[0].clickupListId, '901616718146');
+  assert.equal(rows[0].clickupListId, '1301130000002447');
 });
 
 test('getExistingProductConfig returns empty config when the product is missing', async () => {
@@ -89,7 +89,7 @@ test('upsertProduct fetches existing config and writes a preserving upsert', asy
   const fetchImpl = async (url, init) => {
     calls.push({ url, init });
     if (init.method === 'GET') {
-      return new Response(JSON.stringify([{ config: { clickup_list_id: '901616718146' } }]));
+      return new Response(JSON.stringify([{ config: { clickup_list_id: '1301130000002447' } }]));
     }
     return new Response(null, { status: 204 });
   };
@@ -104,6 +104,6 @@ test('upsertProduct fetches existing config and writes a preserving upsert', asy
   assert.equal(calls[1].init.headers.Prefer, 'resolution=merge-duplicates,return=minimal');
   assert.equal(
     calls[1].init.body,
-    '[{"id":"immuvi","name":"Immuvi","config":{"clickup_list_id":"901616718146","color":"#123456"}}]',
+    '[{"id":"immuvi","name":"Immuvi","config":{"clickup_list_id":"1301130000002447","color":"#123456"}}]',
   );
 });

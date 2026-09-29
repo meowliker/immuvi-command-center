@@ -1,0 +1,30 @@
+update public.products set config=config||'{"qa_brief_doc_id":"qa-library","qa_brief_tracker_page_id":"tracker"}'::jsonb where id='qa-insp-fixture';
+update public.qa_private_inspiration_jobs set context=context||'{"libraryDocId":"qa-library","libraryTrackerPageId":"tracker"}'::jsonb where id='00000000-0000-4000-8000-000000000095';
+select set_config('test.lease',(select lease_id::text from public.qa_private_inspiration_jobs where id='00000000-0000-4000-8000-000000000095'),true);
+set local role anon;
+select public.qa_private_inspiration_checkpoint('00000000-0000-4000-8000-000000000095',current_setting('test.lease')::uuid,'delivery-start');
+select public.qa_private_inspiration_checkpoint('00000000-0000-4000-8000-000000000095',current_setting('test.lease')::uuid,'doc','{"id":"qa-library"}');
+select public.qa_private_inspiration_delivery_rejected('00000000-0000-4000-8000-000000000095',current_setting('test.lease')::uuid,403,'DENIED');
+select public.qa_private_inspiration_checkpoint('00000000-0000-4000-8000-000000000095',current_setting('test.lease')::uuid,'failed','{"error":"Page denied"}');
+reset role;
+select set_config('request.jwt.claims','{"sub":"00000000-0000-4000-8000-000000000091","role":"authenticated"}',true);
+set local role authenticated;
+select public.qa_private_inspiration_retry_delivery('00000000-0000-4000-8000-000000000095','qa-insp-fixture','qa-insp-a','00000000-0000-4000-8000-000000000093',repeat('a',512));
+reset role;
+select set_config('request.jwt.claims','{"role":"anon"}',true);
+set local role anon;
+do $$ declare j jsonb;rows jsonb;begin
+ j:=public.qa_private_inspiration_claim();
+ if j->>'doc_id'<>'qa-library' or j->>'delivery_started'<>'false' then raise exception 'Lost library receipt or rejection fence';end if;
+ perform public.qa_private_inspiration_checkpoint((j->>'id')::uuid,(j->>'lease_id')::uuid,'delivery-start');
+ perform public.qa_private_inspiration_checkpoint((j->>'id')::uuid,(j->>'lease_id')::uuid,'page','{"id":"brief"}');
+ rows:=public.qa_private_inspiration_tracker_rows((j->>'id')::uuid,(j->>'lease_id')::uuid);
+ if jsonb_array_length(rows)<>1 or rows->0->>'url'<>'https://app.clickup.com/9016762494/docs/qa-library/brief' then raise exception 'Tracker scope/receipt wrong';end if;
+ begin perform public.qa_private_inspiration_tracker_rows((j->>'id')::uuid,gen_random_uuid());raise exception 'FAILED foreign tracker';exception when insufficient_privilege then null;end;
+ perform public.qa_private_inspiration_checkpoint((j->>'id')::uuid,(j->>'lease_id')::uuid,'complete');
+end $$;
+reset role;
+do $$ begin
+ if not exists(select 1 from public.inspirations where id='qa-insp-a' and status='Classified' and data->>'_clickupDocPageUrl'='https://app.clickup.com/9016762494/docs/qa-library/brief') then raise exception 'Library brief not published';end if;
+ if not exists(select 1 from public.qa_private_inspiration_jobs where id='00000000-0000-4000-8000-000000000095' and status='done' and error is null) then raise exception 'Failed state not cleared';end if;
+end $$;

@@ -1,0 +1,17 @@
+.surface { min-width: 0; }
+.surface .toolbar { display: flex; flex-wrap: wrap; gap: 16px; align-items: center; margin: 0 0 18px; width: 100%; }
+.surface .toolbar > div { border: 0; padding: 0; background: transparent; display: flex; align-items: baseline; gap: 5px; }
+.surface .toolbar strong { font-size: 14px; }
+.surface .toolbar span { font-size: 11px; }
+.surface .toolbar button { min-height: 30px; padding: 4px 10px; font-size: 12px; margin-left: auto; }
+.surface .grid { display: grid; grid-template-columns: minmax(0, 1fr); width: min(1200px, 100%); margin: 0; gap: 18px; }
+.surface .create { grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr)); gap: 12px; padding: 20px 0; border: 0; border-top: 1px solid #e5e7eb; border-bottom: 1px solid #e5e7eb; border-radius: 0; background: transparent; }
+.create > div, .create > fieldset { grid-column: 1 / -1; }
+.create > button { grid-column: 1 / -1; justify-self: start; }
+.surface .create h2, .surface .users h2 { font-size: 16px; }
+.surface .create label { font-size: 10.88px; font-weight: 600; gap: 4px; min-width: 0; }
+.surface .create input:not([type=checkbox]), .surface .create select { padding: 8px 10px; min-height: 36px; border-radius: 6px; font-size: 13.6px; font-weight: 400; width: 100%; min-width: 0; }
+.surface .users { border: 0; border-radius: 0; }
+.surface .users > div:first-child { padding: 12px 0; }
+.surface .users article { padding: 12px 0; gap: 10px; font-size: 13px; }
+.surface .users article button { min-height: 30px; font-size: 12px; border-radius: 6px; padding: 4px 9px; }

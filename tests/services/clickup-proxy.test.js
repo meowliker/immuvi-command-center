@@ -9,8 +9,8 @@ import {
 
 test('buildClickUpProxyTarget builds v2 ClickUp URLs and preserves extra query params', () => {
   assert.equal(
-    buildClickUpProxyTarget('http://localhost/api/clickup?path=/list/901616718146/task&archived=false&page=1'),
-    'https://api.clickup.com/api/v2/list/901616718146/task?archived=false&page=1',
+    buildClickUpProxyTarget('http://localhost/api/clickup?path=/list/1301130000002447/task&archived=false&page=1'),
+    'https://api.clickup.com/api/v2/list/1301130000002447/task?archived=false&page=1',
   );
 });
 

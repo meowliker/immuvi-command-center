@@ -1,0 +1,128 @@
+const assert = require('node:assert/strict');
+
+module.exports = async function testVariationLab({ page, context, data, emit, control, tab, artifactDir, results }) {
+  const parent = data.ads[0]; parent.status = 'Winner';
+  data.task_video_winners.push({ id: 'WIN', ad_id: parent.id, drive_file_id: 'qa-winner', file_name: 'QA winner', web_view_url: 'https://drive.google.com/file/d/qa-winner/view' });
+  data.ads.push({ ...structuredClone(parent), id: 'FOREIGN-WINNER', product_id: 'qa-second', format_name: 'Foreign winner' },
+    { ...structuredClone(parent), id: 'QUARANTINED-WINNER', format_name: 'Quarantined winner', meta: { _productBoundaryQuarantined: true } });
+  control.schema = { fields: [], mappings: {}, members: [{ id: 12, username: 'Editor' }, { id: 13, username: 'Reviewer' }, { id: 14, username: 'Override' }] };
+  const submissions = [];
+  await context.route(/\/rest\/v1\/rpc\/qa_tracker_spawn$/, async (route) => { submissions.push(route.request().postDataJSON()); await route.fallback(); });
+  await page.locator('details summary').click();
+  await page.getByLabel('QA session API key').fill('synthetic-clickup-key');
+  await page.getByText('ClickUp: QA ClickUp User', { exact: true }).waitFor();
+  await tab(page, 'Action Plan');
+  await page.getByRole('button', { name: 'Variations view', exact: true }).click();
+  await page.getByText('No variations yet.', { exact: true }).waitFor();
+  assert.deepEqual(await page.getByLabel('Winning creative', { exact: true }).locator('option').allTextContents(), ['QA creative']);
+  await page.getByRole('button', { name: 'Create variations', exact: true }).click();
+  let dialog = page.getByRole('dialog', { name: 'Variation Lab: QA creative', exact: true });
+  await dialog.getByLabel('Editor brief', { exact: true }).fill('Cancelled draft');
+  await dialog.getByRole('button', { name: 'Close Variation Lab', exact: true }).click();
+  assert.equal(submissions.length, 0);
+  await page.getByRole('button', { name: 'Create variations', exact: true }).click();
+  await dialog.getByRole('button', { name: 'Load ClickUp members' }).click();
+  await dialog.getByLabel('Default editors', { exact: true }).selectOption('12');
+  await dialog.getByLabel('Default reviewers', { exact: true }).selectOption('13');
+  await dialog.getByLabel('Default due date', { exact: true }).fill('2026-10-10');
+  for (const [name, count] of [['5 Hook tests', 5], ['3 Production-style tests', 3], ['4 Music tests', 4], ['3 CTA tests', 3], ['Full Remake set', 3]]) {
+    await dialog.getByRole('button', { name, exact: true }).click();
+    assert.equal(await dialog.getByLabel('Change axis', { exact: true }).count(), count);
+  }
+  await dialog.getByRole('button', { name: '3 CTA tests', exact: true }).click();
+  await dialog.getByRole('button', { name: 'Remove variation 3', exact: true }).click();
+  const row = (n) => dialog.getByRole('region', { name: `Variation ${n}`, exact: true });
+  await row(1).getByLabel('Editor brief', { exact: true }).fill('Keep this draft');
+  await dialog.getByRole('button', { name: 'Add variation', exact: true }).click();
+  assert.equal(await row(3).getByLabel('Change axis', { exact: true }).inputValue(), 'CTA');
+  assert.equal(await row(1).getByLabel('Editor brief', { exact: true }).inputValue(), 'Keep this draft');
+  await dialog.getByRole('button', { name: 'Remove variation 3', exact: true }).click();
+  const previousDialogs = page.listeners('dialog'); page.removeAllListeners('dialog');
+  page.once('dialog', (confirm) => confirm.dismiss());
+  await dialog.getByRole('button', { name: '5 Hook tests', exact: true }).click();
+  assert.equal(await dialog.getByLabel('Change axis', { exact: true }).count(), 2);
+  for (const listener of previousDialogs) page.on('dialog', listener);
+  await row(1).getByLabel('Change axis', { exact: true }).selectOption('__custom__');
+  await dialog.getByRole('button', { name: 'Create 2 variations', exact: true }).click();
+  await dialog.getByRole('alert').filter({ hasText: 'enter an axis' }).waitFor(); assert.equal(submissions.length, 0);
+  await row(1).getByLabel('Custom axis name', { exact: true }).fill('Color');
+  await row(1).getByLabel('From', { exact: true }).fill('Red'); await row(1).getByLabel('To', { exact: true }).fill('Green');
+  await row(1).getByRole('button', { name: 'Single note', exact: true }).click();
+  await row(1).getByRole('button', { name: 'From / To', exact: true }).click();
+  assert.equal(await row(1).getByLabel('To', { exact: true }).inputValue(), 'Green');
+  await row(1).getByRole('button', { name: 'Single note', exact: true }).click();
+  await row(1).getByLabel('Change note', { exact: true }).fill('Change the background color');
+  await row(1).getByLabel('Hypothesis', { exact: true }).fill('More contrast');
+  await row(1).getByLabel('Due date', { exact: true }).fill('2026-10-11');
+  await row(1).getByLabel('Variation 1 editors', { exact: true }).selectOption('14');
+  await dialog.getByLabel('Winning file reference', { exact: true }).selectOption('qa-winner');
+  emit('ads', 'UPDATE', parent); await page.waitForTimeout(350);
+  assert.equal(await row(1).getByLabel('Editor brief', { exact: true }).inputValue(), 'Keep this draft');
+  for (const width of [1440, 320, 390, 768]) {
+    await page.setViewportSize({ width, height: 1000 });
+    assert.equal(await dialog.evaluate((el) => el.scrollWidth <= el.clientWidth), true, `Variation editor overflow ${width}`);
+    await row(1).scrollIntoViewIfNeeded();
+    await page.screenshot({ path: `${artifactDir}/variation-lab-editor-${width}.png` });
+  }
+  const beforeActions = data.manual_actions.length, beforeClickup = control.clickupCalls.length;
+  await dialog.getByRole('button', { name: 'Create 2 variations', exact: true }).click();
+  await dialog.waitFor({ state: 'detached' });
+  assert.equal(submissions.length, 1);
+  assert.equal(submissions[0].p_product_id, parent.product_id); assert.equal(submissions[0].p_winner_file_id, 'qa-winner');
+  assert.equal(submissions[0].p_expected_updated_at, parent.updated_at);
+  assert.deepEqual(submissions[0].p_rows[0], { axis: 'Color', from: 'Change the background color', to: '', hypothesis: 'More contrast', brief: 'Keep this draft', dueDate: '2026-10-11', editorIds: ['14'], reviewerIds: ['13'] });
+  assert.deepEqual(submissions[0].p_rows[1].editorIds, ['12']); assert.equal(submissions[0].p_rows[1].dueDate, '2026-10-10');
+  assert.equal(data.manual_actions.length, beforeActions); assert.equal(control.clickupCalls.length, beforeClickup);
+  assert.ok(data.matrix_cells[0].creative_assignments.includes('AD-1-V1')); assert.ok(data.matrix_cells[0].creative_assignments.includes('AD-1-V2'));
+  assert.equal(data.ads.find((ad) => ad.id === 'AD-1-V1').drive_link, '');
+  const group = page.locator('[data-variation-group="AD-1"]'); await group.waitFor();
+  const chip = group.getByRole('button', { name: 'Variation breakdown for QA creative', exact: true });
+  for (const width of [1440, 320, 390, 768]) {
+    await page.setViewportSize({ width, height: 1000 }); await chip.click();
+    const popover = page.getByRole('dialog', { name: 'Variation breakdown: QA creative', exact: true });
+    await popover.waitFor(); await page.waitForTimeout(150);
+    assert.equal(await popover.evaluate((el) => { const r = el.getBoundingClientRect(); return r.left >= 0 && r.right <= innerWidth && r.top >= 0 && r.bottom <= innerHeight; }), true);
+    await page.screenshot({ path: `${artifactDir}/variation-lab-breakdown-${width}.png` });
+    await popover.getByRole('button', { name: 'Close variation breakdown' }).focus(); await page.keyboard.press('Escape');
+    await popover.waitFor({ state: 'hidden' }); assert.equal(await chip.evaluate((el) => el === document.activeElement), true);
+  }
+  const child = data.ads.find((ad) => ad.id === 'AD-1-V1');
+  for (const [status, bucket] of [['In Production', 'Testing'], ['Ready to Launch', 'Testing'], ['Complete', 'Losers'], ['Scale', 'Winners']]) {
+    child.status = status; emit('ads', 'UPDATE', child);
+    await page.waitForFunction(([id, status]) => document.querySelector(`[data-variation-row="${id}"]`)?.textContent.includes(status), [child.id, status]);
+    await chip.click();
+    const popover = page.getByRole('dialog', { name: 'Variation breakdown: QA creative', exact: true });
+    assert.equal(await popover.locator('dl > div').filter({ has: page.locator('dt', { hasText: new RegExp(`^${bucket}$`) }) }).locator('dd').innerText(), '1');
+    await popover.getByRole('button', { name: 'Close variation breakdown' }).click();
+  }
+  await chip.click(); await page.getByRole('button', { name: 'Spawn more', exact: true }).click();
+  await dialog.getByLabel('Change axis', { exact: true }).selectOption('Color');
+  await dialog.getByLabel('Editor brief', { exact: true }).fill('Stale draft retained');
+  parent.updated_at = new Date(Date.parse(parent.updated_at) + 5000).toISOString(); emit('ads', 'UPDATE', parent);
+  await page.waitForTimeout(350); control.expectedSpawnRejections = 1;
+  await dialog.getByRole('button', { name: 'Create 1 variations', exact: true }).click();
+  await dialog.getByRole('alert').filter({ hasText: 'Parent changed' }).waitFor();
+  assert.equal(await dialog.getByLabel('Editor brief', { exact: true }).inputValue(), 'Stale draft retained');
+  assert.equal(data.ads.filter((ad) => ad.parent_ad_id === parent.id).length, 2);
+  await dialog.getByRole('button', { name: 'Close Variation Lab', exact: true }).click();
+  await page.getByRole('button', { name: 'Table view', exact: true }).click();
+  await page.getByRole('button', { name: 'Variation breakdown for QA creative', exact: true }).waitFor();
+  await page.getByRole('button', { name: 'Cards view', exact: true }).click();
+  await page.getByRole('button', { name: 'Variation breakdown for QA creative', exact: true }).waitFor();
+  await tab(page, 'Creative Tracker');
+  await page.getByRole('button', { name: 'Variation breakdown for QA creative', exact: true }).click();
+  await page.getByRole('dialog', { name: 'Variation breakdown: QA creative', exact: true }).getByRole('button', { name: 'QA creative - V1', exact: true }).click();
+  await page.getByLabel('Creative name', { exact: true }).waitFor(); await page.getByRole('button', { name: 'Close editor', exact: true }).click();
+  await tab(page, 'Creative Matrix');
+  await page.getByRole('button', { name: /Energy x Busy people: / }).click();
+  await page.getByRole('button', { name: 'Variation breakdown for QA creative', exact: true }).click();
+  const popover = page.getByRole('dialog', { name: 'Variation breakdown: QA creative', exact: true });
+  await popover.getByRole('button', { name: 'Close variation breakdown' }).focus(); await page.keyboard.press('Escape');
+  await page.getByRole('button', { name: 'Close inspector', exact: true }).waitFor();
+  await page.getByRole('button', { name: 'Close inspector', exact: true }).click();
+  await page.locator('main > section').first().locator('select').selectOption('qa-second');
+  await tab(page, 'Action Plan'); await page.getByRole('button', { name: 'Variations view', exact: true }).click();
+  assert.equal(await page.locator('[data-variation-group="AD-1"]').count(), 0);
+  assert.equal(new URL(page.url()).pathname, '/');
+  results.push('Variation Lab: all templates, preserved drafts/defaults, custom axes, note/split mode, per-row overrides, winner reference, independent QA creation, stale-parent rejection, Tracker/Matrix/Plan chips, nested popover Escape/focus, 320/390/768/1440 screenshots, product boundaries; no automatic ClickUp writes');
+};

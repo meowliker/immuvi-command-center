@@ -58,6 +58,7 @@ test('summarizeQueue groups pending, active, classified, and failed jobs', () =>
     active: 3,
     classified: 1,
     failed: 1,
+    blocked: 0,
   });
 });
 

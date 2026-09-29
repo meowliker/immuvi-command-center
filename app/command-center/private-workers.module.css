@@ -1,0 +1,11 @@
+.panel { padding: 12px 0; border-bottom: 1px solid #e2e5ec; }
+.heading { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.heading h2 { margin: 0; font-size: 14px; font-weight: 600; }
+.row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 0; }
+.identity { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; font-size: 13px; }
+.state { color: #718096; font-size: 11px; }
+.state[data-online='true'] { color: #087f5b; }
+.capabilities { display: flex; gap: 14px; margin-top: 6px; font-size: 11px; color: #718096; }
+.capabilities span[data-active='true'] { color: #087f5b; }
+.row button { display: inline-flex; align-items: center; gap: 4px; padding: 5px 8px; font-size: 11px; border: 1px solid #dce1ea; border-radius: 4px; background: #fff; }
+.error { font-size: 12px; color: #bb2028; }

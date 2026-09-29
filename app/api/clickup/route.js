@@ -1,9 +1,8 @@
-import legacyHandler from '../../../api/clickup.js';
-import { runLegacyHandler } from '../../../lib/legacy-route-adapter.js';
+import { qaDisabledRoute } from '../../../lib/qa-disabled-route.js';
 
-export const GET = (request) => runLegacyHandler(legacyHandler, request);
-export const POST = (request) => runLegacyHandler(legacyHandler, request);
-export const PUT = (request) => runLegacyHandler(legacyHandler, request);
-export const PATCH = (request) => runLegacyHandler(legacyHandler, request);
-export const DELETE = (request) => runLegacyHandler(legacyHandler, request);
-export const OPTIONS = (request) => runLegacyHandler(legacyHandler, request);
+export const GET = qaDisabledRoute;
+export const POST = qaDisabledRoute;
+export const PUT = qaDisabledRoute;
+export const PATCH = qaDisabledRoute;
+export const DELETE = qaDisabledRoute;
+export const OPTIONS = qaDisabledRoute;

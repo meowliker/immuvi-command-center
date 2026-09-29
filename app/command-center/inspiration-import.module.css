@@ -1,0 +1,21 @@
+.layout { display:grid; grid-template-columns:160px minmax(0,1fr); gap:16px; }
+.products { border:0; padding:0; margin:0; min-width:0; }
+.products legend { font-weight:600; margin-bottom:12px; }
+.products label { display:flex; align-items:flex-start; gap:8px; padding:8px 0; overflow-wrap:anywhere; }
+.products input { flex:none; width:15px; height:15px; }
+.preview { min-width:0; }
+.tabs,.toolbar,.footer { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.tabs { margin-bottom:12px; }
+.layout button,.footer button { display:inline-flex; align-items:center; gap:6px; font:inherit; padding:8px 10px; border:1px solid #d6dce5; border-radius:6px; background:#fff; color:#273444; cursor:pointer; }
+.layout button:disabled,.footer button:disabled { opacity:.5; cursor:not-allowed; }
+.tabs [aria-pressed=true] { background:#263b3a; color:#fff; }
+.toolbar input { flex:1; width:120px; min-width:0; }
+.toolbar input,.toolbar select { border:1px solid #d6dce5; border-radius:6px; font:inherit; padding:8px; }
+.tableRegion { max-height:360px; overflow:auto; margin-top:12px; border:1px solid #d6dce5; }
+.tableRegion table { border-collapse:collapse; min-width:950px; width:100%; font-size:12px; }
+.tableRegion th,.tableRegion td { text-align:left; border-bottom:1px solid #e6e9ef; padding:8px; max-width:180px; overflow-wrap:anywhere; }
+.tableRegion th { position:sticky; top:0; background:#f1f4f6; z-index:1; }
+.tableRegion input { width:15px; height:15px; }
+.footer { border-top:1px solid #e6e9ef; margin-top:16px; padding-top:12px; }
+.footer span { flex:1; }
+@media(max-width:600px) { .layout {grid-template-columns:minmax(0,1fr);} .products {max-height:130px;overflow:auto;} .footer span {flex-basis:100%;} }

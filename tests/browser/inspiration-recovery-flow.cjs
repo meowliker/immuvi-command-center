@@ -1,0 +1,36 @@
+const assert=require('node:assert/strict');
+module.exports=async function testRecovery({page,data,control,emit,tab,artifactDir,results}) {
+  const stamp=new Date().toISOString(),product='qa-fixture';
+  const queue=(id,status='failed')=>({id:`JOB-${id}`,ins_id:id,product_id:product,url:`https://example.test/${id}`,platform:'Other',status,attempts:4,claimed_by:'old-worker',claimed_at:stamp,queued_at:'2026-09-01T00:00:00.000Z',processed_at:stamp,worker_assignment:'auto',error_message:'Historical decode failure'});
+  const first=queue('INS-RECOVER'),stale=queue('INS-STALE'),active=queue('INS-ACTIVE','classifying');data.inspiration_queue=[first,stale,active];data.inspirations=[];
+  data.inspiration_results=[{id:'RESULT-OLD',product_id:product,ins_id:first.ins_id,source_url:first.url,classified_at:stamp,classification:{creative_usp:'Recovered classification'},brief:{next_ad_scripts:[{variation:'Stored'}]}}];
+  data.ads[0].meta._fromInspoId=first.ins_id;
+  const beforeResult=structuredClone(data.inspiration_results),beforeAds=structuredClone(data.ads),beforePlans=structuredClone(data.manual_actions),beforeQueue=structuredClone(first);
+  await tab(page,'Inspiration');await page.getByText('3 / 3',{exact:true}).waitFor();
+  const views=page.getByRole('group',{name:'Inspiration view',exact:true});await page.getByRole('button',{name:'Open task activity',exact:true}).click();
+  await page.getByRole('button',{name:'Inspect inspiration INS-RECOVER',exact:true}).click();
+  const drawer=page.getByRole('dialog',{name:'INS-RECOVER',exact:true}),dialog=page.getByRole('dialog',{name:'Recover queue entry',exact:true});
+  await drawer.getByRole('button',{name:'Recover queue entry',exact:true}).click();await dialog.getByRole('button',{name:'Cancel',exact:true}).click();assert.equal(data.inspirations.length,0);
+  await drawer.getByRole('button',{name:'Recover queue entry',exact:true}).click();
+  for(const width of [320,390,768,1440]){await page.setViewportSize({width,height:900});assert.equal(await dialog.evaluate((el)=>el.scrollWidth<=el.clientWidth && el.getBoundingClientRect().right<=innerWidth),true);await page.screenshot({path:`${artifactDir}/inspiration-recovery-${width}.png`});}
+  control.loseRecoveryAck=true;await dialog.getByRole('button',{name:'Recover library record',exact:true}).click();await dialog.getByRole('button',{name:'Retry same recovery',exact:true}).waitFor();
+  assert.equal(data.inspirations.length,1);await dialog.getByRole('button',{name:'Retry same recovery',exact:true}).click();await dialog.waitFor({state:'hidden'});
+  assert.deepEqual(control.recoveryCalls[0],control.recoveryCalls[1]);assert.equal(data.inspirations.length,1);
+  assert.deepEqual(data.inspirations[0].data._qaRecoveredQueue,beforeQueue);assert.deepEqual(data.inspiration_results,beforeResult);assert.deepEqual(data.ads,beforeAds);assert.deepEqual(data.manual_actions,beforePlans);
+  assert.equal(first.queued_at,beforeQueue.queued_at);assert.equal(first.attempts,4);assert.equal(first.worker_assignment,'blocked:qa-isolation');
+  await drawer.getByRole('heading',{name:'Recovered queue history',exact:true}).waitFor();await drawer.getByText('Historical decode failure',{exact:true}).waitFor();
+  assert.equal(await drawer.getByRole('button',{name:'Recover queue entry',exact:true}).count(),0);await drawer.getByRole('button',{name:'Edit',exact:true}).waitFor();
+  await drawer.getByRole('button',{name:'Import result',exact:true}).click();const importer=page.getByRole('dialog',{name:'Import classification result',exact:true});await importer.getByLabel('Classification result',{exact:true}).waitFor();
+  await importer.getByRole('button',{name:'Import classification result',exact:true}).click();await importer.waitFor({state:'hidden'});
+  assert.equal(data.inspirations[0].status,'Classified');assert.equal(data.ads[0].format_name,'Recovered classification');
+  await page.keyboard.press('Escape');await views.getByRole('button',{name:'Table',exact:true}).click();
+  await page.getByRole('button',{name:'Open inspiration INS-STALE',exact:true}).click();await page.getByRole('dialog',{name:'INS-STALE',exact:true}).getByRole('button',{name:'Recover queue entry',exact:true}).click();
+  stale.attempts=5;control.expectedRecoveryRejections=1;await dialog.getByRole('button',{name:'Recover library record',exact:true}).click();await dialog.getByRole('alert').filter({hasText:'Queue changed'}).waitFor();assert.equal(data.inspirations.length,1);
+  await dialog.getByRole('button',{name:'Cancel',exact:true}).click();await page.getByRole('dialog',{name:'INS-STALE',exact:true}).getByRole('button',{name:'Recover queue entry',exact:true}).click();
+  await dialog.getByRole('button',{name:'Recover library record',exact:true}).click();await dialog.waitFor({state:'hidden'});assert.equal(data.inspirations.length,2);await page.keyboard.press('Escape');
+  await page.getByRole('button',{name:'Open inspiration INS-ACTIVE',exact:true}).click();await page.getByRole('dialog',{name:'INS-ACTIVE',exact:true}).getByRole('button',{name:'Recover queue entry',exact:true}).click();
+  await dialog.getByRole('alert').filter({hasText:'Active jobs must finish first'}).waitFor();assert.equal(await dialog.getByRole('button',{name:'Recover library record',exact:true}).isDisabled(),true);await page.keyboard.press('Escape');await page.keyboard.press('Escape');
+  data.inspiration_queue=data.inspiration_queue.filter((row)=>row!==active);emit('inspiration_queue','DELETE',{id:active.id});await page.getByRole('button',{name:'Open inspiration INS-ACTIVE',exact:true}).waitFor({state:'hidden'});
+  assert.equal(control.clickupCalls.length,0);assert.equal(new URL(page.url()).pathname,'/');
+  results.push('Queue-only recovery: Queue inspection, confirmation/cancel, preserved ID/history/results/creatives, QA-blocked processing, lost-ack same-request replay, audit drawer, explicit result import, stale queue conflict/reopen, active-job denial, queue deletion refresh and 320/390/768/1440px dialog bounds; no external calls');
+};

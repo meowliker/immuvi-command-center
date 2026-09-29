@@ -1,8 +1,16 @@
 # Immuvi Command Center Next.js Migration Plan
 
+See [Next.js Migration Progress](next-migration-progress.md) for the current
+13-milestone checklist and extracted React module structure. The phases below
+record the original migration plan and earlier implementation checkpoints.
+
 This branch (`qa`) starts the Next.js migration without replacing production.
-The current single-file dashboard remains the behavioral baseline at
-`/immuvi-command-center.html`.
+The original single-file dashboard remains the source-level behavioral baseline.
+As of milestone 12, its three Next.js QA URLs redirect to `/` without executing
+the legacy runtime. Legacy proxy, callback and worker-installer paths are disabled
+in Next.js QA; production HTML/serverless files are unchanged. See
+[QA release gate](qa-release-gate.md). The compatibility-shell details below are
+historical, not the current QA runtime or deployment policy.
 
 ## Safety Rules
 

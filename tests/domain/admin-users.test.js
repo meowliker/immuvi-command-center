@@ -31,6 +31,7 @@ test('normalizeAdminUser converts profiles_with_products rows into UI rows', () 
       productIds: ['immuvi'],
       createdAt: '2026-08-31T10:00:00Z',
       lastLoginAt: '',
+      accessRevision: '',
     },
   );
 });

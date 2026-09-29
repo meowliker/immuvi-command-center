@@ -1,0 +1,66 @@
+const assert = require('node:assert/strict');
+module.exports = async function testPulsePeriod({ page, data, emit, tab, artifactDir, results }) {
+  await page.clock.setFixedTime(new Date(2026, 8, 16, 12));
+  await tab(page, 'Action Plan');
+  const trigger = page.getByRole('button', { name: 'Pulse date range', exact: true });
+  const menu = page.getByRole('group', { name: 'Pulse date options', exact: true });
+  const tableDate = page.getByRole('button', { name: 'Action Plan date range', exact: true });
+  await page.getByLabel('Select QA creative', { exact: true }).check();
+  await page.getByLabel('Search Action Plan', { exact: true }).fill('QA');
+  await trigger.focus(); await page.keyboard.press('Enter'); await menu.waitFor();
+  assert.equal(await page.getByRole('dialog').count(), 0);
+  assert.deepEqual(await menu.locator('[data-pulse-preset]').allTextContents(), ['Today', 'Yesterday', 'This Week', 'Last 7d', 'Last 14d', 'Last 30d', 'This month', 'Last month', 'All time']);
+  await menu.getByRole('button', { name: 'Apply date range', exact: true }).click();
+  await menu.getByRole('alert').waitFor(); assert.equal(await tableDate.getAttribute('data-preset'), 'all');
+  await menu.getByLabel('Start date', { exact: true }).fill('2026-09-15');
+  await menu.getByLabel('End date', { exact: true }).fill('2026-09-16');
+  emit('ads', 'UPDATE', data.ads[0]); await page.waitForTimeout(350);
+  assert.equal(await menu.getByLabel('Start date', { exact: true }).inputValue(), '2026-09-15');
+  await page.keyboard.press('Escape'); await menu.waitFor({ state: 'detached' });
+  assert.equal(await trigger.evaluate((el) => el === document.activeElement), true);
+  await trigger.click(); assert.equal(await menu.getByLabel('Start date', { exact: true }).inputValue(), '');
+  await menu.getByLabel('Start date', { exact: true }).fill('2026-09-15');
+  await menu.getByLabel('End date', { exact: true }).fill('2026-09-16');
+  await menu.getByRole('button', { name: 'Apply date range', exact: true }).click();
+  await menu.waitFor({ state: 'detached' }); assert.equal(await tableDate.getAttribute('data-preset'), 'custom');
+  assert.ok((await trigger.innerText()).includes('2026-09-15 to 2026-09-16'));
+  for (const [preset, label] of [['today', 'Today'], ['yesterday', 'Yesterday'], ['week', 'This Week'], ['7d', 'Last 7d'], ['14d', 'Last 14d'], ['30d', 'Last 30d'], ['month', 'This month'], ['lastmonth', 'Last month']]) {
+    await trigger.click(); await menu.getByRole('button', { name: label, exact: true }).click();
+    assert.equal(await tableDate.getAttribute('data-preset'), preset); assert.equal(await trigger.getAttribute('data-active'), 'true');
+    assert.equal(await page.getByLabel('Search Action Plan', { exact: true }).inputValue(), 'QA');
+  }
+  await trigger.click(); assert.equal(await menu.getByLabel('Start date', { exact: true }).inputValue(), '2026-08-01');
+  assert.equal(await menu.getByLabel('End date', { exact: true }).inputValue(), '2026-08-31');
+  await menu.getByRole('button', { name: 'Reset pulse date range', exact: true }).click();
+  assert.equal(await tableDate.getAttribute('data-preset'), 'all');
+  assert.equal(await page.getByLabel('Select QA creative', { exact: true }).isChecked(), true);
+  assert.equal(await page.getByLabel('Search Action Plan', { exact: true }).inputValue(), 'QA');
+  for (const width of [1440, 768, 390, 320]) {
+    await page.setViewportSize({ width, height: 844 }); await trigger.click(); await menu.waitFor(); await page.waitForTimeout(100);
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, `Page overflow ${width}`);
+    assert.equal(await menu.evaluate((el) => { const r = el.getBoundingClientRect(); return r.left >= 0 && r.right <= innerWidth && r.top >= 0 && r.bottom <= innerHeight; }), true, `Menu bounds ${width}`);
+    assert.equal(await menu.locator('input').evaluateAll((inputs) => inputs.every((el) => el.getBoundingClientRect().right <= el.parentElement.getBoundingClientRect().right + 1)), true, `Input overflow ${width}`);
+    await page.screenshot({ path: `${artifactDir}/pulse-period-${width}.png` });
+    await menu.getByRole('button', { name: 'Cancel date range', exact: true }).click();
+  }
+  await page.setViewportSize({ width: 768, height: 320 }); await trigger.click(); await menu.waitFor();
+  await menu.getByRole('button', { name: 'Apply date range', exact: true }).scrollIntoViewIfNeeded();
+  await menu.getByRole('button', { name: 'Apply date range', exact: true }).click(); await menu.getByRole('alert').waitFor();
+  assert.equal(await menu.evaluate((el) => { const r = el.getBoundingClientRect(); return r.top >= 0 && r.bottom <= innerHeight; }), true);
+  await page.screenshot({ path: `${artifactDir}/pulse-period-short.png` });
+  await menu.getByRole('button', { name: 'Cancel date range', exact: true }).click();
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await trigger.click(); await menu.getByLabel('Start date', { exact: true }).fill('2026-09-01');
+  await tableDate.click(); await menu.waitFor({ state: 'detached' });
+  await page.keyboard.press('Escape');
+  await trigger.click(); assert.equal(await menu.getByLabel('Start date', { exact: true }).inputValue(), '');
+  await menu.getByRole('button', { name: 'Apply date range', exact: true }).focus(); await page.keyboard.press('Tab');
+  await menu.waitFor({ state: 'detached' });
+  await trigger.click(); await menu.getByRole('button', { name: 'Today', exact: true }).click();
+  await trigger.click(); await menu.getByLabel('Start date', { exact: true }).fill('2026-01-01');
+  await page.locator('main > section').first().locator('select').selectOption('qa-second');
+  await menu.waitFor({ state: 'detached' }); await trigger.click();
+  assert.equal(await menu.getByLabel('Start date', { exact: true }).inputValue(), '');
+  await page.keyboard.press('Escape'); assert.equal(new URL(page.url()).pathname, '/');
+  results.push('Pulse period: legacy eight-preset popover, inline validated dates, local month boundaries, filter/selection preservation, draft retention/cancel, keyboard focus/outside/facet dismissal, short-height scrolling, product reset and 320/390/768/1440px layouts; no writes');
+};

@@ -1,0 +1,61 @@
+const assert = require('node:assert/strict');
+const { randomUUID } = require('node:crypto');
+module.exports = async function ({ page, data, emit, control, requests, tab, artifactDir, results }) {
+  const busy = { worker_id: 'qa-busy', hostname: 'QA host', enabled: true, status: 'busy', current_job_id: randomUUID(), last_heartbeat: new Date().toISOString(), control_revision: randomUUID(), capabilities: { codex: true, worker_contract: 'fixture-contract' } };
+  const stale = { ...busy, worker_id: 'qa-stale', status: 'offline', current_job_id: null, last_heartbeat: '2020-01-01T00:00:00Z', control_revision: randomUUID() };
+  data.worker_registry.push(busy, stale, { ...busy, worker_id: 'qa-paused', enabled: false, control_revision: randomUUID() });
+  await tab(page, 'Admin');
+  const pool = page.getByRole('region', { name: 'Worker pool', exact: true });
+  const dialog = () => page.getByRole('dialog', { name: 'Pause worker', exact: true });
+  await pool.getByRole('button', { name: 'Pause qa-busy', exact: true }).click();
+  await dialog().getByRole('button', { name: 'Cancel', exact: true }).click();
+  assert.equal(control.workerCalls?.length || 0, 0);
+  assert.equal(await pool.getByRole('button', { name: 'Resume', exact: true }).isDisabled(), true);
+  await pool.getByRole('button', { name: 'Pause qa-busy', exact: true }).click();
+  busy.last_heartbeat = new Date(Date.now() + 1000).toISOString(); emit('worker_registry', 'UPDATE', busy);
+  for (const width of [320, 390, 768, 1440]) {
+    await page.setViewportSize({ width, height: 900 });
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, `Worker dialog overflow at ${width}`);
+    if (width === 320 || width === 1440) await page.screenshot({ path: `${artifactDir}/worker-pause-${width}.png`, fullPage: true });
+  }
+  control.loseWorkerAck = true;
+  await dialog().getByRole('button', { name: 'Confirm pause', exact: true }).click();
+  await pool.getByRole('alert').filter({ hasText: 'could not be verified' }).waitFor();
+  const first = structuredClone(control.workerCalls[0]);
+  assert.equal(busy.enabled, false); assert.equal(busy.status, 'busy'); assert.ok(busy.current_job_id);
+  await dialog().getByRole('button', { name: 'Close worker pause', exact: true }).click();
+  assert.equal(await pool.getByRole('button', { name: 'Pause qa-stale', exact: true }).isDisabled(), true);
+  data.worker_registry = data.worker_registry.filter((row) => row.worker_id !== busy.worker_id);
+  await page.reload(); await tab(page, 'Inspiration');
+  await page.getByRole('button',{name:'Queue and worker health',exact:true}).click();
+  await pool.getByRole('button', { name: 'Recover worker pause', exact: true }).click();
+  await pool.getByRole('status').filter({ hasText: 'Pause request saved for qa-busy' }).waitFor();
+  assert.deepEqual(control.workerCalls.at(-1), first); assert.equal(control.workerReceipts.size, 1);
+  await pool.getByRole('button', { name: 'Pause qa-stale', exact: true }).click();
+  stale.control_revision = randomUUID(); control.expectedWorkerErrors = 1;
+  await dialog().getByRole('button', { name: 'Confirm pause', exact: true }).click();
+  await pool.getByRole('alert').filter({ hasText: 'Worker control changed' }).waitFor();
+  assert.equal(stale.enabled, true); assert.equal(await pool.getByRole('button', { name: 'Recover worker pause' }).count(), 0);
+  await dialog().getByRole('button', { name: 'Cancel', exact: true }).click();
+  await pool.getByRole('button', { name: 'Refresh worker pool' }).click();
+  control.failWorkersRead = true; control.expectedWorkerErrors = 1;
+  await pool.getByRole('button', { name: 'Refresh worker pool' }).click();
+  await pool.getByRole('alert').filter({ hasText: 'Worker read unavailable' }).waitFor();
+  assert.equal(await pool.getByRole('button', { name: 'Pause qa-stale', exact: true }).isDisabled(), true);
+  control.failWorkersRead = false;
+  await pool.getByRole('button', { name: 'Refresh worker pool' }).click();
+  await pool.getByRole('button', { name: 'Pause qa-stale', exact: true }).click();
+  await dialog().getByRole('button', { name: 'Confirm pause', exact: true }).click();
+  await pool.getByRole('status').filter({ hasText: 'Pause request saved for qa-stale' }).waitFor();
+  assert.equal(stale.enabled, false); assert.equal(stale.status, 'offline');
+  assert.equal(control.workerReceipts.size, 2);
+  await pool.getByRole('article', { name: 'Worker qa-stale', exact: true }).getByRole('button', { name: 'Resume', exact: true }).waitFor();
+  for (const width of [320, 390, 768, 1440]) {
+    await page.setViewportSize({ width, height: 900 });
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, `Worker pool overflow at ${width}`);
+    if (width === 320 || width === 1440) await page.screenshot({ path: `${artifactDir}/worker-pool-${width}.png`, fullPage: true });
+  }
+  assert.equal(requests.some((item) => item.table === 'worker_registry' && item.method !== 'GET'), false);
+  assert.equal(new URL(page.url()).pathname, '/');
+  results.push('Worker controls: no-write cancel, blocked resume, in-flight preservation, heartbeat tolerance, exact lost-ack/deleted-worker recovery from Admin to Inspiration across reload, stale rejection, failed-read retention/retry and responsive single-page controls');
+};

@@ -1,0 +1,43 @@
+const assert = require('node:assert/strict');
+module.exports = async function ({ page, data, control, tab, artifactDir, results }) {
+  data.inspiration_queue = [];
+  data.ads.push({ ...data.ads[0], id: 'qa-stale-browser', format_name: 'Stale imported creative', clickup_task_id: 'old-task', ad_origin: 'ClickUp', meta: { _clickupListId: 'old-list' } });
+  await tab(page, 'COMMAND HQ');
+  const open = () => page.getByRole('button', { name: 'Clean stale', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'Clean stale ads', exact: true });
+  const preview = () => dialog.getByRole('button', { name: 'Preview stale ads', exact: true }).click();
+  const remove = dialog.getByRole('button', { name: 'Remove stale creatives', exact: true });
+  await open(); control.cleanupFailure = true; control.expectedCleanupRejections = 1;
+  await preview(); await dialog.getByRole('alert').filter({ hasText: 'nonempty' }).waitFor(); assert.equal(await remove.isDisabled(), true);
+  control.cleanupFailure = false;
+  await preview(); await dialog.getByText('Stale imported creative', { exact: true }).waitFor();
+  assert.equal(await remove.isDisabled(), true);
+  await dialog.getByLabel('Type product name').fill('wrong'); assert.equal(await remove.isDisabled(), true);
+  for (const width of [320,390,768,1440]) {
+    await page.setViewportSize({ width, height: 900 });
+    assert.equal(await dialog.evaluate((el) => el.scrollWidth <= el.clientWidth), true);
+    const box = await dialog.boundingBox(); assert.ok(box.x >= 0 && box.x + box.width <= width);
+    if ([320,1440].includes(width)) await page.screenshot({ path: `${artifactDir}/stale-cleanup-${width}.png`, fullPage: true });
+  }
+  await dialog.getByRole('button', { name: 'Cancel', exact: true }).click(); assert.equal(control.cleanupCommits || 0, 0);
+  await open(); await dialog.getByLabel('Type product name').fill('QA Fixture');
+  data.manual_actions[0].payload.notes = 'A concurrent local change'; control.expectedCleanupRejections = 1;
+  await remove.click(); await dialog.getByRole('alert').filter({ hasText: 'changed since preview' }).waitFor();
+  assert.equal(control.cleanupCommits || 0, 0);
+  await preview(); await dialog.getByLabel('Type product name').fill('QA Fixture');
+  control.loseCleanupAck = true;
+  await remove.click(); await dialog.getByRole('alert').filter({ hasText: 'could not be verified' }).waitFor();
+  const request = control.cleanupCalls.at(-1), reads = control.cleanupRemoteReads;
+  assert.equal(control.cleanupCommits, 1);
+  const stored = await page.evaluate(() => Object.values(sessionStorage).join(' ')); assert.equal(stored.includes('synthetic-clickup-key'), false);
+  await page.reload(); await tab(page, 'COMMAND HQ');
+  await page.getByRole('button', { name: 'Recover stale-ad cleanup', exact: true }).click();
+  control.cleanupFailure = true;
+  await dialog.getByRole('button', { name: 'Recover cleanup', exact: true }).click();
+  await dialog.getByRole('status').filter({ hasText: 'Removed 1 stale creatives' }).waitFor();
+  assert.deepEqual(control.cleanupCalls.at(-1), request); assert.equal(control.cleanupRemoteReads, reads); assert.equal(control.cleanupCommits, 1);
+  assert.equal(data.deleted_ads.length, 1); assert.equal(data.manual_actions.length, 1); assert.equal(data.angles.length, 1); assert.equal(data.personas.length, 1);
+  assert.ok(!data.ads.find((row) => row.id === 'AD-1').deleted_at);
+  assert.equal(new URL(page.url()).pathname, '/');
+  results.push('Stale-ad cleanup: empty snapshot denial, typed confirmation/cancel, preserved references and taxonomy, stale-preview rejection, one atomic commit and exact recovery across reload without ClickUp access, 320-1440px dialogs');
+};

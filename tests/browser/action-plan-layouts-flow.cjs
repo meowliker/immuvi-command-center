@@ -1,0 +1,68 @@
+const assert = require('node:assert/strict');
+module.exports = async function testPlanLayouts({ page, data, control, emit, tab, artifactDir, results }) {
+  await page.clock.setFixedTime(new Date(2026, 8, 16, 12));
+  const dates = await page.evaluate(() => Object.fromEntries([13, 14, 15, 16, 17, 21].map((day) => [day, new Date(2026, 8, day, 12).toISOString()])));
+  const ad = data.ads[0], action = data.manual_actions[0];
+  ad.status = 'Testing'; ad.created_at = dates[14]; ad.last_status_change_at = Date.parse(dates[15]);
+  const longStatus = 'Custom review requiring a detailed creative compliance check';
+  for (const [index, status, created, changed] of [[2, longStatus, 13, 14], [3, 'Winner', 16, 16], [4, 'Live', 21, 17]]) {
+    data.ads.push({ ...structuredClone(ad), id: `LAYOUT-AD-${index}`, format_name: `Layout task ${index}`, status,
+      created_at: dates[created], last_status_change_at: Date.parse(dates[changed]) });
+    data.manual_actions.push({ ...structuredClone(action), id: `LAYOUT-ACTION-${index}`, payload: { adId: `LAYOUT-AD-${index}`, title: `Layout task ${index}` } });
+  }
+  control.pipelineStatuses = [{ status: 'Winner', orderindex: 2 }, { status: 'Testing', orderindex: 1 }, { status: 'Empty stage', orderindex: 3 }];
+  await tab(page, 'Action Plan');
+  await page.locator('[data-plan-row="LAYOUT-ACTION-4"]').waitFor();
+  await page.getByRole('button', { name: 'Pipeline view', exact: true }).click();
+  const pipeline = page.getByRole('region', { name: 'Pipeline columns', exact: true });
+  await page.getByText('Enter a ClickUp key in the QA connection controls. Local task statuses are shown.', { exact: true }).waitFor();
+  assert.equal(await page.locator('[data-pipeline-task]').count(), 4);
+  await page.evaluate(() => sessionStorage.setItem('immuvi:qa:entgcnlfsnysnwyadzzp:clickup:11111111-1111-4111-8111-111111111111', 'synthetic-clickup-key'));
+  await page.getByRole('button', { name: 'Refresh ClickUp statuses', exact: true }).click();
+  await pipeline.locator('[data-pipeline-status="empty stage"]').waitFor();
+  assert.deepEqual((await pipeline.locator('[data-pipeline-status]').evaluateAll((els) => els.map((el) => el.dataset.pipelineStatus))).slice(0, 3), ['testing', 'winner', 'empty stage']);
+  assert.equal(await pipeline.locator(`[data-pipeline-status="${longStatus.toLowerCase()}"] [data-pipeline-task]`).count(), 1);
+  await page.getByLabel('Select Layout task 3', { exact: true }).check();
+  await page.getByLabel('Search Action Plan').fill('QA creative');
+  await page.getByText('1 hidden selections excluded', { exact: true }).waitFor();
+  assert.equal(await page.locator('[data-pipeline-task]').count(), 1);
+  await page.getByRole('button', { name: 'Open QA creative', exact: true }).click();
+  await page.getByRole('button', { name: 'Close task detail', exact: true }).click();
+  assert.equal(await page.getByRole('button', { name: 'Table view', exact: true }).getAttribute('aria-pressed'), 'true');
+  await page.getByRole('button', { name: 'Reset Action Plan filters', exact: true }).click();
+  await page.getByRole('button', { name: 'Week view', exact: true }).click();
+  const week = page.getByRole('region', { name: 'Action Plan week', exact: true });
+  assert.equal(await page.getByLabel('Bulk status', { exact: true }).count(), 0);
+  assert.equal(await week.locator('[data-week-start]').count(), 7);
+  assert.equal(await week.locator('[data-future="true"]').count(), 4);
+  const metrics = () => week.locator('[data-week-metric]').evaluateAll((els) => els.map((el) => Number(el.textContent)));
+  // Future status timestamps are capped at the shared clock, as in legacy.
+  assert.deepEqual(await metrics(), [1, 0, 0, 0, 1, 0, 1, 1, 1]);
+  await page.getByLabel('Search Action Plan').fill('QA creative');
+  assert.deepEqual(await metrics(), [1, 0, 0, 0, 1, 0, 0, 0, 0]);
+  await page.getByRole('button', { name: 'Reset Action Plan filters', exact: true }).click();
+  ad.status = 'Winner'; ad.last_status_change_at = Date.parse(dates[16]);
+  emit('ads', 'UPDATE', ad);
+  await page.waitForFunction(() => [...document.querySelectorAll('[data-week-metric="decided"]')].at(-1)?.textContent === '2');
+  assert.deepEqual(await metrics(), [1, 0, 0, 0, 0, 0, 1, 1, 2]);
+  await page.screenshot({ path: `${artifactDir}/action-plan-week-desktop.png`, fullPage: true });
+  await page.setViewportSize({ width: 390, height: 844 });
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+  await page.screenshot({ path: `${artifactDir}/action-plan-week-mobile.png`, fullPage: true });
+  await page.getByRole('button', { name: 'Pipeline view', exact: true }).click();
+  await pipeline.locator('[data-pipeline-status="empty stage"]').waitFor();
+  assert.equal(await page.getByLabel('Select Layout task 3', { exact: true }).isChecked(), true);
+  assert.equal(await pipeline.locator('[data-pipeline-status="winner"] [data-pipeline-task]').count(), 2);
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+  await page.screenshot({ path: `${artifactDir}/action-plan-pipeline-mobile.png`, fullPage: true });
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.screenshot({ path: `${artifactDir}/action-plan-pipeline-desktop.png`, fullPage: true });
+  await page.locator('main > section').first().locator('select').selectOption('qa-second');
+  await page.getByRole('button', { name: 'Pipeline view', exact: true }).click();
+  await page.getByText('No Action Plan tasks match these filters.', { exact: true }).waitFor();
+  assert.equal(await page.locator('[data-pipeline-status="empty stage"]').count(), 0);
+  assert.equal(await page.locator('[data-pipeline-task]').count(), 0);
+  assert.equal(control.clickupCalls.every((call) => call.operation === 'plan-statuses'), true);
+  assert.equal(new URL(page.url()).pathname, '/');
+  results.push('Action Plan pipeline/status order/fallback/custom statuses, filters, details, retained selection, week metrics/future days, realtime updates, product isolation and responsive layouts');
+};

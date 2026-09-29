@@ -11,6 +11,7 @@ import { deliverPrivateBrief } from '../lib/services/private-inspiration.js';
 import { createPrivateJobPool } from '../lib/services/private-job-pool.js';
 
 import { validateSharedWorkerConfig, assertInspirationJob } from '../lib/services/shared-worker.js';
+import { createReleaseUpdater, readReleaseState, atomicJson, fetchApprovedRelease, stageWorkerRelease, managedUpdatesEnabled, QA_WORKER_PROTOCOL } from '../lib/services/shared-worker-updates.js';
 
 process.umask(0o077);
 const path = process.argv[2];
@@ -20,6 +21,14 @@ if (permissions.uid !== process.getuid() || (permissions.mode & 0o077)) throw ne
 const input = JSON.parse(await readFile(path, 'utf8'));
 const shared = input.scope === 'shared';
 const config = shared ? validateSharedWorkerConfig(input) : validatePrivateWorkerConfig(input);
+const managed = shared && process.env.IMMUVI_MANAGED_QA_WORKER === '1' && !!process.send;
+const update = managed ? createReleaseUpdater({
+  readState:()=>readReleaseState(dirname(path)),
+  saveState:value=>atomicJson(join(dirname(path),'release-state.json'),value),
+  fetchRelease:async()=>await managedUpdatesEnabled(dirname(path)) ? fetchApprovedRelease() : null,
+  stageRelease:release=>stageWorkerRelease({release,directory:dirname(path),bootstrapRoot:process.env.IMMUVI_QA_BOOTSTRAP_ROOT,pythonBin:config.pythonBin,signal:abort.signal}),
+  onError:message=>console.error(message),
+}) : null;
 if(shared && (process.env.HOME !== config.runtimeHome || process.env.CODEX_HOME !== join(config.runtimeHome,'.codex'))) throw new Error('Shared worker requires isolated HOME and Codex configuration.');
 const capacity = shared ? 1 : 2;
 process.env.IMMUVI_CODEX_BIN = config.codexBin;
@@ -110,8 +119,24 @@ async function processInspiration(job) {
   }
 }
 try {
+  if (managed) {
+    await new Promise((resolve,reject)=>{
+      const activated=message=>{
+        if (message?.type==='qa-worker-activate' && message.protocol===QA_WORKER_PROTOCOL) {
+          process.off('message',activated);resolve();
+        }
+      };
+      process.on('message',activated);
+      abort.signal.addEventListener('abort',()=>reject(new Error('Worker activation interrupted.')),{once:true});
+      process.send({type:'qa-worker-ready',protocol:QA_WORKER_PROTOCOL,classifier});
+    });
+  }
   while (!stopped) {
     try {
+      if (update && !pool.size && !current && await update()) {
+        console.log('Approved QA release staged; restarting while idle.');
+        process.exitCode=75;stopped=true;break;
+      }
       if (!enabled) { await sleep(3000); continue; }
       if(shared) {try {if((await readFile(join(dirname(path),'paused'),'utf8')).trim()!=='0'){await sleep(2000);continue;}}catch{await sleep(2000);continue;}}
       const job = classifier && pool.size<capacity ? await rpc('qa_private_inspiration_claim') : null;
@@ -140,4 +165,7 @@ try {
       } finally { current = null; await rm(directory, { recursive: true, force: true }); }
     } catch { console.error('Private queue unavailable; retrying in 15 seconds.'); await sleep(15000); }
   }
-} finally { await pool.drain(); clearInterval(timer); await heartbeat().catch(() => {}); }
+} finally {
+  await pool.drain();clearInterval(timer);await heartbeat().catch(()=>{});
+  if (managed && process.connected) process.disconnect();
+}

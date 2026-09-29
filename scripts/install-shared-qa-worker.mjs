@@ -10,6 +10,7 @@ import { Writable } from 'node:stream';
 import { QA_SUPABASE_URL, QA_SUPABASE_ANON_KEY } from '../lib/qa-supabase-env.js';
 import { privateWorkerHeaders } from '../lib/services/private-worker.js';
 import { validateSharedWorkerConfig } from '../lib/services/shared-worker.js';
+import { atomicJson, managedUpdatesEnabled, readReleaseState } from '../lib/services/shared-worker-updates.js';
 
 process.umask(0o077);
 if(process.platform!=='darwin')throw new Error('macOS required.');
@@ -24,6 +25,14 @@ if(mode==='--status') {
  try {console.log(launch(['print',`${domain}/${label}`]).split('\n').filter(l=>/^\s*(state|pid|runs|last exit code) =/.test(l)).join('\n'));}
  catch {console.log('Shared QA LaunchAgent is not loaded.');}
  try {await stat(configPath);console.log('Device paired (credentials not displayed).');}catch{console.log('Waiting for QA administrator enrollment.');}
+ const state=await readReleaseState(directory);
+ console.log(JSON.stringify({automaticUpdates:await managedUpdatesEnabled(directory),release:state.current||'bootstrap',pendingActivation:state.pending}));
+ process.exit(0);
+}
+if(mode==='--enable-updates' || mode==='--disable-updates') {
+ validateSharedWorkerConfig(JSON.parse(await readFile(configPath,'utf8')));
+ await atomicJson(join(directory,'updates.json'),{schema:1,enabled:mode==='--enable-updates'});
+ console.log(mode==='--enable-updates'?'Approved QA updates enabled. First activation requires an idle service restart.':'Automatic update discovery disabled; the installed release is retained.');
  process.exit(0);
 }
 if(mode==='--stop'){launch(['bootout',`${domain}/${label}`]);console.log('Only shared QA service stopped.');process.exit(0);}
@@ -42,7 +51,7 @@ if(mode==='--pause' || mode==='--resume') {
  }catch(error){if(error.code!=='ENOENT')throw error;}
  console.log(mode==='--pause'?'Shared QA claims paused; active jobs finish.':'Shared QA resumed.');process.exit(0);
 }
-if(!['--prepare','--enroll'].includes(mode))throw new Error('Use --prepare, --enroll, --status, --start, --stop, --restart, --pause or --resume.');
+if(!['--prepare','--enroll'].includes(mode))throw new Error('Use --prepare, --enroll, --status, --start, --stop, --restart, --pause, --resume, --enable-updates or --disable-updates.');
 for(const path of [directory,runtimeHome,join(runtimeHome,'.codex')]) {await mkdir(path,{recursive:true,mode:0o700});await chmod(path,0o700);}
 const codexBin='/Applications/ChatGPT.app/Contents/Resources/codex';
 if(mode==='--prepare') {

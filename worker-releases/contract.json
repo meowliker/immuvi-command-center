@@ -1,0 +1,6 @@
+{
+  "schema": 1,
+  "environment": "qa",
+  "protocol": 1,
+  "entry": "scripts/private-worker.mjs"
+}

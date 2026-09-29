@@ -803,7 +803,7 @@ The dashboard sees this within 1–2 s via its realtime subscription on `public.
 Skip this entire step for `no_brief=true`. Successful classification-only items
 must not create or update a document.
 
-Uses the `doc_id` from `products.config->>'doc_id'` (pulled in Step 1). **IMPORTANT:** always list existing pages first. If a page already starts with `[INS_ID]` (same ins_id, regardless of old/stale title), UPDATE it instead of creating a duplicate.
+Uses the `doc_id` from `products.config->>'doc_id'` (pulled in Step 1). **IMPORTANT:** an ID or page title alone is not proof of identity. Before updating any page, read its content and verify its Reference/Source URL matches this job's source URL and the saved inspiration belongs to this product. If the source differs or cannot be verified, preserve that page and create a separate page for the current source. Never overwrite an older creative's brief because its number matches.
 
 ### 6-pre — Resolve library doc (discover → create) + heal product config
 
@@ -877,7 +877,7 @@ After this, proceed to 6a with the resolved `doc_id` + `master_tracker_page_id`.
 
 ### 6a — List existing pages + decide create vs update
 
-Use `clickup_list_document_pages` MCP tool with `document_id = [DOC_ID]`. Scan returned pages for one whose `name` starts with `[INS_ID] ` or equals `[INS_ID]`. If found → capture its `id` for update. If not → create new.
+Use `clickup_list_document_pages` MCP tool with `document_id = [DOC_ID]`. Find candidate pages with an exact ID token (not a partial-number match), then read each candidate's content. Reuse a page only when its actual source URL matches the current job. Otherwise create a new page; preserve all mismatched pages and record an identity-conflict warning.
 
 ### 6b — Create OR update the inspiration page
 

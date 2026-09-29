@@ -86,6 +86,8 @@ class NoBriefTests(unittest.TestCase):
                         "INS-test", "p-test", require_next_script_format=True, no_brief=mode is True)
 
     def test_retry_shortcut_honors_saved_mode(self):
+        self.worker.sb.select.side_effect = None
+        self.worker.sb.select.return_value = [{"id": self.job["ins_id"], "url": self.job["url"]}]
         self.worker.mark_classifying = Mock()
         self.worker.mark_classified = Mock()
         self.worker.increment_completed = Mock()
@@ -96,6 +98,16 @@ class NoBriefTests(unittest.TestCase):
         self.worker.run_skill_on_job.assert_not_called()
         self.worker.mark_classified.assert_called_once_with("q-test")
         self.assertTrue(self.worker._verify_inspirations_row.call_args.kwargs["no_brief"])
+
+    def test_source_collision_blocks_before_model_or_brief_work(self):
+        self.worker.sb.select.side_effect = None
+        self.worker.sb.select.return_value = [{"id": self.job["ins_id"], "url": "https://different.example/ad"}]
+        self.worker.run_skill_on_job = Mock()
+        self.worker.mark_classifying = Mock()
+        self.worker._execute_classify_job(self.job)
+        self.worker.run_skill_on_job.assert_not_called()
+        self.worker.mark_classifying.assert_not_called()
+        self.assertEqual(self.worker.sb.update.call_args.args[2]["status"], "blocked")
 
     def test_historical_requeue_does_not_require_a_brief_for_no_brief_jobs(self):
         self.worker._last_incomplete_classified_audit_at = 0

@@ -1168,6 +1168,17 @@ class Worker:
         ins_id = job.get("ins_id")
         product_id = job.get("product_id")
         try:
+            identity = self.sb.select(
+                "inspirations",
+                "select=id,url,product_id&id=eq." + urllib.parse.quote(str(ins_id), safe="")
+                + "&product_id=eq." + urllib.parse.quote(str(product_id), safe="") + "&limit=1",
+            )
+            if not identity or identity[0].get("url") != job.get("url"):
+                self.sb.update("inspiration_queue", f"id=eq.{queue_id}", {
+                    "status": "blocked", "claimed_by": None, "claimed_at": None,
+                    "error_message": "Inspiration source identity changed; review before retrying.",
+                })
+                return
             self.mark_classifying(queue_id)
             # Idempotency: skip the 10-min skill run if the inspirations row
             # is already complete from a prior attempt.

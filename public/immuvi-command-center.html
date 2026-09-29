@@ -13569,109 +13569,41 @@ const DB = {
   },
 
   async listInspirations(productId) {
-    if (!SB) return [];
-    const { data, error } = await _withCloudTimeout(SB.from('inspirations').select('*').eq('product_id', productId).order('created_at'), 'Inspirations');
-    if (error) throw error;
-    // Merge the jsonb `data` blob with top-level columns so all fields
-    // (sourceUrl, angle, persona, hookType, creativeStructure, _clickupDocPageUrl,
-    // importTags, etc.) are present — restoring full parity with localStorage.
-    return (data || []).filter(function (r) {
-      return _inspirationIdBelongsToProduct(productId, r && r.id);
-    }).map(function (r) {
-      const blob = r.data || {};
-      return Object.assign({}, blob, {
-        id: r.id,
-        product_id: r.product_id,
-        url: r.url || blob.url,
-        sourceUrl: blob.sourceUrl || r.url,
-        title: r.title || blob.title || '',
-        platform: r.platform || blob.platform || '',
-        addedBy: r.added_by || blob.addedBy || '',
-        status: r.status || blob.status || 'saved',
-        adType: blob.adType || '',
-        mediaKind: blob.mediaKind || blob.media_kind || ''
-      });
-    });
+    if (!SB) throw new Error('Cloud is unavailable');
+    var rows = [];
+    for (var offset = 0;; offset += 500) {
+      var page = await _withCloudTimeout(SB.from('inspirations').select('*').eq('product_id', productId).order('id').range(offset, offset + 499), 'Inspirations');
+      if (page.error) throw page.error;
+      rows = rows.concat(page.data || []);
+      if (!page.data || page.data.length < 500) break;
+    }
+    return rows.map(_inspirationFromRow);
   },
 
   async saveInspirations(productId, inspirations) {
-    if (!SB) return;
-    if (!Array.isArray(inspirations) || !inspirations.length) return;
-    inspirations = inspirations.filter(function (i) {
-      var ok = _inspirationIdBelongsToProduct(productId, i && i.id);
-      if (!ok) console.warn('[SB] blocked cross-product inspiration save', i && i.id, 'into', productId);
-      return ok;
+    if (!SB) throw new Error('Cloud is unavailable');
+    var changed = (inspirations || []).filter(function(i) {
+      return i && i.product_id === productId && i._baseUpdatedAt && _inspirationSignature(i) !== i._persistedSignature;
     });
-    if (!inspirations.length) return;
-
-    // Keys the classify-inspiration skill writes server-side after classification.
-    // The frontend's in-memory copy may be stale (e.g. realtime event missed, or
-    // the skill patched these fields between our last fetch and this save). We
-    // re-read the current server values and let the SERVER WIN for these keys
-    // so we never clobber a just-created brief URL with an empty string.
-    const SERVER_OWNED_KEYS = [
-      '_clickupDocPageUrl',
-      '_clickupDocId',
-      '_inspoDocCreated'
-    ];
-
-    // Pre-read current server state for exactly the rows we're about to upsert
-    // so we can preserve server-owned keys. One round-trip, no transaction
-    // needed — race window shrinks from seconds (realtime poll cadence) to
-    // milliseconds (read-then-write).
-    const ids = inspirations.map(function (i) { return i.id; }).filter(Boolean);
-    let serverDataById = {};
-    if (ids.length) {
-      const preRead = await SB.from('inspirations')
-        .select('id, data, added_by')
-        .in('id', ids)
-        .eq('product_id', productId);
-      if (preRead.error) {
-        console.warn('[SB] saveInspirations pre-read failed, falling back to blind upsert:', preRead.error);
-      } else {
-        (preRead.data || []).forEach(function (r) {
-          serverDataById[r.id] = Object.assign({}, r.data || {}, { _serverAddedBy: r.added_by || '' });
-        });
-      }
-    }
-
-    // Strip only truly transient keys before storing. Everything else (angle, persona,
-    // hookType, _clickupDocPageUrl, body_copy, …) goes into the `data` jsonb blob.
-    const rows = inspirations.map(function (i) {
-      const blob = {};
-      const addedByTouched = !!i._addedByTouched;
-      Object.keys(i).forEach(function (k) {
-        // Skip undefined and the mirrored top-level columns
-        if (i[k] === undefined) return;
-        if (k === '_addedByTouched') return;
-        blob[k] = i[k];
-      });
-      // Merge: server wins for server-owned keys. If the server has a value and
-      // our in-memory copy is empty/missing, take the server's value.
-      const serverData = serverDataById[i.id] || {};
-      SERVER_OWNED_KEYS.forEach(function (k) {
-        var serverVal = serverData[k];
-        var localVal  = blob[k];
-        // Take server value if it exists and local value is empty/missing.
-        if (serverVal !== undefined && serverVal !== null && serverVal !== '' &&
-            (localVal === undefined || localVal === null || localVal === '')) {
-          blob[k] = serverVal;
-        }
-      });
-      if (!blob.addedBy && serverData._serverAddedBy && !addedByTouched) blob.addedBy = serverData._serverAddedBy;
-      return {
-        id: i.id,
-        product_id: productId,
-        url: i.sourceUrl || i.url || '',
-        title: i.title || i.formatName || null,
-        platform: i.platform || null,
-        added_by: blob.addedBy || null,
-        status: i.status || 'saved',
-        data: blob
-      };
+    if (!changed.length) return;
+    var rows = changed.map(function(i) {
+      var blob = JSON.parse(JSON.stringify(i));
+      delete blob._persistedSignature;
+      delete blob._addedByTouched;
+      return {id:i.id, product_id:productId, url:i.sourceUrl || i.url || '',
+        title:i.title || i.formatName || null, platform:i.platform || null,
+        added_by:i.addedBy || null, status:i.status || 'Saved', data:blob};
     });
-    const { error } = await SB.from('inspirations').upsert(rows);
-    if (error) console.error('[SB] saveInspirations', error);
+    // Reject stale snapshots and identity collisions in the database.
+    var response = await _withCloudTimeout(SB.from('inspirations').upsert(rows).select('*'), 'Save inspirations');
+    if (response.error) throw response.error;
+    (response.data || []).forEach(function(row) {
+      var saved = _inspirationFromRow(row);
+      var item = changed.find(function(i) { return i.id === row.id; });
+      if (item) { item._baseUpdatedAt = saved._baseUpdatedAt; item._persistedSignature = saved._persistedSignature; }
+      var live = INSPIRATIONS.find(function(i) { return i.id === row.id && i.product_id === productId; });
+      if (live) { live._baseUpdatedAt = saved._baseUpdatedAt; live._persistedSignature = saved._persistedSignature; }
+    });
   },
 
   // Replaces bridge POST /queue
@@ -21232,8 +21164,7 @@ async function _recApprove(recId) {
     }
 
     // Step 2 — Create an inspiration row
-    var insId = 'INS-' + String(INS_NEXT_ID).padStart(3,'0');
-    INS_NEXT_ID++;
+    var insId = '';
     var srcCreative = rec.competitor_creatives || {};
     var newIns = {
       id: insId,
@@ -21259,6 +21190,8 @@ async function _recApprove(recId) {
       _origin: 'strategist_recommendation',
       _strategistRecId: rec.id
     };
+    if (!await _persistNewInspiration(newIns, activeProductId)) return;
+    insId = newIns.id;
     INSPIRATIONS.unshift(newIns);
 
     // Step 3 — Place in matrix cell (using existing addInspoToCell or similar)
@@ -47094,6 +47027,52 @@ function addCellRecToPlan(recId, angleName, personaName) {
 // ── INSPIRATIONS ─────────────────────────────────
 var INSPIRATIONS = [];
 var INS_NEXT_ID = 1;
+var _insAddBusy = false;
+function _inspirationSignature(ins) {
+  var data = {};
+  Object.keys(ins).sort().forEach(function(k) {
+    if (k !== '_baseUpdatedAt' && k !== '_persistedSignature' && k !== '_addedByTouched') data[k] = ins[k];
+  });
+  return JSON.stringify(data);
+}
+function _inspirationFromRow(row) {
+  var ins = Object.assign({}, row.data || {}, {id:row.id, product_id:row.product_id,
+    url:row.url || '', sourceUrl:row.url || (row.data || {}).sourceUrl || '',
+    title:row.title || '', platform:row.platform || '', addedBy:row.added_by || '',
+    status:row.status || 'Saved', _baseUpdatedAt:row.updated_at});
+  ins._persistedSignature = _inspirationSignature(ins);
+  return ins;
+}
+function _inspirationCanCreate() {
+  if (!DB.ready || !activeProductId || _cloudLoadFailed || _productSwitchPending || _inspirationsProductId !== activeProductId) {
+    showInsStatus('error', 'Wait for this product to finish loading before adding inspirations.');
+    return false;
+  }
+  return true;
+}
+async function _persistNewInspiration(ins, productId) {
+  try {
+    if (!_inspirationCanCreate() || activeProductId !== productId) return false;
+    var generation = _uiProductGeneration;
+    var payload = JSON.parse(JSON.stringify(ins));
+    delete payload._persistedSignature;
+    delete payload._baseUpdatedAt;
+    payload.product_id = productId;
+    var response = await _withCloudTimeout(SB.rpc('create_inspiration', {
+      p_product_id:productId, p_request_id:crypto.randomUUID(), p_data:payload
+    }), 'Create inspiration');
+    if (response.error) throw response.error;
+    Object.assign(ins, _inspirationFromRow(response.data));
+    if (activeProductId !== productId || generation !== _uiProductGeneration) return false;
+    ++_inspirationLoadGeneration; // Discard reads started before this insert.
+    return true;
+  } catch(e) {
+    console.error('[SB] create inspiration', e);
+    showInsStatus('error', 'Could not confirm the new inspiration. Refresh to check before retrying; existing inspirations are unchanged.');
+    return false;
+  }
+}
+
 var INS_POLL_TIMER = null;
 // Legacy bridge URL kept only for backwards compatibility strings;
 // all reads/writes now go through DB (Supabase).
@@ -47152,22 +47131,21 @@ function getCurrentInspirationAddedBy() {
   return String(label || '').trim();
 }
 
-// Save: push the full INSPIRATIONS array for the active product to Supabase (debounced, fire-and-forget).
-// Captures productId AND a snapshot of INSPIRATIONS at schedule time so a product-switch
-// mid-debounce can't move rows to the wrong product.
+// Serialize revision-checked saves. Unchanged records are never written.
 var _insSaveTimer = null;
+var _insSaveChain = Promise.resolve();
 function saveInspirations() {
   if (!DB.ready || !activeProductId || _cloudLoadFailed || _inspirationsProductId !== activeProductId) return;
   if (_insSaveTimer) clearTimeout(_insSaveTimer);
   var capturedProductId = activeProductId;
-  var capturedInspos = INSPIRATIONS.slice(); // shallow snapshot; items are upserted by id
   _insSaveTimer = setTimeout(function () {
     _insSaveTimer = null;
-    // Extra guard: if the user switched products during the debounce window,
-    // only write if we're still on the same product we scheduled for.
-    if (activeProductId !== capturedProductId) return;
-    DB.saveInspirations(capturedProductId, capturedInspos).catch(function (e) {
-      console.error('[SB] saveInspirations', e);
+    _insSaveChain = _insSaveChain.catch(function() {}).then(async function() {
+      if (activeProductId !== capturedProductId || _inspirationsProductId !== capturedProductId) return;
+      await DB.saveInspirations(capturedProductId, JSON.parse(JSON.stringify(INSPIRATIONS)));
+    }).catch(function(e) {
+      console.error('[SB] inspiration save rejected', e);
+      showInsStatus('error', 'Changes were not saved because the server has newer data. Refresh before trying again.');
     });
   }, 600);
 }
@@ -47254,7 +47232,9 @@ function platformClass(platform) {
 }
 
 // Add a single URL to the queue (instant, no processing)
-function addToInsQueue() {
+async function addToInsQueue() {
+  if (_insAddBusy || !_inspirationCanCreate()) return;
+  var creationProductId = activeProductId;
   var url = document.getElementById('insUrlInput').value.trim();
   var noBrief = !!(document.getElementById('insNoBrief') || {}).checked;
   if (!url) { showInsStatus('error', 'Please paste a URL first'); return; }
@@ -47267,7 +47247,7 @@ function addToInsQueue() {
   }
 
   var ins = {
-    id: getProductInsPrefix() + '-INS-' + String(INS_NEXT_ID).padStart(3,'0'),
+    id: '',
     sourceUrl: url,
     platform: detectPlatform(url),
     noBrief: noBrief,
@@ -47300,10 +47280,11 @@ function addToInsQueue() {
     _anglePromptDone: false,
     _personaPromptDone: false
   };
-
-  INS_NEXT_ID++;
+  _insAddBusy = true;
+  try {
+    if (!await _persistNewInspiration(ins, creationProductId)) return;
+  } finally { _insAddBusy = false; }
   INSPIRATIONS.unshift(ins);
-  saveInspirations();
   renderInspirations();
   document.getElementById('insUrlInput').value = '';
   updateQueueCounter();
@@ -47317,19 +47298,20 @@ async function autoPushToBridge() {
   // Renamed behavior: push queued items to Supabase `inspiration_queue` table.
   var queued = getQueuedItems();
   if (queued.length === 0) return;
-  if (!DB.ready || !activeProductId) return;
+  if (!_inspirationCanCreate()) return;
+  var queueProductId = activeProductId;
   try {
     // Exclude items already classified (Supabase inspiration_results)
     var doneIds = new Set();
     try {
-      var existing = await DB.getResults(activeProductId);
+      var existing = await DB.getResults(queueProductId);
       (existing || []).forEach(function (r) { if (r.ins_id) doneIds.add(r.ins_id); });
     } catch (e) { console.error('[SB] getResults', e); }
 
     var toPush = queued.filter(function (i) { return !doneIds.has(i.id); });
     if (toPush.length === 0) return;
 
-    var res = await DB.enqueueInspirations(activeProductId, toPush.map(function (i) {
+    var res = await DB.enqueueInspirations(queueProductId, toPush.map(function (i) {
       return { id: i.id, url: i.sourceUrl, platform: i.platform, noBrief: i.noBrief === true };
     }));
     if (res && res.blocked) showInsStatus('error', res.error_message || 'No healthy classifier worker is online');
@@ -47984,6 +47966,7 @@ async function applyClassificationResults(results, isPolling, expectedProductId)
       return data.ins_id ? i.id === data.ins_id : !!data.source_url && i.sourceUrl === data.source_url;
     });
     if (!ins || (ins.product_id && ins.product_id !== productId)) return;
+    if (data.source_url && ins.sourceUrl && data.source_url !== ins.sourceUrl) return;
     var resultSignature = JSON.stringify(data);
     if (ins._lastImportedResult === resultSignature) return;
     // Replayed results must not reset manual taxonomy, placement, or testing status.
@@ -48792,11 +48775,13 @@ function useInspirationFormat(id) {
   if (typeof toast === 'function') toast('Marked as Approved — available in Creative Matrix', 'ok');
 }
 
-function showAddInspirationModal() {
+async function showAddInspirationModal() {
+  if (!_inspirationCanCreate()) return;
+  var creationProductId = activeProductId;
   var url = prompt('Source URL:');
   if (!url) return;
   var ins = {
-    id: 'INS-' + String(INS_NEXT_ID).padStart(3,'0'),
+    id: '',
     sourceUrl: url,
     platform: detectPlatform(url),
     brand: prompt('Brand name:') || '',
@@ -48818,7 +48803,7 @@ function showAddInspirationModal() {
     addedBy: getCurrentInspirationAddedBy(),
     classifiedAt: null
   };
-  INS_NEXT_ID++;
+  if (!await _persistNewInspiration(ins, creationProductId)) return;
   INSPIRATIONS.unshift(ins);
   saveInspirations();
   renderInspirations();
@@ -49031,7 +49016,11 @@ function getProductWinningFormats(productId) {
 window.refreshWinnersCache = refreshWinnersCache;
 
 // ── Unified import — handles both types from selected rows ───────
-function importFromPicker() {
+async function importFromPicker() {
+  if (window._insImportBusy || !_inspirationCanCreate()) return;
+  var importProductId = activeProductId;
+  window._insImportBusy = true;
+  try {
   var selectedIdxs = Array.from(document.querySelectorAll('.ins-picker-row-cb:checked'))
     .map(function(cb){ return parseInt(cb.dataset.idx); });
   if (!selectedIdxs.length) { alert('Select at least one item to import'); return; }
@@ -49041,17 +49030,21 @@ function importFromPicker() {
   var winIdxs   = selectedIdxs.filter(function(i){ return rows[i] && rows[i].type === 'win'; });
 
   var totalImported = 0;
-  if (inspoIdxs.length) totalImported += _doImportInspos(inspoIdxs, rows);
-  if (winIdxs.length)   totalImported += _doImportWins(winIdxs, rows);
+  if (inspoIdxs.length) totalImported += await _doImportInspos(inspoIdxs, rows);
+  if (activeProductId !== importProductId) return;
+  if (winIdxs.length)   totalImported += await _doImportWins(winIdxs, rows);
+  if (activeProductId !== importProductId) return;
 
   if (totalImported > 0) {
     saveInspirations();
     renderInspirations();
-    document.getElementById('insProductPickerOverlay').remove();
+    var pickerOverlay = document.getElementById('insProductPickerOverlay');
+    if (pickerOverlay) pickerOverlay.remove();
     if (typeof toast === 'function') toast(totalImported + ' item' + (totalImported>1?'s':'') + ' imported', 'ok');
   } else {
     alert('All selected items are already imported (duplicates skipped)');
   }
+  } finally { window._insImportBusy = false; }
 }
 
 function refreshPickerPreview() {
@@ -49249,14 +49242,16 @@ function selectAllPickerRows() {
 }
 
 // ── Internal: import inspo rows by index array, returns count ────
-function _doImportInspos(idxs, rows) {
+async function _doImportInspos(idxs, rows) {
+  if (!_inspirationCanCreate()) return 0;
+  var creationProductId = activeProductId;
   var imported = 0;
   var CLASSIFIED_STATUSES = ['Classified', 'Testing', 'Winner', 'Scale', 'Loser'];
-  idxs.forEach(function(idx) {
+  for (var idx of idxs) {
     var row = rows[idx];
-    if (!row || row.type !== 'inspo') return;
+    if (!row || row.type !== 'inspo') continue;
     var sourceIns = row.ins;
-    if (INSPIRATIONS.some(function(i){ return i.sourceUrl && i.sourceUrl === sourceIns.sourceUrl; })) return;
+    if (INSPIRATIONS.some(function(i){ return i.sourceUrl && i.sourceUrl === sourceIns.sourceUrl; })) continue;
     // 2026-05-19 — Import resets status + classifiedAt so the imported inspo
     // shows as fresh for THIS product. Source's verdict (Testing/Winner/Loser)
     // was for THAT product's audience — meaningless here. Classification
@@ -49265,7 +49260,7 @@ function _doImportInspos(idxs, rows) {
     // data the new status is 'Classified', not 'Saved'.
     var preservedStatus = (CLASSIFIED_STATUSES.indexOf(sourceIns.status) !== -1) ? 'Classified' : 'Saved';
     var newIns = Object.assign({}, sourceIns, {
-      id:               'INS-' + String(INS_NEXT_ID).padStart(3,'0'),
+      id: '',
       status:           preservedStatus,
       importTags:       ['Imported', 'From: ' + row.productName],
       reusedIn:         [],
@@ -49281,24 +49276,26 @@ function _doImportInspos(idxs, rows) {
       // content is identical (same creative format/concept), so reusing it
       // saves a re-classify pass and keeps the editor's link intact.
     });
-    INS_NEXT_ID++;
+    if (!await _persistNewInspiration(newIns, creationProductId)) break;
     INSPIRATIONS.unshift(newIns);
     crossProductMarkInspoImported(row.productId, sourceIns.id, activeProductId);
     imported++;
-  });
+  }
   return imported;
 }
 
 // ── Internal: import winning format rows by index array, returns count ──
-function _doImportWins(idxs, rows) {
+async function _doImportWins(idxs, rows) {
+  if (!_inspirationCanCreate()) return 0;
+  var creationProductId = activeProductId;
   var imported = 0;
-  idxs.forEach(function(idx) {
+  for (var idx of idxs) {
     var row = rows[idx];
-    if (!row || row.type !== 'win') return;
+    if (!row || row.type !== 'win') continue;
     var ad = row.ad;
-    if (INSPIRATIONS.some(function(i){ return i._sourceAdId === ad.id && i._sourceProductId === row.productId; })) return;
+    if (INSPIRATIONS.some(function(i){ return i._sourceAdId === ad.id && i._sourceProductId === row.productId; })) continue;
     var newIns = {
-      id:               'INS-' + String(INS_NEXT_ID).padStart(3,'0'),
+      id: '',
       sourceUrl:        ad.adLink || '',
       platform:         ad.platform || 'Other',
       brand:            row.productName,
@@ -49337,7 +49334,7 @@ function _doImportWins(idxs, rows) {
       _inspoDocCreated:  false
     };
     _applyImportedWinnerTaxonomy(newIns, ad, row);
-    INS_NEXT_ID++;
+    if (!await _persistNewInspiration(newIns, creationProductId)) break;
     INSPIRATIONS.unshift(newIns);
     crossProductMarkAdImported(row.productId, ad.id, activeProductId);
 
@@ -49358,7 +49355,7 @@ function _doImportWins(idxs, rows) {
     }
 
     imported++;
-  });
+  }
   return imported;
 }
 

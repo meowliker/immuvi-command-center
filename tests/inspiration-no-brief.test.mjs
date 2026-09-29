@@ -15,24 +15,26 @@ for (const file of ['immuvi-command-center.html','public/immuvi-command-center.h
     assert.ok(html.indexOf('id="insNoBrief"')>html.indexOf('id="insUrlInput"'));
     assert.ok(html.indexOf('id="insNoBrief"')<html.indexOf('id="insAddBtn"'));
   });
-  test(file+': each new inspiration captures its own checkbox value',()=>{
+  test(file+': each new inspiration captures its own checkbox value',async()=>{
     const input={value:'https://example.com/one'},box={checked:true};
     const c=vm.createContext({document:{getElementById:id=>({insUrlInput:input,insNoBrief:box})[id]},
-      INSPIRATIONS:[],INS_NEXT_ID:1,getProductInsPrefix:()=> 'Q',detectPlatform:()=> 'instagram',
+      INSPIRATIONS:[],INS_NEXT_ID:1,_insAddBusy:false,activeProductId:'Q',
+      _inspirationCanCreate:()=>true,_persistNewInspiration:async()=>true,
+      getProductInsPrefix:()=> 'Q',detectPlatform:()=> 'instagram',
       getCurrentInspirationAddedBy:()=> 'tester',saveInspirations(){},renderInspirations(){},
       updateQueueCounter(){},showInsStatus(){},autoPushToBridge(){}});
-    load(c,'function addToInsQueue()','async function autoPushToBridge()');
-    c.addToInsQueue();
-    box.checked=false;input.value='https://example.com/two';c.addToInsQueue();
+    load(c,'async function addToInsQueue()','async function autoPushToBridge()');
+    await c.addToInsQueue();
+    box.checked=false;input.value='https://example.com/two';await c.addToInsQueue();
     assert.equal(c.INSPIRATIONS[0].noBrief,false);
     assert.equal(c.INSPIRATIONS[1].noBrief,true);
-    input.value='https://example.com/one';c.addToInsQueue();
+    input.value='https://example.com/one';await c.addToInsQueue();
     assert.equal(c.INSPIRATIONS.length,2);
   });
   test(file+': auto queue and Process All retain mixed per-item modes',async()=>{
     const items=[{id:'a',sourceUrl:'https://a',noBrief:true},{id:'b',sourceUrl:'https://b',noBrief:false},{id:'legacy',sourceUrl:'https://c'}];
     const payloads=[];
-    const c=vm.createContext({getQueuedItems:()=>items,activeProductId:'p',console,
+    const c=vm.createContext({getQueuedItems:()=>items,activeProductId:'p',console,_inspirationCanCreate:()=>true,
       DB:{ready:true,getResults:async()=>[],enqueueInspirations:async(_,rows)=>{payloads.push(rows);return {ok:true};}},
       showInsStatus(){},showProcessModal(){}});
     load(c,'async function autoPushToBridge()','function getQueuedItems()');

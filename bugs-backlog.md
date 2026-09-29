@@ -2546,3 +2546,15 @@ PostgREST returns an authentication error. A failed retry leaves the task
 untouched and displays the real database message. Non-auth errors are not
 retried. `tests/delete-session-retry.test.mjs` covers both HTML entry points,
 the refresh-and-retry path, and the non-auth error path.
+# 2026-09-29: Inspiration Identity Collisions And Phonics Recovery
+
+Fixed on main: browser-local inspiration numbers could overwrite globally keyed
+records and inherit unrelated Testing status. Recovered 86 misrouted Phonics
+records and three overwritten originals; six new sources now use P-INS-141..146.
+Server allocation, immutable source/product guards, revision-checked saves,
+queue/result identity checks, pagination, and durable audit history now protect
+all products. Worker/page updates must verify source identity, not an ID alone.
+No creative, Action Plan, matrix, or deletion-marker rows changed during recovery.
+Three already-overwritten historical brief bodies and 13 older queue/source
+discrepancies remain documented for review, not silently guessed or overwritten.
+See `docs/repairs/2026-09-29-inspiration-identity.md` for verification and rollback.

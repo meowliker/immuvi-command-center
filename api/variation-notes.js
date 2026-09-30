@@ -31,7 +31,7 @@ export function createVariationNotesHandler({fetchImpl = fetch, env = process.en
       const result = await response.json();
       if (!response.ok) {
         const code = String(result.code || 'DATABASE_ERROR');
-        const status = code === '40001' ? 409 : code === 'P0002' ? 404 :
+        const status = (code === 'PT409' || code === '40001') ? 409 : code === 'P0002' ? 404 :
           code === '42501' ? 403 : response.status === 401 ? 401 : 502;
         const error = status === 409 ? 'Notes changed since you opened them. Copy your edits, then reopen the notes.' :
           status === 404 ? 'This variation is no longer available in this product.' :

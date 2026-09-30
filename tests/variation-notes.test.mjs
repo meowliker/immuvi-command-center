@@ -84,7 +84,7 @@ test('API rejects unauthorized or invalid requests without database access',asyn
   }
 });
 test('API conflicts, permissions, missing records, failed readback do not report success',async()=>{
-  for(const [code,status] of [['40001',409],['42501',403],['P0002',404]]){
+  for(const [code,status] of [['PT409',409],['40001',409],['42501',403],['P0002',404]]){
     const {handler,req,res,state,calls}=server();state.status=400;state.error={code};await handler(req,res);assert.equal(res.statusCode,status);assert.equal(calls.length,1);
   }
   const {handler,req,res,state}=server();state.readback='Different';await handler(req,res);assert.equal(res.statusCode,502);assert.equal(res.body.code,'VERIFY_FAILED');

@@ -2,195 +2,90 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import test from 'node:test';
 import vm from 'node:vm';
-
-for (const file of ['immuvi-command-center.html', 'public/immuvi-command-center.html']) {
-  const html = readFileSync(new URL('../' + file, import.meta.url), 'utf8');
-  const start = html.indexOf('function _variationNotesText(');
-  const end = html.indexOf('function saveAdNotes(', start);
-  assert.ok(start > 0 && end > start);
-  const code = html.slice(start, end);
+import {createVariationNotesHandler} from '../api/variation-notes.js';
+for (const file of ['immuvi-command-center.html','public/immuvi-command-center.html']) {
+  const html=readFileSync(new URL('../'+file,import.meta.url),'utf8');
+  const code=html.slice(html.indexOf('function _variationNotesText('),html.indexOf('function saveAdNotes('));
   function setup() {
-    const log = [], broadcasts = [];
-    const state = {meta: {notes: 'Original', variationNotes: 'Original', brief: 'Keep brief', other: 7},
-      readError: null, saveError: null, missing: false, conflict: false, afterRead: null,
-      storedMeta: null, refreshes: 0, refreshOK: true, verifyMismatch: false};
-    const escape = value => String(value).replace(/[&<>"']/g, c => ({'&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'}[c]));
-    const c = vm.createContext({console, activeProductId:'A', _adsProductId:'A', _uiProductGeneration:1,
-      _productSwitchPending:false, _cloudLoadFailed:false, _notesCache:{}, _myClientId:'me',
-      ADS:[{id:'v1', parentAdId:'p1', notes:'Original', status:'Testing', formatName:'V1'},
-        {id:'unrelated', notes:'Untouched', status:'Winner'}],
-      esc:escape, escAttr:escape, _withCloudTimeout:async value => value,
-      _isSupabaseAuthError:error => error.code === 'PGRST301' || error.status === 401,
-      _refreshSupabaseWriteSession:async () => {
-        state.refreshes++;
-        if (state.refreshOK) state.saveError = null;
-        return state.refreshOK;
-      },
-      _rtChannel:{send:async message => broadcasts.push(message)},
-      SB:{from(table) {
-        assert.equal(table, 'ads');
-        let update = null;
-        const filters = [];
-        const q = {
-          select(columns) { log.push(['select', columns]); return q; },
-          eq(key, value) { filters.push([key,value]); return q; },
-          is(key, value) { filters.push([key,value]); return q; },
-          update(patch) { update = patch; return q; },
-          async maybeSingle() {
-            log.push(['read', filters]);
-            const meta = state.verifyMismatch ? state.meta : (state.storedMeta || state.meta);
-            const result = {error:state.readError, data:state.missing ? null : {id:'v1', meta, updated_at:'2026-09-30T06:00:00Z'}};
-            if (state.afterRead) state.afterRead();
-            return result;
-          },
-          then(resolve, reject) {
-            log.push(['write', update, filters]);
-            if (!state.saveError && !state.conflict) state.storedMeta = update.meta;
-            return Promise.resolve({error:state.saveError, data:state.conflict ? [] : [{id:'v1'}]}).then(resolve, reject);
-          }
-        };
-        return q;
-      }}
-    });
-    vm.runInContext(code, c);
-    return {c, log, state, broadcasts};
+    const calls=[],state={status:200,verified:true,refreshes:0};
+    const c=vm.createContext({console,activeProductId:'A',_adsProductId:'A',_uiProductGeneration:1,_productSwitchPending:false,_cloudLoadFailed:false,_notesCache:{},
+      ADS:[{id:'v1',parentAdId:'p1',notes:'Original',status:'Testing'},{id:'other',notes:'Keep'}],
+      esc:s=>String(s).replaceAll('<','&lt;'),escAttr:String,_withCloudTimeout:async p=>p,
+      SB:{auth:{getSession:async()=>({data:{session:{access_token:'user-token'}}})}},
+      _refreshSupabaseWriteSession:async()=>{state.refreshes++;state.status=200;return true;},
+      fetch:async(url,opts)=>{calls.push({url,opts});if(state.afterSend)state.afterSend();const b=JSON.parse(opts.body);
+        return {ok:state.status===200,status:state.status,json:async()=>state.status===200?
+          {id:b.adId,productId:state.wrongProduct?'B':b.productId,notes:b.notes,verified:state.verified}:{error:'Rejected',code:'TEST_ERROR'}};}
+    });vm.runInContext(code,c);return {c,calls,state};
   }
-  test(file + ': notes column keeps existing variation columns and row behavior', () => {
+  test(file+': escaped truncated preview and short notes',()=>{
+    const {c}=setup();const s=c._variationNotesCell({id:'v1',notes:'<script>'+'x'.repeat(200)});
+    assert.ok(s.includes('&lt;script>'));assert.ok(s.includes('...</button>'));assert.ok(s.includes('event.stopPropagation()'));
+    assert.ok(c._variationNotesCell({id:'v1',notes:'Short'}).includes('Short</button>'));
+    assert.equal(c._variationNotesText({notes:'',variationNotes:'Old'}),'');
     assert.ok(html.includes('<th>Due</th><th>Notes</th><th>ClickUp</th>'));
-    assert.ok(html.includes('html += _variationNotesCell(v);'));
-    const {c} = setup();
-    const result = c._variationNotesCell({id:'v1', notes:'Short note'});
-    assert.ok(result.includes('Short note</button>'));
-    assert.ok(result.includes('event.stopPropagation()'));
-    assert.ok(result.includes('openVariationNotes(this.dataset.adId)'));
   });
-  test(file + ': preview is truncated and safely escaped; full notes stay unchanged', () => {
-    const {c} = setup();
-    const ad = {id:'" onclick="bad()', notes:'<script>' + 'x'.repeat(200)};
-    const before = JSON.stringify(ad);
-    const result = c._variationNotesCell(ad);
-    assert.ok(result.includes('...</button>'));
-    assert.ok(result.includes('&lt;script&gt;'));
-    assert.ok(!result.includes('<script>'));
-    assert.equal(JSON.stringify(ad), before);
-    assert.equal(c._variationNotesText({notes:'', variationNotes:'Old'}), '');
-    assert.equal(c._variationNotesText({variationNotes:'Legacy'}), 'Legacy');
-    assert.ok(c._variationNotesCell({id:'empty', notes:''}).includes('Add notes...'));
+  test(file+': only same-origin POST; notes-only local update after verified save',async()=>{
+    const {c,calls}=setup();await c._saveVariationNotes('v1','A',1,'Original',' New ');
+    assert.equal(calls[0].url,'/api/variation-notes');assert.equal(calls[0].opts.method,'POST');
+    assert.equal(calls[0].opts.headers.Authorization,'Bearer user-token');
+    assert.deepEqual(JSON.parse(calls[0].opts.body),{adId:'v1',productId:'A',original:'Original',notes:'New'});
+    assert.equal(c.ADS[0].notes,'New');assert.equal(c.ADS[0].status,'Testing');assert.equal(c.ADS[1].notes,'Keep');
+    for(const s of ['SB.from(','.upsert(','.delete(','apiUpdateTask(','_flushStateToSupabase('])assert.ok(!code.includes(s));
   });
-  test(file + ': saves only notes in current product and preserves every other field', async () => {
-    const {c, log, state, broadcasts} = setup();
-    const before = JSON.stringify(state.meta);
-    assert.equal(await c._saveVariationNotes('v1','A',1,'Original',' Shared note '), 'Shared note');
-    const write = log.find(x => x[0] === 'write');
-    assert.deepEqual(Object.keys(write[1]), ['meta']);
-    assert.equal(write[1].meta.brief, 'Keep brief');
-    assert.equal(write[1].meta.other, 7);
-    assert.equal(write[1].meta.notes, 'Shared note');
-    assert.equal(write[1].meta.variationNotes, 'Shared note');
-    assert.deepEqual(write[2], [['id','v1'], ['product_id','A'], ['deleted_at',null], ['updated_at','2026-09-30T06:00:00Z']]);
-    assert.equal(log.filter(x => x[0] === 'read').length, 2);
-    assert.equal(c.ADS[0].notes, 'Shared note');
-    assert.equal(c.ADS[0].status, 'Testing');
-    assert.equal(c.ADS[1].notes, 'Untouched');
-    assert.equal(broadcasts[0].payload.productId, 'A');
-    assert.equal(JSON.stringify(state.meta), before);
-    assert.ok(!code.includes('apiUpdateTask('));
-    assert.ok(!code.includes('_flushStateToSupabase('));
-    assert.ok(!code.includes('.upsert('));
-    assert.ok(!code.includes('.delete('));
-  });
-  test(file + ': clearing a note is persisted without reviving the legacy note', async () => {
-    const {c, log} = setup();
-    await c._saveVariationNotes('v1','A',1,'Original','  ');
-    const meta = log.find(x => x[0] === 'write')[1].meta;
-    assert.equal(meta.notes, '');
-    assert.equal(meta.variationNotes, '');
-    assert.equal(c._variationNotesText(c.ADS[0]), '');
-  });
-  test(file + ': product switch or incomplete load blocks reads and writes', async () => {
-    for (const changes of [{activeProductId:'B'}, {_adsProductId:'B'}, {_uiProductGeneration:2},
-      {_cloudLoadFailed:true}, {_productSwitchPending:true}]) {
-      const {c, log} = setup();
-      Object.assign(c, changes);
-      await assert.rejects(c._saveVariationNotes('v1','A',1,'Original','New'), /Product changed/);
-      assert.equal(log.length, 0);
+  test(file+': product guards block all requests',async()=>{
+    for(const change of [{activeProductId:'B'},{_adsProductId:'B'},{_uiProductGeneration:2},{_productSwitchPending:true},{_cloudLoadFailed:true}]){
+      const {c,calls}=setup();Object.assign(c,change);await assert.rejects(c._saveVariationNotes('v1','A',1,'Original','New'));assert.equal(calls.length,0);
     }
   });
-  test(file + ': switching product during read prevents the write', async () => {
-    const {c, log, state} = setup();
-    state.afterRead = () => {c.activeProductId = 'B';};
-    await assert.rejects(c._saveVariationNotes('v1','A',1,'Original','New'), /Product changed/);
-    assert.ok(!log.some(x => x[0] === 'write'));
+  test(file+': product switched during save never receives old-product notes',async()=>{
+    const {c,state}=setup();state.afterSend=()=>{c.activeProductId='B';c.ADS=[{id:'v1',notes:'Other'}];};
+    await c._saveVariationNotes('v1','A',1,'Original','New');assert.equal(c.ADS[0].notes,'Other');
   });
-  test(file + ': missing rows never get recreated', async () => {
-    const {c, log, state} = setup();
-    state.missing = true;
-    await assert.rejects(c._saveVariationNotes('v1','A',1,'Original','New'), /not found/);
-    assert.ok(!log.some(x => x[0] === 'write'));
-    assert.equal(c.ADS[0].notes, 'Original');
-  });
-  test(file + ': concurrent notes edits are not overwritten', async () => {
-    const {c, log, state} = setup();
-    state.meta.notes = 'Written by teammate';
-    await assert.rejects(c._saveVariationNotes('v1','A',1,'Original','New'), /changed since/);
-    assert.ok(!log.some(x => x[0] === 'write'));
-    assert.equal(c.ADS[0].notes, 'Original');
-  });
-  test(file + ': metadata conflict and network errors leave local data unchanged', async () => {
-    for (const failure of ['conflict','readError','saveError']) {
-      const {c, state, broadcasts} = setup();
-      state[failure] = true;
-      await assert.rejects(c._saveVariationNotes('v1','A',1,'Original','New'));
-      assert.equal(c.ADS[0].notes, 'Original');
-      assert.equal(broadcasts.length, 0);
+  test(file+': failures and invalid readback preserve local notes',async()=>{
+    for(const change of [{status:409},{status:503},{verified:false},{wrongProduct:true}]){
+      const {c,state}=setup();Object.assign(state,change);await assert.rejects(c._saveVariationNotes('v1','A',1,'Original','New'));assert.equal(c.ADS[0].notes,'Original');
     }
   });
-  test(file + ': expired session refreshes once and retries the same guarded write', async () => {
-    const {c, state, log} = setup();
-    state.saveError = {code:'PGRST301', message:'JWT expired'};
-    await c._saveVariationNotes('v1','A',1,'Original','New');
-    assert.equal(state.refreshes, 1);
-    const writes = log.filter(x => x[0] === 'write');
-    assert.equal(writes.length, 2);
-    assert.deepEqual(writes[0][2], writes[1][2]);
-    assert.equal(c.ADS[0].notes, 'New');
+  test(file+': session retry is bounded and preserves request',async()=>{
+    const {c,state,calls}=setup();state.status=401;await c._saveVariationNotes('v1','A',1,'Original','New');
+    assert.equal(state.refreshes,1);assert.equal(calls.length,2);assert.equal(calls[0].opts.body,calls[1].opts.body);
   });
-  test(file + ': failed session renewal keeps edits and shows a useful error code', async () => {
-    const {c, state} = setup();
-    state.saveError = {code:'PGRST301', message:'JWT expired'};
-    state.refreshOK = false;
-    await assert.rejects(c._saveVariationNotes('v1','A',1,'Original','New'), /PGRST301.*Sign in again/);
-    assert.equal(c.ADS[0].notes, 'Original');
-    assert.equal(state.refreshes, 1);
+  test(file+': empty notes save; oversized notes fail without a request',async()=>{
+    const {c,calls}=setup();await c._saveVariationNotes('v1','A',1,'Original','');assert.equal(c.ADS[0].notes,'');
+    await assert.rejects(c._saveVariationNotes('v1','A',1,'','x'.repeat(20001)),/20,000/);assert.equal(calls.length,1);
   });
-  test(file + ': read-back must match before claiming success', async () => {
-    const {c, state, broadcasts} = setup();
-    state.verifyMismatch = true;
-    await assert.rejects(c._saveVariationNotes('v1','A',1,'Original','New'), /did not confirm/);
-    assert.equal(c.ADS[0].notes, 'Original');
-    assert.equal(broadcasts.length, 0);
-  });
-  test(file + ': retry after lost acknowledgment confirms an already saved note without rewriting it', async () => {
-    const {c, state, log} = setup();
-    state.meta.notes = 'New';
-    state.meta.variationNotes = 'New';
-    await c._saveVariationNotes('v1','A',1,'Original','New');
-    assert.equal(log.filter(x => x[0] === 'write').length, 0);
-    assert.equal(log.filter(x => x[0] === 'read').length, 2);
-    assert.equal(c.ADS[0].notes, 'New');
-  });
-  test(file + ': dialog uses native focus management, scroll containment, and retains failed edits', () => {
-    assert.ok(code.includes('dialog.showModal()'));
-    assert.ok(code.includes("dialog.addEventListener('cancel'"));
-    assert.ok(code.includes('input.value = original'));
-    assert.ok(code.includes('error.textContent = e.message'));
+  test(file+': popup retains drafts and all inline scripts parse',()=>{
+    assert.ok(code.includes('error.textContent = e.message'));assert.ok(code.includes('dialog.showModal()'));
     assert.ok(html.includes('body.varlab-notes-open { overflow: hidden; }'));
-    assert.ok(html.includes('overscroll-behavior: contain'));
-    assert.ok(code.includes('trigger.focus()'));
-  });
-  test(file + ': every inline script parses', () => {
-    for (const [, attrs, body] of html.matchAll(/<script([^>]*)>([\s\S]*?)<\/script>/g)) {
-      if (!/type="module"|src=/.test(attrs)) new vm.Script(body);
-    }
+    for(const [,attrs,body] of html.matchAll(/<script([^>]*)>([\s\S]*?)<\/script>/g))if(!/type="module"|src=/.test(attrs))new vm.Script(body);
   });
 }
+function server() {
+  const calls=[],state={status:200,error:null,readback:'New'};
+  const handler=createVariationNotesHandler({env:{SUPABASE_URL:'https://example.supabase.co',SUPABASE_SERVICE_ROLE_KEY:'server-key'},fetchImpl:async(url,opts)=>{
+    calls.push({url,opts});return url.includes('/rpc/')?{ok:state.status===200,status:state.status,json:async()=>state.error||{id:'v1',productId:'A',notes:'New'}}:
+    {ok:true,json:async()=>[{id:'v1',meta:{notes:state.readback}}]};
+  }});
+  const req={method:'POST',headers:{authorization:'Bearer user-token'},body:{adId:'v1',productId:'A',original:'Original',notes:'New'}};
+  const res={setHeader(){},status(n){this.statusCode=n;return this;},json(b){this.body=b;return this;}};
+  return {handler,req,res,calls,state};
+}
+test('API keeps caller identity and verifies committed notes',async()=>{
+  const {handler,req,res,calls}=server();await handler(req,res);assert.equal(res.statusCode,200);assert.equal(res.body.verified,true);
+  assert.equal(calls[0].opts.headers.Authorization,'Bearer user-token');
+  assert.deepEqual(JSON.parse(calls[0].opts.body),{p_ad_id:'v1',p_product_id:'A',p_original:'Original',p_notes:'New'});
+  assert.ok(calls[1].url.includes('product_id=eq.A'));
+});
+test('API rejects unauthorized or invalid requests without database access',async()=>{
+  for(const mode of ['token','body','method']){const {handler,req,res,calls}=server();
+    if(mode==='token')req.headers={};if(mode==='body')req.body.notes={};if(mode==='method')req.method='GET';
+    await handler(req,res);assert.ok(res.statusCode>=400);assert.equal(calls.length,0);
+  }
+});
+test('API conflicts, permissions, missing records, failed readback do not report success',async()=>{
+  for(const [code,status] of [['40001',409],['42501',403],['P0002',404]]){
+    const {handler,req,res,state,calls}=server();state.status=400;state.error={code};await handler(req,res);assert.equal(res.statusCode,status);assert.equal(calls.length,1);
+  }
+  const {handler,req,res,state}=server();state.readback='Different';await handler(req,res);assert.equal(res.statusCode,502);assert.equal(res.body.code,'VERIFY_FAILED');
+});

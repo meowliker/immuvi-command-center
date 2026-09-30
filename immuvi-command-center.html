@@ -45766,54 +45766,33 @@ async function _saveVariationNotes(adId, productId, generation, original, value)
   if (!sameProduct() || !SB) throw new Error('Product changed or is still loading. Reopen the notes and try again.');
   var ad = ADS.find(function(a) { return a.id === adId; });
   if (!ad || !ad.parentAdId) throw new Error('This variation is no longer available. Refresh and try again.');
-  async function request(makeQuery, label) {
-    var response = await _withCloudTimeout(makeQuery(), label, 15000);
-    if (response.error && _isSupabaseAuthError(Object.assign({}, response.error, { status: response.status }))) {
-      var refreshed = await _withCloudTimeout(_refreshSupabaseWriteSession(), 'Refreshing session', 15000);
-      if (refreshed && sameProduct()) response = await _withCloudTimeout(makeQuery(), label, 15000);
-    }
-    return response;
-  }
-  function failure(response, label) {
-    var error = response.error || {};
-    var code = String(error.code || response.status || 'network').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 32);
-    var reason = _isSupabaseAuthError(Object.assign({}, error, { status: response.status }))
-      ? 'Your login session could not be renewed. Sign in again after keeping a copy of your edits.'
-      : (Number(response.status) === 0 || /fetch|network/i.test(error.message || '')
-        ? 'The connection to Supabase failed. Check your connection and try again.'
-        : 'Supabase rejected the request. Please try again and report this code if it continues.');
-    return new Error(label + ' [' + code + ']. ' + reason + ' Your edits remain in this popup.');
-  }
   var notes = value.trim();
-  function readNotes() {
-    return SB.from('ads').select('id,meta,updated_at').eq('id', adId)
-      .eq('product_id', productId).is('deleted_at', null).maybeSingle();
+  if (notes.length > 20000) throw new Error('Notes must be 20,000 characters or fewer.');
+  async function send() {
+    var session = await _withCloudTimeout(SB.auth.getSession(), 'Checking session', 15000);
+    var token = session.data && session.data.session && session.data.session.access_token;
+    if (!token) throw new Error('Sign in again after keeping a copy of your edits.');
+    if (!sameProduct()) throw new Error('Product changed. Reopen the notes and try again.');
+    var response = await _withCloudTimeout(fetch('/api/variation-notes', {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ adId: adId, productId: productId, original: original, notes: notes })
+    }), 'Saving notes', 30000);
+    var result;
+    try { result = await response.json(); }
+    catch (e) { throw new Error('The notes service returned an unexpected response. Your edits are still here; please try again.'); }
+    return { response: response, result: result };
   }
-  var read = await request(readNotes, 'Loading notes');
-  if (read.error) throw failure(read, 'Unable to load shared notes');
-  if (!read.data) throw new Error('This variation was not found in this product. Nothing was saved.');
-  if (!sameProduct()) throw new Error('Product changed. Reopen the notes and try again.');
-  var meta = read.data.meta;
-  if (_variationNotesText(meta || {}) !== original && _variationNotesText(meta || {}) !== notes) {
-    throw new Error('These notes changed since you opened them. Copy your edits, then reopen to see the latest notes.');
+  var saved = await send();
+  if (saved.response.status === 401 && sameProduct()) {
+    var refreshed = await _withCloudTimeout(_refreshSupabaseWriteSession(), 'Refreshing session', 15000);
+    if (refreshed && sameProduct()) saved = await send();
   }
-  var nextMeta = Object.assign({}, meta || {}, { notes: notes, variationNotes: notes });
-  if (_variationNotesText(meta || {}) !== notes) {
-    var saved = await request(function() {
-      var query = SB.from('ads').update({ meta: nextMeta }).eq('id', adId)
-        .eq('product_id', productId).is('deleted_at', null);
-      // The database stamps updated_at on every update; avoid putting the entire metadata in the URL.
-      query = read.data.updated_at == null ? query.is('updated_at', null) : query.eq('updated_at', read.data.updated_at);
-      return query.select('id');
-    }, 'Saving notes');
-    if (saved.error) throw failure(saved, 'Unable to save shared notes');
-    if (!saved.data || saved.data.length !== 1) {
-      throw new Error('This creative changed while saving. Copy your edits, then reopen the notes and try again.');
-    }
+  if (!saved.response.ok) {
+    throw new Error((saved.result.error || 'Unable to save shared notes.') + ' [' +
+      (saved.result.code || saved.response.status) + '] Your edits remain in this popup.');
   }
-  var verified = await request(readNotes, 'Verifying saved notes');
-  if (verified.error) throw failure(verified, 'Save not yet confirmed');
-  if (!verified.data || _variationNotesText(verified.data.meta || {}) !== notes) {
+  if (!saved.result.verified || saved.result.id !== adId || saved.result.productId !== productId || saved.result.notes !== notes) {
     throw new Error('Supabase did not confirm these notes. Your edits are still here; please try again.');
   }
   if (sameProduct()) {

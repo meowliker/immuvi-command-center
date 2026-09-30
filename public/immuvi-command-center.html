@@ -10902,6 +10902,11 @@ function _authEsc(s) {
 }
 
 function _showLogin(errMsg) {
+  var cloudError = document.getElementById('cloudLoadFailure');
+  if (cloudError) {
+    cloudError.remove();
+    Array.from(document.body.children || []).forEach(function(child) { child.inert = false; });
+  }
   var ov = document.getElementById('loginOverlay'); if (!ov) return;
   ov.classList.add('on');
   document.getElementById('pwChangeOverlay').classList.remove('on');
@@ -11149,14 +11154,17 @@ async function _onSession(session) {
   // no correctness risk.
   var _profP = SB.from('profiles').select('*').eq('id', session.user.id).single();
   var _upP   = SB.from('user_products').select('product_id').eq('user_id', session.user.id);
-  var _both  = await Promise.all([_profP, _upP]);
+  var _both  = await _withCloudTimeout(Promise.all([_profP, _upP]), 'Account lookup', 15000);
   var profRes = _both[0];
   var _upResEarly = _both[1];
-  if (profRes.error || !profRes.data) {
+  if (profRes.error || (profRes.data && profRes.data.role !== 'admin' && _upResEarly.error)) {
     console.error('[auth] profile lookup failed', profRes.error);
-    await SB.auth.signOut();
+    _showLogin('Could not reach your account data. Please retry sign-in; your session and data have not been deleted.');
+    return false;
+  }
+  if (!profRes.data) {
     _showLogin('Profile not found. Contact your admin.');
-    return;
+    return false;
   }
   if (!profRes.data.is_active) {
     await SB.auth.signOut();
@@ -11203,12 +11211,12 @@ async function _onSession(session) {
   _renderUserPill();
   _toggleAdminTabVisibility();
 
-  // Wait for the existing boot to finish populating PRODUCTS, then filter.
-  await _waitForBootProducts(15000);
-  await _applyUserProductFilter();
+  // Install access filtering before startup requests any product data.
+  _patchDBForUser();
 
   // All gating done — reveal the dashboard.
   _hideLogin();
+  return true;
 }
 
 async function _authInit() {
@@ -11217,21 +11225,27 @@ async function _authInit() {
     return;
   }
   try {
-    var s = await SB.auth.getSession();
+    var s = await _withCloudTimeout(SB.auth.getSession(), 'Sign-in session', 15000);
     var session = s.data && s.data.session;
     if (!session) {
       _showLogin();
       return;
     }
-    await _onSession(session);
+    return await _onSession(session);
   } catch (e) {
     console.error('[auth] init failed', e);
-    _showLogin('Sign-in error. Check console.');
+    _showLogin('Sign-in could not finish. Please retry; no data was reset or deleted.');
+    return false;
   }
 }
 
 // Kick off auth-gating at page load.
-document.addEventListener('DOMContentLoaded', _authInit);
+var _authReadyPromise = null;
+function _startAuthInit() {
+  if (!_authReadyPromise) _authReadyPromise = _authInit();
+  return _authReadyPromise;
+}
+document.addEventListener('DOMContentLoaded', _startAuthInit);
 
 /* ─── Admin tab ───────────────────────────────────────────────────────── */
 // Map a logical admin path (e.g. '/admin/create-user') to the right URL.
@@ -14939,6 +14953,9 @@ function _showCloudLoadFailure() {
   _cloudLoadFailed = true;
   _adsProductId = null;
   document.body.classList.remove('booting');
+  var login = document.getElementById('loginOverlay');
+  var passwordChange = document.getElementById('pwChangeOverlay');
+  if ((login && login.classList.contains('on')) || (passwordChange && passwordChange.classList.contains('on'))) return;
   var status = document.getElementById('statusLbl');
   if (status) status.textContent = 'Cloud load failed';
   if (document.getElementById('cloudLoadFailure')) return;
@@ -34530,6 +34547,7 @@ async function loadState() {
   // through to the slower path.
   var _savedActiveId = null;
   try { _savedActiveId = localStorage.getItem('immuvi_active_product') || null; } catch(e){}
+  if (_savedActiveId && AUTH.profile && !AUTH.hasProduct(_savedActiveId)) _savedActiveId = null;
 
   var _productsP = DB.listProducts();
   var _stateP = _savedActiveId ? DB.loadProductData(_savedActiveId).catch(function(){ return null; })
@@ -36841,6 +36859,9 @@ async function broadcastForceReload() {
 // ════════════════════════════════════════════════════════════════════
 
 window.addEventListener('load', async function () {
+  // Never load shared product data or cover sign-in before authentication completes.
+  var authenticated = await _startAuthInit();
+  if (!authenticated) return;
   _syncHeaderHeightVar();
   initFieldOptions();
   loadFieldMaps();

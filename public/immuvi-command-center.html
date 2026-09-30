@@ -1513,6 +1513,18 @@ body::before {
 .varlab-ap-group-table td { padding: 9px 14px; border-bottom: 1px solid rgba(0,0,0,0.04); }
 .varlab-ap-group-table tr:hover { background: rgba(59,130,246,0.04); cursor: pointer; }
 .varlab-ap-group-table .vl-vid-cell { font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; color: var(--t2); }
+.varlab-notes-cell { width: 220px; min-width: 180px; max-width: 260px; }
+.varlab-notes-preview { display: block; width: 100%; padding: 4px 0; border: 0; background: transparent; color: var(--t2); text-align: left; font: inherit; line-height: 1.5; overflow-wrap: anywhere; white-space: pre-wrap; cursor: pointer; }
+.varlab-notes-preview:hover { color: var(--accent, #2563eb); text-decoration: underline; }
+.varlab-notes-preview:focus-visible { outline: 2px solid #2563eb; outline-offset: 3px; }
+.varlab-notes-dialog { width: min(600px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); padding: 24px; border: 1px solid var(--border); border-radius: 8px; color: var(--t1); background: var(--bg, white); box-sizing: border-box; overflow: auto; overscroll-behavior: contain; }
+.varlab-notes-dialog::backdrop { background: rgba(0,0,0,.45); }
+.varlab-notes-dialog h2 { font-size: 18px; margin: 0 0 8px; }
+.varlab-notes-dialog p { overflow-wrap: anywhere; margin: 0 0 16px; color: var(--t2); }
+.varlab-notes-dialog textarea { width: 100%; min-height: 220px; max-height: 50dvh; box-sizing: border-box; resize: vertical; overflow: auto; overscroll-behavior: contain; line-height: 1.6; }
+.varlab-notes-dialog footer { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+.varlab-notes-dialog [role="alert"] { color: #b42318; margin-top: 12px; overflow-wrap: anywhere; }
+body.varlab-notes-open { overflow: hidden; }
 .varlab-ap-empty { text-align: center; padding: 60px 20px; color: var(--t3); font-size: 0.85rem; }
 
 @media (prefers-reduced-motion: reduce) {
@@ -45793,6 +45805,118 @@ function saveCellMeta(angleName, personaName, value) {
 // global to the AD — same note shows no matter which cell you view it from.
 // Persists to Supabase via saveState() and pushes to ClickUp task description.
 // ================================================
+// Variation notes use a product-scoped, compare-and-set write, never a full-state flush.
+function _variationNotesText(ad) {
+  if (ad.notes !== undefined && ad.notes !== null) return String(ad.notes);
+  return String(ad.variationNotes || '');
+}
+
+function _variationNotesCell(ad) {
+  var notes = _variationNotesText(ad);
+  var chars = Array.from(notes.replace(/\s+/g, ' ').trim());
+  var preview = chars.length > 100 ? chars.slice(0, 100).join('').trimEnd() + '...' : chars.join('');
+  return '<td class="varlab-notes-cell"><button type="button" class="varlab-notes-preview" data-ad-id="' +
+    escAttr(ad.id) + '" onclick="event.stopPropagation();openVariationNotes(this.dataset.adId)" aria-label="' +
+    escAttr('Notes for ' + (ad.formatName || ad.id)) + '">' + esc(preview || 'Add notes...') + '</button></td>';
+}
+
+async function _saveVariationNotes(adId, productId, generation, original, value) {
+  function sameProduct() {
+    return activeProductId === productId && _adsProductId === productId &&
+      _uiProductGeneration === generation && !_productSwitchPending && !_cloudLoadFailed;
+  }
+  if (!sameProduct() || !SB) throw new Error('Product changed or is still loading. Reopen the notes and try again.');
+  var ad = ADS.find(function(a) { return a.id === adId; });
+  if (!ad || !ad.parentAdId) throw new Error('This variation is no longer available. Refresh and try again.');
+  var notes = value.trim();
+  var read = await _withCloudTimeout(SB.from('ads').select('id,meta').eq('id', adId)
+    .eq('product_id', productId).maybeSingle(), 'Loading notes', 15000);
+  if (read.error) throw new Error('Unable to load shared notes. Please try again.');
+  if (!read.data) throw new Error('This variation was not found in this product. Nothing was saved.');
+  if (!sameProduct()) throw new Error('Product changed. Reopen the notes and try again.');
+  var meta = read.data.meta;
+  if (_variationNotesText(meta || {}) !== original) {
+    throw new Error('These notes changed since you opened them. Copy your edits, then reopen to see the latest notes.');
+  }
+  var nextMeta = Object.assign({}, meta || {}, { notes: notes, variationNotes: notes });
+  var query = SB.from('ads').update({ meta: nextMeta }).eq('id', adId).eq('product_id', productId);
+  query = meta == null ? query.is('meta', null) : query.eq('meta', JSON.stringify(meta));
+  var saved = await _withCloudTimeout(query.select('id'), 'Saving notes', 15000);
+  if (saved.error) throw new Error('Unable to save shared notes. Your edits are still here; please try again.');
+  if (!saved.data || saved.data.length !== 1) {
+    throw new Error('This creative changed while saving. Copy your edits, then reopen the notes and try again.');
+  }
+  if (sameProduct()) {
+    var current = ADS.find(function(a) { return a.id === adId; });
+    if (current) { current.notes = notes; current.variationNotes = notes; }
+    _notesCache[adId] = notes;
+    if (typeof _rtChannel !== 'undefined' && _rtChannel) {
+      try {
+        Promise.resolve(_rtChannel.send({ type: 'broadcast', event: 'field-update',
+          payload: { adId: adId, productId: productId, field: 'notes', value: notes, clientId: _myClientId } }))
+          .catch(function() { console.warn('[notes] Live notification unavailable; notes are saved.'); });
+      } catch (e) { console.warn('[notes] Live notification unavailable; notes are saved.'); }
+    }
+  }
+  return notes;
+}
+
+function openVariationNotes(adId) {
+  if (document.getElementById('varlabNotesDialog')) return;
+  var ad = ADS.find(function(a) { return a.id === adId; });
+  if (!ad || !ad.parentAdId || _adsProductId !== activeProductId || _productSwitchPending || _cloudLoadFailed) return;
+  var productId = activeProductId;
+  var generation = _uiProductGeneration;
+  var original = _variationNotesText(ad);
+  var trigger = document.activeElement;
+  var dialog = document.createElement('dialog');
+  dialog.id = 'varlabNotesDialog';
+  dialog.className = 'varlab-notes-dialog';
+  dialog.setAttribute('aria-labelledby', 'varlabNotesTitle');
+  dialog.innerHTML = '<h2 id="varlabNotesTitle">Variation notes</h2><p></p>' +
+    '<label for="varlabNotesInput">Notes</label><textarea id="varlabNotesInput" class="f-inp"></textarea>' +
+    '<div role="alert" aria-live="polite"></div><footer>' +
+    '<button type="button" class="btn btn-ghost" data-cancel>Cancel</button>' +
+    '<button type="button" class="btn btn-primary" data-save>Save</button></footer>';
+  dialog.querySelector('p').textContent = ad.formatName || ad.id;
+  var input = dialog.querySelector('textarea');
+  input.value = original;
+  var save = dialog.querySelector('[data-save]');
+  var cancel = dialog.querySelector('[data-cancel]');
+  var error = dialog.querySelector('[role="alert"]');
+  var saving = false;
+  cancel.onclick = function() { dialog.close(); };
+  dialog.addEventListener('cancel', function(event) { if (saving) event.preventDefault(); });
+  dialog.addEventListener('close', function() {
+    document.body.classList.remove('varlab-notes-open');
+    dialog.remove();
+    if (trigger && trigger.isConnected) trigger.focus();
+  });
+  save.onclick = async function() {
+    if (saving) return;
+    saving = true;
+    save.disabled = cancel.disabled = input.disabled = true;
+    save.textContent = 'Saving...';
+    error.textContent = '';
+    try {
+      await _saveVariationNotes(adId, productId, generation, original, input.value);
+      dialog.close();
+      if (activeProductId === productId && _uiProductGeneration === generation) renderActionPlan();
+      toast('Notes saved', 'ok');
+    } catch (e) {
+      error.textContent = e.message || 'Unable to confirm the save. Your edits are still here.';
+    } finally {
+      saving = false;
+      save.disabled = cancel.disabled = input.disabled = false;
+      save.textContent = 'Save';
+    }
+  };
+  document.body.appendChild(dialog);
+  document.body.classList.add('varlab-notes-open');
+  dialog.showModal();
+  input.focus();
+}
+
 function saveAdNotes(adId, value) {
   var ad = null;
   for (var i = 0; i < ADS.length; i++) {
@@ -50851,7 +50975,7 @@ window._clearPendingCu = _clearPendingCu;
       html += '<div class="vl-paxes">' + (axesPills || '<span style="background:transparent;border:none">No axis data</span>') + '</div>';
       html += '</div>';
       html += '<table class="varlab-ap-group-table">';
-      html += '<thead><tr><th>Variation</th><th>Axis</th><th>Status</th><th>Editor</th><th>Due</th><th>ClickUp</th></tr></thead>';
+      html += '<thead><tr><th>Variation</th><th>Axis</th><th>Status</th><th>Editor</th><th>Due</th><th>Notes</th><th>ClickUp</th></tr></thead>';
       html += '<tbody>';
       s.variations.slice().sort(function (a, b) { return (a.variationNumber || 0) - (b.variationNumber || 0); }).forEach(function (v) {
         var act = (typeof MANUAL_ACTIONS !== 'undefined') ? MANUAL_ACTIONS.find(function (m) { return m && (m.sourceAdId === v.id || m.adId === v.id); }) : null;
@@ -50868,6 +50992,7 @@ window._clearPendingCu = _clearPendingCu;
         html += '<td>' + statusPill(v.status) + '</td>';
         html += '<td>' + esc(editorTxt) + '</td>';
         html += '<td class="vl-vid-cell">' + esc(v.dueDate || '—') + '</td>';
+        html += _variationNotesCell(v);
         html += '<td>' + cuCell + '</td>';
         html += '</tr>';
       });

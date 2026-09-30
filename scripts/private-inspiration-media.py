@@ -8,6 +8,7 @@ from pathlib import Path
 import sys
 from functools import partial
 from private_inspiration_audio import transcribe_audio
+from private_inspiration_pipeline import extend_qa_download_timeout
 
 ROOT = Path(__file__).resolve().parent.parent
 skill = (ROOT / 'team-skill/SKILL.md').read_text()
@@ -55,8 +56,8 @@ else:
             audio_evidence['error'] = str(error)[:200]
             return '', [], 'unavailable:audio verification failed'
 
-    # Replace only transcription, leaving the legacy downloader and prompts intact.
-    tree = ast.parse(pipeline)
+    # QA changes only the download deadline and transcription; prompts stay intact.
+    tree = extend_qa_download_timeout(ast.parse(pipeline))
     definitions = [node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == 'transcribe_audio']
     if len(definitions) != 1:
         raise RuntimeError('Legacy transcription boundary changed; review required')

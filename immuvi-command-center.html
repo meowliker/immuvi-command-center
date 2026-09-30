@@ -45766,23 +45766,55 @@ async function _saveVariationNotes(adId, productId, generation, original, value)
   if (!sameProduct() || !SB) throw new Error('Product changed or is still loading. Reopen the notes and try again.');
   var ad = ADS.find(function(a) { return a.id === adId; });
   if (!ad || !ad.parentAdId) throw new Error('This variation is no longer available. Refresh and try again.');
+  async function request(makeQuery, label) {
+    var response = await _withCloudTimeout(makeQuery(), label, 15000);
+    if (response.error && _isSupabaseAuthError(Object.assign({}, response.error, { status: response.status }))) {
+      var refreshed = await _withCloudTimeout(_refreshSupabaseWriteSession(), 'Refreshing session', 15000);
+      if (refreshed && sameProduct()) response = await _withCloudTimeout(makeQuery(), label, 15000);
+    }
+    return response;
+  }
+  function failure(response, label) {
+    var error = response.error || {};
+    var code = String(error.code || response.status || 'network').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 32);
+    var reason = _isSupabaseAuthError(Object.assign({}, error, { status: response.status }))
+      ? 'Your login session could not be renewed. Sign in again after keeping a copy of your edits.'
+      : (Number(response.status) === 0 || /fetch|network/i.test(error.message || '')
+        ? 'The connection to Supabase failed. Check your connection and try again.'
+        : 'Supabase rejected the request. Please try again and report this code if it continues.');
+    return new Error(label + ' [' + code + ']. ' + reason + ' Your edits remain in this popup.');
+  }
   var notes = value.trim();
-  var read = await _withCloudTimeout(SB.from('ads').select('id,meta').eq('id', adId)
-    .eq('product_id', productId).maybeSingle(), 'Loading notes', 15000);
-  if (read.error) throw new Error('Unable to load shared notes. Please try again.');
+  function readNotes() {
+    return SB.from('ads').select('id,meta,updated_at').eq('id', adId)
+      .eq('product_id', productId).is('deleted_at', null).maybeSingle();
+  }
+  var read = await request(readNotes, 'Loading notes');
+  if (read.error) throw failure(read, 'Unable to load shared notes');
   if (!read.data) throw new Error('This variation was not found in this product. Nothing was saved.');
   if (!sameProduct()) throw new Error('Product changed. Reopen the notes and try again.');
   var meta = read.data.meta;
-  if (_variationNotesText(meta || {}) !== original) {
+  if (_variationNotesText(meta || {}) !== original && _variationNotesText(meta || {}) !== notes) {
     throw new Error('These notes changed since you opened them. Copy your edits, then reopen to see the latest notes.');
   }
   var nextMeta = Object.assign({}, meta || {}, { notes: notes, variationNotes: notes });
-  var query = SB.from('ads').update({ meta: nextMeta }).eq('id', adId).eq('product_id', productId);
-  query = meta == null ? query.is('meta', null) : query.eq('meta', JSON.stringify(meta));
-  var saved = await _withCloudTimeout(query.select('id'), 'Saving notes', 15000);
-  if (saved.error) throw new Error('Unable to save shared notes. Your edits are still here; please try again.');
-  if (!saved.data || saved.data.length !== 1) {
-    throw new Error('This creative changed while saving. Copy your edits, then reopen the notes and try again.');
+  if (_variationNotesText(meta || {}) !== notes) {
+    var saved = await request(function() {
+      var query = SB.from('ads').update({ meta: nextMeta }).eq('id', adId)
+        .eq('product_id', productId).is('deleted_at', null);
+      // The database stamps updated_at on every update; avoid putting the entire metadata in the URL.
+      query = read.data.updated_at == null ? query.is('updated_at', null) : query.eq('updated_at', read.data.updated_at);
+      return query.select('id');
+    }, 'Saving notes');
+    if (saved.error) throw failure(saved, 'Unable to save shared notes');
+    if (!saved.data || saved.data.length !== 1) {
+      throw new Error('This creative changed while saving. Copy your edits, then reopen the notes and try again.');
+    }
+  }
+  var verified = await request(readNotes, 'Verifying saved notes');
+  if (verified.error) throw failure(verified, 'Save not yet confirmed');
+  if (!verified.data || _variationNotesText(verified.data.meta || {}) !== notes) {
+    throw new Error('Supabase did not confirm these notes. Your edits are still here; please try again.');
   }
   if (sameProduct()) {
     var current = ADS.find(function(a) { return a.id === adId; });

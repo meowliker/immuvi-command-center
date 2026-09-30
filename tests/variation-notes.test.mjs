@@ -12,13 +12,20 @@ for (const file of ['immuvi-command-center.html', 'public/immuvi-command-center.
   function setup() {
     const log = [], broadcasts = [];
     const state = {meta: {notes: 'Original', variationNotes: 'Original', brief: 'Keep brief', other: 7},
-      readError: null, saveError: null, missing: false, conflict: false, afterRead: null};
+      readError: null, saveError: null, missing: false, conflict: false, afterRead: null,
+      storedMeta: null, refreshes: 0, refreshOK: true, verifyMismatch: false};
     const escape = value => String(value).replace(/[&<>"']/g, c => ({'&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'}[c]));
     const c = vm.createContext({console, activeProductId:'A', _adsProductId:'A', _uiProductGeneration:1,
       _productSwitchPending:false, _cloudLoadFailed:false, _notesCache:{}, _myClientId:'me',
       ADS:[{id:'v1', parentAdId:'p1', notes:'Original', status:'Testing', formatName:'V1'},
         {id:'unrelated', notes:'Untouched', status:'Winner'}],
       esc:escape, escAttr:escape, _withCloudTimeout:async value => value,
+      _isSupabaseAuthError:error => error.code === 'PGRST301' || error.status === 401,
+      _refreshSupabaseWriteSession:async () => {
+        state.refreshes++;
+        if (state.refreshOK) state.saveError = null;
+        return state.refreshOK;
+      },
       _rtChannel:{send:async message => broadcasts.push(message)},
       SB:{from(table) {
         assert.equal(table, 'ads');
@@ -31,12 +38,14 @@ for (const file of ['immuvi-command-center.html', 'public/immuvi-command-center.
           update(patch) { update = patch; return q; },
           async maybeSingle() {
             log.push(['read', filters]);
-            const result = {error:state.readError, data:state.missing ? null : {id:'v1', meta:state.meta}};
+            const meta = state.verifyMismatch ? state.meta : (state.storedMeta || state.meta);
+            const result = {error:state.readError, data:state.missing ? null : {id:'v1', meta, updated_at:'2026-09-30T06:00:00Z'}};
             if (state.afterRead) state.afterRead();
             return result;
           },
           then(resolve, reject) {
             log.push(['write', update, filters]);
+            if (!state.saveError && !state.conflict) state.storedMeta = update.meta;
             return Promise.resolve({error:state.saveError, data:state.conflict ? [] : [{id:'v1'}]}).then(resolve, reject);
           }
         };
@@ -78,7 +87,8 @@ for (const file of ['immuvi-command-center.html', 'public/immuvi-command-center.
     assert.equal(write[1].meta.other, 7);
     assert.equal(write[1].meta.notes, 'Shared note');
     assert.equal(write[1].meta.variationNotes, 'Shared note');
-    assert.deepEqual(write[2], [['id','v1'], ['product_id','A'], ['meta',before]]);
+    assert.deepEqual(write[2], [['id','v1'], ['product_id','A'], ['deleted_at',null], ['updated_at','2026-09-30T06:00:00Z']]);
+    assert.equal(log.filter(x => x[0] === 'read').length, 2);
     assert.equal(c.ADS[0].notes, 'Shared note');
     assert.equal(c.ADS[0].status, 'Testing');
     assert.equal(c.ADS[1].notes, 'Untouched');
@@ -134,6 +144,40 @@ for (const file of ['immuvi-command-center.html', 'public/immuvi-command-center.
       assert.equal(c.ADS[0].notes, 'Original');
       assert.equal(broadcasts.length, 0);
     }
+  });
+  test(file + ': expired session refreshes once and retries the same guarded write', async () => {
+    const {c, state, log} = setup();
+    state.saveError = {code:'PGRST301', message:'JWT expired'};
+    await c._saveVariationNotes('v1','A',1,'Original','New');
+    assert.equal(state.refreshes, 1);
+    const writes = log.filter(x => x[0] === 'write');
+    assert.equal(writes.length, 2);
+    assert.deepEqual(writes[0][2], writes[1][2]);
+    assert.equal(c.ADS[0].notes, 'New');
+  });
+  test(file + ': failed session renewal keeps edits and shows a useful error code', async () => {
+    const {c, state} = setup();
+    state.saveError = {code:'PGRST301', message:'JWT expired'};
+    state.refreshOK = false;
+    await assert.rejects(c._saveVariationNotes('v1','A',1,'Original','New'), /PGRST301.*Sign in again/);
+    assert.equal(c.ADS[0].notes, 'Original');
+    assert.equal(state.refreshes, 1);
+  });
+  test(file + ': read-back must match before claiming success', async () => {
+    const {c, state, broadcasts} = setup();
+    state.verifyMismatch = true;
+    await assert.rejects(c._saveVariationNotes('v1','A',1,'Original','New'), /did not confirm/);
+    assert.equal(c.ADS[0].notes, 'Original');
+    assert.equal(broadcasts.length, 0);
+  });
+  test(file + ': retry after lost acknowledgment confirms an already saved note without rewriting it', async () => {
+    const {c, state, log} = setup();
+    state.meta.notes = 'New';
+    state.meta.variationNotes = 'New';
+    await c._saveVariationNotes('v1','A',1,'Original','New');
+    assert.equal(log.filter(x => x[0] === 'write').length, 0);
+    assert.equal(log.filter(x => x[0] === 'read').length, 2);
+    assert.equal(c.ADS[0].notes, 'New');
   });
   test(file + ': dialog uses native focus management, scroll containment, and retains failed edits', () => {
     assert.ok(code.includes('dialog.showModal()'));

@@ -1,12 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp,writeFile,readFile,rm } from 'node:fs/promises';
+import { mkdtemp,writeFile,readFile,rm,stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { setTimeout as sleep } from 'node:timers/promises';
 import sharp from 'sharp';
 import { recoverSharedImages,generationName,assertSharedImageJob,imageHash } from '../../lib/services/shared-image-recovery.js';
 import { createSharedImageDelivery } from '../../lib/services/shared-image-delivery.js';
+import { validateGeneratedImages } from '../../lib/services/qa-image-generation.js';
 import { legacyProducerCreativeContract,runNativeCodex } from '../../scripts/qa-native-image-runner.mjs';
 
 const manifest={status:'done',outputs:[{variation:1,filename:'1.png',prompt:'fixture only',reference_anatomy:'fixture',quality_checks:['fixture'],passed:true,native_tool:'image_gen__imagegen'}]};
@@ -47,6 +48,36 @@ test('completed raw output survives a crash before validation and database save'
  await assert.rejects(recoverSharedImages(input),/process died/);
  await recoverSharedImages(input);
  assert.equal(events.filter(e=>e==='generate-1').length,1);
+});
+test('saved image_gen output recovers after legacy validation rejection without regeneration',async t=>{
+ const {input,events,stored,directory}=await fixture(t,1),generate=input.generate;
+ const alias={...manifest,outputs:[{...manifest.outputs[0],native_tool:'image_gen'}]};
+ input.generate=async args=>{
+  await generate(args);
+  await writeFile(join(args.directory,'result.json'),JSON.stringify(alias));
+  return alias;
+ };
+ const legacyValidate=async(dir,value,count)=>{
+  if(!value.outputs[0].native_tool.includes('imagegen'))throw new Error('Image quality manifest is invalid.');
+  return validateGeneratedImages(dir,value,count);
+ };
+ await assert.rejects(recoverSharedImages({...input,validate:legacyValidate}),/manifest is invalid/);
+ assert.deepEqual(input.run.delivery.started,[1]);assert.equal(stored.size,0);
+ const local=join(directory,'variation-1');
+ await assert.rejects(stat(join(local,'accepted.json')),{code:'ENOENT'});
+ const preserved=await Promise.all(['result.json','1.png'].map(async name=>({name,hash:imageHash(await readFile(join(local,name))),mtime:(await stat(join(local,name))).mtimeMs})));
+ input.generate=async()=>assert.fail('Saved output must never regenerate');
+ const result=await recoverSharedImages(input);
+ assert.equal(result.outputs[0].native_tool,'image_gen');
+ assert.equal(result.outputs[0].sha256,preserved[1].hash);
+ assert.deepEqual(JSON.parse(await readFile(join(local,'accepted.json'),'utf8')),alias);
+ await recoverSharedImages(input);
+ assert.equal(events.filter(e=>e==='generate-1').length,1);
+ assert.equal(events.filter(e=>e==='upload').length,1);assert.equal(stored.size,1);
+ for(const saved of preserved) {
+  assert.equal(imageHash(await readFile(join(local,saved.name))),saved.hash);
+  assert.equal((await stat(join(local,saved.name))).mtimeMs,saved.mtime);
+ }
 });
 test('uncertain paid generation is never repeated, including a lost start acknowledgment',async t=>{
  const {input}=await fixture(t,1);let calls=0;

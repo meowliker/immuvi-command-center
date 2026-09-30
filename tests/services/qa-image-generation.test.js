@@ -7,6 +7,22 @@ import sharp from 'sharp';
 import { validateGeneratedImages,persistGeneratedImages } from '../../lib/services/qa-image-generation.js';
 
 const output={variation:1,filename:'1.png',passed:true,native_tool:'image_gen__imagegen',prompt:'QA fixture',quality_checks:['Typography checked'],reference_anatomy:'No reference'};
+test('native image_gen alias passes without relaxing the remaining manifest checks',async t=>{
+  const dir=await mkdtemp(join(tmpdir(),'qa-image-alias-'));
+  t.after(()=>rm(dir,{recursive:true,force:true}));
+  await writeFile(join(dir,'1.png'),await sharp({create:{width:1122,height:1402,channels:3,background:'#2495ac'}}).png().toBuffer());
+  const alias={...output,native_tool:'image_gen'};
+  for(const native_tool of ['image_gen','image_gen__imagegen','imagegen']) {
+    const [image]=await validateGeneratedImages(dir,{status:'done',outputs:[{...alias,native_tool}]},1);
+    assert.equal(image.metadata.width,1122);assert.equal(image.metadata.height,1402);
+  }
+  for(const patch of [{native_tool:'image_gen_fake'},{native_tool:''},{native_tool:null},{passed:false},{variation:2},{filename:'other.png'},{prompt:''},{quality_checks:[]}]) {
+    await assert.rejects(validateGeneratedImages(dir,{status:'done',outputs:[{...alias,...patch}]},1),/manifest/);
+  }
+  await assert.rejects(validateGeneratedImages(dir,{status:'failed',outputs:[alias]},1),/did not complete/);
+  await writeFile(join(dir,'1.png'),'not a PNG');
+  await assert.rejects(validateGeneratedImages(dir,{status:'done',outputs:[alias]},1),/PNG/);
+});
 test('image validation rejects placeholders, incomplete batches, duplicate variations and path escapes',async()=>{
   const dir=await mkdtemp(join(tmpdir(),'qa-image-test-'));
   try{

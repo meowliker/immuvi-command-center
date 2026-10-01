@@ -28887,6 +28887,66 @@ function recreateClickUpTask(actionId) {
   });
 }
 
+function _variationParentForClickUp(ad, act, productId, adsProductId, ads) {
+  var parentId = (ad && ad.parentAdId) || (act && act.parentAdId);
+  if (!parentId) return null;
+  if (!productId || productId !== adsProductId ||
+      (ad && ad.product_id && ad.product_id !== productId) ||
+      (ad && ad.parentAdId && act && act.parentAdId && ad.parentAdId !== act.parentAdId)) {
+    throw new Error('Variation product or parent changed. Reload before pushing.');
+  }
+  var parent = (ads || []).find(function(a) { return a.id === parentId; });
+  if (!parent || (ad && parent.id === ad.id) || parent.deleted_at ||
+      (parent.product_id && parent.product_id !== productId) ||
+      (typeof _isBoundaryQuarantinedAd === 'function' && _isBoundaryQuarantinedAd(parent))) {
+    throw new Error('Variation parent is unavailable in this product. Reload before pushing.');
+  }
+  var taskId = parent.clickupTaskId || parent._clickupId;
+  if (!taskId) throw new Error('Push the parent winner to ClickUp before its variations.');
+  return { taskId: taskId, name: parent.formatName || parent.id };
+}
+
+function _hasClickUpTaskLink(task, otherId) {
+  return (task.linked_tasks || []).some(function(link) {
+    return (String(link.task_id) === String(task.id) && String(link.link_id) === String(otherId)) ||
+      (String(link.link_id) === String(task.id) && String(link.task_id) === String(otherId));
+  });
+}
+
+async function _syncVariationParentLink(taskId, parentTaskId, listId) {
+  var key = taskId + '|variation-parent|' + parentTaskId;
+  function request(path, options) {
+    return _withCloudTimeout(apiFetch(path, options), 'Link variation to winner', 15000);
+  }
+  try {
+    if (!taskId || !parentTaskId || taskId === parentTaskId || !listId) throw new Error('Invalid variation relationship');
+    var parent = await request('/task/' + encodeURIComponent(parentTaskId));
+    var child = await request('/task/' + encodeURIComponent(taskId));
+    if (String(parent.id) !== String(parentTaskId) || String(child.id) !== String(taskId) ||
+        parent.archived || child.archived ||
+        String(parent.list && parent.list.id) !== String(listId) ||
+        String(child.list && child.list.id) !== String(listId)) {
+      throw new Error('Winner and variation must belong to the same product list.');
+    }
+    if (!_hasClickUpTaskLink(child, parentTaskId)) {
+      await request('/task/' + encodeURIComponent(taskId) + '/link/' + encodeURIComponent(parentTaskId), {method: 'POST', body: {}});
+      var verified = await request('/task/' + encodeURIComponent(taskId));
+      if (String(verified.id) !== String(taskId) || !_hasClickUpTaskLink(verified, parentTaskId)) throw new Error('ClickUp did not confirm the winner relationship.');
+    }
+    window._pendingCu = (window._pendingCu || []).filter(function(w) { return w.dedupeKey !== key; });
+    _renderSyncBanner();
+    return true;
+  } catch (err) {
+    window._pendingCu = (window._pendingCu || []).filter(function(w) { return w.dedupeKey !== key; });
+    window._pendingCu.push({kind: 'variation-parent-link', dedupeKey: key, taskId: taskId,
+      parentTaskId: parentTaskId, listId: listId, label: 'Link variation to winner',
+      error: (err && err.message) || String(err), at: Date.now()});
+    _renderSyncBanner();
+    toast('Winner link failed; use Retry in the ClickUp sync banner.', 'warn');
+    return false;
+  }
+}
+
 function createClickUpTaskFromAction(actionId, onDone, sourceAdOverride) {
   if (!CFG.key) { toast('Enter ClickUp API key first', 'err'); return; }
 
@@ -29030,6 +29090,16 @@ function createClickUpTaskFromAction(actionId, onDone, sourceAdOverride) {
   // (for tracker-format tasks this is the parent task's ID — used for linking + description)
   var prevSourceClickupId = sourceAd ? (sourceAd._clickupId || null) : null;
   var isTrackerSource = sourceAd && !sourceAd._fromInspoId;
+  // Capture the exact parent before async creation or a product switch.
+  var variationParent;
+  try {
+    variationParent = _variationParentForClickUp(sourceAd, act, activeProductId, _adsProductId, ADS);
+  } catch (err) {
+    act._cu_creating = false;
+    toast(err.message, 'warn');
+    if (onDone) onDone(false);
+    return;
+  }
 
   // Build description
   // For tracker-source production clones: build from a synthetic AD that merges the
@@ -29272,7 +29342,7 @@ function createClickUpTaskFromAction(actionId, onDone, sourceAdOverride) {
   if (_initCuStatus) createPayload.status = _initCuStatus;
 
   apiCreateTask(listId, createPayload)
-  .then(function(resp) {
+  .then(async function(resp) {
     if (!resp || !resp.id) { throw new Error('No task ID returned'); }
 
     var newId = resp.id;
@@ -29506,7 +29576,7 @@ function createClickUpTaskFromAction(actionId, onDone, sourceAdOverride) {
         var newTaskUrl = 'https://app.clickup.com/t/' + newId;
 
         // 1. Create ClickUp relationship (shows in Related Items panel)
-        apiFetch('/task/' + newId + '/link/' + srcFmtClickupId, { method: 'POST', body: {} })
+        if (!variationParent) apiFetch('/task/' + newId + '/link/' + srcFmtClickupId, { method: 'POST', body: {} })
           .then(function(){ console.log('[S2] Task relationship created ✓'); })
           .catch(function(e){ console.warn('[S2] Task link failed:', e && e.message); });
 
@@ -29646,6 +29716,9 @@ function createClickUpTaskFromAction(actionId, onDone, sourceAdOverride) {
       }
     }
 
+    // Inspiration provenance does not replace a variation's parent relationship.
+    var parentLinkSaved = !variationParent || await _syncVariationParentLink(newId, variationParent.taskId, listId);
+
     // Release the in-flight lock before re-rendering so the idle "↗ ClickUp"
     // link (driven by act._clickupId) wins the render.
     act._cu_creating = false;
@@ -29655,7 +29728,7 @@ function createClickUpTaskFromAction(actionId, onDone, sourceAdOverride) {
     P = process(ADS);
     buildCreativeUsageIndex();
     renderCreatives();
-    toast('Task created in ClickUp ✓', 'ok');
+    toast(parentLinkSaved ? 'Task created in ClickUp ✓' : 'Task created; winner link needs retry.', parentLinkSaved ? 'ok' : 'warn');
     if (onDone) onDone(newId);
   })
   .catch(function(err) {
@@ -49738,7 +49811,8 @@ function _retryPendingCu() {
   // Stagger 200ms apart to avoid rate limit
   queue.forEach(function(w, i) {
     setTimeout(function() {
-      _syncToClickUp(w.taskId, w.body, w.label);
+      if (w.kind === 'variation-parent-link') _syncVariationParentLink(w.taskId, w.parentTaskId, w.listId);
+      else _syncToClickUp(w.taskId, w.body, w.label);
     }, i * 200);
   });
 }

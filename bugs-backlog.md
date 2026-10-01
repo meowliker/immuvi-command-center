@@ -7,6 +7,28 @@ Status legend: 🆕 just-flagged · 📐 plan-locked · 🛠 in-progress · ✅ 
 
 ---
 
+## Winner variations missing from ClickUp Related tasks
+**Status:** Creation-path fix deployed; verified historical links repaired, 2026-10-01.
+
+Some creation paths saved `parent_ad_id` in Immuvi without creating ClickUp's
+explicit relationship. The app now resolves the exact same-product parent,
+checks both tasks' live product list, verifies the relationship, and retries a
+failed relationship independently of task creation. It never guesses by name.
+
+The follow-up audit covered all 27 products and restored 623 missing relationships
+across 20 products. Every added relationship was read back; existing links were
+preserved. One task changed concurrently and retains a content-review warning.
+The 124 unpublished, protected, invalid-parent or inaccessible review records
+remain unchanged. No database writes or task deletions were performed.
+
+166 targeted regression tests passed. Private pre-write snapshots and a per-pair
+journal support rollback. See
+`docs/repairs/2026-10-01-all-product-variation-links.md` for counts, exceptions and
+rollback instructions. Preserve these identity, product-boundary and deletion
+guards in future creation or sync changes.
+
+---
+
 ## Historical duplicate cleanup hides surviving ClickUp tasks
 **Status:** Fixed for verified automatic-cleanup cases, 2026-09-21.
 **Reported:** CA-225-INS-051 and CA-227-INS-054 missing from Action Plan and Creative Matrix.

@@ -29,3 +29,6 @@ Persistent backup: `/Users/anaytripathy/.codex/backups/immuvi-variation-links-17
 Contains the original relationship sets, exact added pairs, per-write snapshots and verification results. To undo only this repair, remove only the 11 pairs recorded in `verified.json.added`; do not remove Production Queue links or other relationships. Review current state before rollback.
 
 Code baseline: `c909cf481621ef84668e1c3cefa8d7e834880f7e`. QA was not edited. No user browser was used. Historical variations outside this Quilting family were not automatically relinked.
+
+The subsequent user-authorized all-product audit and repair is documented in
+`2026-10-01-all-product-variation-links.md`.

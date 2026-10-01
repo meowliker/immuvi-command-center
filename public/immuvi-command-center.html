@@ -13128,8 +13128,8 @@ const DB = {
       }
     });
     const state = {
-      ANGLES: (angles.data || []).map(function (a) { return { id: a.id, name: a.name, status: a.status, sourceLink: a.source_link || '', notes: a.notes || '', createdAt: a.created_at ? new Date(a.created_at).getTime() : null, archivedAt: a.archived_at ? new Date(a.archived_at).getTime() : null }; }),
-      PERSONAS: (personas.data || []).map(function (p) { return { id: p.id, name: p.name, status: p.status, sourceLink: p.source_link || '', notes: p.notes || '', createdAt: p.created_at ? new Date(p.created_at).getTime() : null, archivedAt: p.archived_at ? new Date(p.archived_at).getTime() : null }; }),
+      ANGLES: (angles.data || []).map(function (a) { return { id: a.id, name: a.name, status: a.status, sourceLink: a.source_link || '', notes: a.notes || '', creationApproved: a.creation_approved !== false, createdAt: a.created_at ? new Date(a.created_at).getTime() : null, archivedAt: a.archived_at ? new Date(a.archived_at).getTime() : null }; }),
+      PERSONAS: (personas.data || []).map(function (p) { return { id: p.id, name: p.name, status: p.status, sourceLink: p.source_link || '', notes: p.notes || '', creationApproved: p.creation_approved !== false, createdAt: p.created_at ? new Date(p.created_at).getTime() : null, archivedAt: p.archived_at ? new Date(p.archived_at).getTime() : null }; }),
       ADS: (ads.data || []).map(_rowToAd),
       MATRIX_CELL_META: meta,
       CELL_CREATIVE_ASSIGNMENTS: assigns,
@@ -13196,7 +13196,7 @@ const DB = {
     const angleRows = survivingLocalAngles.map(function (a) {
       // 2026-05-17 — last-line defense: strip badge-like suffix at the DB-write boundary.
       // 2026-05-19 — carry archived_at through so saveState doesn't clobber it.
-      return { id: a.id, product_id: productId, name: _normalizeTaxonomyName(a.name || ''), status: a.status || 'Untested', source_link: a.sourceLink || null, notes: a.notes || null, archived_at: a.archivedAt ? new Date(a.archivedAt).toISOString() : null };
+      return { id: a.id, product_id: productId, name: _normalizeTaxonomyName(a.name || ''), status: a.status || 'Untested', source_link: a.sourceLink || null, notes: a.notes || null, creation_approved: a._localNew === true && a._autoDiscovered !== true, archived_at: a.archivedAt ? new Date(a.archivedAt).toISOString() : null };
     });
     const angleIds = new Set(angleRows.map(function (r) { return r.id; }));
     const angleOrphans = (existingAngles.data || []).filter(function (r) { return !angleIds.has(r.id); }).map(function (r) { return r.id; });
@@ -13219,7 +13219,7 @@ const DB = {
       }
     }
     const personaRows = survivingLocalPersonas.map(function (p) {
-      return { id: p.id, product_id: productId, name: _normalizeTaxonomyName(p.name || ''), status: p.status || 'Untested', source_link: p.sourceLink || null, notes: p.notes || null, archived_at: p.archivedAt ? new Date(p.archivedAt).toISOString() : null };
+      return { id: p.id, product_id: productId, name: _normalizeTaxonomyName(p.name || ''), status: p.status || 'Untested', source_link: p.sourceLink || null, notes: p.notes || null, creation_approved: p._localNew === true && p._autoDiscovered !== true, archived_at: p.archivedAt ? new Date(p.archivedAt).toISOString() : null };
     });
     const personaIds = new Set(personaRows.map(function (r) { return r.id; }));
     const personaOrphans = (existingPersonas.data || []).filter(function (r) { return !personaIds.has(r.id); }).map(function (r) { return r.id; });
@@ -19508,18 +19508,19 @@ function updateTabCounts() {
   var el;
   var visibleAds = (ADS || []).filter(function(a) { return !_isBoundaryQuarantinedAd(a); });
   var visibleActions = (MANUAL_ACTIONS || []).filter(function(a) { return !_isBoundaryQuarantinedAction(a); });
-  var visibleAngles = (ANGLES || []).filter(function(a) { return !_isBoundaryQuarantinedTaxonomy('angle', a && a.name); });
-  var visiblePersonas = (PERSONAS || []).filter(function(p) { return !_isBoundaryQuarantinedTaxonomy('persona', p && p.name); });
+  var visibleAngles = (ANGLES || []).filter(function(a) { return a && !a.archivedAt && !_isBoundaryQuarantinedTaxonomy('angle', a.name); });
+  var visiblePersonas = (PERSONAS || []).filter(function(p) { return p && !p.archivedAt && !_isBoundaryQuarantinedTaxonomy('persona', p.name); });
   el = document.getElementById('anglesCount');
   if (el) el.innerHTML = visibleAngles.length;
   el = document.getElementById('personasCount');
   if (el) el.innerHTML = visiblePersonas.length;
   el = document.getElementById('creativesCount');
   if (el) el.innerHTML = visibleAds.length;
-  var matrixCells = 0;
+  var activeAngleNames = new Set(visibleAngles.map(function(a) { return a.name; }));
+  var activePersonaNames = new Set(visiblePersonas.map(function(p) { return p.name; }));
   var filledCells = {};
   for (var i = 0; i < visibleAds.length; i++) {
-    if (!visibleAds[i].parentAdId) filledCells[visibleAds[i].angle + '||' + visibleAds[i].persona] = true;
+    if (!visibleAds[i].parentAdId && activeAngleNames.has(visibleAds[i].angle) && activePersonaNames.has(visibleAds[i].persona)) filledCells[visibleAds[i].angle + '||' + visibleAds[i].persona] = true;
   }
   el = document.getElementById('matrixCount');
   if (el) el.innerHTML = Object.keys(filledCells).length + '/' + (visibleAngles.length * visiblePersonas.length);
@@ -26733,6 +26734,7 @@ async function archivePersona(idx) {
     renderPersonas();
     if (typeof renderMatrix === 'function') renderMatrix();
     if (typeof renderActionPlan === 'function') renderActionPlan();
+    updateTabCounts();
     toast('Archived persona: ' + p.name, 'ok');
   } catch (e) {
     p.archivedAt = null;
@@ -26742,20 +26744,25 @@ async function archivePersona(idx) {
 async function unarchivePersona(idx) {
   var p = PERSONAS[idx];
   if (!p) return;
+  if (p.creationApproved === false && !confirm('Add this previously auto-imported persona to the active product?\n\n' + p.name)) return;
   var prev = p.archivedAt;
+  var prevApproval = p.creationApproved;
   p.archivedAt = null;
   try {
     if (typeof SB !== 'undefined' && SB && p.id) {
-      var r = await SB.from('personas').update({ archived_at: null }).eq('id', p.id);
+      var r = await SB.from('personas').update({ archived_at: null, creation_approved: true }).eq('id', p.id).eq('product_id', activeProductId);
       if (r.error) throw new Error(r.error.message);
     }
+    p.creationApproved = true;
     saveState();
     renderPersonas();
     if (typeof renderMatrix === 'function') renderMatrix();
     if (typeof renderActionPlan === 'function') renderActionPlan();
+    updateTabCounts();
     toast('Restored persona: ' + p.name, 'ok');
   } catch (e) {
     p.archivedAt = prev;
+    p.creationApproved = prevApproval;
     toast('Restore failed: ' + (e.message || e), 'err');
   }
 }
@@ -26775,6 +26782,7 @@ async function archiveAngle(idx) {
     renderAngles();
     if (typeof renderMatrix === 'function') renderMatrix();
     if (typeof renderActionPlan === 'function') renderActionPlan();
+    updateTabCounts();
     toast('Archived angle: ' + a.name, 'ok');
   } catch (e) {
     a.archivedAt = null;
@@ -26784,20 +26792,25 @@ async function archiveAngle(idx) {
 async function unarchiveAngle(idx) {
   var a = ANGLES[idx];
   if (!a) return;
+  if (a.creationApproved === false && !confirm('Add this previously auto-imported angle to the active product?\n\n' + a.name)) return;
   var prev = a.archivedAt;
+  var prevApproval = a.creationApproved;
   a.archivedAt = null;
   try {
     if (typeof SB !== 'undefined' && SB && a.id) {
-      var r = await SB.from('angles').update({ archived_at: null }).eq('id', a.id);
+      var r = await SB.from('angles').update({ archived_at: null, creation_approved: true }).eq('id', a.id).eq('product_id', activeProductId);
       if (r.error) throw new Error(r.error.message);
     }
+    a.creationApproved = true;
     saveState();
     renderAngles();
     if (typeof renderMatrix === 'function') renderMatrix();
     if (typeof renderActionPlan === 'function') renderActionPlan();
+    updateTabCounts();
     toast('Restored angle: ' + a.name, 'ok');
   } catch (e) {
     a.archivedAt = prev;
+    a.creationApproved = prevApproval;
     toast('Restore failed: ' + (e.message || e), 'err');
   }
 }
@@ -30513,110 +30526,11 @@ function pushAllToClickUp() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Scoped auto-discover for angles & personas.
-//
-// Context: earlier versions of this sync code auto-pushed new angle/persona
-// values into global arrays without a product guard, which leaked KLS
-// taxonomy into Astro Rekha and vice-versa. That behavior was removed and
-// replaced with fully-manual curation. The manual path is safe but painful:
-// every time a new product is added, the team has to type its angles + personas
-// into the Angles / Personas tabs before the Creative Matrix and Coverage
-// Intelligence cards populate.
-//
-// This helper brings auto-discover back, but SCOPED:
-//   • It only ever writes to the current in-memory ANGLES / PERSONAS (which
-//     are swapped on every switchProduct), so it cannot cross products.
-//   • Both call sites (importTasksFromClickUp, pollFullSync Pass 2) are
-//     already guarded by the `_adsProductId === activeProductId` invariant,
-//     so the sync that triggered this is itself scoped to one product.
-//   • Match is case-insensitive so typos like "stressed women 25-45" vs
-//     "Stressed Women 25-45" don't add duplicate entries.
-//   • New entries get `_localNew: true` so the existing filter logic in
-//     switchProduct keeps them on refresh until a save completes.
-//
-// Returns { addedAngles: [...], addedPersonas: [...] } for diagnostic output.
-//
-// Rollback: `git reset --hard pre-scoped-autodiscover-2026-04-21`
-// ─────────────────────────────────────────────────────────────────────────────
+// Compatibility hook: sync may import creative tags but cannot create taxonomy.
 function autoDiscoverTaxonomy(sourceAds) {
-  // Guard: bail out if ANGLES/PERSONAS aren't yet bound to the active product.
-  // Original bug: `_adsProductId && activeProductId && ≠` only fired when BOTH
-  // were set — if _adsProductId was null (cleared mid product-switch at line
-  // ~10404) the guard silently passed, letting KLS taxonomy leak into KMH and
-  // vice-versa. Fix: require _adsProductId to be set AND match activeProductId.
-  if (!_adsProductId || !activeProductId || _adsProductId !== activeProductId) {
-    return { addedAngles: [], addedPersonas: [] };
-  }
-
-  var existingAngleNamesLC   = {};
-  var existingPersonaNamesLC = {};
-  for (var ai = 0; ai < ANGLES.length; ai++) {
-    var aname = (ANGLES[ai] && ANGLES[ai].name) ? ANGLES[ai].name : '';
-    if (aname) existingAngleNamesLC[_taxonomyLookupKey(aname)] = true;
-  }
-  for (var pi = 0; pi < PERSONAS.length; pi++) {
-    var pname = (PERSONAS[pi] && PERSONAS[pi].name) ? PERSONAS[pi].name : '';
-    if (pname) existingPersonaNamesLC[_taxonomyLookupKey(pname)] = true;
-  }
-  // BUG-004: tombstone of names the user just deleted — DON'T re-discover.
-  var _angTomb = _readTaxonomyTombstone('angle',   activeProductId);
-  var _perTomb = _readTaxonomyTombstone('persona', activeProductId);
-
-  var angleSeen   = {}; // preserve first-seen casing
-  var personaSeen = {};
-  var addedAngles   = [];
-  var addedPersonas = [];
-
-  for (var i = 0; i < (sourceAds || []).length; i++) {
-    var ad = sourceAds[i];
-    if (!ad) continue;
-    if (!_adPassesProductBoundaryForTaxonomy(ad, activeProductId)) continue;
-
-    // 2026-05-17 — defensive normalize. parseClickUpTask already sanitizes,
-    // but ads can also come from local edits / matrix-cell ingestion that
-    // bypass parseClickUpTask. Strip badge-like suffixes here too.
-    var ang = _canonicalTaxonomyName((ad.angle || '').trim(), ANGLES);
-    var angKey = _taxonomyLookupKey(ang);
-    if (ang && !angleSeen[angKey] && !existingAngleNamesLC[angKey] && !_angTomb[angKey]) {
-      angleSeen[angKey] = true;
-      ANGLES.push({
-        id: _newTaxonomyId('angle', ANGLES),
-        name: ang,
-        status: 'Untested',
-        sourceLink: '',
-        notes: '',
-        createdAt: Date.now(),
-        _localNew: true,
-        _autoDiscovered: true
-      });
-      existingAngleNamesLC[angKey] = true;
-      addedAngles.push(ang);
-    }
-
-    var per = _canonicalTaxonomyName((ad.persona || '').trim(), PERSONAS);
-    var perKey = _taxonomyLookupKey(per);
-    if (per && !personaSeen[perKey] && !existingPersonaNamesLC[perKey] && !_perTomb[perKey]) {
-      personaSeen[perKey] = true;
-      PERSONAS.push({
-        id: _newTaxonomyId('persona', PERSONAS),
-        name: per,
-        status: 'Untested',
-        sourceLink: '',
-        notes: '',
-        _localNew: true,
-        _autoDiscovered: true
-      });
-      existingPersonaNamesLC[perKey] = true;
-      addedPersonas.push(per);
-    }
-  }
-
-  if (addedAngles.length || addedPersonas.length) {
-    console.log('[autoDiscover] product', activeProductId,
-      '+', addedAngles.length, 'angles:', addedAngles,
-      '+', addedPersonas.length, 'personas:', addedPersonas);
-  }
-  return { addedAngles: addedAngles, addedPersonas: addedPersonas };
+  // ClickUp labels are task evidence, not approval to expand shared taxonomy.
+  // Keep the tags on creatives; only explicit Add/Restore actions create rows.
+  return { addedAngles: [], addedPersonas: [] };
 }
 
 async function importTasksFromClickUp(tasks) {
@@ -30994,12 +30908,7 @@ async function importTasksFromClickUp(tasks) {
     console.warn('[importTasksFromClickUp] product-boundary quarantine failed before taxonomy discovery', e);
   }
 
-  // Scoped auto-discover: push any new angle/persona values found in ADS into
-  // the active product's ANGLES / PERSONAS master lists. Scoped by the active
-  // product (the `_adsProductId === activeProductId` guard at the sync entry
-  // point ensures ADS belongs to this product; autoDiscoverTaxonomy writes
-  // only to the globals which are swapped on switchProduct, so no leak).
-  // Restored 2026-04-21 (option 3). Rollback tag: pre-scoped-autodiscover-2026-04-21.
+  // Creative tags remain available; shared taxonomy requires explicit approval.
   autoDiscoverTaxonomy(ADS);
 
   // Auto-discover new taxonomy values from imported tasks
@@ -32336,11 +32245,7 @@ function pollFullSync() {
         }
       }
 
-      // Scoped auto-discover runs AFTER Pass 1 (field-updates on existing ads)
-      // and Pass 2 (newly-imported tasks) — catches both sources of new
-      // taxonomy. Guarded by `_adsProductId === _startProductId` at the top
-      // of this .then() block, so ADS is confirmed product-scoped here.
-      // Restored 2026-04-21 (option 3). Rollback tag: pre-scoped-autodiscover-2026-04-21.
+      // Compatibility result is empty: syncing tags must not expand taxonomy.
       try {
         await _applyProductBoundaryQuarantine(_startProductId, {
           ADS: ADS,

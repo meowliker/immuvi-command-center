@@ -2580,3 +2580,21 @@ No creative, Action Plan, matrix, or deletion-marker rows changed during recover
 Three already-overwritten historical brief bodies and 13 older queue/source
 discrepancies remain documented for review, not silently guessed or overwritten.
 See `docs/repairs/2026-09-29-inspiration-identity.md` for verification and rollback.
+
+# 2026-10-01: ClickUp Labels Recreated Unapproved Angles And Personas
+
+Fixed on main with a reversible database archive repair. Sync no longer creates
+master taxonomy from creative tags. A database approval/archive guard prevents
+old tabs from reactivating archived rows or creating active unapproved labels.
+Explicit Add and Restore remain supported; product identity cannot change.
+
+Audited all 27 products; archived 38 Quilting entries, 8 Kids Life Skill persona
+variants and 2 Phonics prose personas. No creative, inspiration, action, matrix
+assignment or deletion marker was changed by the repair (full row hashes checked).
+Legitimate new categories and ambiguous cases were preserved, not guessed away.
+The Quilting burst occurred before the parent-link repair, not because of it.
+
+Regression prevention: treat imported labels as evidence, require explicit
+approval for taxonomy creation, preserve database archives during stale UPSERTs,
+and use non-retrying PT409 for conflicts. See
+`docs/repairs/2026-10-01-taxonomy-imports.md` for evidence, tests and private rollback.

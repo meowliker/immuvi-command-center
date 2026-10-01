@@ -36563,7 +36563,8 @@ function renderHdrProdDropdown() {
     var isActive = p.id === activeProductId;
     html += '<div class="hdr-prod-dd-item' + (isActive ? ' active' : '') + '" onclick="hdrSwitchProduct(\'' + escAttr(p.id) + '\')">';
     html += '<span class="hdr-prod-dd-dot" style="background:' + escAttr(p.color || '#4F46E5') + '"></span>';
-    html += '<span class="hdr-prod-dd-name">' + esc(p.name) + '</span>';
+    // Temporary alias for this dropdown row only; do not change the stored name.
+    html += '<span class="hdr-prod-dd-name">' + esc(p.id === 'prod-1778009469915' ? 'AR' : p.name) + '</span>';
     if (p.clickupListId) html += '<span class="hdr-prod-dd-badge">&#10003; ClickUp</span>';
     if (isActive) html += '<svg width="10" height="8" viewBox="0 0 10 8" fill="none" style="color:var(--win)"><path d="M1 4L3.5 6.5L9 1" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
     html += '</div>';

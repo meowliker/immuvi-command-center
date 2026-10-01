@@ -116,7 +116,14 @@ class FacebookSnapshotTests(unittest.IsolatedAsyncioTestCase):
 class MediaAdapterTests(unittest.TestCase):
     def test_failed_page_parse_retains_diagnostics_and_unknown_media_kind(self):
         pipeline = '''import asyncio
+import os
+import subprocess
 from fb_ad_classifier import fetch_ad_snapshot
+def download_ytdlp(url, outdir):
+    os.makedirs(outdir, exist_ok=True)
+    vp = os.path.join(outdir, "video.mp4")
+    subprocess.run(["yt-dlp","--quiet","-f","mp4/best[height<=720]/best","-o",vp,url], capture_output=True, timeout=90, check=True)
+    return vp
 def transcribe_audio(path):
     return '', [], ''
 try:
@@ -131,8 +138,12 @@ except RuntimeError as error:
         audio = types.ModuleType('private_inspiration_audio')
         audio.transcribe_audio = lambda path: None
         script = Path(__file__).resolve().parents[1] / 'scripts/private-inspiration-media.py'
+        original_path = sys.path.copy()
+        # runpy does not add the script directory as a direct Python launch does.
         with tempfile.TemporaryDirectory() as directory, patch.dict(os.environ), \
+                patch.object(sys, 'path', [str(script.parent), *original_path]), \
                 patch.dict(sys.modules, {'private_inspiration_audio': audio}), \
+                patch('subprocess.run', side_effect=AssertionError('No download expected')) as download, \
                 patch.object(helper, 'fetch_ad_snapshot', fail), \
                 patch.object(Path, 'read_text', return_value=skill), \
                 patch.object(sys, 'argv', [str(script), 'https://www.facebook.com/ads/library/?id=' + AD, directory]), \
@@ -140,6 +151,8 @@ except RuntimeError as error:
             runpy.run_path(str(script), run_name='__main__')
             with open(Path(directory) / 'media.json') as saved:
                 result = json.load(saved)
+        self.assertEqual(sys.path, original_path)
+        download.assert_not_called()
         self.assertEqual(result['error_code'], 'facebook_snapshot_unavailable')
         self.assertEqual(result['metadata']['source_fetch']['attempts'][0]['http_status'], 403)
         self.assertEqual(result['frames'], [])

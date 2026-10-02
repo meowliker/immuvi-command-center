@@ -83,6 +83,10 @@ fi
 # Check Codex install (worker uses it for producer + as fallback)
 if command -v codex >/dev/null 2>&1; then
   ok "Codex CLI installed ($(command -v codex))"
+elif [ -x "/Applications/ChatGPT.app/Contents/Resources/codex-cli/bin/codex" ]; then
+  ok "Codex CLI installed in ChatGPT.app"
+elif [ -x "/Applications/Codex.app/Contents/Resources/codex-cli/bin/codex" ]; then
+  ok "Codex CLI installed in Codex.app"
 elif [ -x "/Applications/ChatGPT.app/Contents/Resources/codex" ]; then
   ok "Codex CLI installed in ChatGPT.app"
 elif [ -x "/Applications/Codex.app/Contents/Resources/codex" ]; then

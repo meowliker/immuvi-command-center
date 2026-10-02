@@ -2035,6 +2035,13 @@ The no-op render guard used order-sensitive fingerprints:
 - Worker-health blocks must render as `Blocked`, not `Failed`, so users do not mistake infrastructure downtime for bad inspiration URLs.
 - A recently repeated `Operation not permitted (os error 1)` failure must make Codex-only workers unhealthy for dashboard queueing even if an old daemon re-registers itself as enabled.
 
+### 2026-10-02 launcher regression
+- `C-INS-150` was blocked because the live worker reported no usable agent CLI, not because its Drive URL failed analysis. No classification result had been saved.
+- Discover both current `Resources/codex-cli/bin/codex` and legacy app layouts, refreshing PATH/overrides on every lookup.
+- Refresh agent capabilities with each heartbeat and refuse classification claims when both agents are unavailable. Infrastructure failures are explicitly blocked and do not consume content retries.
+- Recovery must back up and retry only the exact existing queue row after the updated worker reports healthy. Preserve product, source URL, inspiration ID, brief mode, assignment and retry budget; never bulk-requeue unrelated work.
+- Regression coverage: `tests/test_classify_agent_discovery.py`; operational record: `docs/repairs/2026-10-02-worker-launcher.md`.
+
 ---
 
 ## Bug 47 — Due dates did not persist to ClickUp or disappeared after approval

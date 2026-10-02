@@ -90,15 +90,22 @@ AUTO_PAUSE_CHECK_INTERVAL_SECONDS = 60
 # same CLI inside ChatGPT.app. Keep CODEX_BIN as an env override for machines
 # with custom installs.
 CODEX_BIN_CANDIDATES = [
-    os.environ.get("CODEX_BIN", ""),
-    shutil.which("codex") or "",
+    "/Applications/ChatGPT.app/Contents/Resources/codex-cli/bin/codex",
+    "/Applications/Codex.app/Contents/Resources/codex-cli/bin/codex",
     "/Applications/ChatGPT.app/Contents/Resources/codex",
     "/Applications/Codex.app/Contents/Resources/codex",
+    str(Path.home() / "Applications/ChatGPT.app/Contents/Resources/codex-cli/bin/codex"),
+    str(Path.home() / "Applications/Codex.app/Contents/Resources/codex-cli/bin/codex"),
+    str(Path.home() / ".local/bin/codex"),
+    "/opt/homebrew/bin/codex",
+    "/usr/local/bin/codex",
 ]
 
 
 def _resolve_codex_bin():
-    for path in CODEX_BIN_CANDIDATES:
+    # Resolve overrides/PATH on each call: app updates may relocate the CLI
+    # while the long-lived LaunchAgent remains running.
+    for path in [os.environ.get("CODEX_BIN", ""), shutil.which("codex") or ""] + CODEX_BIN_CANDIDATES:
         if not path:
             continue
         resolved = shutil.which(path) if os.path.basename(path) == path else path
@@ -324,6 +331,7 @@ def probe_capabilities() -> dict:
         "codex": _resolve_codex_bin() is not None,
         "worker_contract": "inspiration-brief-8-section-page-verified",
         "classification_only": True,
+        "agent_launcher_revision": "codex-bundle-v2",
         "taxonomy_review": "semantic-taxonomy-v1" if (
             shutil.which("node") and _resolve_codex_bin()
             and (_project_root() / "tools/taxonomy-review-worker.mjs").exists()
@@ -768,9 +776,23 @@ class Worker:
 
     # ── Heartbeat thread ──
 
+    def refresh_agent_capabilities(self):
+        """Refresh lightweight agent discovery, without installing dependencies."""
+        self._caps.update({
+            "claude": _has_claude(),
+            "codex": _has_codex(),
+            "agent_launcher_revision": "codex-bundle-v2",
+        })
+        self._caps["taxonomy_review"] = "semantic-taxonomy-v1" if (
+            shutil.which("node") and self._caps["codex"]
+            and (_project_root() / "tools/taxonomy-review-worker.mjs").exists()
+            and (_project_root() / "tools/taxonomy-review-core.mjs").exists()
+        ) else ""
+
     def heartbeat_loop(self):
         while not self.shutdown.is_set():
             try:
+                self.refresh_agent_capabilities()
                 paused = self.auto_pause_when_claude_idle and not is_claude_code_running()
                 # Worker is busy if strategist is running OR any classify
                 # or producer jobs are in flight in their parallel pools.
@@ -784,6 +806,7 @@ class Worker:
                     f"worker_id=eq.{urllib.parse.quote(self.worker_id)}",
                     {
                         "last_heartbeat": _now_iso(),
+                        "capabilities": self._caps,
                         "status": next_status,
                         "current_job_id": str(self.current_job_id) if self.current_job_id else None,
                     },
@@ -942,6 +965,8 @@ class Worker:
 
         Returns the claimed row (dict) or None.
         """
+        if not (_has_claude() or _has_codex()):
+            return None
         offline = self._find_offline_workers()
 
         # We can claim if assignment is 'auto', exactly our id, or 'preferred:<x>'
@@ -1144,6 +1169,8 @@ class Worker:
 
     def _classify_has_capacity(self) -> bool:
         """True if pool has a free slot AND we're not in rate-limit cooldown."""
+        if not (_has_claude() or _has_codex()):
+            return False
         if time.time() < self._claude_cooldown_until:
             return False
         if time.time() < self._agent_infra_cooldown_until:
@@ -1425,8 +1452,7 @@ class Worker:
             if not codex_bin:
                 err = (
                     "Codex CLI not found. Checked CODEX_BIN, PATH, "
-                    "/Applications/ChatGPT.app/Contents/Resources/codex, and "
-                    "/Applications/Codex.app/Contents/Resources/codex."
+                    "current codex-cli/bin/codex and legacy Resources/codex app paths."
                 )
                 try:
                     _finish_producer_run(
@@ -2479,7 +2505,7 @@ class Worker:
             log(f"could not flip {job.get('id')} to {new_status}: {e}")
 
     def mark_agent_infra_failure(self, job: dict, error: str):
-        """Fail visibly without spending the user's content retry attempts."""
+        """Block infrastructure outages without spending content retry attempts."""
         attempts = max(0, (job.get("attempts") or 1) - 1)
         message = (
             "Worker agent infrastructure failure (not a URL/classification failure): "
@@ -2491,7 +2517,7 @@ class Worker:
                 "inspiration_queue",
                 f"id=eq.{job.get('id')}",
                 {
-                    "status": "failed",
+                    "status": "blocked",
                     "claimed_by": None,
                     "claimed_at": None,
                     "attempts": attempts,
@@ -2499,7 +2525,7 @@ class Worker:
                 },
             )
         except Exception as e:
-            log(f"could not flip {job.get('id')} to agent infra failed: {e}")
+            log(f"could not block {job.get('id')} after agent infra failure: {e}")
 
     def _mark_brief_classifying(self, job_id):
         try:

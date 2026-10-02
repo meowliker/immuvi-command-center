@@ -2598,3 +2598,22 @@ Regression prevention: treat imported labels as evidence, require explicit
 approval for taxonomy creation, preserve database archives during stale UPSERTs,
 and use non-retrying PT409 for conflicts. See
 `docs/repairs/2026-10-01-taxonomy-imports.md` for evidence, tests and private rollback.
+
+# 2026-10-02: Historical Source Labels Survived The Taxonomy Repair
+
+The Oct 1 audit did not adequately assess older source-only labels, particularly
+Astro Rekha. Inventoried all 27 products and archived 30 reviewed categories in
+nine products without changing creatives, inspirations, actions or matrix cells.
+Full protected-row fingerprints matched inside the committing transaction.
+
+Closed stale snapshot taxonomy deletion, product-switch mapping callbacks,
+count-derived explicit category IDs, and matrix stub creation. Old-client
+DELETEs now require an explicit product-scoped tombstone; current clients use
+the security-invoker deletion RPC. Anonymous grants are explicitly revoked.
+195 regression tests plus rollback-only database contracts passed.
+
+Do not equate imported creative usage with taxonomy approval, archive generic
+categories solely because an inspiration is from another brand, or fuzzy-merge
+personas to hit an expected count. Uncertain historical categories/duplicates
+remain preserved for review. See `docs/repairs/2026-10-02-source-taxonomy.md` for
+exact scope, counts, verification and private rollback location.

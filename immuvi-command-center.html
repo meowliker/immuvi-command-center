@@ -13159,6 +13159,9 @@ const DB = {
   // persist instead of coming back on refresh.
   async saveProductData(productId, state) {
     if (!SB || !productId) return { ok: false, error: 'no client or productId' };
+    const saveGeneration = _uiProductGeneration;
+    const isCurrentSave = function() { return activeProductId === productId && _uiProductGeneration === saveGeneration; };
+    if (!isCurrentSave()) return {ok: false, error: 'Product changed before save'};
 
     // Fetch existing IDs once so we can compute orphan-deletes across all tables.
     // Primary-key tables: ads, angles, personas (id text).
@@ -13166,11 +13169,14 @@ const DB = {
     // uuid table with stable blob: manual_actions (we track via ma._dbId).
     const [existingAds, existingAngles, existingPersonas, existingCells] = await Promise.all([
       SB.from('ads').select('id').eq('product_id', productId).is('deleted_at', null),
-      SB.from('angles').select('id').eq('product_id', productId),
-      SB.from('personas').select('id').eq('product_id', productId),
+      SB.from('angles').select('id,name').eq('product_id', productId),
+      SB.from('personas').select('id,name').eq('product_id', productId),
       SB.from('matrix_cells').select('id, angle_id, persona_id').eq('product_id', productId)
     ]);
 
+    const readFailure = [existingAds, existingAngles, existingPersonas, existingCells].find(function(result) { return result.error; });
+    if (readFailure) return {ok: false, error: readFailure.error};
+    if (!isCurrentSave()) return {ok: false, error: 'Product changed during save'};
     const tasks = [];
 
     // ── ANGLES ───────────────────────────────────────────────────
@@ -13197,8 +13203,8 @@ const DB = {
       return { id: a.id, product_id: productId, name: _normalizeTaxonomyName(a.name || ''), status: a.status || 'Untested', source_link: a.sourceLink || null, notes: a.notes || null, creation_approved: a._localNew === true && a._autoDiscovered !== true, archived_at: a.archivedAt ? new Date(a.archivedAt).toISOString() : null };
     });
     const angleIds = new Set(angleRows.map(function (r) { return r.id; }));
-    const angleOrphans = (existingAngles.data || []).filter(function (r) { return !angleIds.has(r.id); }).map(function (r) { return r.id; });
-    if (angleOrphans.length) tasks.push(SB.from('angles').delete().in('id', angleOrphans));
+    const angleOrphans = _explicitTaxonomyRemovals('angle', productId, existingAngles.data || [], angleIds);
+    if (angleOrphans.length) tasks.push(_deleteProductTaxonomy('angle', productId, angleOrphans));
     if (angleRows.length)    tasks.push(SB.from('angles').upsert(angleRows));
 
     // ── PERSONAS ─────────────────────────────────────────────────
@@ -13218,8 +13224,8 @@ const DB = {
       return { id: p.id, product_id: productId, name: _normalizeTaxonomyName(p.name || ''), status: p.status || 'Untested', source_link: p.sourceLink || null, notes: p.notes || null, creation_approved: p._localNew === true && p._autoDiscovered !== true, archived_at: p.archivedAt ? new Date(p.archivedAt).toISOString() : null };
     });
     const personaIds = new Set(personaRows.map(function (r) { return r.id; }));
-    const personaOrphans = (existingPersonas.data || []).filter(function (r) { return !personaIds.has(r.id); }).map(function (r) { return r.id; });
-    if (personaOrphans.length) tasks.push(SB.from('personas').delete().in('id', personaOrphans));
+    const personaOrphans = _explicitTaxonomyRemovals('persona', productId, existingPersonas.data || [], personaIds);
+    if (personaOrphans.length) tasks.push(_deleteProductTaxonomy('persona', productId, personaOrphans));
     if (personaRows.length)    tasks.push(SB.from('personas').upsert(personaRows));
 
     // ── ADS ──────────────────────────────────────────────────────
@@ -13238,6 +13244,7 @@ const DB = {
       _deletedAdIdsCache = _flushTomb;
       _deletedAdIdsCacheProductId = productId;
     } catch (e) { console.warn('[SB] flush tombstone fetch failed (proceeding without filter)', e); }
+    if (!isCurrentSave()) return {ok: false, error: 'Product changed during save'};
     const _filteredStateAds = (state.ADS || []).filter(function (a) {
       var _aCu = a && (a._clickupId || a.clickupTaskId);
       if (a && a.id && (_flushTomb.has(a.id) || (_aCu && _deletedAdClickUpIdsCache && _deletedAdClickUpIdsCache.has(_aCu)))) {
@@ -13512,9 +13519,9 @@ const DB = {
       const existing = await SB.from('manual_actions').select('id, payload').eq('product_id', productId);
       if (existing.error) throw existing.error;
       var _localPayloadIdToMa = {};
-      if (typeof MANUAL_ACTIONS !== 'undefined' && Array.isArray(MANUAL_ACTIONS)) {
-        for (var _pi = 0; _pi < MANUAL_ACTIONS.length; _pi++) {
-          var _pma = MANUAL_ACTIONS[_pi];
+      if (Array.isArray(state.MANUAL_ACTIONS)) {
+        for (var _pi = 0; _pi < state.MANUAL_ACTIONS.length; _pi++) {
+          var _pma = state.MANUAL_ACTIONS[_pi];
           if (_pma && _pma.id && !_pma._dbId) _localPayloadIdToMa[_pma.id] = _pma;
         }
       }
@@ -13553,7 +13560,7 @@ const DB = {
         })).select();
         if (ins.error) throw ins.error;
         // Write back newly-generated DB UUIDs so next save can upsert correctly
-        if (ins.data && typeof MANUAL_ACTIONS !== 'undefined') {
+        if (ins.data && isCurrentSave() && typeof MANUAL_ACTIONS !== 'undefined') {
           ins.data.forEach(function (r) {
             if (!r.id || !r.payload || !r.payload.id) return;
             var ma = MANUAL_ACTIONS.find(function (m) { return m.id === r.payload.id; });
@@ -13575,9 +13582,9 @@ const DB = {
     // saves. If a row is deleted externally after this, the next save will
     // correctly drop it from local state instead of resurrecting it.
     try {
-      if (typeof ANGLES !== 'undefined' && Array.isArray(ANGLES))
+      if (isCurrentSave() && typeof ANGLES !== 'undefined' && Array.isArray(ANGLES))
         ANGLES.forEach(function (a) { if (a && a._localNew) delete a._localNew; });
-      if (typeof PERSONAS !== 'undefined' && Array.isArray(PERSONAS))
+      if (isCurrentSave() && typeof PERSONAS !== 'undefined' && Array.isArray(PERSONAS))
         PERSONAS.forEach(function (p) { if (p && p._localNew) delete p._localNew; });
     } catch (_) { /* best-effort, never block the save */ }
     return { ok: true };
@@ -14636,6 +14643,35 @@ function _rememberTaxonomyDeletion(kind, productId, name) {
     raw[name.toLowerCase().trim()] = Date.now();
     localStorage.setItem(key, JSON.stringify(raw));
   } catch (_) {}
+}
+
+function _explicitTaxonomyRemovals(kind, productId, rows, keptIds) {
+  var tombstones = _readTaxonomyTombstone(kind, productId);
+  return rows.filter(function(row) {
+    return !keptIds.has(row.id) && !!tombstones[String(row.name || '').toLowerCase().trim()];
+  }).map(function(row) { return row.id; });
+}
+
+async function _deleteProductTaxonomy(kind, productId, ids) {
+  if (!SB || !productId || ['angle', 'persona'].indexOf(kind) === -1) {
+    return {error: {message: 'Taxonomy deletion is unavailable'}};
+  }
+  try {
+    for (var offset = 0; offset < ids.length; offset += 100) {
+      var result = await SB.rpc('delete_product_taxonomy', {
+        p_product_id: productId, p_kind: kind, p_ids: ids.slice(offset, offset + 100)
+      });
+      if (result.error) return result;
+    }
+    return {error: null};
+  } catch (error) { return {error: error}; }
+}
+
+function _insMatchContextIsCurrent() {
+  var context = window._insMatchContext;
+  return !!context && context.productId === activeProductId &&
+    context.generation === _uiProductGeneration && !_productSwitchPending &&
+    _inspirationsProductId === activeProductId;
 }
 function _isTaxonomyTombstoned(kind, productId, name) {
   if (!name) return false;
@@ -26501,24 +26537,18 @@ function addAngleRow() {
   toast('Angle added');
 }
 
-function deleteAngle(idx) {
+async function deleteAngle(idx) {
+  if (!ANGLES[idx] || _productSwitchPending || _adsProductId !== activeProductId) return;
   var name = ANGLES[idx].name;
   var aid  = ANGLES[idx].id;
   if (!confirm('Delete angle "' + name + '"? This will clear it from all creatives and inspirations.')) return;
-  // BUG-004: tombstone this name so the next ClickUp poll can't resurrect it
-  // via Pass 1 (overwriting cleared ad.angle) → autoDiscoverTaxonomy.
-  _rememberTaxonomyDeletion('angle', activeProductId, name);
-  // 2026-05-17 — direct DB delete + DB-side tombstone insert (see deletePersona comment).
-  try {
-    if (typeof SB !== 'undefined' && SB && aid) {
-      SB.from('angles').delete().eq('id', aid).then(function (r) {
-        if (r && r.error) console.warn('[deleteAngle] DB delete failed:', r.error.message);
-      });
-      if (activeProductId) {
-        SB.from('deleted_angles').upsert({ id: aid, product_id: activeProductId, name: name || null });
-      }
-    }
-  } catch (e) { console.warn('[deleteAngle] direct delete skipped:', e); }
+  var productId = activeProductId, generation = _uiProductGeneration;
+  var result = await _deleteProductTaxonomy('angle', productId, [aid]);
+  if (result.error) { toast('Unable to delete angle. Nothing was cleared; please retry.'); return; }
+  _rememberTaxonomyDeletion('angle', productId, name);
+  if (productId !== activeProductId || generation !== _uiProductGeneration || _productSwitchPending) return;
+  idx = ANGLES.findIndex(function(a) { return a.id === aid; });
+  if (idx < 0) return;
   ANGLES.splice(idx, 1);
   // Clear from ADS
   for (var i = 0; i < ADS.length; i++) {
@@ -26775,29 +26805,18 @@ async function unarchiveAngle(idx) {
   }
 }
 
-function deletePersona(idx) {
+async function deletePersona(idx) {
+  if (!PERSONAS[idx] || _productSwitchPending || _adsProductId !== activeProductId) return;
   var name = PERSONAS[idx].name;
   var pid  = PERSONAS[idx].id;
   if (!confirm('Delete persona "' + name + '"? This will clear it from all creatives and inspirations.')) return;
-  // BUG-004: tombstone — same reasoning as deleteAngle.
-  _rememberTaxonomyDeletion('persona', activeProductId, name);
-  // 2026-05-17 — direct DB delete + DB-side tombstone insert. Previously this
-  // function only mutated in-memory PERSONAS and relied on saveState's orphan
-  // diff to indirectly delete from DB. That created a multi-tab race where
-  // another tab's saveState could resurrect the row (it still had the persona
-  // in its local existingPersonaIdSet from a prior fetch). The DB-side
-  // deleted_personas tombstone (Phase 3) makes resurrection impossible — any
-  // upsert with that id is blocked by the trigger.
-  try {
-    if (typeof SB !== 'undefined' && SB && pid) {
-      SB.from('personas').delete().eq('id', pid).then(function (r) {
-        if (r && r.error) console.warn('[deletePersona] DB delete failed:', r.error.message);
-      });
-      if (activeProductId) {
-        SB.from('deleted_personas').upsert({ id: pid, product_id: activeProductId, name: name || null });
-      }
-    }
-  } catch (e) { console.warn('[deletePersona] direct delete skipped:', e); }
+  var productId = activeProductId, generation = _uiProductGeneration;
+  var result = await _deleteProductTaxonomy('persona', productId, [pid]);
+  if (result.error) { toast('Unable to delete persona. Nothing was cleared; please retry.'); return; }
+  _rememberTaxonomyDeletion('persona', productId, name);
+  if (productId !== activeProductId || generation !== _uiProductGeneration || _productSwitchPending) return;
+  idx = PERSONAS.findIndex(function(p) { return p.id === pid; });
+  if (idx < 0) return;
   PERSONAS.splice(idx, 1);
   // Clear from ADS
   for (var i = 0; i < ADS.length; i++) {
@@ -34571,15 +34590,24 @@ async function loadState() {
 async function resetToSeedData() {
   if (!confirm('Reset this product to empty state? All ads, angles, personas, and matrix data will be deleted from the cloud database. This cannot be undone.')) return;
   if (!DB.ready || !activeProductId) return;
+  var productId = activeProductId;
   try {
-    // Delete all product-scoped rows (cascade via FK)
-    await Promise.all([
-      SB.from('ads').delete().eq('product_id', activeProductId),
-      SB.from('matrix_cells').delete().eq('product_id', activeProductId),
-      SB.from('manual_actions').delete().eq('product_id', activeProductId),
-      SB.from('angles').delete().eq('product_id', activeProductId),
-      SB.from('personas').delete().eq('product_id', activeProductId)
+    var categories = await Promise.all([
+      SB.from('angles').select('id').eq('product_id', productId),
+      SB.from('personas').select('id').eq('product_id', productId)
     ]);
+    var readError = categories.find(function(r) { return r.error; });
+    if (readError) throw readError.error;
+    // Delete all product-scoped rows (cascade via FK)
+    var results = await Promise.all([
+      SB.from('ads').delete().eq('product_id', productId),
+      SB.from('matrix_cells').delete().eq('product_id', productId),
+      SB.from('manual_actions').delete().eq('product_id', productId),
+      _deleteProductTaxonomy('angle', productId, categories[0].data.map(function(r) { return r.id; })),
+      _deleteProductTaxonomy('persona', productId, categories[1].data.map(function(r) { return r.id; }))
+    ]);
+    var writeError = results.find(function(r) { return r.error; });
+    if (writeError) throw writeError.error;
     toast('Product reset', 'ok');
     location.reload();
   } catch (e) {
@@ -35205,8 +35233,14 @@ async function _pruneTaxonomyAfterStaleCleanup(productId, staleAds, liveTasks) {
     if (typeof purgeOrphanedMatrixKeys === 'function') purgeOrphanedMatrixKeys();
 
     try {
-      if (removedAngleIds.length) await SB.from('angles').delete().eq('product_id', productId).in('id', removedAngleIds);
-      if (removedPersonaIds.length) await SB.from('personas').delete().eq('product_id', productId).in('id', removedPersonaIds);
+      if (removedAngleIds.length) {
+        var angleDelete = await _deleteProductTaxonomy('angle', productId, removedAngleIds);
+        if (angleDelete.error) throw angleDelete.error;
+      }
+      if (removedPersonaIds.length) {
+        var personaDelete = await _deleteProductTaxonomy('persona', productId, removedPersonaIds);
+        if (personaDelete.error) throw personaDelete.error;
+      }
     } catch (e) {
       console.warn('[cleanStaleAds] taxonomy direct delete non-fatal error', e);
     }
@@ -37018,23 +37052,10 @@ function addPersonaToAngle(angleName, personaName) {
 // creative" placeholder in renderMatrix().
 // ================================================
 function assignAndExpandCell(angleName, personaName) {
-  // Belt & suspenders: also ensure the persona exists in the PERSONAS array.
-  // If a matrix column was sourced from ANGLE_PERSONAS but the persona is
-  // missing from PERSONAS (rare, but happens when state syncs race a create),
-  // add a stub so the "+ Add Persona" popup + tracker tab stay in sync.
-  var hasInPersonas = false;
-  for (var pi = 0; pi < PERSONAS.length; pi++) {
-    if (PERSONAS[pi].name === personaName) { hasInPersonas = true; break; }
-  }
-  if (!hasInPersonas) {
-    PERSONAS.push({
-      id: _newTaxonomyId('persona', PERSONAS),
-      name: personaName,
-      status: 'Untested',
-      sourceLink: '',
-      notes: '',
-      _localNew: true
-    });
+  if (!ANGLES.some(function(a) { return a.name === angleName && !a.archivedAt; }) ||
+      !PERSONAS.some(function(p) { return p.name === personaName && !p.archivedAt; })) {
+    toast('Add or restore the category before assigning this cell.');
+    return;
   }
   // Assign persona to angle (mirror of addPersonaToAngle, minus toast).
   if (!ANGLE_PERSONAS[angleName]) ANGLE_PERSONAS[angleName] = [];
@@ -47659,7 +47680,7 @@ function showNewEntityPrompt(type, detectedName, ins, callback) {
       index: i,
       score: (typeof _taxonomySimilarityScore === 'function') ? _taxonomySimilarityScore(detectedName, e && e.name) : 0
     };
-  }).sort(function(a, b) {
+  }).filter(function(row) { return row.item && !row.item.archivedAt; }).sort(function(a, b) {
     return b.score - a.score ||
       _taxonomyStatusRank(b.item) - _taxonomyStatusRank(a.item) ||
       String((a.item && a.item.name) || '').localeCompare(String((b.item && b.item.name) || ''));
@@ -47687,12 +47708,12 @@ function showNewEntityPrompt(type, detectedName, ins, callback) {
       '<p style="font-size:0.72rem;color:var(--t2);margin-top:12px;margin-bottom:6px">What would you like to do?</p>' +
       '<div class="ins-match-options">' +
         '<label class="ins-match-opt" style="border:1.5px solid ' + accentColor + ';background:rgba(79,70,229,0.04)">' +
-          '<input type="radio" name="ins_match_opt" value="new" checked> ' +
+          '<input type="radio" name="ins_match_opt" value="new"> ' +
           '<div><strong>Add as new ' + type + '</strong><div style="font-size:0.68rem;color:var(--t2);margin-top:2px">Appears in ' + type + 's tab as "Not Tested"</div></div>' +
         '</label>' +
         options +
         '<label class="ins-match-opt">' +
-          '<input type="radio" name="ins_match_opt" value="custom"> ' +
+          '<input type="radio" name="ins_match_opt" value="custom" checked> ' +
           '<div><strong>Keep as custom label</strong><div style="font-size:0.68rem;color:var(--t2);margin-top:2px">Stays on this inspiration only — not added to ' + type + 's</div></div>' +
         '</label>' +
       '</div>' +
@@ -47708,9 +47729,11 @@ function showNewEntityPrompt(type, detectedName, ins, callback) {
 
   window._insMatchCallback = callback;
   window._insMatchExisting = existing;
+  window._insMatchContext = {productId: activeProductId, generation: _uiProductGeneration};
 }
 
 function confirmInsMatch(type, detectedName) {
+  if (!_insMatchContextIsCurrent()) { closeInsMatchModal(); return; }
   var selected = document.querySelector('input[name="ins_match_opt"]:checked');
   if (!selected) return;
   var val = selected.value;
@@ -47723,7 +47746,9 @@ function confirmInsMatch(type, detectedName) {
     chosenName = detectedName;
     isNew = false;
   } else {
-    chosenName = existing[parseInt(val)].name;
+    var match = existing[parseInt(val, 10)];
+    if (!match || match.archivedAt) { toast('Select an active category or keep the custom label.'); return; }
+    chosenName = match.name;
     isNew = false;
   }
   closeInsMatchModal();
@@ -47732,6 +47757,7 @@ function confirmInsMatch(type, detectedName) {
 
 // Skip = keep raw label as-is, but mark as handled so popup never re-fires
 function skipInsMatch(type, detectedName) {
+  if (!_insMatchContextIsCurrent()) { closeInsMatchModal(); return; }
   closeInsMatchModal();
   // Call callback with raw label and isNew=false — marks _anglePromptDone/_personaPromptDone=true
   if (window._insMatchCallback) window._insMatchCallback(detectedName, false);
@@ -48160,19 +48186,20 @@ async function applyClassificationResults(results, isPolling, expectedProductId)
   } finally { _classificationImportBusy = false; }
 }
 
-// ── Auto-add new Angle or Persona from inspiration ──────────────
+// Explicitly approved additions only; classification labels stay local.
 function addEntityFromInspiration(type, name, ins) {
+  if (!_insMatchContextIsCurrent()) return;
   var isAngle = type === 'Angle';
   var arr = isAngle ? ANGLES : PERSONAS;
   // Avoid exact duplicates
   if (arr.some(function(e){ return e.name.toLowerCase().trim() === name.toLowerCase().trim(); })) return;
-  var prefix = isAngle ? 'ang' : 'per';
   var newEntity = {
-    id: prefix + '-' + (arr.length + 1),
+    id: _newTaxonomyId(isAngle ? 'angle' : 'persona', arr),
     name: name,
     status: 'Untested',
     sourceLink: ins.sourceUrl || '',
-    notes: 'Auto-added from inspiration ' + ins.id
+    notes: 'Approved from inspiration ' + ins.id,
+    _localNew: true
   };
   arr.push(newEntity);
   P = process(ADS);

@@ -123,7 +123,7 @@ for (const file of ['immuvi-command-center.html', 'public/immuvi-command-center.
     await assert.rejects(c.dbTest.loadProductData('A'), /offline/);
   });
   function loadImporter(c) {
-    load(c, 'async function applyClassificationResults(', '// ── Auto-add new Angle or Persona');
+    load(c, 'async function applyClassificationResults(', 'function addEntityFromInspiration(');
   }
   test(file + ': replay fills only missing brief fields, preserving manual taxonomy and status', async () => {
     const {c,calls,turn} = context(); loadImporter(c);

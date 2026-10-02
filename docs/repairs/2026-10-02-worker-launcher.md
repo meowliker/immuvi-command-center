@@ -20,7 +20,11 @@
 - 25 Python tests pass: launcher discovery, queue guards, no-brief mode and taxonomy-review worker contracts.
 - 195 focused Node regression tests pass across product boundaries, taxonomy creation, inspiration identity, auth, notes, parent links, deletion safeguards, matrix search and rendering.
 - Installer shell syntax checks pass.
-- Operational completion still requires a live `codex-bundle-v2` heartbeat and successful processing of the exact requested inspiration.
+- Code fix `261f0e8` deployed READY; the public worker asset matched the tested local file byte-for-byte.
+- Production `gp-mac-mini` self-updated and reported `agent_launcher_revision: codex-bundle-v2`, Codex available, and a fresh heartbeat at 07:18:26 UTC.
+- The guarded recovery requeued only C-INS-150. It was claimed by `gp-mac-mini` at 07:19:06 UTC and finished `classified` at 07:27:39 UTC, on one content attempt, with no remaining error.
+- Final read-back confirmed exactly one saved result, all ten required classification/brief fields, and unchanged product, source URL, inspiration ID and brief mode.
+- Private recovery and verified completion snapshots: `/Users/anaytripathy/.codex/backups/immuvi-worker-20261002/C-INS-150-retry/`.
 
 ## Rollback
 

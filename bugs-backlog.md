@@ -2624,3 +2624,15 @@ categories solely because an inspiration is from another brand, or fuzzy-merge
 personas to hit an expected count. Uncertain historical categories/duplicates
 remain preserved for review. See `docs/repairs/2026-10-02-source-taxonomy.md` for
 exact scope, counts, verification and private rollback location.
+
+# 2026-10-02: Overlapping Refreshes And Peer Notification Storms
+
+Coalesced database and peer notifications into one-minute background windows,
+rate-limited automatic ClickUp refreshes, removed refresh-generated broadcasts,
+and made manual refresh local/read-only. Failed saves no longer send success
+notifications. Pending edits and product-generation guards remain in place.
+Removed speculative local deletion based only on absence from a list response.
+
+Regression coverage includes fixed-window timing, simultaneous users, overlapping
+requests, failed saves, product switching, stale queued field updates, and no-op
+rendering. See `docs/repairs/2026-10-02-refresh-budget.md` for scope and rollback.

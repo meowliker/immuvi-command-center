@@ -11479,6 +11479,80 @@ var _productsRealtimeReconnectTimer = null;
 // saveAdNotes writes here; render reads here first; cleared when DB confirms the value.
 var _notesCache = {};
 
+// Incoming notifications invalidate local views; they are not new user edits.
+// Fixed windows (not a sliding debounce) ensure continuous traffic cannot starve a refresh.
+var _backgroundRefreshTasks = new Map();
+var _backgroundRefreshTimer = null;
+var _backgroundRefreshRunning = false;
+var _backgroundEventApplying = false;
+var _pendingBackgroundRender = false;
+var _requestSharedRefresh = null;
+var _lastClickUpRefreshAt = 0;
+var _lastClickUpRefreshProduct = null;
+var _clickUpRefreshPromise = null;
+var _manualRefreshBusy = false;
+var _cloudRefreshPromise = null;
+var _clickUpRefreshRetryAfter = 0;
+var _clickUpRefreshFailures = 0;
+
+function _queueBackgroundRefresh(key, run, productId) {
+  var generation = _uiProductGeneration;
+  _backgroundRefreshTasks.set(key, {run: run, productId: productId, generation: generation});
+  if (_backgroundRefreshTimer || _backgroundRefreshRunning) return;
+  _backgroundRefreshTimer = setTimeout(_drainBackgroundRefreshes, 60000);
+}
+
+async function _drainBackgroundRefreshes() {
+  _backgroundRefreshTimer = null;
+  if (_backgroundRefreshRunning) return;
+  if (document.hidden || _saveScheduled || _saveInFlight || _productSwitchPending) {
+    _backgroundRefreshTimer = setTimeout(_drainBackgroundRefreshes, 60000);
+    return;
+  }
+  var pending = Array.from(_backgroundRefreshTasks.values());
+  _backgroundRefreshTasks.clear();
+  _backgroundRefreshRunning = true;
+  try {
+    for (var task of pending) {
+      if (task.productId && (task.productId !== activeProductId || task.generation !== _uiProductGeneration)) continue;
+      try { await task.run(); } catch (e) { console.warn('[refresh] background refresh failed', e); }
+    }
+  } finally {
+    _backgroundRefreshRunning = false;
+    if (_pendingBackgroundRender) {
+      _pendingBackgroundRender = false;
+      _renderAllSilent();
+    }
+    if (_backgroundRefreshTasks.size && !_backgroundRefreshTimer) {
+      _backgroundRefreshTimer = setTimeout(_drainBackgroundRefreshes, 60000);
+    }
+  }
+}
+
+function _listenProductBroadcast(channel, event, productId, callback) {
+  var generation = _uiProductGeneration;
+  channel.on('broadcast', {event: event}, function(msg) {
+    var p = msg && msg.payload;
+    if (!p || p.clientId === _myClientId || activeProductId !== productId || generation !== _uiProductGeneration) return;
+    if (p.productId && p.productId !== productId) return;
+    var identity = p.adId || p.actionId || p.cellKey || (p.ad && p.ad.id) || (p.action && p.action.id) || '';
+    var readLocalValue = function() {
+      if (event === 'cell-assignment-changed') return JSON.stringify(CELL_CREATIVE_ASSIGNMENTS[p.cellKey]);
+      if (event !== 'field-update') return null;
+      var ad = ADS.find(function(a) { return a.id === p.adId; });
+      return JSON.stringify(ad && (p.kind === 'custom' ? (ad._customFields || {})[p.field] : ad[p.field]));
+    };
+    var localValueAtReceipt = readLocalValue();
+    _queueBackgroundRefresh('broadcast:' + event + ':' + identity + ':' + (p.field || ''), function() {
+      // Never replay an older peer value over a local edit made during the wait.
+      if (readLocalValue() !== localValueAtReceipt) return;
+      _backgroundEventApplying = true;
+      try { return callback(msg); }
+      finally { _backgroundEventApplying = false; _pendingBackgroundRender = true; }
+    }, productId);
+  });
+}
+
 function _isBadRealtimeStatus(status) {
   return status === 'CHANNEL_ERROR' || status === 'TIMED_OUT';
 }
@@ -11489,14 +11563,14 @@ function _isClosedRealtimeStatus(status) {
 
 function _scheduleRealtimeReconnect(reason, productId, delayMs) {
   if (!SB || !productId) return;
-  if (_realtimeReconnectTimer) clearTimeout(_realtimeReconnectTimer);
+  if (_realtimeReconnectTimer) return;
   _realtimeReconnectTimer = setTimeout(function () {
     _realtimeReconnectTimer = null;
     if (!SB || productId !== activeProductId) return;
     console.warn('[rt] reconnecting live channels:', reason);
     try { _resubscribeRealtime(); } catch (e) { console.warn('[rt] product channel reconnect failed', e); }
     try { _initRealtimeChannel(productId); } catch (e) { console.warn('[rt] broadcast channel reconnect failed', e); }
-  }, delayMs || 1200);
+  }, Math.max(60000, delayMs || 0));
 }
 
 function _startRealtimeHealthWatchdog() {
@@ -11504,7 +11578,7 @@ function _startRealtimeHealthWatchdog() {
   _realtimeHealthInterval = setInterval(function () {
     if (!SB) return;
     if (!_productsChannel || _isBadRealtimeStatus(_productsRealtimeStatus) || _isClosedRealtimeStatus(_productsRealtimeStatus)) {
-      try { _initProductsRealtimeChannel(); } catch (e) { console.warn('[products-realtime] watchdog reconnect failed', e); }
+      _scheduleProductsRealtimeReconnect('watchdog');
     }
     if (!activeProductId) return;
     if (!_activeRTChannel || _isBadRealtimeStatus(_productRealtimeStatus) || _isClosedRealtimeStatus(_productRealtimeStatus)) {
@@ -11519,13 +11593,13 @@ function _startRealtimeHealthWatchdog() {
 
 function _scheduleProductsRealtimeReconnect(reason, delayMs) {
   if (!SB) return;
-  if (_productsRealtimeReconnectTimer) clearTimeout(_productsRealtimeReconnectTimer);
+  if (_productsRealtimeReconnectTimer) return;
   _productsRealtimeReconnectTimer = setTimeout(function () {
     _productsRealtimeReconnectTimer = null;
     if (!SB) return;
     console.warn('[products-realtime] reconnecting:', reason);
     try { _initProductsRealtimeChannel(); } catch (e) { console.warn('[products-realtime] reconnect failed', e); }
-  }, delayMs || 1500);
+  }, Math.max(60000, delayMs || 0));
 }
 
 // ── GLOBAL PRODUCTS CHANNEL (2026-05-11) ─────────────────────────────────
@@ -11723,7 +11797,9 @@ function _initProductsRealtimeChannel() {
     }
   );
 
+  var productsChannel = _productsChannel;
   _productsChannel.subscribe(function (status) {
+    if (_productsChannel !== productsChannel) return;
     _productsRealtimeStatus = status;
     if (_isBadRealtimeStatus(status)) {
       _scheduleProductsRealtimeReconnect(status, 1500);
@@ -11744,7 +11820,7 @@ function _initRealtimeChannel(productId) {
 
   // Listen for broadcast field updates from other clients.
   // Echo guard: ignore broadcasts the local tab originated.
-  _rtChannel.on('broadcast', { event: 'field-update' }, function(msg) {
+  _listenProductBroadcast(_rtChannel, 'field-update', productId, function(msg) {
     var p = msg.payload;
     if (!p || !p.adId || !p.field) return;
     if (p.clientId && p.clientId === _myClientId) return; // own echo
@@ -11909,7 +11985,7 @@ function _initRealtimeChannel(productId) {
   });
 
   // Listen for broadcast deletes from other clients
-  _rtChannel.on('broadcast', { event: 'ad-deleted' }, function(msg) {
+  _listenProductBroadcast(_rtChannel, 'ad-deleted', productId, function(msg) {
     var p = msg.payload;
     if (!p || !p.adId) return;
     ADS = ADS.filter(function(a) { return a.id !== p.adId; });
@@ -11920,7 +11996,7 @@ function _initRealtimeChannel(productId) {
   });
 
   // Instant action-plan item deletion from another client
-  _rtChannel.on('broadcast', { event: 'action-deleted' }, function(msg) {
+  _listenProductBroadcast(_rtChannel, 'action-deleted', productId, function(msg) {
     var p = msg && msg.payload;
     if (!p || !p.actionId) return;
     var before = MANUAL_ACTIONS.length;
@@ -11943,10 +12019,11 @@ function _initRealtimeChannel(productId) {
   // so receivers can hydrate ADS + CELL_CREATIVE_ASSIGNMENTS without
   // waiting for the post-save sync-needed roundtrip (which is what was
   // causing the "1 ClickUp task" orphan in Tab B).
-  _rtChannel.on('broadcast', { event: 'ad-added' }, function (msg) {
+  _listenProductBroadcast(_rtChannel, 'ad-added', productId, function (msg) {
     var p = msg && msg.payload;
     if (!p || !p.ad || !p.ad.id) return;
     if (p.clientId && p.clientId === _myClientId) return; // own echo
+    if (_isDeletedAdTombstonedNow({adid: p.ad.id, cuid: p.ad._clickupId || p.ad.clickupTaskId, title: p.ad.formatName})) return;
     // Skip if we already have this AD (postgres echo may have delivered it).
     var existing = ADS.find(function (a) { return a.id === p.ad.id; });
     if (!existing) {
@@ -11986,7 +12063,7 @@ function _initRealtimeChannel(productId) {
   // creative_assignments without spawning a new AD (e.g. moving an AD
   // between cells, removing from cell). Authoritative replace of the
   // cell's array.
-  _rtChannel.on('broadcast', { event: 'cell-assignment-changed' }, function (msg) {
+  _listenProductBroadcast(_rtChannel, 'cell-assignment-changed', productId, function (msg) {
     var p = msg && msg.payload;
     if (!p || !p.cellKey) return;
     if (p.clientId && p.clientId === _myClientId) return;
@@ -12004,7 +12081,7 @@ function _initRealtimeChannel(productId) {
   // when a recovery re-link runs. Without this listener, peers had to
   // wait for the Supabase postgres-changes echo (~1-3s + needs realtime
   // subscription healthy). The broadcast lands in <200ms.
-  _rtChannel.on('broadcast', { event: 'action-added' }, function (msg) {
+  _listenProductBroadcast(_rtChannel, 'action-added', productId, function (msg) {
     var p = msg && msg.payload;
     if (!p || !p.action || !p.action.id) return;
     if (p.clientId && p.clientId === _myClientId) return; // own echo
@@ -12024,7 +12101,7 @@ function _initRealtimeChannel(productId) {
   });
 
   // Instant action re-link from another client (Recreate flow)
-  _rtChannel.on('broadcast', { event: 'action-relinked' }, function(msg) {
+  _listenProductBroadcast(_rtChannel, 'action-relinked', productId, function(msg) {
     var p = msg && msg.payload;
     if (!p || !p.actionId || !p.newClickupId) return;
     for (var i = 0; i < MANUAL_ACTIONS.length; i++) {
@@ -12053,108 +12130,10 @@ function _initRealtimeChannel(productId) {
   });
 
   // Generic sync-needed: another client finished saving → we re-fetch
-  _rtChannel.on('broadcast', { event: 'sync-needed' }, function(msg) {
+  _rtChannel.on('broadcast', {event: 'sync-needed'}, function(msg) {
     var p = msg && msg.payload;
-    // Bug 7 fix: previously we returned here if _saveScheduled || _saveInFlight,
-    // which meant a tab busy saving its own edits would silently drop a peer's
-    // sync-needed event and never reconcile. Now we just delay the merge until
-    // the local save settles — _rtMergeTimer's setTimeout already gives us a
-    // grace window; we extend it if a save is in progress so the merge runs
-    // AFTER our own save lands (avoids stomping on our own pending writes).
-    var _initialDelay = (_saveScheduled || _saveInFlight) ? 800 : 150;
-    if (_rtMergeTimer) clearTimeout(_rtMergeTimer);
-    var _retriesLeft = 3;
-    var _runMerge = async function () {
-      _rtMergeTimer = null;
-      try {
-        var pid = activeProductId;
-        // If we're STILL mid-save when the timer fires, requeue with bounded
-        // retries so we don't loop forever but don't drop the peer's update.
-        if ((_saveScheduled || _saveInFlight) && _retriesLeft > 0) {
-          _retriesLeft--;
-          _rtMergeTimer = setTimeout(_runMerge, 600);
-          return;
-        }
-        var st = await DB.loadProductData(pid);
-        if (!st || pid !== activeProductId) return;
-        // BUG-004: drop any taxonomy rows the user tombstoned locally but a
-        // peer / read-replica still has. Without this, "deleted" angles flash
-        // back in on every realtime sync.
-        var _rtAngTomb = _readTaxonomyTombstone('angle',   pid);
-        var _rtPerTomb = _readTaxonomyTombstone('persona', pid);
-        ANGLES = (st.ANGLES || ANGLES).filter(function (a) {
-          return !(a && a.name && _rtAngTomb[a.name.toLowerCase().trim()]);
-        });
-        PERSONAS = (st.PERSONAS || PERSONAS).filter(function (p) {
-          return !(p && p.name && _rtPerTomb[p.name.toLowerCase().trim()]);
-        });
-        if (Array.isArray(st.ADS)) {
-          var _localAdById = {};
-          for (var i = 0; i < ADS.length; i++) {
-            if (ADS[i] && ADS[i].id) _localAdById[ADS[i].id] = ADS[i];
-          }
-          var _mergedAds = [];
-          for (var di = 0; di < st.ADS.length; di++) {
-            var _dbAd = st.ADS[di];
-            if (!_dbAd || !_dbAd.id) continue;
-            if (_recentlyDeletedAdIds.has(_dbAd.id)) continue;
-            var _localAd = _localAdById[_dbAd.id];
-            if (_localAd) {
-              for (var mfi = 0; mfi < _META_FIELDS.length; mfi++) {
-                var mf = _META_FIELDS[mfi];
-                if (_localAd[mf] !== undefined && _localAd[mf] !== null && _localAd[mf] !== '') _dbAd[mf] = _localAd[mf];
-              }
-              if (_notesCache[_dbAd.id] !== undefined) {
-                _dbAd.notes = _notesCache[_dbAd.id];
-                delete _notesCache[_dbAd.id];
-              } else if (_localAd.notes) { _dbAd.notes = _localAd.notes; }
-              if (_localAd.variationNotes) _dbAd.variationNotes = _localAd.variationNotes;
-              if (_localAd._clickupId && !_dbAd._clickupId) { _dbAd._clickupId = _localAd._clickupId; _dbAd._clickupUrl = _localAd._clickupUrl || _dbAd._clickupUrl; }
-            }
-            _mergedAds.push(_dbAd);
-          }
-          for (var lo in _localAdById) { if (!st.ADS.some(function(x){return x.id===lo;})) _mergedAds.push(_localAdById[lo]); }
-          ADS = _mergedAds;
-        }
-        MATRIX_CELL_META = st.MATRIX_CELL_META || MATRIX_CELL_META;
-        CELL_CREATIVE_ASSIGNMENTS = st.CELL_CREATIVE_ASSIGNMENTS || CELL_CREATIVE_ASSIGNMENTS;
-        // BUG-005 (live): peer deletes a persona/angle → their save flushes
-        // → broadcast fires → we get here. We MUST also refresh ANGLE_PERSONAS
-        // from the peer's state, otherwise the local map still references the
-        // deleted name and the matrix shows the dead column until manual
-        // refresh. Scrubbed against THIS user's tombstone too, so a name we
-        // also just deleted locally can't bounce back via the peer.
-        if (st.ANGLE_PERSONAS && typeof st.ANGLE_PERSONAS === 'object') {
-          ANGLE_PERSONAS = _scrubAnglePersonas(st.ANGLE_PERSONAS, pid);
-        }
-        // Full replace for MANUAL_ACTIONS from peer (but keep tombstoned items out)
-        if (Array.isArray(st.MANUAL_ACTIONS)) {
-          var _maById = {};
-          for (var li = 0; li < MANUAL_ACTIONS.length; li++) {
-            if (MANUAL_ACTIONS[li] && MANUAL_ACTIONS[li].id) _maById[MANUAL_ACTIONS[li].id] = MANUAL_ACTIONS[li];
-          }
-          var _mergedMa = [];
-          for (var dai = 0; dai < st.MANUAL_ACTIONS.length; dai++) {
-            var _dbma = st.MANUAL_ACTIONS[dai];
-            if (!_dbma || !_dbma.id) continue;
-            if (_recentlyDeletedMaIds.has(_dbma.id)) continue;
-            _mergedMa.push(_maById[_dbma.id] ? _apMergeServerOneScaleLaunch(_maById[_dbma.id], _dbma) : _dbma);
-          }
-          // Keep local-only (pending save)
-          for (var lok in _maById) { if (!st.MANUAL_ACTIONS.some(function(x){return x.id===lok;})) _mergedMa.push(_maById[lok]); }
-          MANUAL_ACTIONS = _mergedMa;
-        }
-        P = process(ADS);
-        if (typeof deriveWinners === 'function') deriveWinners();
-        if (typeof genActions === 'function') genActions();
-        if (typeof buildCreativeUsageIndex === 'function') buildCreativeUsageIndex();
-        // Bug 12: silent variant — skip if user is editing or has a picker
-        // open, otherwise render with scroll-position preserved. No more
-        // every-30s blink + scroll reset.
-        (typeof _renderAllSilent === 'function' ? _renderAllSilent() : renderAll());
-      } catch(e) { console.error('[SB] sync-needed merge failed', e); }
-    };
-    _rtMergeTimer = setTimeout(_runMerge, _initialDelay);
+    if (!p || p.clientId === _myClientId || p.productId !== productId || productId !== activeProductId) return;
+    if (_requestSharedRefresh) _requestSharedRefresh(false, productId);
   });
 
   // Presence — track who's online
@@ -12195,7 +12174,9 @@ function _initRealtimeChannel(productId) {
         }
       });
 
+  var subscribedChannel = _rtChannel;
   _rtChannel.subscribe(function(status) {
+    if (_rtChannel !== subscribedChannel) return;
     _broadcastRealtimeStatus = status;
     if (_isBadRealtimeStatus(status)) {
       _scheduleRealtimeReconnect('broadcast-channel-' + status, productId);
@@ -13776,6 +13757,7 @@ const DB = {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'manual_actions', filter: 'product_id=eq.' + productId }, onChange)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'activity_events', filter: 'product_id=eq.' + productId }, onChange);
     ch.subscribe(function(status) {
+      if (_activeRTChannel && _activeRTChannel !== ch) return;
       _productRealtimeStatus = status;
       if (_isBadRealtimeStatus(status)) _scheduleRealtimeReconnect('product-channel-' + status, productId);
     });
@@ -13838,7 +13820,10 @@ function _resubscribeRealtime() {
   _productRealtimeStatus = 'idle';
   if (!activeProductId) return;
   _startRealtimeHealthWatchdog();
-  _activeRTChannel = DB.subscribeToProduct(activeProductId, function (payload) {
+  var subscribedProductId = activeProductId;
+  var subscribedGeneration = _uiProductGeneration;
+  var refresh = async function (payload) {
+    if (activeProductId !== subscribedProductId || _uiProductGeneration !== subscribedGeneration) return;
     if (payload && payload.table === 'activity_events') {
       _handleActivityEventRealtime(payload.new);
       return;
@@ -13849,19 +13834,16 @@ function _resubscribeRealtime() {
       if (_deletedId) {
         ADS = ADS.filter(function(a) { return a.id !== _deletedId; });
         _rememberAdDeletion(_deletedId);
-        if (typeof renderMatrix === 'function') renderMatrix();
-        if (typeof renderActionPlan === 'function') renderActionPlan();
+        _renderAllSilent();
         return;
       }
     }
 
-    // Debounce — coalesce bursts of changes into a single re-fetch + re-render
-    if (_rtMergeTimer) clearTimeout(_rtMergeTimer);
+    // Notification bursts are coalesced by the one-minute refresh queue.
     // Capture payload table NOW (before closure, so debounce uses latest)
     var _payloadTable = payload && payload.table;
     var _payloadNew = payload && payload.new;
-    _rtMergeTimer = setTimeout(async function () {
-      _rtMergeTimer = null;
+    return (async function () {
       try {
         // ──── SELF-ECHO GUARDS ────
         // Realtime echoes our OWN writes back to us. During a local save (or
@@ -13869,8 +13851,10 @@ function _resubscribeRealtime() {
         // transient partial DB state — rows deleted but replacement upserts
         // not yet applied → the screen would flash blank. Bail in these cases;
         // our in-memory state already reflects the changes.
-        if (_saveScheduled) return;                    // a save is debounced
-        if (_saveInFlight) return;                     // a save is running right now
+        if (_saveScheduled || _saveInFlight) {
+          _requestSharedRefresh(false, subscribedProductId);
+          return;
+        }
         // If the change came from OUR OWN client, always skip — our in-memory
         // state is already up to date. Re-fetching would clobber just-typed values
         // with stale DB data before the write has committed on the read replica.
@@ -13902,10 +13886,10 @@ function _resubscribeRealtime() {
         // Only merge if we're still on the same product
         const pid = activeProductId;
         const st = await DB.loadProductData(pid);
-        if (!st || pid !== activeProductId) return;
+        if (!st || pid !== activeProductId || subscribedGeneration !== _uiProductGeneration) return;
         // Re-check the save guards AFTER the network round-trip in case another
         // save started while we were fetching.
-        if (_saveScheduled || _saveInFlight) return;
+        if (_saveScheduled || _saveInFlight) { _requestSharedRefresh(false, subscribedProductId); return; }
         // And don't clobber data that doesn't belong here (mid-switch guard)
         if (_adsProductId && _adsProductId !== activeProductId) return;
         // BUG-004: drop tombstoned taxonomy from peer state.
@@ -14071,8 +14055,45 @@ function _resubscribeRealtime() {
         if (typeof buildCreativeUsageIndex === 'function') buildCreativeUsageIndex();
         // Bug 12: silent variant — preserves scroll, skips if user is editing.
         (typeof _renderAllSilent === 'function' ? _renderAllSilent() : renderAll());
-      } catch (e) { console.error('[SB] realtime merge failed', e); }
-    }, 350);
+      } catch (e) {
+        console.error('[SB] realtime merge failed', e);
+        _requestSharedRefresh(false, subscribedProductId);
+        throw e;
+      }
+    })();
+  };
+  var refreshing = null;
+  _requestSharedRefresh = function(manual, productId) {
+    if (productId !== subscribedProductId || activeProductId !== subscribedProductId || _uiProductGeneration !== subscribedGeneration) return;
+    var run = function() {
+      if (refreshing) return refreshing;
+      if (_autoSyncPollInFlight) { _requestSharedRefresh(false, subscribedProductId); return; }
+      refreshing = refresh({}).finally(function() {
+        if (_cloudRefreshPromise === refreshing) _cloudRefreshPromise = null;
+        refreshing = null;
+      });
+      _cloudRefreshPromise = refreshing;
+      return refreshing;
+    };
+    if (manual) return run();
+    _queueBackgroundRefresh('product-snapshot', run, subscribedProductId);
+  };
+  _activeRTChannel = DB.subscribeToProduct(subscribedProductId, function(payload) {
+    if (activeProductId !== subscribedProductId || _uiProductGeneration !== subscribedGeneration) return;
+    var row = payload && payload.new;
+    if (row && ((row.meta && row.meta._clientId === _myClientId) || (row.payload && row.payload._clientId === _myClientId))) return;
+    if (payload && payload.table === 'activity_events') {
+      _queueBackgroundRefresh('activity:' + (row && row.id), function() { _handleActivityEventRealtime(row); }, subscribedProductId);
+    } else if (row && row.deleted_at) {
+      _queueBackgroundRefresh('deletion:' + row.id, function() { return refresh(payload); }, subscribedProductId);
+    } else if (payload && payload.table === 'inspirations') {
+      _queueBackgroundRefresh('inspirations', async function() {
+        await loadInspirations();
+        if (activeProductId === subscribedProductId && _uiProductGeneration === subscribedGeneration) renderInspirations();
+      }, subscribedProductId);
+    } else {
+      _requestSharedRefresh(false, subscribedProductId);
+    }
   });
 }
 window._resubscribeRealtime = _resubscribeRealtime;
@@ -15013,6 +15034,7 @@ function _showCloudLoadFailure() {
 }
 
 function _shouldRenderTab(tabId) {
+  if (typeof _backgroundEventApplying !== 'undefined' && _backgroundEventApplying) { _pendingBackgroundRender = true; return false; }
   var panel = document.getElementById('panel-' + tabId);
   if (!_cloudLoadFailed && panel && panel.classList.contains('on')) return true;
   _renderedTabs[tabId] = false;
@@ -19921,6 +19943,8 @@ function _safeViewTransition(fn) {
 }
 
 function renderAll() {
+  if (_backgroundEventApplying) { _pendingBackgroundRender = true; return; }
+  _lastSilentRenderFingerprint = '';
   // Capture scroll BEFORE any DOM swap so we can restore even when the
   // browser would otherwise reset scrollTop to 0 after a big innerHTML write.
   var prevY = (typeof window !== 'undefined') ? (window.scrollY || window.pageYOffset || 0) : 0;
@@ -19936,10 +19960,20 @@ function renderAll() {
 // Skips the render entirely when the user is editing or has a picker open,
 // preserves scroll, and only refreshes panels that aren't holding the user's
 // active focus. Prevents the every-30s blink the user reported.
+var _lastSilentRenderFingerprint = '';
 function _renderAllSilent() {
+  if (_backgroundRefreshRunning) { _pendingBackgroundRender = true; return; }
   if (_userIsActivelyEditing()) return;
   if (typeof _mxv4 !== 'undefined' && _mxv4 && _mxv4.usersPickerOpen) return;
-  renderAll();
+  var fingerprint = JSON.stringify([activeProductId, ADS, ANGLES, PERSONAS, MANUAL_ACTIONS,
+    MATRIX_CELL_META, CELL_CREATIVE_ASSIGNMENTS, ANGLE_PERSONAS], function(key, value) {
+    return key === '_clientId' ? undefined : value;
+  });
+  if (fingerprint === _lastSilentRenderFingerprint) return;
+  var scrollY = window.scrollY || 0;
+  _renderAllInternal();
+  _lastSilentRenderFingerprint = fingerprint;
+  window.scrollTo(0, scrollY);
 }
 
 // ── 4a. COMMAND HQ ──
@@ -20507,7 +20541,7 @@ function _compStartAutoRefresh() {
     _compRenderBuckets();
     _compRenderSummary();
     _compRenderLiveActivity();
-  }, 4000);
+  }, 60000);
 }
 var _compNeedsReload = true;  // force a load on first render of this product
 
@@ -30236,96 +30270,33 @@ function fetchAndStoreFieldMap(listId) {
   }).catch(function() { return null; });
 }
 
-function syncClickUp() {
+async function syncClickUp() {
   var keyInput = document.getElementById('apiKeyInput');
-  CFG.key = (keyInput ? keyInput.value.trim() : CFG.key);
-
-  if (!CFG.key) {
-    toast('Enter your ClickUp API key first', 'err');
-    return;
-  }
-
-  // Save the API key for persistence
+  CFG.key = keyInput ? keyInput.value.trim() : CFG.key;
+  if (!CFG.key) { toast('Enter your ClickUp API key first', 'err'); return; }
+  var prod = getActiveProduct();
+  if (!prod || !prod.clickupListId) { toast('Link a ClickUp list to this product first', 'err'); return; }
+  if (_manualRefreshBusy || _clickUpRefreshPromise || _autoSyncPollInFlight) { toast('A refresh is already running', 'warn'); return; }
+  _manualRefreshBusy = true;
   localStorage.setItem('immuvi_api_key', CFG.key);
-  // Fetch ClickUp user profile so presence shows real name
-  if (typeof _fetchClickUpUser === 'function') _fetchClickUpUser();
-
-  var activeProd = getActiveProduct();
-  if (!activeProd || !activeProd.clickupListId) {
-    toast('Link a ClickUp list to this product first (Command HQ → Product Profiles)', 'err');
-    return;
+  var productId = activeProductId;
+  var generation = _uiProductGeneration;
+  showLoading('Refreshing ' + prod.name + '...');
+  try {
+    await flushPendingSave();
+    if (_requestSharedRefresh) await _requestSharedRefresh(true, productId);
+    if (activeProductId !== productId || generation !== _uiProductGeneration) return;
+    var result = await pollFullSync({manual: true});
+    if (result && result.ok && activeProductId === productId) {
+      toast('Refreshed this view from ClickUp', 'ok');
+      startAutoSync({immediate: false, reason: 'manual-sync'});
+    }
+  } catch (e) {
+    if (activeProductId === productId) toast('Refresh failed. Your saved data is unchanged; please retry.', 'err');
+  } finally {
+    _manualRefreshBusy = false;
+    hideLoading();
   }
-
-  var listId = activeProd.clickupListId;
-  if (!_guardClickUpListForProduct(activeProd, listId, activeProd.clickupListName, 'Sync blocked')) {
-    return;
-  }
-
-  showLoading('Syncing ' + activeProd.name + ' from ClickUp...');
-  var dot = document.getElementById('statusDot');
-  var lbl = document.getElementById('statusLbl');
-  if (dot) { dot.classList.remove('ok', 'err'); }
-  if (lbl) lbl.textContent = 'Syncing...';
-
-  // Fetch tasks (paginated — ClickUp returns max 100 per page)
-  fetchAllTasks(listId)
-    .then(async function(tasks) {
-      if (!tasks || tasks.length === 0) {
-        toast('No tasks found in this list', 'warn');
-        hideLoading();
-        if (lbl) lbl.textContent = 'List is empty';
-        return;
-      }
-      _stampClickUpTasksWithProductBoundary(tasks, activeProd, listId, activeProd.clickupListName);
-
-      // Import tasks into ADS, ANGLES, PERSONAS
-      await importTasksFromClickUp(tasks);
-      await _applyProductBoundaryQuarantine(activeProductId, {
-        ADS: ADS,
-        MANUAL_ACTIONS: MANUAL_ACTIONS,
-        ANGLES: ANGLES,
-        PERSONAS: PERSONAS
-      });
-      if (typeof _reconcileSyncedAdsToCanonicalCells === 'function') {
-        _reconcileSyncedAdsToCanonicalCells({ persist: false, broadcast: false });
-      }
-
-      // Record sync time on the product
-      var _syncedProd = null;
-      for (var i = 0; i < PRODUCTS.length; i++) {
-        if (PRODUCTS[i].id === activeProductId) {
-          PRODUCTS[i].lastSyncedAt = Date.now();
-          PRODUCTS[i].lastSyncedCount = tasks.length;
-          _syncedProd = PRODUCTS[i];
-          break;
-        }
-      }
-      // Persist the product metadata update to Supabase (fire-and-forget)
-      if (_syncedProd && DB.ready) DB.upsertProduct(_syncedProd).catch(function(e){ console.error('[SB] sync meta', e); });
-
-      P = process(ADS);
-      buildCreativeUsageIndex();
-      deriveWinners();
-      genActions();
-      populateFilterOptions();
-      renderAll();
-      renderProductProfile();
-      hideLoading();
-      saveState();
-
-      _lastSyncedAt = Date.now();
-      if (dot) dot.className = 'live-dot active';
-      if (lbl) lbl.textContent = 'Live · just now';
-      toast('Synced ' + tasks.length + ' tasks from ClickUp', 'ok');
-      startAutoSync({ immediate: false, reason: 'manual-sync' });
-      fetchAndStoreFieldMap(listId);
-    })
-    .catch(function(err) {
-      hideLoading();
-      if (dot) { dot.classList.add('err'); dot.classList.remove('ok'); }
-      if (lbl) lbl.textContent = 'Sync failed';
-      toast('Sync error: ' + (err.message || String(err)), 'err');
-    });
 }
 
 function fetchAllTasks(listId) {
@@ -31897,8 +31868,18 @@ function _diffCustomFieldsRaw(local, fresh) {
 // created tasks (e.g. ones you just pushed from the Action Plan, or tasks your
 // teammate added directly in ClickUp). Silent by default — toasts only when
 // significant changes happen (new tasks or field updates).
-function pollFullSync() {
-  if (_autoSyncPollInFlight) return;
+function pollFullSync(options) {
+  options = options || {};
+  var manual = options.manual === true;
+  if (_manualRefreshBusy && !manual) return;
+  if (_cloudRefreshPromise) return;
+  if (Date.now() < _clickUpRefreshRetryAfter) {
+    if (manual) toast('ClickUp is temporarily unavailable. Please wait a minute before retrying.', 'warn');
+    return;
+  }
+  if (_autoSyncPollInFlight) return _clickUpRefreshPromise;
+  if (!manual && document.hidden) return;
+  if (!manual && _lastClickUpRefreshProduct === activeProductId && Date.now() - _lastClickUpRefreshAt < 60000) return;
   var activeProd = getActiveProduct();
   if (!CFG.key || !activeProd || !activeProd.clickupListId) return;
   // Don't touch ADS if the in-memory data isn't aligned with the active product
@@ -31912,6 +31893,7 @@ function pollFullSync() {
   // tasks into Product B's ADS array — doubling counts on every switch. See
   // the guard inside the .then() below.
   var _startProductId = activeProductId;
+  var _startGeneration = _uiProductGeneration;
   var _startListId = activeProd.clickupListId;
   var _startListName = activeProd.clickupListName || '';
   if (!_guardClickUpListForProduct(activeProd, _startListId, _startListName, 'Live sync blocked')) return;
@@ -31919,15 +31901,17 @@ function pollFullSync() {
   var dot = document.getElementById('statusDot');
   if (dot) dot.className = 'live-dot syncing';
   _autoSyncPollInFlight = true;
+  _lastClickUpRefreshAt = Date.now();
+  _lastClickUpRefreshProduct = _startProductId;
 
   // Fetch ALL pages (up to 500 tasks) — same as manual Sync, so we don't miss new tasks beyond page 0
-  fetchAllTasks(_startListId)
+  _clickUpRefreshPromise = fetchAllTasks(_startListId)
     .then(async function(tasks) {
       // RACE-CONDITION GUARD: verify we're still on the same product before
       // mutating ADS. If the user switched products during the fetch, the
       // fetched tasks belong to a DIFFERENT product's list and must NOT be
       // merged into the current ADS (would create cross-product duplicates).
-      if (activeProductId !== _startProductId) {
+      if (activeProductId !== _startProductId || _uiProductGeneration !== _startGeneration) {
         _autoSyncPollInFlight = false;
         if (dot) dot.className = 'live-dot';
         return;
@@ -31937,7 +31921,12 @@ function pollFullSync() {
         if (dot) dot.className = 'live-dot';
         return;
       }
-      if (!tasks || !tasks.length) { _onSyncSuccess(dot, 0, false, 0); return; }
+      if (!tasks || !tasks.length) {
+        _clickUpRefreshFailures = 0;
+        _clickUpRefreshRetryAfter = 0;
+        _onSyncSuccess(dot, 0, false, 0, manual);
+        return {ok: true};
+      }
       _stampClickUpTasksWithProductBoundary(tasks, activeProd, _startListId, _startListName);
 
       // Build lookup: _clickupId → freshly-parsed task
@@ -31993,7 +31982,8 @@ function pollFullSync() {
       // got re-imported when the SELECT lagged behind the ClickUp fetch.
       if (typeof SB !== 'undefined' && SB && activeProductId) {
         try {
-          var _p1TombResp = await SB.from('deleted_ads').select('id,clickup_task_id').eq('product_id', activeProductId);
+          var _p1TombResp = await SB.from('deleted_ads').select('id,clickup_task_id').eq('product_id', _startProductId);
+          if (_p1TombResp.error) throw _p1TombResp.error;
           if (_p1TombResp && _p1TombResp.data) {
             _p1TombResp.data.forEach(function(row) {
               _p1Tombstone[row.id] = true;
@@ -32001,9 +31991,11 @@ function pollFullSync() {
             });
           }
         } catch (e) {
-          console.warn('[poll] tombstone fetch failed (proceeding without supabase tombstone)', e);
+          throw new Error('Refresh stopped because deletion safeguards could not be loaded. Please retry.');
         }
       }
+
+      if (activeProductId !== _startProductId || _uiProductGeneration !== _startGeneration) return;
 
       // BUG-004: load taxonomy tombstones once per poll cycle.
       var _p1AngTomb = _readTaxonomyTombstone('angle',   activeProductId);
@@ -32069,7 +32061,7 @@ function pollFullSync() {
               // Strip adopt markers + ensure _pushedAt is set
               delete _mh._origin; delete _mh._adoptedAt;
               if (!_mh._pushedAt) _mh._pushedAt = Date.now();
-              if (typeof _writeManualActionRowDirect === 'function') {
+              if (!manual && typeof _writeManualActionRowDirect === 'function') {
                 try { _writeManualActionRowDirect(_mh); } catch (e) {}
               }
               changed = true;
@@ -32149,7 +32141,7 @@ function pollFullSync() {
           var _isDurablyDeleted = (typeof _isDeletedAdTombstonedNow === 'function') &&
                                   _isDeletedAdTombstonedNow({ adid: ad.id, cuid: ad._clickupId || ad.clickupTaskId, title: ad.formatName });
           if (!_alreadyLinked && !_isParent && !_isTombstoned && !_isDurablyDeleted && _hasAppMarker) {
-            if (apAdoptAdAsAction(ad, { reason: 'production tag detected during sync' })) changed = true;
+            if (apAdoptAdAsAction(ad, { reason: 'production tag detected during sync', broadcast: false })) changed = true;
           }
         }
 
@@ -32164,21 +32156,7 @@ function pollFullSync() {
             ad._customFields[lcName]    = (fresh._customFields && fresh._customFields[lcName]) || '';
             ad._customFieldsRaw[lcName] = (fresh._customFieldsRaw && fresh._customFieldsRaw[lcName] != null)
               ? fresh._customFieldsRaw[lcName] : null;
-            // Broadcast so other connected tabs apply this remote change immediately.
-            if (typeof _rtChannel !== 'undefined' && _rtChannel) {
-              try {
-                _rtChannel.send({
-                  type: 'broadcast',
-                  event: 'field-update',
-                  payload: {
-                    adId: ad.id, kind: 'custom', field: lcName,
-                    value: ad._customFields[lcName],
-                    rawValue: ad._customFieldsRaw[lcName],
-                    clientId: _myClientId
-                  }
-                });
-              } catch (e) {}
-            }
+            // Imported fields are reads, not user edits; never rebroadcast them.
           });
           changed = true;
           fieldUpdates += cfDiff.length;
@@ -32275,88 +32253,13 @@ function pollFullSync() {
       } catch (e) {
         console.warn('[pollFullSync] product-boundary quarantine failed before taxonomy discovery', e);
       }
+      if (activeProductId !== _startProductId || _uiProductGeneration !== _startGeneration) return;
       var _discovered = autoDiscoverTaxonomy(ADS);
       var _newTaxonomy = _discovered.addedAngles.length + _discovered.addedPersonas.length;
       if (_newTaxonomy > 0) changed = true;
 
-      // ── Pass 2.5: reconcile deletes from ClickUp ──────────────────────────
-      // If a local ad has a _clickupId that isn't in the fresh taskMap, the
-      // task was likely deleted or archived in ClickUp. Drop it locally so
-      // the dashboard stays in sync. Three safety guards so we never
-      // accidentally nuke good data:
-      //   (a) Skip if the fetch returned suspiciously few tasks — could be a
-      //       partial fetch or network issue. Refuse to drop if < 5 tasks.
-      //   (b) Skip if the delta would remove more than 40% of local ads in
-      //       one shot — that's almost certainly a pagination / fetch bug,
-      //       not genuine mass deletion. Warn the user instead.
-      //   (c) Never drop ads without _clickupId (local-only, not yet pushed).
-      var _fetchedCount = Object.keys(taskMap).length;
-      if (_fetchedCount >= 5) {
-        var _localWithCid = 0;
-        for (var _li2 = 0; _li2 < ADS.length; _li2++) {
-          if (ADS[_li2]._clickupId) _localWithCid++;
-        }
-        // Bug 8 protection: never drop an AD that has an associated
-        // MANUAL_ACTION pointing at it — those are user-tracked entities.
-        // The AD's _clickupId might be a parent format task that's in a
-        // different list / not in this fetch. Dropping it leaves the
-        // Action Plan row orphaned and the matrix cell empty. See
-        // memory/feedback_bug8_orphan_protection.md.
-        var _adsWithActions = {};
-        if (typeof MANUAL_ACTIONS !== 'undefined' && Array.isArray(MANUAL_ACTIONS)) {
-          for (var _mai = 0; _mai < MANUAL_ACTIONS.length; _mai++) {
-            var _maRef = MANUAL_ACTIONS[_mai];
-            if (_maRef && _maRef.sourceAdId) _adsWithActions[_maRef.sourceAdId] = true;
-            if (_maRef && _maRef.adId)       _adsWithActions[_maRef.adId]       = true;
-          }
-        }
-        var _wouldDrop = [];
-        // 2026-05-25 — Bug 8/9 guard #2 (memory/feedback_bug8_orphan_protection.md)
-        // Recent-creation grace window: ads spawned in the last 90s might not
-        // yet be reflected in the ClickUp task fetch (transient race during
-        // task creation + CU's eventual consistency), and the local cell
-        // assignment broadcast may also be in flight. Don't drop them.
-        var _GRACE_MS = 90 * 1000;
-        var _now = Date.now();
-        for (var _li3 = 0; _li3 < ADS.length; _li3++) {
-          var _ad = ADS[_li3];
-          if (_ad._clickupId && !taskMap[_ad._clickupId]) {
-            // Skip if user has tracked this AD via Action Plan.
-            if (_adsWithActions[_ad.id]) continue;
-            // Skip if AD is referenced by any matrix cell — same reasoning,
-            // user has actively organized this creative into a cell.
-            var _inCell = false;
-            if (typeof CELL_CREATIVE_ASSIGNMENTS !== 'undefined') {
-              var _cks = Object.keys(CELL_CREATIVE_ASSIGNMENTS);
-              for (var _cki = 0; _cki < _cks.length; _cki++) {
-                var _arr = CELL_CREATIVE_ASSIGNMENTS[_cks[_cki]] || [];
-                if (_arr.indexOf(_ad.id) !== -1) { _inCell = true; break; }
-              }
-            }
-            if (_inCell) continue;
-            // Recent-creation grace: don't drop a freshly-spawned ad.
-            var _adTs = _ad.createdAt || _ad.dateCreated
-              || (_ad.created_at ? Date.parse(_ad.created_at) : 0)
-              || 0;
-            if (_adTs && (_now - _adTs) < _GRACE_MS) {
-              console.log('[poll] reconcile spared recently-created AD', _ad.id, '(age', Math.round((_now-_adTs)/1000)+'s)');
-              continue;
-            }
-            _wouldDrop.push(_ad.id);
-          }
-        }
-        var _dropPct = _localWithCid > 0 ? (_wouldDrop.length / _localWithCid) : 0;
-        if (_wouldDrop.length > 0 && _dropPct <= 0.4) {
-          var _dropSet = {};
-          for (var _dsi = 0; _dsi < _wouldDrop.length; _dsi++) _dropSet[_wouldDrop[_dsi]] = true;
-          ADS = ADS.filter(function (a) { return !_dropSet[a.id]; });
-          changed = true;
-          console.log('[poll] reconciled — dropped', _wouldDrop.length, 'stale ads deleted from ClickUp (kept all action-linked + cell-linked ADs)');
-        } else if (_wouldDrop.length > 0 && _dropPct > 0.4) {
-          console.warn('[poll] reconcile SKIPPED — would drop', _wouldDrop.length, 'of', _localWithCid,
-            '(' + Math.round(_dropPct * 100) + '%) which exceeds 40% safety threshold. Click Sync Now to force reconcile.');
-        }
-      }
+      // A task absent from a list response is not proof of deletion.
+      // Keep it until an explicit tombstone arrives (also avoids DB/poll restore loops).
 
       // ── Pass 2.6: action dedup ──
       // Whenever there are 2+ MANUAL_ACTIONS pointing at the SAME _clickupId
@@ -32492,7 +32395,7 @@ function pollFullSync() {
       // whose _clickupId matches a live AD (spawn dup-collapse pattern).
       // Mark `changed` so the renderAll() below picks up the heal.
       try {
-        var _repaired = _apRepairMASourceAdIds();
+        var _repaired = _apRepairMASourceAdIds({persist: false});
         if (_repaired > 0) {
           changed = true;
           try { console.log('[pollFullSync] _apRepairMASourceAdIds repaired', _repaired, 'MA(s)'); } catch (e) {}
@@ -32509,6 +32412,7 @@ function pollFullSync() {
       } catch (e) {
         console.warn('[pollFullSync] product-boundary quarantine failed', e);
       }
+      if (activeProductId !== _startProductId || _uiProductGeneration !== _startGeneration) return;
 
       if (typeof _reconcileSyncedAdsToCanonicalCells === 'function') {
         var _canonicalCellCleanupCount = _reconcileSyncedAdsToCanonicalCells({ persist: false, broadcast: false });
@@ -32518,7 +32422,8 @@ function pollFullSync() {
         }
       }
 
-      _onSyncSuccess(dot, fieldUpdates, changed, tasks.length);
+      if (activeProductId !== _startProductId || _uiProductGeneration !== _startGeneration) return;
+      _onSyncSuccess(dot, fieldUpdates, changed, tasks.length, manual);
 
       if (changed) {
         // Rebuild matrix if new tasks arrived OR auto-discover added new
@@ -32530,8 +32435,8 @@ function pollFullSync() {
         deriveWinners();
         genActions();
         populateFilterOptions();
-        renderAll();
-        saveState();
+        _renderAllSilent();
+        if (!manual) saveState();
         // Lightweight toast so the user knows background sync did something
         if (newTaskCount > 0) {
           toast(newTaskCount + ' new task' + (newTaskCount !== 1 ? 's' : '') + ' imported from ClickUp' + (fieldUpdates > 0 ? ' · ' + fieldUpdates + ' field updates' : ''), 'ok');
@@ -32539,18 +32444,28 @@ function pollFullSync() {
           toast(fieldUpdates + ' field' + (fieldUpdates !== 1 ? 's' : '') + ' updated from ClickUp', 'ok');
         }
       }
+      _clickUpRefreshFailures = 0;
+      _clickUpRefreshRetryAfter = 0;
+      return {ok: true, changed: changed};
     })
     .catch(function() {
+      _clickUpRefreshFailures++;
+      _clickUpRefreshRetryAfter = Date.now() + Math.min(300000, 60000 * Math.pow(2, _clickUpRefreshFailures - 1));
+      if (activeProductId !== _startProductId || _uiProductGeneration !== _startGeneration) return;
       if (dot) dot.className = 'live-dot err';
       var lbl = document.getElementById('statusLbl');
       if (lbl) lbl.textContent = 'Sync error';
+      if (manual) toast('Refresh failed. Your saved data is unchanged; please retry.', 'err');
+      return {ok: false};
     })
     .finally(function() {
       _autoSyncPollInFlight = false;
+      _clickUpRefreshPromise = null;
     });
+  return _clickUpRefreshPromise;
 }
 
-function _onSyncSuccess(dot, changedCount, changed, syncedCount) {
+function _onSyncSuccess(dot, changedCount, changed, syncedCount, manual) {
   _lastSyncedAt = Date.now();
   if (dot) dot.className = 'live-dot active';
   updateSyncLabel();
@@ -32559,32 +32474,19 @@ function _onSyncSuccess(dot, changedCount, changed, syncedCount) {
     activeProd.lastSyncedAt = _lastSyncedAt;
     if (typeof syncedCount === 'number') activeProd.lastSyncedCount = syncedCount;
     try { renderProductProfile(); } catch (e) {}
-    // Persist auto-sync metadata occasionally so reload/product-profile views
-    // don't keep showing the last manual sync as stale.
-    if (DB.ready && Date.now() - _lastAutoSyncMetaPersistAt > 300000) {
-      _lastAutoSyncMetaPersistAt = Date.now();
-      DB.upsertProduct(activeProd).catch(function(e){ console.error('[SB] auto-sync meta', e); });
-    }
+    // Refresh timestamps are local UI state, not shared product configuration.
   }
-  // After every successful ClickUp sync, schedule a full Supabase flush so
-  // the freshly-parsed _customFields / _customFieldsRaw / dueDate values
-  // (Editor / Reviewer / Approved Date / Hook Type / etc.) land in the
-  // ads.meta jsonb column. Next page load reads them straight from the DB
-  // and renders the cells instantly — no need for the user to click Sync
-  // ClickUp first.
-  if (changed && typeof saveState === 'function') {
-    try { saveState(); } catch (e) {}
-  }
+
   // Refresh dynamic ClickUp statuses so the Action Plan v2 status filter +
   // status pickers always reflect the current list config. Cheap call —
   // results are cached.
-  try { _fetchCuStatuses(true); } catch (e) {}
+  try { _fetchCuStatuses(false); } catch (e) {}
   // Adopt any production-tagged ADs that arrived via this sync but aren't
   // yet in MANUAL_ACTIONS (idempotent).
-  try { if (typeof apRunLegacyBackfill === 'function') apRunLegacyBackfill(); } catch (e) {}
+  try { if (changed && typeof apRunLegacyBackfill === 'function') apRunLegacyBackfill({persist: !manual, broadcast: false}); } catch (e) {}
   // Re-render Action Plan v2 if it's the active panel — the sync may have
   // shifted ages, statuses, or surfaced new hygiene alerts.
-  try { if (typeof renderActionPlan === 'function') renderActionPlan(); } catch (e) {}
+  // The caller renders changed data once; a no-op refresh does not repaint.
 }
 
 // ════════════════════════════════════════════════════════════════════
@@ -32978,7 +32880,7 @@ function apAdoptAdAsAction(ad, opts) {
   MANUAL_ACTIONS.push(newAction);
   // Live broadcast so teammates see adopted tasks appear without waiting
   // for the Supabase postgres-changes echo.
-  try { apBroadcastActionAdded(newAction, 'adopted'); } catch (e) {}
+  try { if (!opts || opts.broadcast !== false) apBroadcastActionAdded(newAction, 'adopted'); } catch (e) {}
   return newAction;
 }
 
@@ -32987,7 +32889,8 @@ function apAdoptAdAsAction(ad, opts) {
 // "run before." Idempotent (apAdoptAdAsAction dedupes), so re-running is
 // safe. The previous one-time guard caused orphans to stay invisible
 // when the sync arrived AFTER the first backfill pass had already run.
-function apRunLegacyBackfill() {
+function apRunLegacyBackfill(options) {
+  options = options || {};
   if (typeof activeProductId === 'undefined' || !activeProductId) return;
   if (typeof ADS === 'undefined' || !Array.isArray(ADS)) return;
   // Build multi-key dedup index of MANUAL_ACTIONS so we don't recreate
@@ -33019,20 +32922,15 @@ function apRunLegacyBackfill() {
     // pushed → not actionable as an AP row. Skip silently.
     var hasAppMarker = Array.isArray(ad._tags) && ad._tags.indexOf('app-created') !== -1;
     if (!hasAppMarker) return;
-    if (apAdoptAdAsAction(ad, { reason: 'legacy backfill' })) adopted++;
+    if (apAdoptAdAsAction(ad, { reason: 'legacy backfill', broadcast: options.broadcast !== false })) adopted++;
   });
-  if (adopted > 0) {
+  if (adopted > 0 && options.persist !== false) {
     // Persist immediately so the adopted rows survive page refresh — saveState
     // is debounced 300ms which is plenty fast, then _flushStateToSupabase
     // writes the new MANUAL_ACTIONS rows. Also force a flush bypass so a
     // tab close right after adoption doesn't lose them.
     try { saveState(); } catch (e) {}
-    try {
-      if (typeof _flushStateToSupabase === 'function' && typeof activeProductId !== 'undefined' && activeProductId) {
-        // Schedule an immediate post-debounce flush.
-        setTimeout(function () { _flushStateToSupabase(activeProductId).catch(function(){}); }, 350);
-      }
-    } catch (e) {}
+    // saveState already queues a durable flush; do not send the same snapshot twice.
     try { toast('Adopted ' + adopted + ' legacy production task' + (adopted > 1 ? 's' : '') + ' into Action Plan', 'ok', 5000); } catch (e) {}
     if (typeof renderActionPlan === 'function') renderActionPlan();
   }
@@ -33857,7 +33755,8 @@ function apToggleIncludeAdopted(on) {
 //     id, so the virtual-card pass double-renders the live AD.
 // Idempotent. Skip if SB/ADS/MANUAL_ACTIONS aren't ready (boot ordering).
 // Called from pollFullSync after the in-place merge.
-function _apRepairMASourceAdIds() {
+function _apRepairMASourceAdIds(options) {
+  options = options || {};
   if (typeof MANUAL_ACTIONS === 'undefined' || !Array.isArray(MANUAL_ACTIONS)) return 0;
   if (typeof ADS === 'undefined' || !Array.isArray(ADS)) return 0;
   // O(1) lookups for ADs by id, by _clickupId, by clickupTaskId.
@@ -33889,7 +33788,7 @@ function _apRepairMASourceAdIds() {
         var inferredParent = (vm && vm[1]) || (pm && pm[1]) || null;
         if (inferredParent && inferredParent !== live.id && adById[inferredParent]) {
           live.parentAdId = inferredParent;
-          if (typeof _writeAdRowDirect === 'function') {
+          if (options.persist !== false && typeof _writeAdRowDirect === 'function') {
             try { _writeAdRowDirect(live); } catch (e) {}
           }
           try { console.log('[ap-repair] AD', live.id, 'parentAdId ←', inferredParent, '(inferred from', src, ')'); } catch (e) {}
@@ -33901,7 +33800,7 @@ function _apRepairMASourceAdIds() {
     repaired++;
     // Immediate DB flush so the heal is durable; falls back to next
     // debounced saveState if the helper isn't ready.
-    if (typeof _writeManualActionRowDirect === 'function' && ma._dbId) {
+    if (options.persist !== false && typeof _writeManualActionRowDirect === 'function' && ma._dbId) {
       try { _writeManualActionRowDirect(ma); } catch (e) {}
     }
     try { console.log('[ap-repair] MA', ma.id, 'sourceAdId', src, '→', live.id); } catch (e) {}
@@ -34161,27 +34060,26 @@ function updateSyncLabel() {
 }
 
 function _autoSyncIntervalMs() {
-  var hidden = (typeof document !== 'undefined' && document.hidden);
-  return hidden ? 300000 : 60000; // 5 min hidden / 60s foreground
+  return 60000;
 }
 
 function _scheduleAutoSyncInterval() {
   if (_autoSyncInterval) { clearInterval(_autoSyncInterval); _autoSyncInterval = null; }
   if (!_autoSyncActive) return;
   _autoSyncInterval = setInterval(function () {
-    try { pollFullSync(); } catch (e) { console.error('[auto-sync] poll failed', e); }
+    _queueBackgroundRefresh('clickup', function() { if (_autoSyncActive) return pollFullSync(); }, activeProductId);
   }, _autoSyncIntervalMs());
 }
 
 function _kickAutoSync(reason, force) {
   if (!_autoSyncActive) return;
   var now = Date.now();
-  if (!force && now - _lastAutoSyncKickAt < 5000) return;
+  // Focus, visibility and watchdog events share the same request budget.
+  if (now - _lastAutoSyncKickAt < 60000) return;
   _lastAutoSyncKickAt = now;
-  setTimeout(function () {
-    if (!_autoSyncActive) return;
-    try { pollFullSync(); } catch (e) { console.error('[auto-sync] kick failed', reason, e); }
-  }, 250);
+  _queueBackgroundRefresh('clickup', function() {
+    if (_autoSyncActive) return pollFullSync();
+  }, activeProductId);
 }
 
 function startAutoSync(opts) {
@@ -34303,6 +34201,7 @@ function flushPendingSave() {
     _saveQueue = _saveQueue.then(function(){ return _flushStateToSupabase(pid); })
       .catch(function(e){ console.error('[SB] flush error', e); });
   }
+  return _saveQueue;
 }
 
 // Bug 9 — Direct, single-row AD upsert. Writes ONE ad straight to the
@@ -34491,8 +34390,9 @@ async function _flushStateToSupabase(productIdArg) {
     try { _collapseDuplicateClickUpAds({ persist: false }); } catch (e) {}
   }
   _saveInFlight = true;
+  var saved = false;
   try {
-    await DB.saveProductData(pid, {
+    var result = await DB.saveProductData(pid, {
       ANGLES: ANGLES,
       PERSONAS: PERSONAS,
       ADS: ADS,
@@ -34501,6 +34401,8 @@ async function _flushStateToSupabase(productIdArg) {
       MANUAL_ACTIONS: MANUAL_ACTIONS,
       ANGLE_PERSONAS: ANGLE_PERSONAS  // BUG-003: persist explicit assignments
     });
+    if (!result || result.ok !== true) throw new Error('Shared save did not complete');
+    saved = true;
     // ── PRODUCTS WRITE INTENTIONALLY SKIPPED HERE ────────────────────
     // 2026-05-11 (v2): the products table is owned by explicit save paths,
     // never by the bulk flush. These are the ONLY legitimate write paths:
@@ -34525,7 +34427,7 @@ async function _flushStateToSupabase(productIdArg) {
     // Notify all other connected clients that we just saved — they will
     // re-fetch and re-render. This covers ALL tables (ads, manual_actions,
     // angles, personas, matrix_cells) with one universal mechanism.
-    if (typeof _broadcastSyncNeeded === 'function') _broadcastSyncNeeded();
+    if (saved && activeProductId === pid && typeof _broadcastSyncNeeded === 'function') _broadcastSyncNeeded();
   }
 }
 
@@ -36271,6 +36173,8 @@ async function _queryBoundaryDuplicateAds(productId, clickupIds) {
 }
 
 async function _applyProductBoundaryQuarantine(productId, state) {
+  var boundaryGeneration = _uiProductGeneration;
+  var boundaryActiveProduct = activeProductId;
   PRODUCT_BOUNDARY_QUARANTINE = { ads: {}, actions: {}, angles: {}, personas: {}, reasons: {} };
   if (!state || !Array.isArray(state.ADS)) return state;
   var prod = _productById(productId) || getActiveProduct();
@@ -36288,6 +36192,7 @@ async function _applyProductBoundaryQuarantine(productId, state) {
     });
   }
   var duplicateMap = await _queryBoundaryDuplicateAds(productId, ids);
+  if (activeProductId !== boundaryActiveProduct || _uiProductGeneration !== boundaryGeneration) return state;
   var quarantinedCuIds = {};
 
   state.ADS.forEach(function(ad) {
@@ -47599,7 +47504,9 @@ function copyInsCmd(btn) {
 // Realtime subscription handles most updates; this is the safety net.
 function startResultPolling() {
   if (INS_POLL_TIMER) clearInterval(INS_POLL_TIMER);
-  INS_POLL_TIMER = setInterval(pollCloudResults, 6000);
+  INS_POLL_TIMER = setInterval(function() {
+    _queueBackgroundRefresh('classification-results', pollCloudResults, activeProductId);
+  }, 60000);
 }
 
 async function pollCloudResults() {
@@ -51671,7 +51578,7 @@ window._clearPendingCu = _clearPendingCu;
   if (window._insPipelineUIInstalled) return;
   window._insPipelineUIInstalled = true;
 
-  var POLL_MS = 20000;
+  var POLL_MS = 60000;
   var WORKER_HEARTBEAT_GRACE_MS = 120000;
   window._insPipeFilter = null;
   window._insWorkersList = [];
@@ -52113,7 +52020,14 @@ window._clearPendingCu = _clearPendingCu;
 
   // ── Polling: only while inspirations panel is visible ──
   var pollTimer = null;
-  function startPolling() { stopPolling(); refreshPipeline(); refreshWorkers(); pollTimer = setInterval(function(){ refreshPipeline(); refreshWorkers(); }, POLL_MS); }
+  function startPolling() {
+    stopPolling();
+    refreshPipeline(); refreshWorkers();
+    pollTimer = setInterval(function() {
+      _queueBackgroundRefresh('inspiration-pipeline', refreshPipeline, activeProductId);
+      _queueBackgroundRefresh('worker-registry', refreshWorkers, null);
+    }, POLL_MS);
+  }
   function stopPolling()  { if (pollTimer) { clearInterval(pollTimer); pollTimer = null; } }
 
   function isInspirationsTabVisible() {
@@ -52258,7 +52172,7 @@ window._clearPendingCu = _clearPendingCu;
   if (typeof SB !== 'undefined' && SB && SB.channel) {
     try {
       SB.channel('worker_registry_global')
-        .on('postgres_changes', { event:'*', schema:'public', table:'worker_registry' }, function(){ refreshWorkers(); })
+        .on('postgres_changes', { event:'*', schema:'public', table:'worker_registry' }, function(){ _queueBackgroundRefresh('worker-registry', refreshWorkers, null); })
         .subscribe();
     } catch(e) { console.warn('[ins-workers] realtime subscribe failed', e); }
   }
@@ -52670,7 +52584,9 @@ window._clearPendingCu = _clearPendingCu;
   }
   window._insRefreshWorkerBadge = _insRefreshWorkerBadge;
   // Refresh on tab visibility + every 15s while visible
-  setInterval(function(){ if (isInspirationsTabVisible()) _insRefreshWorkerBadge(); }, 15000);
+  setInterval(function(){
+    if (isInspirationsTabVisible()) _queueBackgroundRefresh('worker-badge', _insRefreshWorkerBadge, activeProductId);
+  }, 60000);
 
   // Wrap the existing checkBridgeStatus so it routes to our pill
   if (typeof window.checkBridgeStatus === 'function' && !window._chBridgeWrappedForWorker) {

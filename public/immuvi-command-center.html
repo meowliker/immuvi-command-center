@@ -36549,7 +36549,8 @@ function updateHeaderProductName() {
   var nameEl = document.getElementById('hdrProdName');
   var activeProd = getActiveProduct();
   if (dot) dot.style.background = activeProd ? (activeProd.color || '#4F46E5') : '#94A3B8';
-  if (nameEl) nameEl.textContent = activeProd ? activeProd.name : 'No Product';
+  // Temporary display alias, matching the dropdown without renaming the product.
+  if (nameEl) nameEl.textContent = activeProd ? (activeProd.id === 'prod-1778009469915' ? 'AR' : activeProd.name) : 'No Product';
   // Also re-render dropdown if it's open
   var dd = document.getElementById('hdrProdDd');
   if (dd && dd.classList.contains('open')) renderHdrProdDropdown();

@@ -8,7 +8,7 @@ from pathlib import Path
 import sys
 from functools import partial
 from private_inspiration_audio import transcribe_audio
-from private_inspiration_pipeline import extend_qa_download_timeout
+from private_inspiration_pipeline import extend_qa_download_timeout, install_checked_audio_probe, probe_and_transcribe_audio
 
 ROOT = Path(__file__).resolve().parent.parent
 skill = (ROOT / 'team-skill/SKILL.md').read_text()
@@ -56,14 +56,16 @@ else:
             audio_evidence['error'] = str(error)[:200]
             return '', [], 'unavailable:audio verification failed'
 
-    # QA changes only the download deadline and transcription; prompts stay intact.
+    # Keep the retained prompts while checking audio evidence and download timeouts.
     tree = extend_qa_download_timeout(ast.parse(pipeline))
+    tree = install_checked_audio_probe(tree)
     definitions = [node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == 'transcribe_audio']
     if len(definitions) != 1:
         raise RuntimeError('Legacy transcription boundary changed; review required')
     definitions[0].body = ast.parse('return _qa_transcribe_audio(wav_path)').body
     ast.fix_missing_locations(tree)
-    namespace = {'__name__': '__qa_pipeline__', '_qa_transcribe_audio': transcribe_checked}
+    namespace = {'__name__': '__qa_pipeline__', '_qa_transcribe_audio': transcribe_checked,
+                 '_checked_audio_probe': partial(probe_and_transcribe_audio, transcribe=transcribe_checked)}
     sys.argv = ['legacy-media', url, directory]
     with contextlib.redirect_stdout(io.StringIO()):
         exec(compile(tree, 'legacy-skill-media', 'exec'), namespace)

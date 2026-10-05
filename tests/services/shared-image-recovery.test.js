@@ -108,7 +108,7 @@ test('changed job identity and corrupt source checkpoint fail closed',async t=>{
 });
 
 function clickupFixture() {
- const run={id:'qa-run',delivery:{task_id:'qa-task',list_id:'1301130000002447',intents:{},receipts:{}},request:{options:{},creative:{}}};
+ const run={id:'qa-run',product_id:'qa-sample-astrorekha',delivery:{task_id:'qa-task',list_id:'1301130000002447',intents:{},receipts:{}},request:{options:{},creative:{}}};
  const bytes=Buffer.from('fixture-image-bytes'),image={bytes,metadata:{variation:1,filename:'Task-1.png',sha256:imageHash(bytes)}};
  let attachments=[],comments=[],status='in production',lostAttachment=false,lostComment=false,moved=false;
  const calls=[];

@@ -9,6 +9,7 @@ import { createClient } from '@supabase/supabase-js';
 import { qaServiceKey } from './qa-service-config.mjs';
 import { QA_SUPABASE_URL, QA_SUPABASE_ANON_KEY } from '../lib/qa-supabase-env.js';
 import { validatePrivateWorkerConfig } from '../lib/services/private-worker.js';
+import { discoverCodexExecutable } from '../lib/services/codex-executable.js';
 
 if (process.platform !== 'darwin') throw new Error('This installer is for a per-user macOS LaunchAgent.');
 process.umask(0o077);
@@ -45,7 +46,7 @@ try { config = validatePrivateWorkerConfig(JSON.parse(await readFile(configPath,
 catch (error) { if (error.code !== 'ENOENT') throw error; }
 if (config && config.ownerId !== profile.data.id) throw new Error('This device is already paired to another owner; refusing reassignment.');
 if (!config) {
-  const codexBin = execFileSync('/usr/bin/which', ['codex'], { encoding: 'utf8' }).trim();
+  const codexBin = await discoverCodexExecutable();
   config = validatePrivateWorkerConfig({ version: 1, environment: 'qa', url: QA_SUPABASE_URL, anonKey: QA_SUPABASE_ANON_KEY,
     id: randomUUID(), ownerId: profile.data.id, token: randomBytes(32).toString('hex'), codexBin });
   await writeFile(configPath, JSON.stringify(config, null, 2) + '\n', { mode: 0o600, flag: 'wx' });

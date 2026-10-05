@@ -126,6 +126,8 @@ def download_ytdlp(url, outdir):
     return vp
 def transcribe_audio(path):
     return '', [], ''
+def probe_and_transcribe_audio(video_path, work_dir):
+    return {}, '', []
 try:
     asyncio.run(fetch_ad_snapshot('4115883025377044'))
 except RuntimeError as error:

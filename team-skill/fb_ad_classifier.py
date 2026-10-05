@@ -597,9 +597,8 @@ def _ig_get_duration(path: str) -> float:
 
 def download_instagram_media(url: str, work_dir: str) -> dict:
     """
-    Download Instagram media with the robust 3-method chain documented in the
-    backlog: gallery-dl with browser cookies, Snapinsta via off-screen Playwright,
-    then Open Graph media as the always-available fallback.
+    Try yt-dlp, gallery-dl, Snapinsta, then actual Open Graph video.
+    Crawler preview images are never accepted as final creative evidence.
     """
     os.makedirs(work_dir, exist_ok=True)
     try:
@@ -611,6 +610,8 @@ def download_instagram_media(url: str, work_dir: str) -> dict:
     raw_path = None
     kind = ""
     via = ""
+    expects_video = bool(re.match(r'^/(?:reel|reels|tv)/', urllib.parse.urlparse(url).path, re.I)
+                         or og.get('video_url'))
     chain = (
         ("yt-dlp", lambda: _ig_download_ytdlp(url, work_dir)),
         ("gallery-dl", lambda: _ig_download_gallery_dl(url, work_dir)),
@@ -619,7 +620,10 @@ def download_instagram_media(url: str, work_dir: str) -> dict:
     )
     for name, fn in chain:
         try:
-            raw_path, kind = fn()
+            candidate_path, candidate_kind = fn()
+            if expects_video and candidate_kind != 'video':
+                raise RuntimeError('Video post returned only an image preview')
+            raw_path, kind = candidate_path, candidate_kind
             via = name
             break
         except Exception as e:

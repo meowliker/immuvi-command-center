@@ -15,9 +15,10 @@ import { createPrivateJobPool } from '../lib/services/private-job-pool.js';
 import { analysisAvailable, executeSharedAnalysis } from './shared-analysis-runner.mjs';
 import { assertAnalysisJob } from '../lib/services/shared-analysis-recovery.js';
 
-import { validateSharedWorkerConfig, assertInspirationJob } from '../lib/services/shared-worker.js';
+import { validateSharedWorkerConfig, assertInspirationJob, attestWorkerDestinations, APPROVED_PRODUCT_IDS } from '../lib/services/shared-worker.js';
 import { createReleaseUpdater, readReleaseState, atomicJson, fetchApprovedRelease, stageWorkerRelease, managedUpdatesEnabled } from '../lib/services/shared-worker-updates.js';
 import { watchSupervisorConnection, waitForWorkerActivation } from '../lib/services/shared-worker-supervisor.js';
+import { resolveConfiguredCodexExecutable } from '../lib/services/codex-executable.js';
 
 process.umask(0o077);
 const path = process.argv[2];
@@ -26,7 +27,8 @@ const permissions = await stat(path);
 if (permissions.uid !== process.getuid() || (permissions.mode & 0o077)) throw new Error('Worker configuration must be owner-only (0600).');
 const input = JSON.parse(await readFile(path, 'utf8'));
 const shared = input.scope === 'shared';
-const config = shared ? validateSharedWorkerConfig(input) : validatePrivateWorkerConfig(input);
+const configured = shared ? validateSharedWorkerConfig(input) : validatePrivateWorkerConfig(input);
+const config = { ...configured, codexBin: await resolveConfiguredCodexExecutable(configured.codexBin) };
 const managed = shared && process.env.IMMUVI_MANAGED_QA_WORKER === '1' && !!process.send;
 const update = managed ? createReleaseUpdater({
   isIdle:()=>!stopped && !pool.size && !current,
@@ -69,6 +71,9 @@ async function heartbeat() {
   const protocol=await rpc(shared?'qa_shared_analysis_heartbeat':'qa_private_runtime_heartbeat',
     {p_codex:(shared?analysis:available || classifier) && !stopped,p_claude:false,p_classifier:classifier && (!shared || analysis) && !stopped,...(shared?{p_images:available && analysis && !stopped}:{})});
   if(shared && protocol!==1)throw new Error('Shared analysis database contract is unavailable.');
+  // Credential headers bind this attestation to the running binary. Registration
+  // remains anchored to Astro; the ordinary heartbeat must clear old attestations.
+  await attestWorkerDestinations(rpc,stopped);
   for (const job of inspirationJobs.values()) {
     const startedAt=Date.now();
     if (job.guard && !job.guard.check()) continue;
@@ -218,6 +223,14 @@ try {
       }
       if (!enabled) { await sleep(3000); continue; }
       if(shared) {try {if((await readFile(join(dirname(path),'paused'),'utf8')).trim()!=='0'){await sleep(2000);continue;}}catch{await sleep(2000);continue;}}
+      const currentExecutable = await resolveConfiguredCodexExecutable(config.codexBin).catch(() => null);
+      if (currentExecutable !== config.codexBin) {
+        // Let existing work settle; the next process must re-probe the moved
+        // binary before any new job can be claimed.
+        if (pool.size || current) { await sleep(2000); continue; }
+        console.error('Codex executable changed or disappeared; restarting before new claims.');
+        process.exitCode=75;stopped=true;break;
+      }
       const job = classifier && pool.size<capacity ? await rpc(shared?'qa_shared_inspiration_claim':'qa_private_inspiration_claim') : null;
       if (job) {
         assertInspirationJob(config,job);
@@ -234,6 +247,7 @@ try {
       if (!run) { await sleep(2000); continue; }
       if(shared){await processSharedImage(run);continue;}
       assertPrivateJob(config, run);
+      if(!APPROVED_PRODUCT_IDS.includes(run.product_id))throw new Error('Private image product is not approved.');
       current = run;
       const directory = await mkdtemp(join(tmpdir(), 'immuvi-private-images-'));
       try {

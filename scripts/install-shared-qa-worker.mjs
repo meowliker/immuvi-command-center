@@ -11,6 +11,7 @@ import { QA_SUPABASE_URL, QA_SUPABASE_ANON_KEY } from '../lib/qa-supabase-env.js
 import { privateWorkerHeaders } from '../lib/services/private-worker.js';
 import { validateSharedWorkerConfig } from '../lib/services/shared-worker.js';
 import { atomicJson, managedUpdatesEnabled, readReleaseState } from '../lib/services/shared-worker-updates.js';
+import { discoverCodexExecutable } from '../lib/services/codex-executable.js';
 
 process.umask(0o077);
 if(process.platform!=='darwin')throw new Error('macOS required.');
@@ -53,7 +54,7 @@ if(mode==='--pause' || mode==='--resume') {
 }
 if(!['--prepare','--enroll'].includes(mode))throw new Error('Use --prepare, --enroll, --status, --start, --stop, --restart, --pause, --resume, --enable-updates or --disable-updates.');
 for(const path of [directory,runtimeHome,join(runtimeHome,'.codex')]) {await mkdir(path,{recursive:true,mode:0o700});await chmod(path,0o700);}
-const codexBin='/Applications/ChatGPT.app/Contents/Resources/codex';
+const codexBin=await discoverCodexExecutable();
 if(mode==='--prepare') {
  // Refuse any pre-existing label; never replace an unknown service.
  try {await stat(plist);throw new Error('QA label already exists. Inspect it; use service-specific controls.');}catch(e){if(e.code!=='ENOENT')throw e;}

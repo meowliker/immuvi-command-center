@@ -21,10 +21,11 @@ test('analysis receives timing evidence only for attached frames, without local 
 
 const headings=['SNAPSHOT','CREATIVE BREAKDOWN','WHY IT WORKS','REPLICATION BRIEF','WHAT TO TEST','COMPETITOR INTEL','OUR NEXT AD','NEXT AD SCRIPTS'];
 const scriptTable='| Field | Direction |\n| --- | --- |\n| Source Format Match | Reference faithful |\n\n**Voice-over Script:** Proposed script.\n\n| Time | Label | Caption / Voice Over | Visual Beat | Editor Notes |\n| --- | --- | --- | --- | --- |\n| 0:00-0:03 | HOOK | Words | Scene | Cut |\n';
-const markdown=headings.map((text,i)=>`## ${i+1}\\. ${text}`).join('\n')+'\nVoice Over: No voice over\nInspiration Script Skeleton\n\n'+Array(3).fill(scriptTable).join('\n');
+const breakdown='| Time | Label | Caption / Voice Over | What Happens | Emotion Triggered |\n| --- | --- | --- | --- | --- |\n| 0:00-0:03 | HOOK | Visible words | Scene | Curiosity |\n';
+const markdown=headings.map((text,i)=>`## ${i+1}\\. ${text}\n\n${i===0?'Voice Over: No voice over\n':i===1?breakdown:i<7?'Evidence.\n':''}`).join('\n')+'\nInspiration Script Skeleton: Hook, proof, CTA.\n\n'+Array(3).fill(scriptTable).join('\n');
 const pair=generateKeyPairSync('rsa',{modulusLength:3072});
 const token=publicEncrypt({key:pair.publicKey,padding:constants.RSA_PKCS1_OAEP_PADDING,oaepHash:'sha256'},Buffer.from('test-only-token')).toString('base64');
-const job={context:{listId:TEST_LIST},brief_number:1,sealed_clickup_token:token};
+const job={product_id:'qa-sample-astrorekha',context:{listId:TEST_LIST},brief_number:1,sealed_clickup_token:token};
 test('ClickUp Markdown formatting normalizes without losing brief content or structure',()=>{
   const original='## 1. Snapshot\n\n> [topic]\n\n- **First** item\n- Second item\n\n| Time | Direction |\n| --- | --- |\n| 0:00 | [Source](https://example.com/ad) |\n';
   const saved='## 1\\. Snapshot\n> \\[topic\\]\n\n*   **First** item\n*   Second item\n\n| Time | Direction |\n| ---| --- |\n| 0:00 | [Source](https://example.com/ad) |\n';
@@ -131,11 +132,56 @@ test('legacy table aliases and formatting do not cause false failures',()=>{
   validateBriefMarkdown(markdown.replaceAll('\\.','.'));
   validateBriefMarkdown(markdown.replaceAll('\\.',''));
   validateBriefMarkdown(markdown.replaceAll('Caption / Voice Over','Caption/Voice Over'));
+  validateBriefMarkdown(markdown.replaceAll('**Voice-over Script:** Proposed script.','#### Voice-over Script\n\nProposed script.'));
   validateBriefMarkdown(markdown+'\nSource Format Match is explained in each strategy table.\n');
   assert.throws(()=>validateBriefMarkdown(markdown.replaceAll('| --- | --- |','not a table')));
   assert.throws(()=>validateBriefMarkdown(markdown.replaceAll('| HOOK | Words | Scene | Cut |','| HOOK | Words | Scene | |')));
   assert.throws(()=>validateBriefMarkdown(markdown.replace('## 8\\. NEXT AD SCRIPTS','```md\n## 8\\. NEXT AD SCRIPTS')+'\n```'));
   assert.throws(()=>validateBriefMarkdown(markdown.replaceAll(scriptTable,'')+'\n```md\n'+scriptTable.repeat(3)+'\n```'));
+});
+test('all eight sections and each individual script must contain their deliverables',()=>{
+  for (const altered of [
+    markdown.replace('Evidence.',''),
+    markdown.replace(breakdown,'Breakdown omitted.'),
+    markdown.replace('**Voice-over Script:** Proposed script.',''),
+    markdown+scriptTable,
+    markdown+'\n**Hook text:** loose field\n',
+    markdown+'\n**CTA:** loose field\n',
+    markdown.replace('Voice-over Script:** Proposed script.','Voice-over Script:** '),
+    markdown.replaceAll(scriptTable,'') + scriptTable.split('**Voice-over Script:**')[0].repeat(3)
+      + scriptTable.slice(scriptTable.indexOf('**Voice-over Script:**')).repeat(3),
+  ]) assert.throws(()=>validateBriefMarkdown(altered));
+});
+test('escaped narration labels accept static No voice over without changing rendered content',()=>{
+  const original='**Voice-over Script:** Proposed script.';
+  for (const label of [
+    '**Voice-over Script:** No voice over',
+    '**Voice\\-over Script:** No voice over',
+    '**Voice\\-over Script:** `No voice over`',
+    '#### Voice\\-over Script\n\nNo voice over',
+  ]) {
+    const staticBrief=markdown.replaceAll(original,label);
+    assert.doesNotThrow(()=>validateBriefMarkdown(staticBrief));
+    assert.equal(briefContentMatches(staticBrief,staticBrief.replaceAll('Voice\\-over','Voice-over')),true);
+  }
+});
+test('literal escaped asterisks and empty escaped narration labels remain invalid',()=>{
+  const original='**Voice-over Script:** Proposed script.';
+  for (const label of [
+    '\\*\\*Voice\\-over Script:\\*\\* No voice over',
+    '**Voice\\-over Script:**',
+    '#### Voice\\-over Script',
+    '```markdown\n**Voice\\-over Script:** No voice over\n```',
+  ]) assert.throws(()=>validateBriefMarkdown(markdown.replaceAll(original,label)));
+});
+test('retained delivery rejects audio placeholders and HTML before any ClickUp request',async()=>{
+  for (const copy of ['Audio present; exact transcript not verified','exact transcript unavailable',
+    'unavailable on this worker','Visible captions are captured below','Caption<br />next line']) {
+    const altered=markdown.replace('Evidence.',copy);
+    assert.throws(()=>validateBriefMarkdown(altered),/forbidden/);
+    await assert.rejects(deliverPrivateBrief({job,result:{markdown:altered},privateKey:pair.privateKey,
+      checkpoint:()=>assert.fail('no checkpoint'),fetchImpl:()=>assert.fail('no network')}),/forbidden/);
+  }
 });
 test('legacy structured brief sections normalize to prose without dropping content',()=>{
   assert.equal(briefSectionText(['First reason','Second reason']),'- First reason\n- Second reason');
@@ -151,7 +197,7 @@ test('narration uses the legacy alias fallback rather than requiring three copie
   const script={variation:'One',intent:'Intent',hook_text:'Hook',source_format_match:'Reference faithful',voice_over_script:'Script',cta:'Shop now',what_to_change:'Product',why_it_should_work:'Evidence',script_breakdown:[{time:'0:00-0:03',label:'HOOK',caption_voice_over:'Text',visual_beat:'Scene',editor_note:'Cut'}]};
   const value={metadata:{page_name:'Brand',media_kind:'video',voice_over:'Verified spoken words',caption_timeline:[],voice_over_timeline:[]},
     classification:{hook_type:'Curiosity',creative_structure:'Demo',production_style:'Organic/Raw UGC',funnel_type:'TOF',persona:'Persona',angle:'Angle',creative_usp:'Format',creative_hypothesis:'Hypothesis',notes:'Scene',media_kind:'video',photo_video:'Video'},
-    brief:{why_it_works:'Why',replication_brief:'How',what_to_test:'What',competitor_intel:'Intel',our_next_ad:'Next',inspiration_script_skeleton:'Skeleton',frame_by_frame:[{time:'0:00-0:03',label:'HOOK'}],next_ad_scripts:[script,script,script]},markdown};
+    brief:{why_it_works:'Why',replication_brief:'How',what_to_test:'What',competitor_intel:'Intel',our_next_ad:'Next',inspiration_script_skeleton:'Skeleton',frame_by_frame:[{time:'0:00-0:03',label:'HOOK'}],next_ad_scripts:[script,script,script]},markdown:markdown.replace('Voice Over: No voice over','Voice Over: Verified spoken words')};
   const media={media_kind:'video',metadata:{voice_over:'Verified spoken words',audio_probe:{has_audio:true}},duration:3,frames:['frame.jpg']};
   const verified=validateInspirationResult(structuredClone(value),media);
   assert.equal(verified.classification.voice_over,'Verified spoken words');
@@ -178,8 +224,9 @@ test('narration uses the legacy alias fallback rather than requiring three copie
   const structured=structuredClone(value);structured.brief.why_it_works=['Why'];structured.brief.replication_brief={talent:'Illustration'};
   const normalized=validateInspirationResult(structured,media);
   assert.equal(normalized.brief.why_it_works,'- Why');assert.equal(normalized.brief.replication_brief,'talent: Illustration');
-  assert.equal(normalized.markdown,markdown);
+  assert.equal(normalized.markdown,value.markdown);
   const ambient=structuredClone(value);ambient.classification.voice_over='No voice over';ambient.metadata.voice_over_timeline=[{time:'0:00-0:03',voice_over:'Background lyrics'}];
+  ambient.markdown=markdown;
   const noNarration=validateInspirationResult(ambient,media);
   assert.equal(noNarration.metadata.voice_over,'No voice over');assert.deepEqual(noNarration.metadata.voice_over_timeline,[]);
   assert.throws(()=>validateInspirationResult({...value,metadata:{...value.metadata,voice_over:''}},media),/Unverified narration requires/);
@@ -187,11 +234,28 @@ test('narration uses the legacy alias fallback rather than requiring three copie
   const uncertain=structuredClone(value);
   uncertain.metadata.voice_over='';uncertain.metadata.caption_timeline=[{time:'0:00-0:03',caption:'Visible hook'}];
   uncertain.classification.notes='Narration cannot be distinguished from background lyrics; brief uses visible captions.';
-  uncertain.markdown=markdown.replace('Voice Over: No voice over\n','');
+  uncertain.markdown=markdown.replace('Voice Over: No voice over\n','Visible caption evidence.\n');
   const accepted=validateInspirationResult(uncertain,{...media,metadata:{audio_probe:{has_audio:true}}});
   assert.equal(accepted.metadata.voice_over,'');assert.equal(accepted.classification.voice_over,'');
   assert.equal(accepted.metadata.audio_verification.status,'unverified');assert.deepEqual(accepted.metadata.voice_over_timeline,[]);
   assert.throws(()=>validateInspirationResult({...structuredClone(uncertain),markdown:'Voice Over: No voice over\n'+uncertain.markdown},media),/must be omitted/);
+  assert.throws(()=>validateInspirationResult({...structuredClone(uncertain),markdown:uncertain.markdown.replace('Visible caption evidence.','**Voice Over:** Guessed')},media),/must be omitted/);
+  assert.throws(()=>validateInspirationResult({...structuredClone(value),markdown},media),/Snapshot must render/);
+  assert.throws(()=>validateInspirationResult({...structuredClone(value),markdown:markdown.replace('Voice Over: No voice over','Ad Copy: Verified spoken words\nVoice Over: No voice over')},media),/Snapshot must render/);
+  const guessed=structuredClone(value);guessed.classification.voice_over='Invented caption treated as speech';
+  assert.throws(()=>validateInspirationResult(guessed,media),/differs from the verified audio/);
+  assert.throws(()=>validateInspirationResult(structuredClone(value),{...media,metadata:{voice_over:'No voice over',audio_probe:{has_audio:false}}}),/differs from the verified audio/);
+  assert.throws(()=>validateInspirationResult(structuredClone(ambient),{...media,metadata:{audio_probe:{has_audio:null,error:'ffprobe failed'}}}),/silence cannot be inferred/);
+  for(const type of ['SHOP_NOW','LEARN_MORE']) {
+    const localized=structuredClone(value);localized.metadata.cta_text='Localized platform CTA';
+    assert.throws(()=>validateInspirationResult(localized,{...media,metadata:{...media.metadata,cta_type:type}}),/Platform CTA/);
+    localized.metadata.cta_text=type==='SHOP_NOW'?'Shop now':'Learn more';
+    assert.throws(()=>validateInspirationResult(localized,{...media,metadata:{...media.metadata,cta_type:type}}),/Snapshot must render/);
+    localized.markdown=localized.markdown.replace('Voice Over: Verified spoken words',`Voice Over: Verified spoken words\nCTA: ${localized.metadata.cta_text}`);
+    validateInspirationResult(localized,{...media,metadata:{...media.metadata,cta_type:type}});
+  }
+  const custom=structuredClone(value);custom.metadata.cta_text='Custom creative CTA';
+  validateInspirationResult(custom,media);
 });
 test('delivery creates one private test-list Doc, checkpoints receipts and verifies saved content',async()=>{
   const calls=[],stages=[];
@@ -249,22 +313,22 @@ test('wrong document parent cannot receive content',async()=>{
   assert.equal(count,3);assert.deepEqual(stages,['result','delivery-start','doc']);
 });
 
-const libraryDoc={id:'qa-library',workspace_id:TEST_WORKSPACE,parent:{id:TEST_LIST,type:6},public:true};
-const libraryJob={...job,inspiration_id:'INS-1',context:{...job.context,docVisibility:'PUBLIC',libraryDocId:'qa-library',libraryTrackerPageId:'tracker',product:{name:'QA'}}};
-const trackerPage={id:'tracker',name:'Master Tracker'};
+const libraryDoc={id:'8cq1r3y-44896',workspace_id:TEST_WORKSPACE,parent:{id:TEST_LIST,type:6},public:true};
+const libraryJob={...job,inspiration_id:'INS-1',context:{...job.context,docVisibility:'PUBLIC',libraryDocId:libraryDoc.id,libraryTrackerPageId:'8cq1r3y-118036',product:{name:'QA'}}};
+const trackerPage={id:'8cq1r3y-118036',name:'Master Tracker'};
 test('legacy library creates a brief page, not another Doc, and updates the tracker',async()=>{
   const calls=[],stages=[];
   const responses=[{id:TEST_LIST},libraryDoc,[trackerPage],{id:'brief'},{content:markdown},{}];
   const value=await deliverPrivateBrief({job:libraryJob,result:{markdown},privateKey:pair.privateKey,checkpoint:async(stage)=>{stages.push(stage);return stage==='tracker-rows'?[]:undefined;},fetchImpl:async(url,init)=>{calls.push({url,...init});return Response.json(responses.shift());}});
-  assert.deepEqual(value,{docId:'qa-library',pageId:'brief'});
+  assert.deepEqual(value,{docId:libraryDoc.id,pageId:'brief'});
   assert.equal(calls.filter(call=>call.method==='POST').length,1);
-  assert.match(calls.find(call=>call.method==='POST').url,/docs\/qa-library\/pages$/);
+  assert.match(calls.find(call=>call.method==='POST').url,/docs\/8cq1r3y-44896\/pages$/);
   assert.equal(JSON.parse(calls[3].body).name,'test immuvi brief-1');
-  assert.match(calls.at(-1).url,/pages\/tracker$/);
+  assert.match(calls.at(-1).url,/pages\/8cq1r3y-118036$/);
   assert.deepEqual(stages,['result','delivery-start','doc','page','tracker-rows','complete']);
 });
 test('legacy library reuses existing inspiration pages and resumes known receipts',async()=>{
-  for(const receipts of [{},{delivery_started:true,doc_id:'qa-library',page_id:'brief'}]) {
+  for(const receipts of [{},{delivery_started:true,doc_id:libraryDoc.id,page_id:'brief'}]) {
     const calls=[],stages=[];
     const responses=[{id:TEST_LIST},libraryDoc,[trackerPage,{id:'brief',name:'test immuvi brief-1'}],null, {content:markdown.replaceAll('\\.','.')},null];
     await deliverPrivateBrief({job:{...libraryJob,...receipts},result:{markdown},privateKey:pair.privateKey,checkpoint:async(stage)=>{stages.push(stage);return stage==='tracker-rows'?[]:undefined;},fetchImpl:async(url,init)=>{calls.push({url,...init});const response=responses.shift();return response===null?new Response(null,{status:200}):Response.json(response);}});
@@ -275,18 +339,18 @@ test('legacy library reuses existing inspiration pages and resumes known receipt
 });
 test('uncertain library creation cannot be repeated just because a page is not listed',async()=>{
   const responses=[{id:TEST_LIST},libraryDoc,[trackerPage]];
-  await assert.rejects(deliverPrivateBrief({job:{...libraryJob,delivery_started:true,doc_id:'qa-library'},result:{markdown},privateKey:pair.privateKey,checkpoint:async()=>assert.fail('no write'),fetchImpl:async(url,init)=>{assert.equal(init.method,'GET');return Response.json(responses.shift());}}),/uncertain outcome/);
+  await assert.rejects(deliverPrivateBrief({job:{...libraryJob,delivery_started:true,doc_id:libraryDoc.id},result:{markdown},privateKey:pair.privateKey,checkpoint:async()=>assert.fail('no write'),fetchImpl:async(url,init)=>{assert.equal(init.method,'GET');return Response.json(responses.shift());}}),/uncertain outcome/);
 });
 test('saved brief recovery accepts ClickUp domain links and completes without a new page',async()=>{
   const original=markdown+'\n\nDestination: sub.astroline.today.\n';
   const saved=original.replace('Destination: sub.astroline.today.','Destination: [sub.astroline.today](http://sub.astroline.today).');
   const calls=[],stages=[];
   const responses=[{id:TEST_LIST},libraryDoc,[trackerPage,{id:'brief',name:'test immuvi brief-1'}],{}, {content:saved},{}];
-  const receipt=await deliverPrivateBrief({job:{...libraryJob,delivery_started:true,doc_id:'qa-library',page_id:'brief'},
+  const receipt=await deliverPrivateBrief({job:{...libraryJob,delivery_started:true,doc_id:libraryDoc.id,page_id:'brief'},
     result:{markdown:original},privateKey:pair.privateKey,
     checkpoint:async(stage)=>{stages.push(stage);return stage==='tracker-rows'?[]:undefined;},
     fetchImpl:async(url,init)=>{calls.push({url,...init});return Response.json(responses.shift());}});
-  assert.deepEqual(receipt,{docId:'qa-library',pageId:'brief'});
+  assert.deepEqual(receipt,{docId:libraryDoc.id,pageId:'brief'});
   assert.equal(calls.some(call=>call.method==='POST'),false);
   assert.deepEqual(stages,['result','tracker-rows','complete']);
 });
@@ -302,7 +366,7 @@ test('lost page-create response resumes by remote identity without a second POST
   };
   const fetchImpl=async(url,init)=>{
     if(url.endsWith(`/v2/list/${TEST_LIST}`))return Response.json({id:TEST_LIST});
-    if(url.endsWith('/docs/qa-library'))return Response.json(libraryDoc);
+    if(url.endsWith(`/docs/${libraryDoc.id}`))return Response.json(libraryDoc);
     if(url.includes('/page_listing'))return Response.json([trackerPage,...(remotePage?[remotePage]:[])]);
     if(init.method==='POST'){
       creates++;remotePage={id:'recovered-page',name:'test immuvi brief-1'};
@@ -325,9 +389,9 @@ test('altered ClickUp content cannot update the tracker or mark the inspiration 
   assert.equal(stages.includes('tracker-rows'),false);
 });
 test('production libraries and ambiguous pages fail closed without mistaking the public flag for workspace visibility',()=>{
-  verifyLibraryDocument(libraryDoc,'qa-library');
-  verifyLibraryDocument({...libraryDoc,public:false},'qa-library');
-  for(const patch of [{parent:{id:'production',type:5}},{workspace_id:'other'},{deleted:true},{archived:true}]) assert.throws(()=>verifyLibraryDocument({...libraryDoc,...patch},'qa-library'));
+  verifyLibraryDocument(libraryDoc,libraryDoc.id);
+  verifyLibraryDocument({...libraryDoc,public:false},libraryDoc.id);
+  for(const patch of [{parent:{id:'production',type:5}},{workspace_id:'other'},{deleted:true},{archived:true}]) assert.throws(()=>verifyLibraryDocument({...libraryDoc,...patch},libraryDoc.id));
   assert.deepEqual(libraryPages([{id:'parent',pages:[{id:'child'}]}]).map(p=>p.id),['parent','child']);
   assert.throws(()=>libraryPages([{id:'same'},{id:'same'}]));
   assert.throws(()=>libraryPages({}));

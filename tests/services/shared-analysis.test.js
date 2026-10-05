@@ -94,7 +94,8 @@ test('unchanged task cache is reused and deleted/unjudged tasks are excluded fro
 
 const headings=['SNAPSHOT','CREATIVE BREAKDOWN','WHY IT WORKS','REPLICATION BRIEF','WHAT TO TEST','COMPETITOR INTEL','OUR NEXT AD','NEXT AD SCRIPTS'];
 const table='| Field | Direction |\n| --- | --- |\n| Source Format Match | Reference faithful |\n\nVoice-over Script: Proposed script.\n\n| Time | Label | Caption / Voice Over | Visual Beat | Editor Notes |\n| --- | --- | --- | --- | --- |\n| 0:00 | HOOK | Words | Scene | Cut |\n';
-const markdown=headings.map((h,i)=>`## ${i+1}. ${h}`).join('\n')+'\nInspiration Script Skeleton\n\n'+Array(3).fill(table).join('\n');
+const breakdown='| Time | Label | Caption / Voice Over | What Happens | Emotion Triggered |\n| --- | --- | --- | --- | --- |\n| 0:00-0:03 | HOOK | Words | Scene | Curiosity |\n';
+const markdown=headings.map((h,i)=>`## ${i+1}. ${h}\n\n${i===1?breakdown:i<7?'Evidence.\n':''}`).join('\n')+'\nInspiration Script Skeleton: Hook, proof, CTA.\n\n'+Array(3).fill(table).join('\n');
 const pair=generateKeyPairSync('rsa',{modulusLength:3072});
 const sealed=publicEncrypt({key:pair.publicKey,padding:constants.RSA_PKCS1_OAEP_PADDING,oaepHash:'sha256'},Buffer.from('fixture-token')).toString('base64');
 test('winner delivery reconciles lost page creation response, verifies readback and creates only one page',async()=>{

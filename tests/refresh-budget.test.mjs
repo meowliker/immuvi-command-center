@@ -54,6 +54,89 @@ for (const file of ['immuvi-command-center.html', 'public/immuvi-command-center.
     return {c, calls, timers, advance};
   }
 
+  function setupNewTaskImport(productId = 'A') {
+    const fixture = setup(), {c} = fixture;
+    c.activeProductId = c._adsProductId = productId;
+    Object.assign(c, {
+      getActiveProduct: () => ({id: c.activeProductId, clickupListId: 'list-' + c.activeProductId, name: 'Product ' + c.activeProductId}),
+      _productListId: product => product.clickupListId,
+      _productListName: product => product.clickupListName || '',
+      parseClickUpTask: task => ({...task}),
+      _readTaxonomyTombstone: () => ({}), _SYNC_DIFF_FIELDS: ['status'],
+      _stampAdStatusChange: (ad, status) => {ad.status = status;},
+      _diffCustomFieldsRaw: () => [], _isDeletedAdTombstonedNow: () => false,
+      autoDiscoverTaxonomy: () => ({addedAngles: [], addedPersonas: []}),
+      _apRepairMASourceAdIds: () => 0, _applyProductBoundaryQuarantine: async () => {},
+      _reconcileSyncedAdsToCanonicalCells: () => 0,
+      process: () => ({}), buildCreativeUsageIndex() {}, deriveWinners() {}, genActions() {},
+      populateFilterOptions() {}, initAnglePersonas() {},
+    });
+    vm.runInContext(code('function _stampClickUpTasksWithProductBoundary(', 'function _guardClickUpListForProduct('), c);
+    c.fetchAllTasks = async () => [{id: 'new-ad', _clickupId: 'new-cu', status: 'Testing',
+      formatName: 'New creative', angle: 'Imported angle', persona: 'Imported persona'}];
+    return fixture;
+  }
+
+  test(file + ': new tasks import for each product on manual and automatic refresh without duplicates', async () => {
+    for (const productId of ['quilting', 'astro-rekha', 'phonics', 'other-product']) {
+      for (const manual of [true, false]) {
+        const {c, calls, advance} = setupNewTaskImport(productId);
+        c.ADS = [{id: 'existing', _clickupId: 'absent-cu', status: 'Winner', variationNotes: 'Keep shared notes'}];
+        c.ANGLES = [{id: 'angle', name: 'Approved angle'}];
+        c.PERSONAS = [{id: 'persona', name: 'Approved persona'}];
+        const protectedBefore = JSON.stringify([c.ADS[0], c.ANGLES, c.PERSONAS]);
+        assert.equal((await c.pollFullSync({manual})).ok, true, productId + ' manual=' + manual);
+        assert.equal(c.ADS.length, 2);
+        assert.equal(c.ADS[1]._syncProductId, productId);
+        assert.equal(c.ADS[1]._syncProductName, 'Product ' + productId);
+        assert.equal(c.ADS[1].clickupListId, 'list-' + productId);
+        assert.equal(JSON.stringify([c.ADS[0], c.ANGLES, c.PERSONAS]), protectedBefore);
+        await advance(60000);
+        assert.equal((await c.pollFullSync({manual})).ok, true);
+        assert.equal(c.ADS.length, 2);
+        assert.equal(calls.save, manual ? 0 : 1);
+        assert.equal(calls.broadcast, 0);
+        assert.equal(c._clickUpRefreshFailure, null);
+      }
+    }
+  });
+
+  test(file + ': new-task import preserves tombstones and action ownership while importing unrelated tasks', async () => {
+    const {c, calls} = setupNewTaskImport();
+    c.localStorage.getItem = key => key === '_deletedCuIds_A' ? JSON.stringify({'locally-deleted': c.Date.now()}) : null;
+    c.SB = {from: table => {
+      assert.equal(table, 'deleted_ads');
+      return {select: () => ({eq: async (column, value) => {
+        assert.equal(column, 'product_id'); assert.equal(value, 'A');
+        return {data: [{id: 'deleted-ad', clickup_task_id: 'cloud-deleted'}]};
+      }})};
+    }};
+    c.MANUAL_ACTIONS = [{id: 'action', _clickupId: 'owned-cu', liveStatus: 'Testing', title: 'Owned creative', variationNotes: 'Keep'}];
+    const before = JSON.stringify(c.MANUAL_ACTIONS);
+    c.fetchAllTasks = async () => ['locally-deleted', 'cloud-deleted', 'owned-cu', 'new-cu'].map(id => ({
+      id, _clickupId: id, status: 'Testing', formatName: id === 'owned-cu' ? 'Owned creative' : id,
+    }));
+    assert.equal((await c.pollFullSync({manual: true})).ok, true);
+    assert.deepEqual(Array.from(c.ADS, ad => ad._clickupId), ['new-cu']);
+    assert.equal(JSON.stringify(c.MANUAL_ACTIONS), before);
+    assert.equal(calls.save, 0); assert.equal(calls.broadcast, 0);
+  });
+
+  test(file + ': a product switch during deletion-safeguard loading rejects new tasks', async () => {
+    const {c, calls} = setupNewTaskImport();
+    let resolve, entered;
+    const loading = new Promise(r => {entered = r;});
+    c.SB = {from: () => ({select: () => ({eq: () => {
+      entered(); return new Promise(r => {resolve = r;});
+    }})})};
+    const pending = c.pollFullSync({manual: true});
+    await loading;
+    c.activeProductId = c._adsProductId = 'B'; c._uiProductGeneration++;
+    resolve({data: []}); await pending;
+    assert.equal(c.ADS.length, 0);
+    assert.equal(calls.save, 0); assert.equal(calls.broadcast, 0);
+  });
+
   test(file + ': continuous events coalesce without postponing the minute deadline', async () => {
     const {c, advance, timers} = setup();
     let count = 0;

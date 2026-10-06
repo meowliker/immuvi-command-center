@@ -32247,7 +32247,7 @@ function pollFullSync(options) {
             continue;
           }
           var freshAd = taskMap[cuid];
-          _stampAdProductBoundary(freshAd, _importProduct);
+          _stampAdProductBoundary(freshAd, activeProd);
           // ── ACTION-PLAN RECOVERY (orphan re-link) ──────────────────
           // If the fresh task's description contains our hidden marker
           // `app_action_id:<id>` AND that id matches an existing

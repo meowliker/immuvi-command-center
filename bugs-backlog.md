@@ -2656,3 +2656,16 @@ and honor real rate-limit reset headers. Keep the existing minute refresh budget
 and read-only manual behavior. Error labels now survive the status age ticker.
 No credentials or task content are logged; no production records were changed.
 See `docs/repairs/2026-10-06-clickup-refresh-errors.md`.
+
+# 2026-10-06: New ClickUp Tasks Stopped Refresh With A Local ReferenceError
+
+The polling importer referenced `_importProduct`, scoped only to the separate
+bulk-import function. An eligible new task therefore stopped the merge even
+after a successful ClickUp response. Use the polling function's captured
+`activeProd` instead, preserving all boundary and tombstone guards.
+
+The previous auth-error diagnosis did not explain this local-merge screenshot.
+Regression coverage now includes new-task imports, repeated refreshes, action
+ownership, local/cloud deletion markers, and product switches while safeguards
+load. All 265 tests passed; no production records or QA files were changed.
+See `docs/repairs/2026-10-06-new-task-sync-reference.md`.

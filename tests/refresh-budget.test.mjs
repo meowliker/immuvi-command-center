@@ -140,6 +140,102 @@ for (const file of ['immuvi-command-center.html', 'public/immuvi-command-center.
     assert.equal(calls.save, 0); assert.equal(c._manualRefreshBusy, false);
   });
 
+  test(file + ': rejected key stops automatic polling and corrected key retries immediately', async () => {
+    const {c, calls, advance} = setup();
+    const messages = [];
+    c.toast = message => messages.push(message);
+    c.fetchAllTasks = async () => {calls.fetch++; throw Object.assign(new Error('Rejected'), {service:'clickup', status:401});};
+    assert.equal((await c.pollFullSync({manual:true})).reason, 'auth');
+    assert.match(messages[0], /API key \(401\)/);
+    assert.doesNotMatch(messages[0], /temporarily unavailable/);
+    await advance(600000);
+    await c.pollFullSync();
+    assert.equal(calls.fetch, 1);
+    c.CFG.key = 'replacement-test-key';
+    c.fetchAllTasks = async () => {calls.fetch++; return [];};
+    assert.equal((await c.pollFullSync({manual:true})).ok, true);
+    assert.equal(calls.fetch, 2);
+    assert.equal(c._clickUpRefreshFailure, null);
+    assert.equal(calls.save, 0); assert.equal(calls.broadcast, 0);
+  });
+
+  test(file + ': explicit retry recovers transient errors; automatic retries keep their budget', async () => {
+    const {c, calls} = setup();
+    c.fetchAllTasks = async () => {calls.fetch++; throw new TypeError('Failed to fetch');};
+    assert.equal((await c.pollFullSync()).reason, 'network');
+    await c.pollFullSync(); assert.equal(calls.fetch, 1);
+    c.fetchAllTasks = async () => {calls.fetch++; return [];};
+    assert.equal((await c.pollFullSync({manual:true})).ok, true);
+    assert.equal(calls.fetch, 2);
+  });
+
+  test(file + ': rate-limit reset blocks even manual retries across products with the same key', async () => {
+    const {c, calls, advance} = setup();
+    c.fetchAllTasks = async () => {calls.fetch++; throw Object.assign(new Error('Rate limited'), {service:'clickup', status:429, retryAt:c.Date.now()+120000});};
+    await c.pollFullSync();
+    c.activeProductId = c._adsProductId = 'B'; c._uiProductGeneration++;
+    const messages = []; c.toast = message => messages.push(message);
+    await advance(60000); await c.pollFullSync({manual:true});
+    assert.equal(calls.fetch, 1); assert.match(messages[0], /60 seconds/);
+    c.fetchAllTasks = async () => {calls.fetch++; return [];};
+    await advance(60000); await c.pollFullSync({manual:true});
+    assert.equal(calls.fetch, 2);
+  });
+
+  test(file + ': stale failures from another product or credential cannot block the active view', async () => {
+    for (const change of ['product','key']) {
+      const {c} = setup(); let reject;
+      c.fetchAllTasks = () => new Promise((_, r) => {reject = r;});
+      const pending = c.pollFullSync();
+      if (change === 'product') {c.activeProductId = 'B'; c._uiProductGeneration++;}
+      else c.CFG.key = 'new-key';
+      reject(Object.assign(new Error('Rejected'), {service:'clickup', status:401}));
+      await pending;
+      assert.equal(c._clickUpRefreshFailure, null);
+      assert.equal(c._clickUpRefreshRetryAfter, 0);
+    }
+  });
+
+  test(file + ': workspace authorization failures are not misreported as invalid API keys', async () => {
+    const {c} = setup();
+    for (const code of ['OAUTH_023','OAUTH_026','OAUTH_029','OAUTH_045']) {
+      const failure = c._classifyClickUpRefreshFailure({service:'clickup',status:401,code},'fetch');
+      assert.equal(failure.kind, 'permission');
+      assert.match(c._clickUpRefreshFailureMessage(failure), /workspace authorization/);
+    }
+    assert.equal(c._classifyClickUpRefreshFailure({service:'clickup',status:401,code:'OAUTH_019'},'fetch').kind,'auth');
+  });
+
+  test(file + ': status ticker retains actionable errors instead of claiming the failed sync is Live', () => {
+    const {c} = setup();
+    const label = {textContent:'',title:''};
+    c.document.getElementById = id => id === 'statusLbl' ? label : null;
+    c._lastSyncedAt = c.Date.now()-1000; c._autoSyncActive = false;
+    c._clickUpRefreshFailure = {kind:'auth',status:401,apiKey:c.CFG.key,productId:'A'};
+    vm.runInContext(code('function updateSyncLabel()', 'function _autoSyncIntervalMs()'), c);
+    c.updateSyncLabel();
+    assert.equal(label.textContent,'Check ClickUp key');
+    assert.match(label.title,/401/);
+    c._clearClickUpRefreshFailure(); c.updateSyncLabel();
+    assert.match(label.textContent,/Live/); assert.equal(label.title,'');
+  });
+
+  test(file + ': local merge errors and Supabase safeguards are not labeled ClickUp outages', async () => {
+    const {c, calls} = setup();
+    c.ADS = [{id:'keep', _clickupId:'task', status:'Winner'}];
+    const original = JSON.stringify(c.ADS);
+    c.fetchAllTasks = async () => [{id:'task'}];
+    c._stampClickUpTasksWithProductBoundary = () => {throw new Error('Local bug');};
+    assert.equal((await c.pollFullSync({manual:true})).reason, 'local');
+    c._stampClickUpTasksWithProductBoundary = () => {};
+    c._stampAdProductBoundary = c.parseClickUpTask = x => x;
+    c.SB = {from:()=>({select:()=>({eq:async()=>({error:{message:'Unavailable'}})})})};
+    assert.equal((await c.pollFullSync({manual:true})).reason, 'safeguard');
+    assert.match(c._clickUpRefreshFailureMessage(c._clickUpRefreshFailure), /Supabase/);
+    assert.equal(JSON.stringify(c.ADS), original);
+    assert.equal(calls.save, 0); assert.equal(calls.broadcast, 0);
+  });
+
   test(file + ': product change while ClickUp is fetching cannot import into another product', async () => {
     const {c} = setup(); let resolve;
     c.fetchAllTasks = () => new Promise(r => {resolve = r;});

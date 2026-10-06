@@ -2645,3 +2645,14 @@ cannot masquerade as Photo/Video or contain fabricated audio/frame evidence.
 Inaccessible text blocks instead of retrying repeatedly. No Brief, per-product
 taxonomy boundaries, source identity and normal media validation remain in place.
 See `docs/repairs/2026-10-06-reddit-text-inspiration.md` for scoped recovery.
+
+# 2026-10-06: ClickUp Authentication Errors Hidden As Temporary Outages
+
+The refresh catch discarded real failures and applied one generic cooldown,
+including after key corrections and product switches. Production logs showed
+repeated 401 responses. Preserve status/error codes, distinguish workspace access
+from token rejection, stop invalid-key automatic polling, permit explicit recovery,
+and honor real rate-limit reset headers. Keep the existing minute refresh budget
+and read-only manual behavior. Error labels now survive the status age ticker.
+No credentials or task content are logged; no production records were changed.
+See `docs/repairs/2026-10-06-clickup-refresh-errors.md`.

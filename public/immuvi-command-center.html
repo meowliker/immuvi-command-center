@@ -11494,6 +11494,7 @@ var _manualRefreshBusy = false;
 var _cloudRefreshPromise = null;
 var _clickUpRefreshRetryAfter = 0;
 var _clickUpRefreshFailures = 0;
+var _clickUpRefreshFailure = null;
 
 function _queueBackgroundRefresh(key, run, productId) {
   var generation = _uiProductGeneration;
@@ -30053,7 +30054,7 @@ function apiFetch(path, opts) {
   opts = opts || {};
   var url = apiUrl(path);
   var headers = {
-    'Authorization': CFG.key,
+    'Authorization': opts.apiKey || CFG.key,
     'Content-Type': 'application/json'
   };
   var fetchOpts = {
@@ -30066,7 +30067,20 @@ function apiFetch(path, opts) {
   return fetch(url, fetchOpts).then(function (res) {
     if (!res.ok) {
       return res.text().then(function (txt) {
-        throw new Error('API Error ' + res.status + ': ' + txt);
+        var error = new Error('API Error ' + res.status + ': ' + txt);
+        error.service = 'clickup';
+        error.status = res.status;
+        try {
+          var payload = JSON.parse(txt);
+          if (/^[A-Z0-9_]{1,40}$/.test(payload.ECODE || '')) error.code = payload.ECODE;
+        } catch (_) {}
+        var reset = Number(res.headers.get('x-ratelimit-reset'));
+        var retry = res.headers.get('retry-after');
+        var retryMs = retry && /^\d+(\.\d+)?$/.test(retry) ? Number(retry) * 1000 : 0;
+        var retryDate = retry && !retryMs ? Date.parse(retry) : 0;
+        error.retryAt = Math.max(Number.isFinite(reset) ? reset * 1000 : 0,
+          retryMs ? Date.now() + retryMs : 0, Number.isFinite(retryDate) ? retryDate : 0);
+        throw error;
       });
     }
     // 204 No Content (e.g. DELETE responses) — no body to parse
@@ -30083,7 +30097,10 @@ function apiFetch(path, opts) {
         // forces callers to see the real failure instead of acting on an
         // empty response.
         console.error('[apiFetch] JSON parse failed for ' + path + ' (body length ' + text.length + ')', e);
-        throw new Error('ClickUp returned a malformed/truncated response (' + text.length + ' bytes). Try again — this is usually transient.');
+        var error = new Error('ClickUp returned a malformed/truncated response (' + text.length + ' bytes). Try again — this is usually transient.');
+        error.service = 'clickup';
+        error.code = 'INVALID_RESPONSE';
+        throw error;
       }
     });
   });
@@ -30302,10 +30319,17 @@ async function syncClickUp() {
 function fetchAllTasks(listId) {
   // Fetch up to 5 pages (500 tasks max)
   var allTasks = [];
+  var apiKey = CFG.key;
   function fetchPage(page) {
-    return apiFetch('/list/' + listId + '/task?include_closed=true&subtasks=true&page=' + page)
+    return apiFetch('/list/' + listId + '/task?include_closed=true&subtasks=true&page=' + page, {apiKey: apiKey})
       .then(function(resp) {
-        var tasks = (resp && resp.tasks) ? resp.tasks : [];
+        if (!resp || !Array.isArray(resp.tasks)) {
+          var error = new Error('ClickUp returned an invalid task-list response. Existing tasks were kept.');
+          error.service = 'clickup';
+          error.code = 'INVALID_RESPONSE';
+          throw error;
+        }
+        var tasks = resp.tasks;
         for (var ti = 0; ti < tasks.length; ti++) {
           if (tasks[ti]) tasks[ti].list_id = tasks[ti].list_id || listId;
         }
@@ -31873,11 +31897,19 @@ function pollFullSync(options) {
   var manual = options.manual === true;
   if (_manualRefreshBusy && !manual) return;
   if (_cloudRefreshPromise) return;
-  if (Date.now() < _clickUpRefreshRetryAfter) {
-    if (manual) toast('ClickUp is temporarily unavailable. Please wait a minute before retrying.', 'warn');
-    return;
-  }
   if (_autoSyncPollInFlight) return _clickUpRefreshPromise;
+  if (_clickUpRefreshFailure && (_clickUpRefreshFailure.apiKey !== CFG.key ||
+      (_clickUpRefreshFailure.productId !== activeProductId &&
+       ['auth','rate_limit','network','upstream'].indexOf(_clickUpRefreshFailure.kind) === -1))) {
+    _clearClickUpRefreshFailure();
+  }
+  var failure = _clickUpRefreshFailure;
+  var retryBlocked = Date.now() < _clickUpRefreshRetryAfter;
+  if ((!manual && (retryBlocked || (failure && failure.kind === 'auth'))) ||
+      (manual && failure && failure.kind === 'rate_limit' && retryBlocked)) {
+    if (manual) toast(_clickUpRefreshFailureMessage(failure), 'warn');
+    return {ok: false, reason: failure ? failure.kind : 'cooldown'};
+  }
   if (!manual && document.hidden) return;
   if (!manual && _lastClickUpRefreshProduct === activeProductId && Date.now() - _lastClickUpRefreshAt < 60000) return;
   var activeProd = getActiveProduct();
@@ -31896,6 +31928,8 @@ function pollFullSync(options) {
   var _startGeneration = _uiProductGeneration;
   var _startListId = activeProd.clickupListId;
   var _startListName = activeProd.clickupListName || '';
+  var _startApiKey = CFG.key;
+  var _refreshStage = 'fetch';
   if (!_guardClickUpListForProduct(activeProd, _startListId, _startListName, 'Live sync blocked')) return;
 
   var dot = document.getElementById('statusDot');
@@ -31907,6 +31941,8 @@ function pollFullSync(options) {
   // Fetch ALL pages (up to 500 tasks) — same as manual Sync, so we don't miss new tasks beyond page 0
   _clickUpRefreshPromise = fetchAllTasks(_startListId)
     .then(async function(tasks) {
+      if (CFG.key !== _startApiKey) return;
+      _refreshStage = 'merge';
       // RACE-CONDITION GUARD: verify we're still on the same product before
       // mutating ADS. If the user switched products during the fetch, the
       // fetched tasks belong to a DIFFERENT product's list and must NOT be
@@ -31922,8 +31958,7 @@ function pollFullSync(options) {
         return;
       }
       if (!tasks || !tasks.length) {
-        _clickUpRefreshFailures = 0;
-        _clickUpRefreshRetryAfter = 0;
+        _clearClickUpRefreshFailure();
         _onSyncSuccess(dot, 0, false, 0, manual);
         return {ok: true};
       }
@@ -31991,7 +32026,9 @@ function pollFullSync(options) {
             });
           }
         } catch (e) {
-          throw new Error('Refresh stopped because deletion safeguards could not be loaded. Please retry.');
+          var safeguardError = new Error('Refresh stopped because deletion safeguards could not be loaded. Please retry.');
+          safeguardError.service = 'supabase';
+          throw safeguardError;
         }
       }
 
@@ -32444,19 +32481,27 @@ function pollFullSync(options) {
           toast(fieldUpdates + ' field' + (fieldUpdates !== 1 ? 's' : '') + ' updated from ClickUp', 'ok');
         }
       }
-      _clickUpRefreshFailures = 0;
-      _clickUpRefreshRetryAfter = 0;
+      _clearClickUpRefreshFailure();
       return {ok: true, changed: changed};
     })
-    .catch(function() {
+    .catch(function(error) {
+      if (activeProductId !== _startProductId || _uiProductGeneration !== _startGeneration || CFG.key !== _startApiKey) return;
       _clickUpRefreshFailures++;
-      _clickUpRefreshRetryAfter = Date.now() + Math.min(300000, 60000 * Math.pow(2, _clickUpRefreshFailures - 1));
-      if (activeProductId !== _startProductId || _uiProductGeneration !== _startGeneration) return;
+      _clickUpRefreshFailure = _classifyClickUpRefreshFailure(error, _refreshStage);
+      _clickUpRefreshFailure.apiKey = _startApiKey; // In-memory only; never logged or shared.
+      _clickUpRefreshFailure.productId = _startProductId;
+      var backoff = Math.min(300000, 60000 * Math.pow(2, _clickUpRefreshFailures - 1));
+      _clickUpRefreshRetryAfter = Math.max(Date.now() + backoff, _clickUpRefreshFailure.retryAt || 0);
+      console.warn('[ClickUp refresh]', {stage: _refreshStage, kind: _clickUpRefreshFailure.kind,
+        status: _clickUpRefreshFailure.status});
       if (dot) dot.className = 'live-dot err';
       var lbl = document.getElementById('statusLbl');
-      if (lbl) lbl.textContent = 'Sync error';
-      if (manual) toast('Refresh failed. Your saved data is unchanged; please retry.', 'err');
-      return {ok: false};
+      if (lbl) {
+        lbl.textContent = _clickUpRefreshFailure.kind === 'auth' ? 'Check ClickUp key' : 'Sync error';
+        lbl.title = _clickUpRefreshFailureMessage(_clickUpRefreshFailure);
+      }
+      if (manual) toast(_clickUpRefreshFailureMessage(_clickUpRefreshFailure), 'err');
+      return {ok: false, reason: _clickUpRefreshFailure.kind};
     })
     .finally(function() {
       _autoSyncPollInFlight = false;
@@ -32465,7 +32510,48 @@ function pollFullSync(options) {
   return _clickUpRefreshPromise;
 }
 
+function _clearClickUpRefreshFailure() {
+  _clickUpRefreshFailures = 0;
+  _clickUpRefreshRetryAfter = 0;
+  _clickUpRefreshFailure = null;
+  var label = document.getElementById('statusLbl');
+  if (label) label.title = '';
+}
+
+function _classifyClickUpRefreshFailure(error, stage) {
+  var status = Number(error && error.status) || 0;
+  var kind = 'local';
+  if (error && error.service === 'supabase') kind = 'safeguard';
+  else if (error && error.service === 'clickup') {
+    var oauthCode = /^OAUTH_\d{3}$/.test(error.code || '') ? Number(error.code.slice(6)) : 0;
+    var workspaceDenied = [23,26,27].indexOf(oauthCode) !== -1 || (oauthCode >= 29 && oauthCode <= 45);
+    if (status === 403 || (status === 401 && workspaceDenied)) kind = 'permission';
+    else if (status === 401) kind = 'auth';
+    else if (status === 429) kind = 'rate_limit';
+    else if (status === 404) kind = 'list';
+    else if (status >= 500) kind = 'upstream';
+    else if (error.code === 'INVALID_RESPONSE') kind = 'response';
+    else kind = 'request';
+  } else if (stage === 'fetch') kind = 'network';
+  return {kind: kind, status: status, retryAt: Number(error && error.retryAt) || 0};
+}
+
+function _clickUpRefreshFailureMessage(failure) {
+  var kind = failure && failure.kind;
+  if (kind === 'auth') return 'ClickUp rejected the API key (401). Check or replace your key above, then click Sync ClickUp. Waiting will not repair an invalid key.';
+  if (kind === 'permission') return 'ClickUp denied access (' + failure.status + '). Check the connected account, workspace authorization and list permissions, then retry.';
+  if (kind === 'list') return 'The linked ClickUp list was not found (404). Check this product\'s ClickUp list connection.';
+  if (kind === 'rate_limit') return 'ClickUp rate limit reached (429). Retry in ' + Math.max(1, Math.ceil((_clickUpRefreshRetryAfter - Date.now()) / 1000)) + ' seconds. Your saved data is unchanged.';
+  if (kind === 'safeguard') return 'Could not load deletion safeguards from Supabase. Sync stopped to protect your tasks. Please retry.';
+  if (kind === 'network') return 'Could not connect to ClickUp. Check your connection and retry. Automatic retries are slowed down.';
+  if (kind === 'upstream') return 'The ClickUp request failed (' + failure.status + '). Please retry; your saved data is unchanged.';
+  if (kind === 'response') return 'ClickUp returned an incomplete response. Existing tasks were kept. Please retry.';
+  if (kind === 'request') return 'ClickUp rejected the request (' + failure.status + '). Check the connection settings and retry.';
+  return 'This page could not finish syncing. Reload and retry. No deletion was requested.';
+}
+
 function _onSyncSuccess(dot, changedCount, changed, syncedCount, manual) {
+  _clearClickUpRefreshFailure();
   _lastSyncedAt = Date.now();
   if (dot) dot.className = 'live-dot active';
   updateSyncLabel();
@@ -34045,6 +34131,14 @@ function _lazyPromoteVirtual(ad) {
 function updateSyncLabel() {
   var lbl = document.getElementById('statusLbl');
   if (!lbl) return;
+  if (_autoSyncPollInFlight) { lbl.textContent = 'Refreshing...'; return; }
+  var failure = _clickUpRefreshFailure;
+  if (failure && failure.apiKey === CFG.key &&
+      (failure.productId === activeProductId || ['auth','rate_limit','network','upstream'].indexOf(failure.kind) !== -1)) {
+    lbl.textContent = failure.kind === 'auth' ? 'Check ClickUp key' : failure.kind === 'rate_limit' ? 'ClickUp rate limit' : 'Sync error';
+    lbl.title = _clickUpRefreshFailureMessage(failure);
+    return;
+  }
   if (!_lastSyncedAt) { lbl.textContent = 'Not synced'; return; }
   var sec = Math.floor((Date.now() - _lastSyncedAt) / 1000);
   if (_autoSyncActive && sec > Math.floor(_autoSyncIntervalMs() / 1000) * 2 + 30) {

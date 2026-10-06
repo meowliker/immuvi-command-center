@@ -33,3 +33,20 @@ or restore the old queue after a successful run.
 
 Verified locally: 236 Node tests, 33 targeted worker tests, and git diff checks.
 Production classification completion is verified separately from code deployment.
+
+## Production Completion
+
+- Code `44dd788` deployed READY. Public HTML, skill and worker assets matched
+  the tested files byte-for-byte.
+- The Mac mini reported reddit-text-v1 before the scoped retry was applied.
+  Its prior in-flight classification completed; no forced restart was requested.
+- Q-INS-055 completed classified at 2026-10-06 07:41:06 UTC, with no error.
+- Read-back confirmed exactly one result; unchanged ID, source URL, product and
+  No Brief setting; 2,994 source-body characters; matching text evidence in both
+  stored records; Text type; zero frames; no voice-over; and three proposed scripts.
+- Existing angle: Saying NO / AITA. Proposed inspiration-local persona:
+  Quilters making meaningful gifts, explicitly flagged as an adaptation for review.
+- Independently read the ClickUp page through the connector: it clearly labels
+  text-only evidence, untimed source paragraphs and proposed product adaptations.
+- Private retry/completion snapshots:
+  `/private/tmp/immuvi-q55-text-retry-20261006`.

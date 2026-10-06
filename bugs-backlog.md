@@ -2636,3 +2636,12 @@ Removed speculative local deletion based only on absence from a list response.
 Regression coverage includes fixed-window timing, simultaneous users, overlapping
 requests, failed saves, product switching, stale queued field updates, and no-op
 rendering. See `docs/repairs/2026-10-02-refresh-budget.md` for scope and rollback.
+
+# 2026-10-06: Reddit Text Posts Retried As Media Downloads
+
+Added an evidence-verified text path for Reddit inspirations after Q-INS-055
+failed three media downloads. Text sources retain original body/provenance and
+cannot masquerade as Photo/Video or contain fabricated audio/frame evidence.
+Inaccessible text blocks instead of retrying repeatedly. No Brief, per-product
+taxonomy boundaries, source identity and normal media validation remain in place.
+See `docs/repairs/2026-10-06-reddit-text-inspiration.md` for scoped recovery.

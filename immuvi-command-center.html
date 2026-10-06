@@ -48073,6 +48073,7 @@ async function applyClassificationResults(results, isPolling, expectedProductId)
     ins.productionStyle   = normalizeToOption(data.production_style || '', PRODUCTION_STYLES);
     ins.funnelStage       = normalizeToOption(data.funnel_type || 'TOF', FUNNEL_STAGES);
     ins.mediaKind         = deriveInspirationMediaKind(data) || ins.mediaKind || '';
+    if (ins.mediaKind === 'text' && data.text_evidence) ins.textEvidence = data.text_evidence;
     ins.adType            = normalizeInspirationAdType(data);
     ins.creativeHypothesis= data.creative_hypothesis || '';
     ins.notes             = data.notes || '';
@@ -48236,6 +48237,7 @@ function normalizeMediaKind(value) {
   if (value === null || value === undefined) return '';
   var v = String(value).toLowerCase().trim();
   if (!v) return '';
+  if (v === 'text' || v === 'text post') return 'text';
   if (v === 'photo' || v === 'image' || v === 'static' || v.indexOf('image') !== -1) return 'image';
   if (v === 'carousel' || v === 'slideshow' || v.indexOf('carousel') !== -1) return 'carousel';
   if (v === 'video' || v === 'reel' || v.indexOf('video') !== -1 || v.indexOf('mp4') !== -1) return 'video';
@@ -48265,6 +48267,7 @@ function normalizeInspirationAdType(data) {
   var mediaKind = deriveInspirationMediaKind(data);
   var rawType = data.photo_video || data.ad_type || data.adType || '';
   var normalized = normalizeToOption(rawType, AD_TYPES);
+  if (mediaKind === 'text') return 'Text';
   if (mediaKind === 'image') {
     if (!normalized || normalized === 'Video' || normalized === 'VSL') return 'Photo';
   } else if (mediaKind === 'carousel') {
@@ -48589,17 +48592,17 @@ function renderInspirations() {
     }).join('');
 
     // Build production style select
-    var prodOpts = [''].concat(PRODUCTION_STYLES).map(function(s){
+    var prodOpts = [''].concat(PRODUCTION_STYLES, ins.mediaKind === 'text' ? ['Text Post'] : []).map(function(s){
       return '<option value="'+escAttr(s)+'"'+(ins.productionStyle===s?' selected':'')+'>'+esc(s||'—')+'</option>';
     }).join('');
 
     // Build funnel select
-    var funnelOpts = FUNNEL_STAGES.map(function(f){
+    var funnelOpts = FUNNEL_STAGES.concat(ins.mediaKind === 'text' ? ['Not applicable'] : []).map(function(f){
       return '<option value="'+escAttr(f)+'"'+(ins.funnelStage===f?' selected':'')+'>'+esc(f)+'</option>';
     }).join('');
 
     // Build ad type select
-    var adTypeOpts = [''].concat(AD_TYPES).map(function(t){
+    var adTypeOpts = [''].concat(AD_TYPES, ins.mediaKind === 'text' ? ['Text'] : []).map(function(t){
       return '<option value="'+escAttr(t)+'"'+(ins.adType===t?' selected':'')+'>'+esc(t || '—')+'</option>';
     }).join('');
 

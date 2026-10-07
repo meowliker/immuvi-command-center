@@ -2,6 +2,7 @@ import importlib.util
 import json
 from pathlib import Path
 import unittest
+import sys
 from unittest.mock import Mock, patch
 
 from tools import classify_worker as worker
@@ -21,6 +22,23 @@ def ad(identity, **snapshot):
 
 
 class FacebookEvidenceTests(unittest.TestCase):
+    def test_checksum_failure_uses_one_isolated_verified_retry(self):
+        whisper = Mock()
+        model = object()
+        whisper.load_model.side_effect = [RuntimeError('SHA256 checksum mismatch'), model]
+        with patch.dict(sys.modules, {'whisper': whisper}), patch.object(helper.tempfile, 'mkdtemp', return_value='/private/tmp/isolated-model'):
+            self.assertIs(helper.load_transcription_model('large-v3'), model)
+        self.assertEqual(whisper.load_model.call_args_list[0].args, ('large-v3',))
+        self.assertEqual(whisper.load_model.call_args_list[1].kwargs, {'download_root':'/private/tmp/isolated-model'})
+
+    def test_other_model_failures_and_second_checksum_failure_stop(self):
+        for error, expected in [(RuntimeError('Out of memory'), 1), (RuntimeError('SHA256 checksum mismatch'), 2)]:
+            whisper = Mock(); whisper.load_model.side_effect = error
+            with patch.dict(sys.modules, {'whisper':whisper}), patch.object(helper.tempfile, 'mkdtemp', return_value='/private/tmp/isolated-model'):
+                with self.assertRaises(RuntimeError):
+                    helper.load_transcription_model('large-v3')
+            self.assertEqual(whisper.load_model.call_count, expected)
+
     def test_exact_id_not_first_ad(self):
         result = helper.parse_ad_snapshot(page([
             ad('wrong', videos=[{'video_hd_url': 'https://video/wrong.mp4'}]),

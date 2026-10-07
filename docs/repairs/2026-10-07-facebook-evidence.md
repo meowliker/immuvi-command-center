@@ -54,3 +54,10 @@ agent timeout: 300 was reclaimed while transcription was still allowed to run.
 Recovery now waits for the agent timeout plus five minutes, skips active local
 futures, uses compare-and-set on the original claim owner/time/state, and refuses
 to claim a queue already running locally. Five regression tests cover this.
+
+The 300 retry then reported a large-v3 SHA256/cache failure. The helper retries
+that specific model load once in a unique temporary download directory.
+Whisper's checksum check remains in force; shared cache files are not removed.
+Other errors are not retried. Two tests cover bounded recovery and unchanged
+non-checksum failures. Worker adoption and a completed classification must be
+verified separately before claiming this inspiration is repaired.

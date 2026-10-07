@@ -31,6 +31,7 @@ import shutil
 import subprocess
 import sys
 import sysconfig
+import tempfile
 import urllib.parse
 import urllib.request
 from pathlib import Path
@@ -48,6 +49,21 @@ USER_AGENT = (
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
+def load_transcription_model(model_name: str):
+    """Retry a damaged shared model cache once in an isolated download directory."""
+    import whisper
+    try:
+        return whisper.load_model(model_name)
+    except RuntimeError as error:
+        message = str(error).lower()
+        if not any(marker in message for marker in ("checksum", "sha256", "sha-256")):
+            raise
+        # Do not delete a shared file another job may still be writing.
+        # Whisper must validate its official download again in this directory.
+        isolated = tempfile.mkdtemp(prefix="immuvi-whisper-recovery-")
+        return whisper.load_model(model_name, download_root=isolated)
+
+
 def extract_ad_id(input_str: str) -> str:
     """Accept raw ID or full URL, return just the numeric ID string."""
     m = re.search(r'[?&]id=(\d+)', input_str)

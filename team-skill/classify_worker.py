@@ -116,6 +116,10 @@ def facebook_source_contract(job):
         "and do not write results or create a ClickUp brief. The worker will stop retries.\n"
         "For genuine narration that base/medium Whisper cannot verify, make at most one stronger "
         "local multilingual transcription attempt with large-v3 and task=transcribe. "
+        "Load it using fb_ad_classifier.load_transcription_model('large-v3'); this retries "
+        "a checksum-damaged shared model once in a fresh isolated directory without deleting "
+        "shared files or bypassing SHA256 validation. Do not stop merely because the first "
+        "shared-cache load failed checksum. If isolated verification also fails, stop. "
         "Set language only when independently supported by the audio/source (Mongolian=mn); "
         "never infer language from the selected Immuvi product. Check repetition, omissions, "
         "timestamps and audible words before accepting it. Model output alone is not proof. "
@@ -431,6 +435,7 @@ def probe_capabilities() -> dict:
         "reddit_text": "reddit-text-v1",
         "facebook_evidence": "exact-ad-v1",
         "classification_lease": "agent-timeout-v1",
+        "asr_cache_recovery": "isolated-checksum-v1",
         "agent_launcher_revision": "codex-bundle-v2",
         "taxonomy_review": "semantic-taxonomy-v1" if (
             shutil.which("node") and _resolve_codex_bin()

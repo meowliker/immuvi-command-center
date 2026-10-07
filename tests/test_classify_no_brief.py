@@ -18,7 +18,7 @@ class NoBriefTests(unittest.TestCase):
             "voiceOver": "No voice over", "bodyCopy": "Real source caption",
         }
         self.worker.sb = Mock()
-        self.worker.sb.select.side_effect = lambda *_: [{"id": "INS-test", "data": copy.deepcopy(self.data)}]
+        self.worker.sb.select.side_effect = lambda *_: [{"id": "INS-test", "url": "https://example.com/ad", "data": copy.deepcopy(self.data)}]
         self.worker._verify_clickup_brief_page = Mock(return_value=(True, "verified"))
         self.job = {"id": "q-test", "ins_id": "INS-test", "product_id": "p-test",
                     "url": "https://example.com/ad", "platform": "instagram", "no_brief": True}
@@ -63,6 +63,43 @@ class NoBriefTests(unittest.TestCase):
     def test_image_classification_without_audio(self):
         self.data.update(mediaKind="image", adType="Photo", voiceOver="")
         self.assertTrue(self.verify()[0])
+
+    def unverified_evidence(self):
+        evidence = {"source_url": self.job["url"], "basis": ["visuals", "ad_copy"],
+                    "summary": "Visible product demonstration and source offer",
+                    "limitation": "Narration could not be reliably transcribed"}
+        self.data.update(voiceOver="", voiceOverTimeline=[], voiceOverStatus="unverified",
+                         classificationEvidence=evidence, notes=evidence["limitation"])
+        self.result = {"source_url": self.job["url"], "metadata": {"no_brief": True,
+                       "voice_over_status": "unverified", "classification_evidence": copy.deepcopy(evidence)}}
+        self.worker.sb.select.side_effect = lambda table, _: [copy.deepcopy(self.result)] if table == "inspiration_results" else [
+            {"id": "INS-test", "url": self.job["url"], "data": copy.deepcopy(self.data)}]
+
+    def test_no_brief_accepts_verified_visual_evidence_without_narration(self):
+        self.unverified_evidence()
+        self.assertEqual(self.verify(), (True, "verified classification only"))
+        self.worker._verify_clickup_brief_page.assert_not_called()
+        self.worker.sb.update.assert_not_called()
+
+    def test_full_brief_still_requires_narration(self):
+        self.unverified_evidence()
+        self.data["_clickupDocPageUrl"] = "https://app.clickup.com/doc"
+        self.assertIn("blank voiceOver", self.verify(False)[1])
+
+    def test_unverified_evidence_rejects_missing_foreign_or_fabricated_data(self):
+        for change in [lambda: self.data.update(voiceOver="No voice over"),
+                       lambda: self.data.update(voiceOverTimeline=[{"text": "invented"}]),
+                       lambda: self.data.update(notes=""),
+                       lambda: self.data["classificationEvidence"].update(source_url="https://other.example"),
+                       lambda: self.data["classificationEvidence"].update(basis=[]),
+                       lambda: self.data["classificationEvidence"].update(basis=["guessed_audio"]),
+                       lambda: self.data["classificationEvidence"].update(limitation=""),
+                       lambda: self.result.update(source_url="https://other.example"),
+                       lambda: self.result["metadata"].update(no_brief=False),
+                       lambda: self.result["metadata"].update(classification_evidence={})]:
+            self.unverified_evidence()
+            change()
+            self.assertFalse(self.verify()[0])
 
     def test_agent_receives_only_requested_mode_and_verifier_gets_same_mode(self):
         for mode in (True, False, None):

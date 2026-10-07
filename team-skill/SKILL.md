@@ -146,6 +146,20 @@ inspiration. New results use `brief={}` and null ClickUp document fields; new
 inspirations have empty brief links and `nextAdScripts=[]`. Merge factual fields
 without deleting any pre-existing brief or unrelated data. Verification requires
 all classification/media fields but does not require a brief URL or scripts.
+For classification-only mode, a complete narration transcript is optional.
+Use verified target visuals, visible text and source copy; do not repeat failed
+ASR or load larger models solely to fill narration. When speech is unverified,
+leave `voiceOver` blank and `voiceOverTimeline=[]`, set
+`data.voiceOverStatus='unverified'` and `metadata.voice_over_status='unverified'`.
+Save matching `data.classificationEvidence` and `metadata.classification_evidence`:
+`{source_url, basis, summary, limitation}`. The source URL must equal the queue
+URL; basis lists only inspected `visuals`, `on_screen_text` and/or `ad_copy`.
+Summary records factual observed evidence; limitation and notes explain missing
+narration. Never label unclear narration 'No voice over', fabricate speech, or
+infer claims from it. Flag uncertain angle/persona for review without creating
+taxonomy or forcing a match. Missing narration alone must not block No Brief.
+These rules override transcript-required brief steps for `no_brief=true` only;
+inaccessible or mismatched target media must still stop classification.
 When the worker invoked this skill, it owns queue status. For manual runs, mark
 the row classified after verifying both writes. Do not retry a successful
 classification-only item just because it has no brief.
@@ -785,6 +799,9 @@ patch = {
   'bodyCopy': body_copy,
   'captionTranscript': caption_transcript,
   'voiceOver': voice_over,
+  **({'voiceOverStatus': 'unverified',
+      'classificationEvidence': md.get('classification_evidence')}
+     if md.get('no_brief') is True and md.get('voice_over_status') == 'unverified' else {}),
   'voiceOverTimeline': cls.get('voice_over_timeline') or md.get('voice_over_timeline') or (result.get('brief') or {}).get('voice_over_timeline') or [],
   'captionTimeline': md.get('caption_timeline') or (result.get('brief') or {}).get('caption_timeline') or [],
   'nextAdScripts': (result.get('brief') or {}).get('next_ad_scripts') or [],

@@ -107,13 +107,26 @@ def facebook_source_contract(job):
     host = (source.hostname or "").lower()
     if not (host == "facebook.com" or host.endswith(".facebook.com")) or source.path.rstrip("/") != "/ads/library":
         return ""
-    return (
+    source_contract = (
         "\nFACEBOOK SOURCE SAFETY (also applies in No Brief mode):\n"
         "Use the deployed fb_ad_classifier.fetch_ad_snapshot exact-ID JSON parser. "
         "The requested archive ID must own the snapshot. Never relabel a neighboring ad's media "
         "with the target ID, select the first video on a page, or substitute a related ad. "
         "If exact target media remains inaccessible, print FAIL with FB_TARGET_UNAVAILABLE: "
         "and do not write results or create a ClickUp brief. The worker will stop retries.\n"
+    )
+    if job.get("no_brief") is True:
+        return source_contract + (
+            "CLASSIFICATION-ONLY: a complete narration transcript is optional. Classify from "
+            "verified target visuals, visible text and source ad copy. Do not repeat failed ASR "
+            "or load larger speech models just to fill voiceOver. Missing narration alone must "
+            "not emit AUDIO_TRANSCRIPT_UNVERIFIED or block this No Brief job. Follow the "
+            "classification-only evidence contract: blank unverified speech, explicit evidence "
+            "and limitation, uncertain taxonomy flagged for review. Never invent narration or "
+            "call unverified narration 'No voice over'. Do not create any brief or ClickUp page. "
+            "Preserve the claimed product/ID/URL/No Brief setting; do not create taxonomy rows.\n"
+        )
+    return source_contract + (
         "For genuine narration that base/medium Whisper cannot verify, make at most one stronger "
         "local multilingual transcription attempt with turbo and task=transcribe. "
         "Use a fresh Python subprocess so base/medium model tensors are not still resident. "
@@ -248,7 +261,17 @@ def classification_only_prompt(job: dict) -> str:
         "2. Download and inspect the actual media, including the complete video and audio. "
         "Use the skill's platform downloaders; TikTok must use the non-browser downloader chain. "
         "Record factual media_kind: image, carousel, or video. Never classify a video preview as Photo. "
-        "Extract frames and use local audio transcription for spoken narration. "
+        "Extract frames; use an available reliable transcript, but a complete transcript is optional. "
+        "Do not retry failed ASR or load larger models for this classification-only job. "
+        "Classify directly from verified visuals, on-screen text and source ad copy. "
+        "If narration cannot be verified, leave voiceOver blank and voiceOverTimeline empty; "
+        "set voiceOverStatus='unverified' and explain the limitation in notes. "
+        "Save classificationEvidence in inspiration data and the identical classification_evidence "
+        "in result metadata: {source_url: exact queue URL, basis: a non-empty list of "
+        "'visuals', 'on_screen_text', 'ad_copy' actually inspected, summary: factual observed "
+        "evidence, limitation: why narration is unverified}. Set metadata.voice_over_status='unverified'. "
+        "Do not infer claims from unheard speech. Flag uncertain angle/persona for review; "
+        "do not create taxonomy or force a match. Missing narration alone is not a failure. "
         "Background chatter, children shouting, music and song lyrics are not voice-over. "
         "Use exactly 'No voice over' if there is no ad narration. Never invent unverified narration.\n"
         "3. Produce all classification fields: brand, angle, persona, hook_type, creative_structure, "
@@ -274,7 +297,9 @@ def classification_only_prompt(job: dict) -> str:
         "Use the Supabase service-role credentials from ~/.classify-inspiration.env.\n"
         "6. Verify BOTH stored rows by exact product_id and ins_id/id. The inspiration must have "
         "noBrief:true, all nine classification fields non-empty, consistent mediaKind/adType, "
-        "and verified voiceOver or 'No voice over' for video. No brief URL or nextAdScripts is required. "
+        "and either verified voiceOver, actual 'No voice over', or blank voiceOver with the "
+        "explicit unverified status and matching classification evidence above. "
+        "No brief URL or nextAdScripts is required. "
         "Do NOT modify inspiration_queue; the worker owns its status and retries.\n"
         f"Print only a short summary and finish with OK {job.get('ins_id')} on success, "
         f"or FAIL {job.get('ins_id')}: <reason> if verification fails.\n"
@@ -436,6 +461,7 @@ def probe_capabilities() -> dict:
         "codex": _resolve_codex_bin() is not None,
         "worker_contract": "inspiration-brief-8-section-page-verified",
         "classification_only": True,
+        "classification_only_evidence": "optional-narration-v1",
         "reddit_text": "reddit-text-v1",
         "facebook_evidence": "exact-ad-v1",
         "classification_lease": "agent-timeout-v1",
@@ -2370,7 +2396,31 @@ class Worker:
             ):
                 return (False, "Instagram video preview image was published as Photo; retry with real media download")
             voice_over = str(data.get("voiceOver") or "").strip().lower()
-            if media_kind == "video" and not voice_over:
+            unverified_narration = no_brief and data.get("voiceOverStatus") == "unverified"
+            if unverified_narration:
+                evidence = data.get("classificationEvidence")
+                if voice_over or data.get("voiceOverTimeline"):
+                    return (False, "unverified narration must not contain a transcript or timeline")
+                if (not isinstance(evidence, dict) or not source_url
+                        or evidence.get("source_url") != source_url
+                        or not isinstance(evidence.get("basis"), list) or not evidence["basis"]
+                        or any(b not in ("visuals", "on_screen_text", "ad_copy") for b in evidence["basis"])
+                        or not str(evidence.get("summary") or "").strip()
+                        or not str(evidence.get("limitation") or "").strip()
+                        or not notes_l):
+                    return (False, "classification-only unverified narration needs source-scoped evidence and limitation")
+                results = self.sb.select(
+                    "inspiration_results",
+                    f"select=source_url,metadata&ins_id=eq.{urllib.parse.quote(ins_id)}"
+                    f"&product_id=eq.{urllib.parse.quote(product_id)}&limit=1",
+                )
+                result = (results or [{}])[0]
+                metadata = result.get("metadata") or {}
+                if (result.get("source_url") != source_url or metadata.get("no_brief") is not True
+                        or metadata.get("voice_over_status") != "unverified"
+                        or metadata.get("classification_evidence") != evidence):
+                    return (False, "classification-only result missing matching evidence")
+            if media_kind == "video" and not voice_over and not unverified_narration:
                 return (False, "video inspiration row has blank voiceOver")
             next_scripts = data.get("nextAdScripts")
             if not no_brief and (not isinstance(next_scripts, list) or len(next_scripts) != 3):

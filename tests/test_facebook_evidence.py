@@ -74,12 +74,19 @@ class FacebookEvidenceTests(unittest.TestCase):
     def test_contract_does_not_change_other_platforms_or_no_brief(self):
         for url in ['https://www.facebook.com/ads/library/?id=123',
                     'https://facebook.com/ads/library/?id=123']:
-            text = worker.facebook_source_contract({'url': url, 'no_brief': True})
+            text = worker.facebook_source_contract({'url': url, 'no_brief': False})
             for required in ['No Brief', "load_transcription_model('turbo')", 'fresh Python subprocess',
                              'Do not run the full-size large-v3', 'do not use task=translate',
                              'Mongolian=mn', 'FB_TARGET_UNAVAILABLE:',
                              'AUDIO_TRANSCRIPT_UNVERIFIED:', 'do not create taxonomy']:
                 self.assertIn(required, text)
+            no_brief = worker.facebook_source_contract({'url': url, 'no_brief': True})
+            self.assertIn('complete narration transcript is optional', no_brief)
+            self.assertIn('FB_TARGET_UNAVAILABLE:', no_brief)
+            self.assertNotIn("load_transcription_model('turbo')", no_brief)
+            self.assertIn('Do not create any brief or ClickUp page', no_brief)
+            for mode in (False, None, 'true'):
+                self.assertIn("load_transcription_model('turbo')", worker.facebook_source_contract({'url': url, 'no_brief': mode}))
         for url in ['https://facebook.com.evil.test/ads/library/?id=123',
                     'https://www.instagram.com/reel/a', 'https://facebook.com/watch']:
             self.assertEqual(worker.facebook_source_contract({'url': url}), '')

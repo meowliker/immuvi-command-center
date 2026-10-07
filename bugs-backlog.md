@@ -2693,3 +2693,9 @@ Use one bounded stronger local transcription attempt; explicit evidence failures
 block rather than looping. Keep transient network retries unchanged. Recovery
 must back up and conditionally requeue only the audited IDs after worker update.
 See `docs/repairs/2026-10-07-facebook-evidence.md` for tests and limitations.
+
+Live verification also found stale claims released at 10 minutes while the agent
+timeout was 20 minutes, duplicating a slow transcription attempt. Stale recovery
+must exceed the agent runtime, skip running local futures, compare the original
+claim state/owner/time before release, and never reclaim a queue already running
+locally. Five lease regression tests cover these boundaries.

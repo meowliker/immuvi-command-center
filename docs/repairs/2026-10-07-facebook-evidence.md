@@ -33,3 +33,24 @@ from completed worker results; inaccessible sources need original media.
 
 Rollback checkpoint: e53572e0750764a2a70381e6c93d9f027d0478fa.
 Revert code only; never restore an old queue backup over an active/completed job.
+
+## Live recovery
+
+Deployment 7a75f89 was verified READY, with byte-identical production assets.
+The Mac mini adopted exact-ad-v1 at 06:07 UTC. All three original queue entries
+were backed up and retried. 224 and 299 still lacked exact target snapshots and
+were blocked without changing their inspiration rows or creating results.
+
+The user supplied ad ID 1753736445862006 as the corrected source for 299.
+A rollback-tested administrative transaction updated only that unused record's
+source in inspirations, inspiration_identity and its existing queue. The
+immutable-source trigger was restored before commit, its function unchanged;
+history retained both URLs. IDs, product, request ID, brief flag and attempts
+were preserved. No existing result, brief, creative placement or taxonomy review
+existed. Private audit: /private/tmp/immuvi-facebook-20261007/.
+
+Live observation also exposed a 10-minute stale-claim timeout despite a 20-minute
+agent timeout: 300 was reclaimed while transcription was still allowed to run.
+Recovery now waits for the agent timeout plus five minutes, skips active local
+futures, uses compare-and-set on the original claim owner/time/state, and refuses
+to claim a queue already running locally. Five regression tests cover this.

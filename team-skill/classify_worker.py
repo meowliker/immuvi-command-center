@@ -52,10 +52,10 @@ LOG_DIR = Path.home() / ".classify-inspiration-worker-logs"
 
 POLL_INTERVAL_SECONDS = 60
 HEARTBEAT_INTERVAL_SECONDS = 30
-STALE_CLAIM_TIMEOUT_MINUTES = 10
 ORPHANED_PROCESSING_TIMEOUT_MINUTES = 2
 PREFERRED_WORKER_OFFLINE_GRACE_MINUTES = 2
 CLAUDE_CLI_TIMEOUT_SECONDS = 1200  # 20 min ceiling (bumped 2026-05-14 — 600s tripped on TikToks: yt-dlp + 30 frame extracts + claude classify reliably hits 10-12 min)
+STALE_CLAIM_TIMEOUT_MINUTES = (CLAUDE_CLI_TIMEOUT_SECONDS + 59) // 60 + 5
 PRODUCER_CLI_TIMEOUT_SECONDS = 1800  # 30 min for Codex image gen jobs
 PRODUCER_STALE_RUNNING_TIMEOUT_MINUTES = int(
     os.environ.get("PRODUCER_STALE_RUNNING_TIMEOUT_MINUTES", "45")
@@ -430,6 +430,7 @@ def probe_capabilities() -> dict:
         "classification_only": True,
         "reddit_text": "reddit-text-v1",
         "facebook_evidence": "exact-ad-v1",
+        "classification_lease": "agent-timeout-v1",
         "agent_launcher_revision": "codex-bundle-v2",
         "taxonomy_review": "semantic-taxonomy-v1" if (
             shutil.which("node") and _resolve_codex_bin()
@@ -926,12 +927,28 @@ class Worker:
         """
         try:
             cutoff = _now_iso(offset_minutes=-STALE_CLAIM_TIMEOUT_MINUTES)
-            # Match any claim that hasn't completed (still claimed/classifying/processing).
-            self.sb.update(
+            # Recover expired leases individually; a live local future is never
+            # abandoned, and a renewed/reassigned claim must not be released.
+            rows = self.sb.select(
                 "inspiration_queue",
-                f"claimed_at=lt.{urllib.parse.quote(cutoff)}&status=in.(claimed,classifying,processing)",
-                {"status": "pending", "claimed_by": None, "claimed_at": None},
+                f"select=id,status,claimed_by,claimed_at&claimed_at=lt.{urllib.parse.quote(cutoff)}"
+                "&status=in.(claimed,classifying,processing)&limit=100",
             )
+            with self._classify_lock:
+                active = {qid for qid, future in self._classify_futures.items() if not future.done()}
+            for row in rows:
+                if row.get("id") in active or not row.get("claimed_at"):
+                    continue
+                owner = row.get("claimed_by")
+                owner_filter = "is.null" if owner is None else "eq." + urllib.parse.quote(str(owner), safe="")
+                self.sb.update(
+                    "inspiration_queue",
+                    "id=eq." + urllib.parse.quote(str(row["id"]), safe="")
+                    + "&status=eq." + urllib.parse.quote(str(row["status"]), safe="")
+                    + "&claimed_by=" + owner_filter
+                    + "&claimed_at=eq." + urllib.parse.quote(str(row["claimed_at"]), safe=""),
+                    {"status": "pending", "claimed_by": None, "claimed_at": None},
+                )
             orphan_cutoff = _now_iso(offset_minutes=-ORPHANED_PROCESSING_TIMEOUT_MINUTES)
             self.sb.update(
                 "inspiration_queue",
@@ -1096,6 +1113,10 @@ class Worker:
         cid = candidate.get("id")
         if not cid:
             return None
+        with self._classify_lock:
+            running = self._classify_futures.get(cid)
+            if running is not None and not running.done():
+                return None
 
         # Step 2: optimistic claim — UPDATE WHERE id=$id AND status is still
         # claimable. If 0 rows updated, another worker won. Try next cycle.

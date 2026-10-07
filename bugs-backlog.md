@@ -2669,3 +2669,16 @@ Regression coverage now includes new-task imports, repeated refreshes, action
 ownership, local/cloud deletion markers, and product switches while safeguards
 load. All 265 tests passed; no production records or QA files were changed.
 See `docs/repairs/2026-10-06-new-task-sync-reference.md`.
+
+# 2026-10-07: Browser Delete Request Failed Before Reaching ClickUp
+
+Direct browser-to-Supabase PATCH returned `TypeError: Failed to fetch` for users.
+The screenshot's creative remained active; server database access worked. The
+exact browser/network cause was not observed. Move deletion to a same-origin
+API using the caller's JWT and an atomic, product-authorized security-invoker RPC.
+Verify committed deletion before removing UI rows or deleting the ClickUp task.
+
+Protect product switches, double clicks, retired duplicates, shared task IDs,
+and deliberate deletion markers. Do not cascade to child variations or source
+inspirations. Anonymous RPC execution is revoked. 276 Node tests and 13
+rollback-only database checks passed. See `docs/repairs/2026-10-07-delete-transport.md`.

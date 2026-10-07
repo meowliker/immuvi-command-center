@@ -16224,7 +16224,7 @@ function _forgetTaxonomyDeletion(kind, productId, name) {
 // rows that were deleted upstream (e.g. by the ClickUp reconcile auto-poll or
 // another tab). Cleared when the fresh load applies or fails.
 var _freshLoadInProgress = false;
-function _rememberManualActionDeletion(id, dbId) {
+function _rememberManualActionDeletion(id, dbId, options) {
   if (id) _recentlyDeletedMaIds.add(id);
   setTimeout(function () { if (id) _recentlyDeletedMaIds.delete(id); }, 8000);
   // Immediately notify other clients so they remove this action without waiting for saveState debounce
@@ -16232,6 +16232,7 @@ function _rememberManualActionDeletion(id, dbId) {
     _rtChannel.send({ type: 'broadcast', event: 'action-deleted',
       payload: { actionId: id, dbId: dbId, clientId: _myClientId, productId: activeProductId } });
   }
+  if (options && options.persisted) return;
   // Fire an IMMEDIATE DB delete so the user's intent reaches Supabase right
   // away — don't wait for the debounced saveState(). Prevents the bug where
   // a realtime echo from some other save arrives before the delete is
@@ -27333,31 +27334,50 @@ async function _refreshSupabaseWriteSession() {
   }
 }
 
-async function _softDeleteAdWithSessionRetry(adId, deletedAt) {
-  // A tab can remain open beyond the JWT lifetime. Refresh proactively near
-  // expiry, and retry once if PostgREST still rejects the token.
-  try {
-    var current = await SB.auth.getSession();
-    var session = current && current.data && current.data.session;
-    var expiresAt = session && Number(session.expires_at || 0);
-    if (session && expiresAt && expiresAt <= Math.floor(Date.now() / 1000) + 60) {
-      await _refreshSupabaseWriteSession();
-    }
-  } catch (error) {
-    console.warn('[SB] pre-delete session check failed', error);
+async function _softDeleteAdWithSessionRetry(adId, productId, generation, expectedClickUpId) {
+  function sameProduct() {
+    return activeProductId === productId && _adsProductId === productId &&
+      _uiProductGeneration === generation && !_productSwitchPending && !_cloudLoadFailed;
   }
-
-  var response = await SB.from('ads').update({ deleted_at: deletedAt }).eq('id', adId);
-  if (response && response.error && _isSupabaseAuthError(response.error)) {
-    var refreshed = await _refreshSupabaseWriteSession();
-    if (refreshed) {
-      response = await SB.from('ads').update({ deleted_at: deletedAt }).eq('id', adId);
-    }
+  if (!SB || !sameProduct()) throw new Error('Product changed or is still loading. Refresh before deleting.');
+  async function send() {
+    var current = await _withCloudTimeout(SB.auth.getSession(), 'Checking session', 15000);
+    var token = current.data && current.data.session && current.data.session.access_token;
+    if (!token) throw new Error('Please sign in before deleting.');
+    if (!sameProduct()) throw new Error('Product changed. Reopen the creative before deleting.');
+    var response = await fetch('/api/delete-creative', {
+      method: 'POST', signal: AbortSignal.timeout(30000),
+      headers: {Authorization: 'Bearer ' + token, 'Content-Type': 'application/json'},
+      body: JSON.stringify({adId: adId, productId: productId, expectedClickUpId: expectedClickUpId || null})
+    });
+    var result = await response.json();
+    return {response: response, result: result};
   }
-  return response;
+  var saved = await send();
+  if (saved.response.status === 401 && sameProduct()) {
+    var refreshed = await _withCloudTimeout(_refreshSupabaseWriteSession(), 'Refreshing session', 15000);
+    if (refreshed && sameProduct()) saved = await send();
+  }
+  if (!saved.response.ok) throw new Error(saved.result.error || 'Deletion could not be confirmed. Refresh before retrying.');
+  if (!saved.result.verified || saved.result.id !== adId || saved.result.productId !== productId ||
+      !saved.result.deletedAt || JSON.stringify(saved.result.clickupTaskIds) !== JSON.stringify(expectedClickUpId ? [expectedClickUpId] : [])) {
+    throw new Error('Deletion could not be verified. Refresh before retrying.');
+  }
+  return saved.result;
 }
 
+var _creativeDeletesInFlight = new Set();
 async function deleteAdEverywhere(adId) {
+  var deleteProductId = activeProductId, deleteGeneration = _uiProductGeneration;
+  var deleteApiKey = CFG.key;
+  var deleteKey = deleteProductId + '||' + adId;
+  if (_creativeDeletesInFlight.has(deleteKey)) return;
+  if (!SB || !deleteProductId || _adsProductId !== deleteProductId || _productSwitchPending || _cloudLoadFailed) {
+    toast('Product is still loading. Refresh before deleting.', 'err');
+    return;
+  }
+  _creativeDeletesInFlight.add(deleteKey);
+  try {
   var ad = null;
   for (var i = 0; i < ADS.length; i++) {
     if (ADS[i].id === adId) { ad = ADS[i]; break; }
@@ -27384,55 +27404,30 @@ async function deleteAdEverywhere(adId) {
     unlinkedInspoId = ad._fromInspoId;
   }
 
-  // ── Multi-tab resurrection fix (2026-05-05) ──────────────────────
-  // Supabase writes are now AWAITED. The user-visible UI doesn't change
-  // local state until both writes commit. If Supabase is unreachable,
-  // the AD stays visible and the user sees an error — better than
-  // "I deleted it but it came back" silently.
-  // Also: the deleted_ads tombstone goes in BEFORE the soft-delete on
-  // ads, so any racing peer save sees the tombstone first and can't
-  // resurrect via filter at flush time (Step 2 in flushStateToSupabase).
-  if (typeof SB !== 'undefined' && SB && activeProductId) {
-    var _delAd_now = new Date().toISOString();
-    // CRITICAL: the soft-delete on `ads` is the AUTHORITATIVE delete signal.
-    // Combined with _adToRow no longer clearing deleted_at, this alone is
-    // enough to keep the row deleted across all peers/tabs. Await it; if
-    // it fails, abort — local state stays intact, user sees an error.
-    try {
-      var _softResp = await _softDeleteAdWithSessionRetry(adId, _delAd_now);
-      if (_softResp && _softResp.error) {
-        console.error('[SB] ads soft delete failed', _softResp.error);
-        try { toast('Delete failed — ' + _supabaseDeleteErrorText(_softResp.error), 'err'); } catch (_) {}
-        return;
-      }
-    } catch (e) {
-      console.error('[SB] ads soft delete threw', e);
-      try { toast('Delete failed — connection error. Try again.', 'err'); } catch (_) {}
-      return;
-    }
-    // SECONDARY: deleted_ads tombstone (cross-client signal + ClickUp-task-id
-    // tombstone for ClickUp re-import filter). Best-effort. RLS may reject
-    // INSERT for some workspaces — that's OK because the soft-delete on
-    // `ads` already protects against resurrection. Log and continue.
-    try {
-      var _tombResp = await SB.from('deleted_ads').upsert({
-        id: adId,
-        product_id: activeProductId,
-        clickup_task_id: (ad && (ad._clickupId || ad.clickupTaskId)) || cuIdsToDelete[0] || null,
-        deleted_at: _delAd_now,
-        deleted_by: (CFG && CFG.userLabel) || 'unknown'
-      }, { onConflict: 'id' });
-      if (_tombResp && _tombResp.error) {
-        console.warn('[SB] deleted_ads tombstone failed (non-fatal — soft-delete on ads still protects)', _tombResp.error.message || _tombResp.error);
-      }
-    } catch (e) {
-      console.warn('[SB] deleted_ads tombstone threw (non-fatal)', e);
-    }
-    // Update in-memory tombstone cache so the next save's filter sees it
-    // even if the periodic refresh hasn't fired yet.
-    try { _deletedAdIdsCache.add(adId); } catch (_) {}
-    try { cuIdsToDelete.forEach(function (cuid) { if (cuid) _deletedAdClickUpIdsCache.add(cuid); }); } catch (_) {}
+  if (cuIdsToDelete.length > 1) {
+    toast('Conflicting ClickUp task links. Refresh and review before deleting.', 'err');
+    return;
   }
+  // Commit the product-scoped soft deletion and tombstone together, through
+  // the same-origin API. Never mutate local state on an unconfirmed result.
+  try {
+    await _softDeleteAdWithSessionRetry(adId, deleteProductId, deleteGeneration, cuIdsToDelete[0]);
+  } catch (e) {
+    toast('Delete not confirmed: ' + (e.message || 'Connection failed. Refresh before retrying.'), 'err');
+    return;
+  }
+  if (activeProductId !== deleteProductId || _adsProductId !== deleteProductId || _uiProductGeneration !== deleteGeneration) {
+    var switchedCleanupFailed = false;
+    for (var deleteIndex = 0; deleteIndex < cuIdsToDelete.length; deleteIndex++) {
+      try { await apiDeleteTask(cuIdsToDelete[deleteIndex], deleteApiKey); }
+      catch (_) { switchedCleanupFailed = true; }
+    }
+    toast(switchedCleanupFailed ? 'Deleted in the original product, but ClickUp cleanup failed. Review that task in ClickUp.' :
+      'Deleted in the original product. Your current product was not changed.', switchedCleanupFailed ? 'err' : 'ok');
+    return;
+  }
+  try { _deletedAdIdsCache.add(adId); } catch (_) {}
+  try { cuIdsToDelete.forEach(function (cuid) { if (cuid) _deletedAdClickUpIdsCache.add(cuid); }); } catch (_) {}
 
   // Both Supabase writes committed. Now safe to clear local state.
   ADS = ADS.filter(function(a) { return a.id !== adId; });
@@ -27445,7 +27440,7 @@ async function deleteAdEverywhere(adId) {
   if (typeof _rtChannel !== 'undefined' && _rtChannel) {
     _rtChannel.send({ type: 'broadcast', event: 'ad-deleted',
       payload: { adId: adId, adName: (ad && ad.taskName) || adId,
-                 deletedBy: (CFG && CFG.userLabel) || 'Someone', clientId: _myClientId } });
+                 deletedBy: (CFG && CFG.userLabel) || 'Someone', clientId: _myClientId, productId: deleteProductId } });
   }
 
   // Record ClickUp IDs AND the local AD id in a localStorage tombstone so
@@ -27467,7 +27462,7 @@ async function deleteAdEverywhere(adId) {
   // Remove Action Plan entries tied to this AD only
   MANUAL_ACTIONS.forEach(function(a) {
     if (a.sourceAdId === adId || a.adId === adId) {
-      _rememberManualActionDeletion(a.id, a._dbId);
+      _rememberManualActionDeletion(a.id, a._dbId, {persisted: true});
     }
   });
   MANUAL_ACTIONS = MANUAL_ACTIONS.filter(function(a) {
@@ -27506,8 +27501,12 @@ async function deleteAdEverywhere(adId) {
   // Immediate full flush — bypass the 300ms debounce so the DB is cleaned
   // up BEFORE the next pollFullSync cycle (every 30s) runs and sees stale data.
   if (_saveScheduled) { clearTimeout(_saveScheduled); _saveScheduled = null; }
-  _pendingFlushProductId = activeProductId;
-  _saveQueue = _saveQueue.then(function(){ return _flushStateToSupabase(activeProductId); })
+  _pendingFlushProductId = deleteProductId;
+  _saveQueue = _saveQueue.then(function(){
+    if (activeProductId === deleteProductId && _adsProductId === deleteProductId && _uiProductGeneration === deleteGeneration) {
+      return _flushStateToSupabase(deleteProductId);
+    }
+  })
     .catch(function(e){ console.error('[SB] delete flush error', e); });
 
   // Fire ClickUp deletes (staggered to avoid rate limits). 2026-05-25:
@@ -27518,10 +27517,10 @@ async function deleteAdEverywhere(adId) {
     var _cuTotal = cuIdsToDelete.length;
     var _cuFailed = [];
     var _suffix = unlinkedInspoId ? ' · inspiration unlinked' : '';
-    Promise.all(cuIdsToDelete.map(function (cuId, idx) {
+    await Promise.all(cuIdsToDelete.map(function (cuId, idx) {
       return new Promise(function (resolve) {
         setTimeout(function () {
-          apiDeleteTask(cuId)
+          apiDeleteTask(cuId, deleteApiKey)
             .then(function () { resolve(); })
             .catch(function (e) { _cuFailed.push({ cuId: cuId, err: (e && e.message) || String(e) }); resolve(); });
         }, idx * 300);
@@ -27537,6 +27536,9 @@ async function deleteAdEverywhere(adId) {
   } else {
     var suffix2 = unlinkedInspoId ? ' · inspiration unlinked' : '';
     toast('Deleted ' + adId + ' everywhere' + suffix2, 'ok');
+  }
+  } finally {
+    _creativeDeletesInFlight.delete(deleteKey);
   }
 }
 
@@ -30132,17 +30134,18 @@ function apiUpdateTask(taskId, updates) {
   return apiFetch('/task/' + taskId, { method: 'PUT', body: updates });
 }
 
-function apiDeleteTask(taskId) {
+function apiDeleteTask(taskId, apiKey) {
   // 2026-05-25: surface the failure if both DELETE and the cancelled-status
   // fallback fail. Previously the last-resort .catch returned {} silently,
   // so the user saw a green "Deleted" toast but the ClickUp task survived.
   // Now: any final failure throws → deleteAdEverywhere catches → user toast.
-  return apiFetch('/task/' + taskId, { method: 'DELETE' })
+  return apiFetch('/task/' + taskId, { method: 'DELETE', apiKey: apiKey })
     .catch(function (err) {
       console.warn('[clickup] DELETE failed for', taskId, '—', err && err.message,
                    '· falling back to status="cancelled"');
       return apiFetch('/task/' + taskId, {
         method: 'PUT',
+        apiKey: apiKey,
         body: { status: 'cancelled' }
       }).catch(function (err2) {
         // BOTH paths failed — surface to caller. Local state is already

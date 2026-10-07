@@ -2682,3 +2682,14 @@ Protect product switches, double clicks, retired duplicates, shared task IDs,
 and deliberate deletion markers. Do not cascade to child variations or source
 inspirations. Anonymous RPC execution is revoked. 276 Node tests and 13
 rollback-only database checks passed. See `docs/repairs/2026-10-07-delete-transport.md`.
+
+# 2026-10-07: Facebook Target Identity and Unverifiable Narration
+
+ARI-INS-224/299 received a different Facebook archive ID; ARI-INS-300 could not
+verify Mongolian narration after base/medium Whisper. Preserve the evidence
+guards: never substitute another ad or invent voice-over to make a job pass.
+Parse only the exact archive object's JSON snapshot, not regex/brace windows.
+Use one bounded stronger local transcription attempt; explicit evidence failures
+block rather than looping. Keep transient network retries unchanged. Recovery
+must back up and conditionally requeue only the audited IDs after worker update.
+See `docs/repairs/2026-10-07-facebook-evidence.md` for tests and limitations.

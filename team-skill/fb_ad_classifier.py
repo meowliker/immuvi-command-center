@@ -34,6 +34,7 @@ import sysconfig
 import urllib.parse
 import urllib.request
 from pathlib import Path
+from html.parser import HTMLParser
 
 # ── Config ──────────────────────────────────────────────────────────────────
 FRAMES_PER_VIDEO = 8          # max frames to extract
@@ -665,6 +666,69 @@ def download_instagram_media(url: str, work_dir: str) -> dict:
 
 
 # ── Step 1: Fetch ad JSON from page ──────────────────────────────────────────
+def parse_ad_snapshot(content: str, ad_id: str) -> dict:
+    """Read only the snapshot owned by the requested archive ID."""
+    class Scripts(HTMLParser):
+        def __init__(self):
+            super().__init__(convert_charrefs=False)
+            self.active = False
+            self.parts = []
+            self.scripts = []
+
+        def handle_starttag(self, tag, attrs):
+            if tag == "script":
+                self.active, self.parts = True, []
+
+        def handle_data(self, data):
+            if self.active:
+                self.parts.append(data)
+
+        def handle_endtag(self, tag):
+            if tag == "script" and self.active:
+                self.scripts.append("".join(self.parts))
+                self.active = False
+
+    parser = Scripts()
+    parser.feed(content)
+    matches = []
+    for script in parser.scripts:
+        try:
+            root = json.loads(script)
+        except (ValueError, TypeError):
+            continue
+        stack = [root]
+        while stack:
+            item = stack.pop()
+            if isinstance(item, list):
+                stack.extend(item)
+            elif isinstance(item, dict):
+                if str(item.get("ad_archive_id", "")) == str(ad_id):
+                    snapshot = item.get("snapshot")
+                    if isinstance(snapshot, dict):
+                        matches.append((item, snapshot))
+                stack.extend(v for v in item.values() if isinstance(v, (dict, list)))
+    for owner, snapshot in matches:
+        # Cards can contain the media, but never borrow a sibling ad's fields.
+        media = [snapshot] + [v for key in ("videos", "images", "cards")
+                              for v in (snapshot.get(key) or []) if isinstance(v, dict)]
+        def first(key):
+            return next((v[key] for v in media if isinstance(v.get(key), str) and v[key]), None)
+        result = {key: first(key) for key in (
+            "video_hd_url", "video_sd_url", "title", "cta_text", "cta_type",
+            "caption", "display_format", "link_url", "link_description", "page_name")}
+        result.update(ad_id=str(ad_id),
+                      video_preview_url=first("video_preview_image_url"),
+                      image_url=first("original_image_url") or first("resized_image_url"),
+                      body_text=(snapshot.get("body") or {}).get("text") if isinstance(snapshot.get("body"), dict) else None,
+                      collation_count=owner.get("collation_count"))
+        if result["video_hd_url"] or result["video_sd_url"] or result["image_url"]:
+            return result
+    raise RuntimeError(
+        f"FB_TARGET_UNAVAILABLE: exact ad {ad_id} has no verified media snapshot. "
+        "Do not use a neighboring ad. Provide the original media or an accessible target link."
+    )
+
+
 async def fetch_ad_snapshot(ad_id: str) -> dict:
     """
     Use Playwright headless to load the Ads Library page and extract the
@@ -686,64 +750,7 @@ async def fetch_ad_snapshot(ad_id: str) -> dict:
         content = await page.content()
         await browser.close()
 
-    # Locate the ad's JSON block — properly bounded to this ad's object only
-    marker = f'"ad_archive_id":"{ad_id}"'
-    idx = content.find(marker)
-    if idx == -1:
-        raise RuntimeError(
-            f"Ad ID {ad_id} not found in page. "
-            "The ad may be inactive or the page may require login."
-        )
-
-    # Find the enclosing JSON object by scanning for matching braces
-    # This prevents bleeding into neighboring ads on collated pages
-    start = idx
-    brace_count = 0
-    for i in range(idx, max(idx - 5000, 0), -1):
-        if content[i] == '}':
-            brace_count += 1
-        if content[i] == '{':
-            brace_count -= 1
-            if brace_count < 0:
-                start = i
-                break
-
-    end = idx
-    brace_count = 0
-    for i in range(start, min(start + 20000, len(content))):
-        if content[i] == '{':
-            brace_count += 1
-        if content[i] == '}':
-            brace_count -= 1
-            if brace_count == 0:
-                end = i + 1
-                break
-
-    chunk = content[start:end]
-
-    def _find(pattern, text=chunk):
-        m = re.search(pattern, text)
-        return unescape_fb_url(m.group(1)) if m else None
-
-    snapshot = {
-        "ad_id":              ad_id,
-        "video_hd_url":       _find(r'"video_hd_url":"(https:\\/\\/video[^"]+\.mp4[^"]*)"'),
-        "video_sd_url":       _find(r'"video_sd_url":"(https:\\/\\/video[^"]+\.mp4[^"]*)"'),
-        "video_preview_url":  _find(r'"video_preview_image_url":"(https:\\/\\/scontent[^"]+\.jpg[^"]*)"'),
-        "image_url":          _find(r'"original_image_url":"(https:\\/\\/scontent[^"]+)"'),
-        "body_text":          _find(r'"body":\{"text":"([^"]+)"'),
-        "title":              _find(r'"title":"([^"]+)"'),
-        "cta_text":           _find(r'"cta_text":"([^"]+)"'),
-        "cta_type":           _find(r'"cta_type":"([^"]+)"'),
-        "caption":            _find(r'"caption":"([^"]+)"'),
-        "display_format":     _find(r'"display_format":"([^"]+)"'),
-        "link_url":           _find(r'"link_url":"(https?:\\/\\/[^"]+)"'),
-        "link_description":   _find(r'"link_description":"([^"]+)"'),
-        "page_name":          _find(r'"page_name":"([^"]+)"'),
-        "collation_count":    _find(r'"collation_count":(\d+)'),
-    }
-
-    return snapshot
+    return parse_ad_snapshot(content, ad_id)
 
 
 # ── Step 2: Download video ────────────────────────────────────────────────────

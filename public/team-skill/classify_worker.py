@@ -102,6 +102,31 @@ CODEX_BIN_CANDIDATES = [
 ]
 
 
+def facebook_source_contract(job):
+    source = urllib.parse.urlparse(job.get("url") or "")
+    host = (source.hostname or "").lower()
+    if not (host == "facebook.com" or host.endswith(".facebook.com")) or source.path.rstrip("/") != "/ads/library":
+        return ""
+    return (
+        "\nFACEBOOK SOURCE SAFETY (also applies in No Brief mode):\n"
+        "Use the deployed fb_ad_classifier.fetch_ad_snapshot exact-ID JSON parser. "
+        "The requested archive ID must own the snapshot. Never relabel a neighboring ad's media "
+        "with the target ID, select the first video on a page, or substitute a related ad. "
+        "If exact target media remains inaccessible, print FAIL with FB_TARGET_UNAVAILABLE: "
+        "and do not write results or create a ClickUp brief. The worker will stop retries.\n"
+        "For genuine narration that base/medium Whisper cannot verify, make at most one stronger "
+        "local multilingual transcription attempt with large-v3 and task=transcribe. "
+        "Set language only when independently supported by the audio/source (Mongolian=mn); "
+        "never infer language from the selected Immuvi product. Check repetition, omissions, "
+        "timestamps and audible words before accepting it. Model output alone is not proof. "
+        "Never call unclear speech 'No voice over', copy captions as speech, or invent translations. "
+        "If still unverifiable, print FAIL with AUDIO_TRANSCRIPT_UNVERIFIED: and preserve the "
+        "source for review without writing a fabricated brief. No new paid API. "
+        "Process only the claimed row, preserve its product/ID/URL/No Brief setting, and do not "
+        "create taxonomy rows or run bulk repair.\n"
+    )
+
+
 def _resolve_codex_bin():
     # Resolve overrides/PATH on each call: app updates may relocate the CLI
     # while the long-lived LaunchAgent remains running.
@@ -404,6 +429,7 @@ def probe_capabilities() -> dict:
         "worker_contract": "inspiration-brief-8-section-page-verified",
         "classification_only": True,
         "reddit_text": "reddit-text-v1",
+        "facebook_evidence": "exact-ad-v1",
         "agent_launcher_revision": "codex-bundle-v2",
         "taxonomy_review": "semantic-taxonomy-v1" if (
             shutil.which("node") and _resolve_codex_bin()
@@ -1874,6 +1900,7 @@ class Worker:
         if job.get("no_brief") is True:
             prompt = classification_only_prompt(job)
         prompt += reddit_source_contract(job)
+        prompt += facebook_source_contract(job)
 
         # Auto-route: use the configured/preferred agent first, but if that
         # installed agent is logged out (Claude 401, stale credentials, etc.),
@@ -2584,7 +2611,15 @@ class Worker:
                  or ("source is a reddit text post" in str(error).lower()
                      and "no downloadable creative media verified" in str(error).lower()))
         )
-        if reddit_text_only:
+        facebook_blocked = facebook_source_contract(job) and any(
+            marker in str(error) for marker in ("FB_TARGET_UNAVAILABLE:", "AUDIO_TRANSCRIPT_UNVERIFIED:")
+        )
+        if facebook_blocked:
+            new_status = "blocked"
+            error = ("Source evidence needs review; original inspiration preserved. "
+                     "Automatic retries stopped. " + str(error))
+            log(f"[{job.get('id')}] SOURCE BLOCKED: {error}")
+        elif reddit_text_only:
             new_status = "blocked"
             error = (
                 "Reddit text could not be verified. Provide an accessible original post or its "

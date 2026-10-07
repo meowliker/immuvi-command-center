@@ -115,8 +115,12 @@ def facebook_source_contract(job):
         "If exact target media remains inaccessible, print FAIL with FB_TARGET_UNAVAILABLE: "
         "and do not write results or create a ClickUp brief. The worker will stop retries.\n"
         "For genuine narration that base/medium Whisper cannot verify, make at most one stronger "
-        "local multilingual transcription attempt with large-v3 and task=transcribe. "
-        "Load it using fb_ad_classifier.load_transcription_model('large-v3'); this retries "
+        "local multilingual transcription attempt with turbo and task=transcribe. "
+        "Use a fresh Python subprocess so base/medium model tensors are not still resident. "
+        "Do not run the full-size large-v3 model or parallel large-model attempts on this worker. "
+        "Record the actual model as whisper:turbo. Turbo returns the original language; "
+        "do not use task=translate or describe its output as an English translation. "
+        "Load it using fb_ad_classifier.load_transcription_model('turbo'); this retries "
         "a checksum-damaged shared model once in a fresh isolated directory without deleting "
         "shared files or bypassing SHA256 validation. Do not stop merely because the first "
         "shared-cache load failed checksum. If isolated verification also fails, stop. "
@@ -435,7 +439,7 @@ def probe_capabilities() -> dict:
         "reddit_text": "reddit-text-v1",
         "facebook_evidence": "exact-ad-v1",
         "classification_lease": "agent-timeout-v1",
-        "asr_cache_recovery": "isolated-checksum-v1",
+        "asr_cache_recovery": "isolated-checksum-v2-turbo",
         "agent_launcher_revision": "codex-bundle-v2",
         "taxonomy_review": "semantic-taxonomy-v1" if (
             shutil.which("node") and _resolve_codex_bin()

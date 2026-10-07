@@ -75,7 +75,9 @@ class FacebookEvidenceTests(unittest.TestCase):
         for url in ['https://www.facebook.com/ads/library/?id=123',
                     'https://facebook.com/ads/library/?id=123']:
             text = worker.facebook_source_contract({'url': url, 'no_brief': True})
-            for required in ['No Brief', 'large-v3', 'Mongolian=mn', 'FB_TARGET_UNAVAILABLE:',
+            for required in ['No Brief', "load_transcription_model('turbo')", 'fresh Python subprocess',
+                             'Do not run the full-size large-v3', 'do not use task=translate',
+                             'Mongolian=mn', 'FB_TARGET_UNAVAILABLE:',
                              'AUDIO_TRANSCRIPT_UNVERIFIED:', 'do not create taxonomy']:
                 self.assertIn(required, text)
         for url in ['https://facebook.com.evil.test/ads/library/?id=123',

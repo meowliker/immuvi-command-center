@@ -61,3 +61,10 @@ Whisper's checksum check remains in force; shared cache files are not removed.
 Other errors are not retried. Two tests cover bounded recovery and unchanged
 non-checksum failures. Worker adoption and a completed classification must be
 verified separately before claiming this inspiration is repaired.
+
+The isolated large-v3 download subsequently passed its checksum, but the local
+model process was killed with exit 137. Do not interpret that exit alone as proof
+of OOM. The fallback now uses Whisper turbo in a fresh subprocess (no resident
+base/medium tensors), original-language transcription only, and truthful model
+provenance. Full-size large-v3 and concurrent large-model fallback attempts are
+explicitly excluded. Evidence validation still determines whether it can save.

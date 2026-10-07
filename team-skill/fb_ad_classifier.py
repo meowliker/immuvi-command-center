@@ -60,8 +60,8 @@ def load_transcription_model(model_name: str):
             raise
         # Do not delete a shared file another job may still be writing.
         # Whisper must validate its official download again in this directory.
-        isolated = tempfile.mkdtemp(prefix="immuvi-whisper-recovery-")
-        return whisper.load_model(model_name, download_root=isolated)
+        with tempfile.TemporaryDirectory(prefix="immuvi-whisper-recovery-") as isolated:
+            return whisper.load_model(model_name, download_root=isolated)
 
 
 def extract_ad_id(input_str: str) -> str:

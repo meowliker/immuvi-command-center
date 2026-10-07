@@ -26,17 +26,22 @@ class FacebookEvidenceTests(unittest.TestCase):
         whisper = Mock()
         model = object()
         whisper.load_model.side_effect = [RuntimeError('SHA256 checksum mismatch'), model]
-        with patch.dict(sys.modules, {'whisper': whisper}), patch.object(helper.tempfile, 'mkdtemp', return_value='/private/tmp/isolated-model'):
+        with patch.dict(sys.modules, {'whisper': whisper}), patch.object(helper.tempfile, 'TemporaryDirectory') as directory:
+            directory.return_value.__enter__.return_value = '/private/tmp/isolated-model'
             self.assertIs(helper.load_transcription_model('large-v3'), model)
+            directory.return_value.__exit__.assert_called_once()
         self.assertEqual(whisper.load_model.call_args_list[0].args, ('large-v3',))
         self.assertEqual(whisper.load_model.call_args_list[1].kwargs, {'download_root':'/private/tmp/isolated-model'})
 
     def test_other_model_failures_and_second_checksum_failure_stop(self):
         for error, expected in [(RuntimeError('Out of memory'), 1), (RuntimeError('SHA256 checksum mismatch'), 2)]:
             whisper = Mock(); whisper.load_model.side_effect = error
-            with patch.dict(sys.modules, {'whisper':whisper}), patch.object(helper.tempfile, 'mkdtemp', return_value='/private/tmp/isolated-model'):
+            with patch.dict(sys.modules, {'whisper':whisper}), patch.object(helper.tempfile, 'TemporaryDirectory') as directory:
+                directory.return_value.__enter__.return_value = '/private/tmp/isolated-model'
                 with self.assertRaises(RuntimeError):
                     helper.load_transcription_model('large-v3')
+                if expected == 2:
+                    directory.return_value.__exit__.assert_called_once()
             self.assertEqual(whisper.load_model.call_count, expected)
 
     def test_exact_id_not_first_ad(self):

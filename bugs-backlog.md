@@ -7,6 +7,20 @@ Status legend: 🆕 just-flagged · 📐 plan-locked · 🛠 in-progress · ✅ 
 
 ---
 
+## No Brief blocked by mandatory narration
+**Status:** Fixed and live-verified, 2026-10-07.
+
+The Facebook contract and video validator incorrectly required a complete
+transcript even when no_brief=true. Classification-only now permits explicitly
+unverified, blank narration with matching source-scoped visual/text evidence
+and a recorded limitation. Exact-ad media checks, taxonomy review and normal
+full-brief requirements remain intact. No Brief still prohibits brief/scripts
+and ClickUp page creation. ARI-INS-315 verified Classified with one result,
+empty brief/scripts and no ClickUp page. 326 tests passed. See
+`docs/repairs/2026-10-07-no-brief-narration.md` for backup and rollback details.
+
+---
+
 ## Winner variations missing from ClickUp Related tasks
 **Status:** Creation-path fix deployed; verified historical links repaired, 2026-10-01.
 

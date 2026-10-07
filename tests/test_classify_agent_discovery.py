@@ -1,4 +1,5 @@
 import os
+import threading
 import unittest
 from unittest.mock import Mock, patch
 
@@ -51,6 +52,8 @@ class AgentDiscoveryTests(unittest.TestCase):
     def worker(self):
         worker = module.Worker.__new__(module.Worker)
         worker.sb = Mock()
+        worker._classify_lock = threading.Lock()
+        worker._classify_futures = {}
         worker._find_offline_workers = Mock(return_value=set())
         worker._active_classify_count = Mock(return_value=0)
         worker._claude_cooldown_until = 0

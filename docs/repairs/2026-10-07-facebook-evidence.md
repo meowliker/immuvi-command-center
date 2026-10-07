@@ -25,8 +25,10 @@ failures, not evidence of missing database rows.
 
 ## Verification and limitations
 
-276 Node regression tests, 8 Reddit evidence tests, 4 taxonomy-worker tests,
-and 7 new Facebook tests pass. Public worker/helper mirrors match.
+276 Node regression tests and all 47 Python tests pass, including Facebook,
+Reddit, taxonomy, agent discovery and classification lease coverage. The older
+agent-discovery fixture now initializes the same lock/future map as real workers.
+Public worker/helper mirrors match.
 Public HTTP access to Facebook from this machine returned 403, so parser tests
 are not proof these particular ads remain accessible. Recovery must be verified
 from completed worker results; inaccessible sources need original media.
@@ -68,3 +70,23 @@ of OOM. The fallback now uses Whisper turbo in a fresh subprocess (no resident
 base/medium tensors), original-language transcription only, and truthful model
 provenance. Full-size large-v3 and concurrent large-model fallback attempts are
 explicitly excluded. Evidence validation still determines whether it can save.
+
+## Verified source corrections
+
+The user also supplied 903515338972882 as the corrected source for 224. The same
+rollback-tested, locked correction procedure preserved its identity and history.
+Both 224 and 299 completed classification with exactly one result each and their
+original No Brief=false setting. Their actual ClickUp pages were read back:
+each has eight sections, three variations and the corrected source URL.
+224 completed at 06:49:27 UTC; 299 completed at 06:24:38 UTC on 2026-10-07.
+After correction, stale attempts to write the old URLs were rejected by the
+unchanged immutable-source guard. No active angles/personas were created.
+
+Deployment 958d909 is READY on production main and both published Python assets
+match the tested local bytes. The Mac mini adopted isolated-checksum-v2-turbo;
+300 was backed up and queued once for a fresh-process turbo attempt. Its source,
+identity, attempts history and brief mode were retained. Attempt 7 ended blocked:
+Mongolian narration remained unverifiable after base and turbo attempts. No
+classification result or ClickUp brief was created. Automatic retries stopped;
+300 requires a reliable transcript or clearer source before further recovery.
+Do not report it as repaired or substitute invented narration.

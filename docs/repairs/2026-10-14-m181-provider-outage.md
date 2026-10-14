@@ -17,7 +17,7 @@ Model selection, credentials, source content and brief mode are unchanged.
 The CLI failure excerpt now includes stderr even when stdout is nonempty, so
 the actual provider error cannot be hidden by a printed prompt.
 
-57 Python tests passed, including service/error distinction, claim isolation,
+58 Python tests passed, including service/error distinction, claim isolation,
 attempt preservation, dispatch cooldown and existing classification guards.
 Private original-record backup:
 /Users/anaytripathy/.codex/backups/immuvi-m181-20261014.
@@ -25,3 +25,25 @@ Private original-record backup:
 Recovery must wait for provider_outage=cooldown-v1 in the live worker registry
 before requesting the next retry. Completion requires saved source identity,
 classification and the actual full ClickUp brief to pass verification.
+
+## Verified outcome
+
+Worker capability cooldown-v1 was confirmed before the guarded resume after
+five minutes. M-INS-181 then completed Classified, with one saved result and
+the unchanged TikTok URL, Medical product ID and no_brief=false setting.
+
+- Format: Seasonal Student Deal Reminder, 5.77-second music-only video.
+- Angle: existing Halloween Sale.
+- Persona: Students Seeking Seasonal Savings, kept as an inspiration-local
+  source proposal requiring review rather than forced into a nursing persona.
+- Narration: No voice over, backed by local source-waveform audio-event review;
+  ASR was not used. The automated-review limitation is recorded.
+- Full eight-section ClickUp brief: doc 8cq1r3y-35516, page 8cq1r3y-125516.
+- Three complete overlay-led scripts for Medical Nursing's free-today offer.
+
+The actual ClickUp page was independently read using existing API access. It
+preserves the exact source copy, marks the phone discount as an unverified
+source claim, and adapts the format without inventing a Medical Halloween
+promotion or student-ID eligibility. The original media was independently
+retrieved via the non-browser TikTok downloader and its frames inspected.
+Final records and page contents are saved in the durable private backup folder.

@@ -15672,6 +15672,25 @@ function _taxonomyItemIsActive(kind, name, includeArchived) {
   return true;
 }
 
+function _activeTaxonomyItems(kind) {
+  var list = kind === 'persona' ? PERSONAS : ANGLES;
+  return (list || []).filter(function(item) {
+    return item && _taxonomyItemIsActive(kind, item.name, false);
+  });
+}
+
+function _inspirationTaxonomyOptions(kind, current) {
+  var items = _activeTaxonomyItems(kind);
+  var html = items.map(function(item) {
+    return '<option value="' + escAttr(item.name) + '"' + (current === item.name ? ' selected' : '') + '>' + esc(item.name) + '</option>';
+  }).join('');
+  // Keep historical/custom labels visible without offering them as choices.
+  if (current && !items.some(function(item) { return item.name === current; })) {
+    html = '<option value="' + escAttr(current) + '" selected disabled>' + esc(current) + '</option>' + html;
+  }
+  return html + '<option value="__custom__">— custom —</option>';
+}
+
 function _taxonomyTopMatches(kind, name, limit) {
   var list = kind === 'persona' ? PERSONAS : ANGLES;
   var clean = _normalizeTaxonomyName(name || '');
@@ -22667,10 +22686,10 @@ function _apEnsureCfColumns() {
         var options = null;
         var fieldMapKey = null;
         if (lcName === 'angle tag' && typeof ANGLES !== 'undefined' && Array.isArray(ANGLES)) {
-          options = ANGLES.map(function (a) { return a.name; });
+          options = _activeTaxonomyItems('angle').map(function (a) { return a.name; });
           fieldMapKey = 'angle tag';
         } else if (lcName === 'persona tag' && typeof PERSONAS !== 'undefined' && Array.isArray(PERSONAS)) {
-          options = PERSONAS.map(function (p) { return p.name; });
+          options = _activeTaxonomyItems('persona').map(function (p) { return p.name; });
           fieldMapKey = 'persona tag';
         } else if (meta && (meta.type === 'drop_down' || meta.type === 'labels') && Array.isArray(meta.options)) {
           options = meta.options.map(function (o) { return o.name || o.label || String(o); });
@@ -22725,6 +22744,9 @@ function apOpenTagDropdown(triggerBtn) {
   var current = triggerBtn.getAttribute('data-current') || '';
   var options = [];
   try { options = JSON.parse(triggerBtn.getAttribute('data-options') || '[]'); } catch (e) { options = []; }
+  if (fieldKey === 'angle tag' || fieldKey === 'persona tag') {
+    options = _activeTaxonomyItems(fieldKey === 'angle tag' ? 'angle' : 'persona').map(function(item) { return item.name; });
+  }
 
   _apTagPopState.options = options;
   _apTagPopState.adId = adId;
@@ -46607,11 +46629,21 @@ function addInspoToCell(insId, angleName, personaName) {
   var ins = INSPIRATIONS.find(function(i) { return i.id === insId; });
   if (!ins) { toast('Inspiration not found', 'error'); return; }
 
+  // Placement explicitly adopts these categories into the product. Previously
+  // a custom label could create an AD and cell with no corresponding matrix row.
+  var cell = _prepareInspirationCell(ins, angleName, personaName);
+  if (!cell) return;
+  angleName = cell.angle;
+  personaName = cell.persona;
+
   // Check if already added in this cell
   var alreadyExists = ADS.some(function(a) {
     return a._fromInspoId === insId && a.angle === angleName && a.persona === personaName;
   });
   if (alreadyExists) {
+    saveState();
+    saveInspirations();
+    renderAll();
     toast('Already in this cell', 'warn');
     return;
   }
@@ -46680,8 +46712,8 @@ function addInspoToCell(insId, angleName, personaName) {
   var noAdvance = ['Saved', 'Pending', 'Classified', 'Queued'];
   if (noAdvance.indexOf(ins.status) !== -1) {
     ins.status = 'Testing';
-    saveInspirations();
   }
+  saveInspirations();
 
   // Rebuild indexes and render
   P = process(ADS);
@@ -46703,6 +46735,32 @@ function addInspoToCell(insId, angleName, personaName) {
 // ================================================
 // removeInspoFromCell — uncheck: delete the task created from this inspo in this cell
 // ================================================
+function _prepareInspirationCell(ins, angleName, personaName) {
+  var names = {angle: _normalizeTaxonomyName(angleName), persona: _normalizeTaxonomyName(personaName)};
+  var kinds = ['angle', 'persona'];
+  // Validate both before creating either; never silently restore an archive.
+  for (var i = 0; i < kinds.length; i++) {
+    var kind = kinds[i], name = names[kind];
+    var list = kind === 'angle' ? ANGLES : PERSONAS;
+    var existing = list.find(function(item) { return _taxonomyLookupKey(item.name) === _taxonomyLookupKey(name); });
+    if (!name || _isBoundaryQuarantinedTaxonomy(kind, name) ||
+        _isTaxonomyTombstoned(kind, activeProductId, name) ||
+        (existing && !_taxonomyItemIsActive(kind, name, false))) {
+      toast('Choose an active ' + kind + ' before placing this inspiration.', 'warn');
+      return null;
+    }
+  }
+  kinds.forEach(function(kind) {
+    names[kind] = _ensureTaxonomyItem(kind, names[kind], 'Added by placing inspiration ' + ins.id + ' into the matrix');
+    if (_taxonomyLookupKey(ins[kind]) === _taxonomyLookupKey(names[kind])) {
+      ins[kind] = names[kind];
+      ins['_' + kind + 'Scope'] = 'product';
+      ins['_' + kind + 'Locked'] = true;
+    }
+  });
+  return names;
+}
+
 function removeInspoFromCell(insId, angleName, personaName) {
   var idx = -1;
   for (var i = 0; i < ADS.length; i++) {
@@ -48269,9 +48327,12 @@ function addEntityFromInspiration(type, name, ins) {
     _localNew: true
   };
   arr.push(newEntity);
+  ins['_' + (isAngle ? 'angle' : 'persona') + 'Scope'] = 'product';
+  ins['_' + (isAngle ? 'angle' : 'persona') + 'Locked'] = true;
   P = process(ADS);
   renderAngles();
   renderPersonas();
+  renderMatrix();
   updateTabCounts();
   saveState();
   toast('Added new ' + type + ': ' + name + ' — check the ' + type + 's tab', 'ok');
@@ -48669,14 +48730,10 @@ function renderInspirations() {
       '</span>';
 
     // Build angle select
-    var angleOpts = ANGLES.map(function(a){
-      return '<option value="'+escAttr(a.name)+'"'+(ins.angle===a.name?' selected':'')+'>'+esc(a.name)+'</option>';
-    }).join('') + '<option value="__custom__"'+(ins.angle && !ANGLES.some(function(a){return a.name===ins.angle;})?' selected':'')+'>— custom —</option>';
+    var angleOpts = _inspirationTaxonomyOptions('angle', ins.angle);
 
     // Build persona select
-    var personaOpts = PERSONAS.map(function(p){
-      return '<option value="'+escAttr(p.name)+'"'+(ins.persona===p.name?' selected':'')+'>'+esc(p.name)+'</option>';
-    }).join('') + '<option value="__custom__"'+(ins.persona && !PERSONAS.some(function(p){return p.name===ins.persona;})?' selected':'')+'>— custom —</option>';
+    var personaOpts = _inspirationTaxonomyOptions('persona', ins.persona);
 
     // Build structure select
     var structureOpts = [''].concat(CREATIVE_STRUCTURES).map(function(s){
@@ -52519,8 +52576,8 @@ window._clearPendingCu = _clearPendingCu;
     }
 
     // Manual cell pick
-    var allAngles   = (typeof ANGLES !== 'undefined') ? ANGLES.map(function(a){return a.name;}) : [];
-    var allPersonas = (typeof PERSONAS !== 'undefined') ? PERSONAS.map(function(p){return p.name;}) : [];
+    var allAngles   = _activeTaxonomyItems('angle').map(function(a){return a.name;});
+    var allPersonas = _activeTaxonomyItems('persona').map(function(p){return p.name;});
     html += '<div class="ins-drw-manual">';
     html += '<select id="insoDrwCustomAngle"><option value="">Pick angle…</option>' + allAngles.map(function(a){return '<option' + (a === sugAngle ? ' selected' : '') + '>' + esc(a) + '</option>';}).join('') + '</select>';
     html += '<select id="insoDrwCustomPersona"><option value="">Pick persona…</option>' + allPersonas.map(function(p){return '<option' + (p === sugPersona ? ' selected' : '') + '>' + esc(p) + '</option>';}).join('') + '</select>';

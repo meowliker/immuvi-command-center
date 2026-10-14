@@ -74,7 +74,7 @@ for (const file of ['immuvi-command-center.html','public/immuvi-command-center.h
     load(c,'assignAndExpandCell');c.assignAndExpandCell('A','Foreign');assert.equal(c.PERSONAS.length,0);
   });
   test(file+': explicit inspiration category creation has unique ID and local approval',()=>{
-    const c=vm.createContext({_insMatchContextIsCurrent:()=>true,ANGLES:[],PERSONAS:[],ADS:[],_newTaxonomyId:kind=>kind+'-unique',process:()=>({}),renderAngles(){},renderPersonas(){},updateTabCounts(){},saveState(){},toast(){}});
+    const c=vm.createContext({_insMatchContextIsCurrent:()=>true,ANGLES:[],PERSONAS:[],ADS:[],_newTaxonomyId:kind=>kind+'-unique',process:()=>({}),renderAngles(){},renderPersonas(){},renderMatrix(){},updateTabCounts(){},saveState(){},toast(){}});
     load(c,'addEntityFromInspiration');c.addEntityFromInspiration('Angle','New',{id:'INS-1'});
     assert.equal(c.ANGLES[0].id,'angle-unique');assert.equal(c.ANGLES[0]._localNew,true);
     c._insMatchContextIsCurrent=()=>false;c.addEntityFromInspiration('Persona','Other',{id:'INS-2'});assert.equal(c.PERSONAS.length,0);

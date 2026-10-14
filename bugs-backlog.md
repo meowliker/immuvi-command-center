@@ -2731,3 +2731,11 @@ briefs. Establish narration presence separately; confirmed music-only videos
 use No voice over and visual/on-screen text breakdowns. Genuine unclear speech
 still requires verification. Exact-source user confirmations are scoped by
 product, inspiration ID and URL. No Brief mode is never silently switched.
+
+## Provider capacity errors exhausted classification retries (2026-10-14)
+
+Codex 503 capacity and 429 provider errors consumed content retries and left
+M-INS-181 Failed without any result. Recognize specific CLI service failures,
+pause dispatch for the existing cooldown, and return only the matching claim
+to pending without consuming a content attempt. Preserve source/media errors
+and authentication checks. See the M-INS-181 repair record for verification.

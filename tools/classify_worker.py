@@ -501,6 +501,7 @@ def probe_capabilities() -> dict:
         "classification_only": True,
         "classification_only_evidence": "optional-narration-v1",
         "narration_presence": "music-aware-v1",
+        "provider_outage": "cooldown-v1",
         "reddit_text": "reddit-text-v1",
         "facebook_evidence": "exact-ad-v1",
         "classification_lease": "agent-timeout-v1",
@@ -621,6 +622,16 @@ def _agent_infra_failed(output: str) -> bool:
         or "agent cli not found" in text
         or "no agent cli installed" in text
     )
+
+
+def _codex_service_unavailable(output: str) -> bool:
+    """Recognize CLI provider errors without mistaking source HTTP errors for them."""
+    text = (output or "").lower()
+    return text.startswith("codex exit ") and any(marker in text for marker in (
+        "selected model is at capacity",
+        "exceeded retry limit, last status: 429",
+        "unexpected status 503 service unavailable",
+    ))
 
 
 def _safe_run(cmd: list, timeout: int = 5) -> str:
@@ -1425,6 +1436,9 @@ class Worker:
                 self.mark_classified(queue_id)
                 self.increment_completed()
                 log(f"[{queue_id}] ✓ classified")
+            elif _codex_service_unavailable(outcome.get("error", "")):
+                self._claude_cooldown_until = time.time() + CLASSIFY_RATE_LIMIT_COOLDOWN_SECONDS
+                self.mark_provider_outage(job, outcome["error"])
             elif _agent_infra_failed(outcome.get("error", "")):
                 self._agent_infra_cooldown_until = time.time() + CLASSIFY_AGENT_INFRA_COOLDOWN_SECONDS
                 log(f"[{queue_id}] AGENT INFRA FAILURE - pausing classify pool for "
@@ -2048,7 +2062,7 @@ class Worker:
                 return {"success": False, "error": "agent infrastructure failure: no usable agent CLI found"}
             stdout = (r.stdout or "").strip()
             stderr = (r.stderr or "").strip()
-            tail = stdout[-500:] if stdout else stderr[-500:]
+            tail = (stdout + "\n" + stderr).strip()[-500:]
             if r.returncode != 0:
                 error = f"{agent_label} exit {r.returncode}: {tail}"
                 if _agent_infra_failed(error):
@@ -2773,6 +2787,22 @@ class Worker:
             )
         except Exception as e:
             log(f"could not flip {job.get('id')} to {new_status}: {e}")
+
+    def mark_provider_outage(self, job: dict, error: str):
+        """Return this claim to the queue after cooldown, preserving content retries."""
+        query = f"id=eq.{job.get('id')}&product_id=eq.{job.get('product_id')}&status=eq.classifying"
+        for field in ("claimed_by", "claimed_at"):
+            if job.get(field):
+                query += f"&{field}=eq.{urllib.parse.quote(str(job[field]), safe='')}"
+        try:
+            self.sb.update("inspiration_queue", query, {
+                "status": "pending", "claimed_by": None, "claimed_at": None,
+                "attempts": max(0, (job.get("attempts") or 1) - 1),
+                "error_message": ("AI provider temporarily unavailable; retrying after cooldown. " + str(error))[:500],
+            })
+            log(f"[{job.get('id')}] provider outage; waiting {CLASSIFY_RATE_LIMIT_COOLDOWN_SECONDS}s")
+        except Exception as e:
+            log(f"could not defer provider outage for {job.get('id')}: {e}")
 
     def mark_agent_infra_failure(self, job: dict, error: str):
         """Block infrastructure outages without spending content retry attempts."""

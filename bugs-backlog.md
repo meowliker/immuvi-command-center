@@ -2713,3 +2713,12 @@ timeout was 20 minutes, duplicating a slow transcription attempt. Stale recovery
 must exceed the agent runtime, skip running local futures, compare the original
 claim state/owner/time before release, and never reclaim a queue already running
 locally. Five lease regression tests cover these boundaries.
+
+## Taxonomy review JSONB evidence comparison (2026-10-14)
+
+Identical source evidence was rejected after JSONB reordered object keys.
+Compare object contents independent of key order, keep exact text/array checks,
+and provide explicit bounded re-review for completed or failed jobs. Citation
+field names are constrained and original voice-over timeline text is included.
+No automatic taxonomy creation, label updates, or brief regeneration.
+See `docs/repairs/2026-10-14-taxonomy-review.md` for scope and verification.

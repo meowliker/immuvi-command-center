@@ -5,6 +5,7 @@ import {targetEnv} from '../../scripts/strategist-env.mjs';
 
 const sql=postgres(targetEnv().STRATEGIST_DATABASE_URL,{prepare:false,max:1,ssl:'require',connect_timeout:15,onnotice(){}});
 const migration=await readFile(new URL('../../supabase/migrations/20260928000100_taxonomy_review_jobs.sql',import.meta.url),'utf8');
+const retryMigration=await readFile(new URL('../../supabase/migrations/20261014000100_taxonomy_review_retry.sql',import.meta.url),'utf8');
 const rollback=new Error('ROLLBACK_TEST_SUCCESS');
 const hash='semantic-taxonomy-v1:'+'f'.repeat(64);
 try {
@@ -14,6 +15,8 @@ try {
       await tx`set local statement_timeout='20s'`;
       await tx.unsafe(migration);
       await tx.unsafe(migration);
+      await tx.unsafe(retryMigration);
+      await tx.unsafe(retryMigration);
       const [admin]=await tx`select id from profiles where role='admin' and is_active=true limit 1`;
       const [member]=await tx`select pr.id from profiles pr where role='member' and is_active=true
         and exists(select 1 from user_products up where up.user_id=pr.id) limit 1`;
@@ -43,6 +46,15 @@ try {
       assert.ok(visible.every(r=>r.product_id!==foreign.product_id));
       const [retried]=await tx`select * from request_taxonomy_review(${ins.product_id},${ins.id},${hash},true)`;
       assert.equal(retried.id,one.id); assert.equal(retried.status,'pending');
+      await tx`reset role`;
+      await tx`update taxonomy_review_jobs set status='complete', result='{"old":true}'::jsonb where id=${one.id}`;
+      await tx`set local role authenticated`;
+      const [cached]=await tx`select * from request_taxonomy_review(${ins.product_id},${ins.id},${hash},false)`;
+      assert.equal(cached.status,'complete');
+      const [reviewedAgain]=await tx`select * from request_taxonomy_review(${ins.product_id},${ins.id},${hash},true)`;
+      assert.equal(reviewedAgain.status,'pending');assert.equal(reviewedAgain.result,null);
+      const [dedup]=await tx`select * from request_taxonomy_review(${ins.product_id},${ins.id},${hash},true)`;
+      assert.equal(dedup.id,one.id);assert.equal(dedup.queued_at.getTime(),reviewedAgain.queued_at.getTime());
       await tx`set local role anon`;
       await assert.rejects(()=>tx.savepoint(sp=>sp`select * from taxonomy_review_jobs`),e=>e.code==='42501');
       await assert.rejects(()=>tx.savepoint(sp=>sp`select * from request_taxonomy_review(${ins.product_id},${ins.id},${hash},false)`),e=>e.code==='42501');
@@ -50,7 +62,7 @@ try {
     });
   } catch(e) {if(e!==rollback) throw e;}
   if(process.argv.includes('--apply')) {
-    await sql.begin(async tx=>{await tx`set local lock_timeout='5s'`;await tx.unsafe(migration);});
+    await sql.begin(async tx=>{await tx`set local lock_timeout='5s'`;await tx.unsafe(retryMigration);});
     console.log('Applied additive review queue after rollback-only RLS tests. Existing creative tables untouched.');
   } else console.log('Passed queue deduplication, product authorization, foreign-row rejection, write restrictions, retry and anonymous access tests. All writes rolled back.');
 } finally {await sql.end({timeout:2});}

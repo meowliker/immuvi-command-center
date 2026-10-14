@@ -46,6 +46,20 @@ test('fabricated quotes, unsupported product transfers and low-confidence guesse
   const withHypothesis = reviewInput(product,angles,personas,{...ins,creativeHypothesis:'This ad targets moms with ADHD.'});
   assert.equal(validateAssessment(recommendation('persona',{evidence:[{field:'creativeHypothesis',quote:'This ad targets moms with ADHD.'}]}),'persona',withHypothesis).decision,'needs_review');
 });
+test('citation paths resolve only to exact evidence fields and never weaken quote checks', () => {
+  for (const field of ['source.bodyCopy','evidence.source.bodyCopy','inspiration.evidence.source.bodyCopy']) {
+    const result=validateAssessment(recommendation('angle',{evidence:[{field,quote:'Learn to finish your first quilt without frustration.'}]}),'angle',input());
+    assert.equal(result.decision,'existing');
+    assert.equal(result.evidence[0].field,'bodyCopy');
+  }
+  for (const field of ['other.source.bodyCopy','observations.bodyCopy','nextAdScripts.bodyCopy']) {
+    assert.equal(validateAssessment(recommendation('angle',{evidence:[{field,quote:'Learn to finish your first quilt without frustration.'}]}),'angle',input()).decision,'needs_review');
+  }
+  assert.equal(validateAssessment(recommendation('angle',{evidence:[{field:'source.bodyCopy',quote:'Learn to finish a quilt without frustration.'}]}),'angle',input()).decision,'needs_review');
+});
+test('saved voice_over timeline segments contribute original narration, not metadata', () => {
+  assert.equal(evidenceFor({voiceOverTimeline:[{voice_over:'Help my child understand their feelings.',timestamp:'00:01',secret:'excluded'}]}).source.voiceOverTimeline,'Help my child understand their feelings.');
+});
 test('cache signature changes with source, taxonomy or product but not current labels/generated scripts', async () => {
   const original = await signature(input());
   assert.equal(original,await signature(reviewInput(product,angles,personas,{...ins,persona:'Wrong',nextAdScripts:['fake']})));
@@ -88,6 +102,24 @@ test('evidence changes and product switches invalidate visible suggestions', asy
   assert.equal(f.client.assessment(f.c.inspirations[0],'persona'),null);
   f.switchTo({...f.c,product:{id:'adhd',name:'ADHD'},generation:2});
   assert.equal(f.client.assessment(ins,'persona'),null);
+});
+test('JSONB key reordering does not invalidate unchanged evidence', async () => {
+  const f=clientFixture(); await f.client.pump();
+  const old=f.jobs[0].result.evidence;
+  f.jobs[0].result.evidence={observations:old.observations,source:old.source};
+  assert.match(f.client.render(f.c.inspirations[0],'persona'),/Match confirmed/);
+  f.jobs[0].result.evidence.source={bodyCopy:'Genuinely changed source text'};
+  assert.equal(f.client.assessment(f.c.inspirations[0],'persona'),null);
+  assert.match(f.client.render(f.c.inspirations[0],'persona'),/button.*retry/);
+});
+test('complete needs-review results retry only on explicit action and preserve product scope', async () => {
+  const f=clientFixture(); await f.client.pump();
+  f.jobs[0].result.persona={decision:'needs_review',reason:'No quote',evidence:[],confidence:0};
+  assert.match(f.client.render(f.c.inspirations[0],'persona'),/Needs source review - Retry/);
+  await f.client.pump(); assert.equal(f.calls.length,1);
+  await f.client.retry(ins.id);
+  assert.equal(f.calls.length,2);assert.equal(f.calls[1].args.p_retry,true);
+  assert.equal(f.calls[1].args.p_product_id,'quilt');assert.deepEqual(f.applied,[]);
 });
 test('only four current-product review jobs are queued at a time', async () => {
   const f=clientFixture();

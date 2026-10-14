@@ -3,6 +3,13 @@ import {REVIEW_VERSION, reviewInput, evidenceFor, validateAssessment, normalized
 const eligible = new Set(['Classified','Approved','Testing','Winner','Mild Winner','Scale','Placed']);
 const escape = value => String(value || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const stable = value => JSON.stringify(value);
+// JSONB does not preserve object key order; arrays and source text remain exact.
+function canonical(value) {
+  if (Array.isArray(value)) return value.map(canonical);
+  if (value && typeof value === 'object') return Object.fromEntries(Object.keys(value).sort().map(key => [key, canonical(value[key])]));
+  return value;
+}
+const sameEvidence = (a, b) => stable(canonical(a)) === stable(canonical(b));
 const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 async function request(query) {
@@ -38,7 +45,7 @@ export function createReviewClient({context, paint, apply, confirm, notify, late
   }
   function assessment(ins, kind) {
     const c = current(), entry = entryFor(ins), result = entry?.job?.result;
-    if (!c || entry?.job?.status !== 'complete' || !result || result.version !== REVIEW_VERSION || result.productId !== c.product.id || result.insId !== ins.id || result.productName !== c.product.name || stable(result.evidence) !== stable(evidenceFor(ins))) return null;
+    if (!c || entry?.job?.status !== 'complete' || !result || result.version !== REVIEW_VERSION || result.productId !== c.product.id || result.insId !== ins.id || result.productName !== c.product.name || !sameEvidence(result.evidence, evidenceFor(ins))) return null;
     return validateAssessment(result[kind], kind, inputFor(c, ins));
   }
   function queue() {
@@ -95,7 +102,7 @@ export function createReviewClient({context, paint, apply, confirm, notify, late
     } finally {
       if (valid(c) && changed) paint();
       running = false;
-      const unvisited = valid(c) && c.inspirations.some(i => eligible.has(i.status) && (!i.product_id || i.product_id === c.product.id) && !rows.has(i.id));
+      const unvisited = valid(c) && c.inspirations.some(i => eligible.has(i.status) && (!i.product_id || i.product_id === c.product.id) && rows.get(i.id)?.inputText !== stable(inputFor(c, i)));
       if (valid(c) && (unvisited || [...rows.values()].some(e => !e.error && ['pending','running'].includes(e.job?.status)))) {
         if (!timer) timer = later(() => {timer = null; pump();}, 5000);
       }
@@ -105,14 +112,14 @@ export function createReviewClient({context, paint, apply, confirm, notify, late
   async function retry(id) {
     const c = current(), ins = c?.inspirations.find(i => i.id === id), entry = ins && entryFor(ins);
     if (!c || !ins) return;
-    if (entry?.job?.status === 'failed') {
+    if (entry && ['failed','complete'].includes(entry.job?.status)) {
       let response;
       try {response = await request(c.sb.rpc('request_taxonomy_review', {p_product_id:c.product.id, p_ins_id:id, p_signature:entry.hash, p_retry:true}));}
       catch (_) {notify('Review request timed out. Retry when the connection is available.'); return;}
       if (!valid(c)) return;
       if (response.error) {notify('Could not retry the review. Check the Mac mini worker.'); return;}
       const job = Array.isArray(response.data) ? response.data[0] : response.data;
-      if (!job || job.product_id !== c.product.id || job.ins_id !== id) return;
+      if (!job || job.product_id !== c.product.id || job.ins_id !== id || job.requested_signature !== entry.hash) return;
       entry.job = job; entry.error = '';
     } else if (entry) {
       entry.error = '';
@@ -141,8 +148,8 @@ export function createReviewClient({context, paint, apply, confirm, notify, late
     } else if (entry?.job?.status === 'running') label = 'Reviewing on Mac mini';
     else if (entry?.job?.status === 'pending') label = 'Queued on Mac mini';
     else if (entry?.job?.status === 'complete') {
-      if (!result) {label = 'Evidence changed - re-review'; title = 'Reload this product to review the latest saved evidence.';}
-      else if (result.decision === 'needs_review') {label = 'Needs source review'; title = result.reason;}
+      if (!result) {label = 'Evidence changed - re-review'; title = 'Review the latest saved evidence on the Mac mini.'; action = 'retry';}
+      else if (result.decision === 'needs_review') {label = 'Needs source review - Retry'; title = result.reason; action = 'retry';}
       else if (normalizedName(result.name) === normalizedName(ins[kind])) {label = 'Match confirmed'; title = result.reason;}
       else {label = (result.isNew ? 'New: ' : 'Suggested: ') + result.name; title = result.reason + '\n' + result.productReason; action = 'accept';}
     }

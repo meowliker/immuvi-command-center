@@ -7,7 +7,7 @@ const aliases = {hookText:'hook_text', bodyCopy:'body_text', adCopy:'ad_copy', c
 function text(value) {
   if (typeof value === 'string') return value.replace(/<br\s*\/?\s*>/gi, '\n').replace(/<[^>]*>/g, '').trim();
   if (Array.isArray(value)) return value.map(text).filter(Boolean).join('\n');
-  if (value && typeof value === 'object') return ['text', 'caption', 'spoken', 'description', 'what_happens'].map(k => text(value[k])).filter(Boolean).join(' ');
+  if (value && typeof value === 'object') return ['text', 'caption', 'spoken', 'voice_over', 'description', 'what_happens'].map(k => text(value[k])).filter(Boolean).join(' ');
   return '';
 }
 
@@ -62,7 +62,12 @@ export function validateAssessment(raw, kind, input) {
   const confidence = Number(raw.confidence);
   if (!Number.isFinite(confidence) || confidence < 0.8 || confidence > 1) return needsReview(text(raw.reason).slice(0, 700) || undefined);
   const fields = {...input.inspiration.evidence.source, ...input.inspiration.evidence.observations};
-  const evidence = (Array.isArray(raw.evidence) ? raw.evidence : []).filter(e =>
+  const evidence = (Array.isArray(raw.evidence) ? raw.evidence : []).map(e => {
+    // Accept only known source paths, never arbitrary suffixes or fuzzy quotes.
+    if (!e || typeof e.field !== 'string') return e;
+    const match = /^(?:inspiration\.evidence\.|evidence\.)?(source|observations)\.([A-Za-z]+)$/.exec(e.field);
+    return match && Object.hasOwn(input.inspiration.evidence[match[1]], match[2]) ? {...e, field:match[2]} : e;
+  }).filter(e =>
     e && typeof e.field === 'string' && typeof e.quote === 'string' && e.quote.trim().length >= 8 && fields[e.field]?.includes(e.quote.trim())
   ).slice(0, 3).map(e => ({field:e.field, quote:e.quote.trim().slice(0, 500)}));
   if (!evidence.length) return needsReview('No verifiable supporting quote was found in the saved creative evidence.');
@@ -88,11 +93,11 @@ Evaluate angle and persona independently. An ANGLE is the central persuasive pro
 Compare ALL active candidates for THIS product by meaning. The current correct category is a valid answer. Reuse existing only when its defining meaning fits without unsupported traits. Do not force the nearest/broadest category. Ignore incidental ages, plural/singular, status badges and synonyms when buyer/job/motivation are equivalent. Preserve important differences, such as parent purchasing for a child versus teacher purchasing for a classroom. Existing names are hypotheses, not evidence about this creative.
 If no existing candidate fits, propose a concise reusable new category and explain the meaningful difference from the closest candidate. Reuse proposedCandidates names for equivalent creatives only after independently checking this source. These are unapproved proposals, not evidence. Never create an age-only near-duplicate. Do not absorb different buyer motivations into a generic category just to avoid creating one.
 The owning product is authoritative. Source ads may be imported references from another category. Do NOT copy a foreign product-specific persona into this product. Use supported_adaptation only when evidence and the product offer establish a clear transferable buyer/job or mechanism; explain that bridge. Never pretend a source ad was about this product. If no supported mapping exists, return needs_review for that axis.
-For EACH proposed axis quote exact text from that inspiration's source fields, not taxonomy notes or a different creative, and explain why it supports the recommendation. If evidence is thin, contradictory, only generic offer text or insufficient to decide, use needs_review. Confidence must be at least .80 for an actionable suggestion. Never decide from current assignments or generated scripts.`;
+For EACH proposed axis quote exact text from that inspiration's source fields, not taxonomy notes or a different creative, and explain why it supports the recommendation. Each evidence.field MUST be the exact bare field name (for example voiceOver or captionTranscript), not a JSON path. Copy an exact contiguous quote of 8-500 characters, preserving case and punctuation; do not paraphrase, translate or combine separated excerpts. If evidence is thin, contradictory, only generic offer text or insufficient to decide, use needs_review. Confidence must be at least .80 for an actionable suggestion. Never decide from current assignments or generated scripts.`;
 
 const axisSchema = {type:'object', additionalProperties:false, required:['decision','existingId','name','reason','distinctReason','productFit','productReason','confidence','evidence'], properties:{
   decision:{type:'string', enum:['existing','new','needs_review']}, existingId:{type:'string'}, name:{type:'string'}, reason:{type:'string'}, distinctReason:{type:'string'},
   productFit:{type:'string', enum:['direct','supported_adaptation','unsupported']}, productReason:{type:'string'}, confidence:{type:'number'},
-  evidence:{type:'array', items:{type:'object', additionalProperties:false, required:['field','quote'], properties:{field:{type:'string'}, quote:{type:'string'}}}}
+  evidence:{type:'array', items:{type:'object', additionalProperties:false, required:['field','quote'], properties:{field:{type:'string',enum:[...sourceFields,...observationFields]}, quote:{type:'string'}}}}
 }};
 export const REVIEW_SCHEMA = {type:'object', additionalProperties:false, required:['angle','persona'], properties:{angle:axisSchema, persona:axisSchema}};

@@ -22777,7 +22777,7 @@ function apOpenTagDropdown(triggerBtn) {
   setTimeout(function () {
     document.addEventListener('mousedown', _apTagPopOutsideClick, true);
     document.addEventListener('keydown', _apTagPopKeyDown, true);
-    window.addEventListener('scroll', apCloseTagDropdown, true);
+    window.addEventListener('scroll', _apTagPopScroll, true);
     window.addEventListener('resize', apCloseTagDropdown);
   }, 0);
 }
@@ -22890,6 +22890,15 @@ function _apTagPopOutsideClick(e) {
   apCloseTagDropdown();
 }
 
+function _apTagPopScroll(e) {
+  var panel = _apTagPopState.panel;
+  if (!panel) return;
+  // Scroll events are captured at window. Keep the picker open when its own
+  // option list scrolls; close only when the page or an ancestor moves.
+  if (e && e.target && (e.target === panel || panel.contains(e.target))) return;
+  apCloseTagDropdown();
+}
+
 function _apTagPopKeyDown(e) {
   if (!_apTagPopState.panel) return;
   if (e.key === 'Escape') {
@@ -22920,7 +22929,7 @@ function apCloseTagDropdown() {
   _apTagPopState = { panel: null, trigger: null, options: [], adId: null, fieldKey: null, current: null, kbdIdx: -1, filter: '' };
   document.removeEventListener('mousedown', _apTagPopOutsideClick, true);
   document.removeEventListener('keydown', _apTagPopKeyDown, true);
-  window.removeEventListener('scroll', apCloseTagDropdown, true);
+  window.removeEventListener('scroll', _apTagPopScroll, true);
   window.removeEventListener('resize', apCloseTagDropdown);
 }
 

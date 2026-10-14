@@ -22,6 +22,32 @@ def ad(identity, **snapshot):
 
 
 class FacebookEvidenceTests(unittest.TestCase):
+    def test_music_only_full_brief_contract_keeps_narration_guards(self):
+        for mode in (False, True):
+            text = worker.narration_presence_contract({'no_brief': mode})
+            for required in ['nonempty transcript', 'complete normal brief',
+                             'No Brief is NOT required', 'Never infer absence from ASR failure alone',
+                             'genuine narration is present but unclear']:
+                self.assertIn(required, text)
+
+    def test_user_audio_confirmation_requires_exact_source_product_and_identity(self):
+        job = {'ins_id':'KMH-INS-219', 'product_id':'kids', 'url':'https://facebook.com/ads/library/?id=1'}
+        review = {'source_url':job['url'], 'has_ad_narration':False,
+                  'audio_type':'music_only', 'verification_source':'user_confirmation'}
+        row = {'id':job['ins_id'], 'product_id':'kids', 'url':job['url'], 'source_audio_review':review}
+        self.assertIn('SOURCE-SCOPED USER CONFIRMATION', worker.narration_presence_contract(job,row))
+        for field, value in [('id','other'),('product_id','other'),('url','https://other')]:
+            self.assertNotIn('SOURCE-SCOPED USER CONFIRMATION', worker.narration_presence_contract(job,{**row,field:value}))
+        for field, value in [('source_url','https://other'),('has_ad_narration','false'),
+                             ('has_ad_narration',True),('verification_source','asr_failed')]:
+            self.assertNotIn('SOURCE-SCOPED USER CONFIRMATION',worker.narration_presence_contract(job,{**row,'source_audio_review':{**review,field:value}}))
+
+    def test_skill_does_not_promote_asr_fragments_to_verified_speech(self):
+        skill=(ROOT/'team-skill/SKILL.md').read_text()
+        self.assertNotIn('probe["has_voice"] = bool(transcript)',skill)
+        self.assertIn('probe["asr_text_detected"] = bool(transcript)',skill)
+        self.assertIn('probe["narration_review_required"] = True',skill)
+
     def test_checksum_failure_uses_one_isolated_verified_retry(self):
         whisper = Mock()
         model = object()

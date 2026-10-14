@@ -127,6 +127,24 @@ and clearly distinguish the three proposed product scripts from source facts.
 Do not add new master angles/personas or touch other jobs/briefs. Reuse only
 genuinely matching target-product taxonomy; keep new suggestions local.
 
+### Establish narration presence before transcription
+
+Music-only, ambient-audio and silent videos remain eligible for the complete
+normal brief. No Brief is not required. An audio stream or a nonempty Whisper
+result is NOT proof of spoken ad narration: ASR can hallucinate fragments from
+music. Before escalating to larger models or AUDIO_TRANSCRIPT_UNVERIFIED,
+establish whether genuine ad narration actually exists. Use source audio review
+or exact-source user confirmation, and record which method supports the decision.
+Never infer absence of narration from ASR failure alone.
+
+For confirmed no-narration media, write exactly `No voice over`, an empty
+voice-over timeline, `audioProbe.has_voice=false` and the actual audio type.
+Build classification, the full brief and the reference-faithful script from
+inspected visual beats, complete on-screen text/timings and actual source copy.
+Do not turn visible text or song lyrics into claimed spoken narration. Preserve
+the selected No Brief setting. If genuine narration exists but is unclear, the
+existing transcript-verification guard still applies.
+
 ### No Brief / classification-only contract
 
 Read `inspiration_queue.no_brief` for each item. Only boolean `true` enables
@@ -370,7 +388,10 @@ def probe_and_transcribe_audio(video_path, work_dir):
 
     transcript, timeline, source = transcribe_audio(wav)
     probe["transcript_source"] = source
-    probe["has_voice"] = bool(transcript) if transcript else None
+    # ASR output is a candidate, not a speech/narration detector.
+    probe["has_voice"] = None
+    probe["asr_text_detected"] = bool(transcript)
+    probe["narration_review_required"] = True
     return probe, transcript, timeline
 
 def download_ytdlp(url, outdir):

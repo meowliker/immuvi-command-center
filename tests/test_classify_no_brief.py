@@ -38,6 +38,15 @@ class NoBriefTests(unittest.TestCase):
         self.assertTrue(self.verify(False)[0])
         self.worker._verify_clickup_brief_page.assert_called_once()
 
+    def test_music_only_with_screen_text_is_eligible_for_a_full_brief(self):
+        self.data.update(noBrief=False,voiceOver='No voice over',voiceOverTimeline=[],
+                         audioProbe={'has_audio':True,'has_voice':False,'audio_type':'music_only'},
+                         captionTranscript='Real visible text',captionTimeline=[{'time':'0:00-0:02','text':'Real visible text'}],
+                         _clickupDocPageUrl='https://app.clickup.com/doc',
+                         nextAdScripts=[{'script_breakdown':[{'time':'0:00'}]} for _ in range(3)])
+        self.assertTrue(self.verify(False)[0])
+        self.worker._verify_clickup_brief_page.assert_called_once()
+
     def test_mode_must_be_persisted(self):
         self.data.pop("noBrief")
         self.assertFalse(self.verify()[0])

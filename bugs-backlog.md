@@ -2722,3 +2722,12 @@ and provide explicit bounded re-review for completed or failed jobs. Citation
 field names are constrained and original voice-over timeline text is included.
 No automatic taxonomy creation, label updates, or brief regeneration.
 See `docs/repairs/2026-10-14-taxonomy-review.md` for scope and verification.
+
+## Music-only videos incorrectly blocked for transcription (2026-10-14)
+
+The skill inferred has_voice from any nonempty Whisper output. Music can produce
+hallucinated fragments, which must not force narration retries or block full
+briefs. Establish narration presence separately; confirmed music-only videos
+use No voice over and visual/on-screen text breakdowns. Genuine unclear speech
+still requires verification. Exact-source user confirmations are scoped by
+product, inspiration ID and URL. No Brief mode is never silently switched.

@@ -22,9 +22,32 @@ still fail. Original voice_over timeline segments now participate in evidence.
 - Mirror the shared core across browser and Mac mini distributions.
 
 KMH-INS-219 and KMH-INS-220 were blocked by unverified audio transcription with
-briefs enabled. Neither has a saved result. They remain preserved pending source
-media/transcripts or explicit permission for No Brief classification. Do not
-silently switch modes or remove narration verification from full briefs.
+briefs enabled. The user subsequently confirmed that both exact source videos
+have music and on-screen text, not spoken narration. Brief mode remains enabled.
+
+## Follow-up: missing cell and music-only sources
+
+KMH-INS-216 also had a blank saved angle. A rollback-tested, source-grounded
+repair selected the existing Dysregulated Kids category and retained its exact
+existing stressed-parent persona. Pending review entries were completed as
+explicit manual-source-review results with exact source quotes, not claimed as
+Mac mini output. Only its data.angle changed; briefs/scripts, other inspirations,
+creatives, assignments, master categories and queues were fingerprint-verified
+unchanged. Private backup: /private/tmp/immuvi-kmh216-cell-1791959206014.
+
+The audio helper incorrectly assigned has_voice=bool(transcript), which treats
+ASR hallucinations over music as verified speech. It now marks ASR output as a
+candidate requiring narration review. The worker explicitly separates narration
+presence from transcription success, accepts confirmed music-only sources for
+full visual/text-led briefs, and preserves the unknown-narration failure guard.
+Exact-source user confirmation is allowlisted and scoped to inspiration ID,
+product and URL; it cannot carry arbitrary prompt instructions. No Brief remains
+an independent setting. These two confirmations were saved with private backups
+under /private/tmp/immuvi-kmh-music-1791959368603 before any retry.
+
+The follow-up passes 280 Node and 54 Python tests, including music-only full
+brief acceptance, exact-source confirmation isolation and all previous unknown
+audio/No Brief guards. No QA changes or master taxonomy creation are involved.
 
 ## Separate requested restoration
 

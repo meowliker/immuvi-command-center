@@ -102,6 +102,44 @@ CODEX_BIN_CANDIDATES = [
 ]
 
 
+def narration_presence_contract(job, row=None):
+    contract = (
+        "\nNARRATION PRESENCE BEFORE TRANSCRIPTION (all platforms and both brief modes):\n"
+        "An audio stream is not proof of ad narration. Whisper can hallucinate words from music; "
+        "a nonempty transcript, repetition or unreliable fragments do not establish speech. "
+        "First distinguish spoken ad narration from music, song lyrics, ambient sound and silence. "
+        "For confirmed music-only/ambient/silent media with no ad narration, use exactly "
+        "'No voice over', voice_over_timeline=[], audio_probe.has_voice=false, and record the "
+        "actual audio_type and verification source. Classify from inspected frames, timed on-screen "
+        "text and real ad copy. When no_brief=false, produce the complete normal brief and three "
+        "scripts using the visible-text/visual beat sequence; keep the reference-faithful script "
+        "overlay-led rather than inventing source narration. No Brief is NOT required for this. "
+        "Do not run larger ASR models or emit AUDIO_TRANSCRIPT_UNVERIFIED solely because music "
+        "produced unreliable fragments. If genuine narration is present but unclear, preserve "
+        "the existing transcript-verification guard. Never infer absence from ASR failure alone.\n"
+    )
+    row = row if isinstance(row, dict) else {}
+    review = row.get("source_audio_review")
+    if (row.get("id") == job.get("ins_id") and row.get("product_id") == job.get("product_id")
+            and row.get("url") == job.get("url") and isinstance(review, dict)
+            and review.get("source_url") == job.get("url")
+            and review.get("has_ad_narration") is False
+            and review.get("audio_type") == "music_only"
+            and review.get("verification_source") == "user_confirmation"):
+        contract += (
+            "SOURCE-SCOPED USER CONFIRMATION: the user has reviewed this exact source and "
+            "confirmed music plus on-screen text, with no spoken ad narration. Use this as "
+            "user-confirmed audio evidence, not an independently heard transcript. Do not rerun "
+            "ASR to invent speech. Verify the exact target media and read its full on-screen text; "
+            "record audio_type='music_only', has_voice=false and "
+            "verification_source='user_confirmation' in audioProbe/metadata.audio_probe. "
+            "Preserve sourceAudioReview, ID, source URL and the existing No Brief setting. "
+            "If actual source evidence contradicts the confirmation, report that conflict instead "
+            "of guessing.\n"
+        )
+    return contract
+
+
 def facebook_source_contract(job):
     source = urllib.parse.urlparse(job.get("url") or "")
     host = (source.hostname or "").lower()
@@ -462,6 +500,7 @@ def probe_capabilities() -> dict:
         "worker_contract": "inspiration-brief-8-section-page-verified",
         "classification_only": True,
         "classification_only_evidence": "optional-narration-v1",
+        "narration_presence": "music-aware-v1",
         "reddit_text": "reddit-text-v1",
         "facebook_evidence": "exact-ad-v1",
         "classification_lease": "agent-timeout-v1",
@@ -1864,8 +1903,8 @@ class Worker:
             f"  2. Download the ad media (Playwright only for Facebook Ad Library; non-browser downloader chain for TikTok; yt-dlp/helper chain for IG/other video URLs).\n"
             f"     Never try to download TikTok through a browser UI. For ads.tiktok.com Creative Center/topads links, use the skill helper's Creative Center SSR signed-MP4 resolver.\n"
             f"     Record factual mediaKind/media_kind from the downloaded media: video, image, or carousel.\n"
-            f"  3. Extract frames plus audio via ffmpeg. Run Whisper/local transcription when available and use that transcript as the only source for voice_over.\n"
-            f"     If Python cannot import whisper, install it first with: python3 -m pip install --user -U openai-whisper. Then rerun transcription before writing the brief.\n"
+            f"  3. Extract frames plus audio via ffmpeg. Establish whether genuine ad narration exists before running Whisper. Music-only, ambient or silent videos still receive full briefs from their visuals/on-screen text. Never infer speech from nonempty ASR output alone.\n"
+            f"     Only when actual narration needs transcription, use Whisper/local transcription and verify the spoken words. If needed, install with: python3 -m pip install --user -U openai-whisper.\n"
             f"  4. Visually classify (ALL 9 are MANDATORY — none may be blank):\n"
             f"       hook_type, creative_structure, production_style, funnel_type,\n"
             f"       persona, angle, ad_type, brand, media_kind.\n"
@@ -1957,6 +1996,14 @@ class Worker:
             prompt = classification_only_prompt(job)
         prompt += reddit_source_contract(job)
         prompt += facebook_source_contract(job)
+        audio_row = None
+        try:
+            audio_rows = self.sb.select("inspirations", f"id=eq.{ins_id}&product_id=eq.{product_id}&select=id,product_id,url,source_audio_review:data->sourceAudioReview")
+            audio_row = audio_rows[0] if audio_rows else None
+        except Exception:
+            # Missing confirmation never authorizes guessing that speech is absent.
+            pass
+        prompt += narration_presence_contract(job, audio_row)
 
         # Auto-route: use the configured/preferred agent first, but if that
         # installed agent is logged out (Claude 401, stale credentials, etc.),

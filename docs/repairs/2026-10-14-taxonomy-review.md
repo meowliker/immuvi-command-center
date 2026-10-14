@@ -49,6 +49,27 @@ The follow-up passes 280 Node and 54 Python tests, including music-only full
 brief acceptance, exact-source confirmation isolation and all previous unknown
 audio/No Brief guards. No QA changes or master taxonomy creation are involved.
 
+## Verified production outcome
+
+Production release de8a7a9 served byte-identical worker/skill assets. The Mac
+mini advertised music-aware-v1 before the two exact jobs were retried once.
+Both finished classified on attempt 2, with no error, no_brief=false, one result
+each, No voice over, user-confirmed music-only provenance and three scripts.
+The actual ClickUp pages were independently read through the existing API and
+contain all eight sections and timed visual/text-led breakdowns:
+
+- KMH-INS-219: page 8cq1r3y-125476, Study Claim to Family Checklist.
+- KMH-INS-220: page 8cq1r3y-125456, Tried-Everything Static Testimonial.
+
+Both reuse ADHD Kids. Parents Seeking ADHD Support remains a local proposal
+with persona_needs_review=true; no master persona was created. Source IDs,
+URLs and brief mode were retained. Durable private rollback and verification
+snapshots: /Users/anaytripathy/.codex/backups/immuvi-kmh-20261014.
+
+KMH-INS-216's live repaired record and review were additionally passed through
+the deployed review client without browser use: both axes return Match confirmed
+and the drawer's required angle/persona values are nonempty.
+
 ## Separate requested restoration
 
 AR-391-INS-247 remained a Winner with an intact cell assignment. Restored only

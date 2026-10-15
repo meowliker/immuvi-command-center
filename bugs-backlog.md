@@ -2739,3 +2739,14 @@ M-INS-181 Failed without any result. Recognize specific CLI service failures,
 pause dispatch for the existing cooldown, and return only the matching claim
 to pending without consuming a content attempt. Preserve source/media errors
 and authentication checks. See the M-INS-181 repair record for verification.
+
+## ClickUp Product dropdown ownership (2026-10-15)
+
+Product fields could swap labels through cached numeric dropdown positions,
+source-task Product inheritance, fuzzy matching and delayed global field maps.
+Use stable option UUIDs and captured ownership; the server must validate the
+actual ClickUp list before any Product write, including requests from older tabs.
+Never infer a product move or revive taxonomy from an incorrect external label.
+Confirmed repairs are Product-only and require private before/after backups.
+Ambiguous historical labels and shared-list placeholders remain for review.
+See `docs/repairs/2026-10-15-clickup-product-ownership.md` for scope and rollback.

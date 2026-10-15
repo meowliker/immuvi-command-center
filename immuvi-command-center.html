@@ -11624,6 +11624,9 @@ function _convertProductRow(p) {
     name: p.name,
     clickupListId: c.clickup_list_id || '',
     clickupListName: c.clickup_list_name || '',
+    clickupProductName: c.clickup_product_name || '',
+    clickupProductOptionId: c.clickup_product_option_id || '',
+    clickupProductFieldId: c.clickup_product_field_id || '',
     color: c.color || '',
     insPrefix: c.ins_prefix || '',
     createdAt: c.created_at_ms || null,
@@ -11658,6 +11661,9 @@ function _productFieldsDiffer(a, b) {
   return a.name !== b.name ||
          a.clickupListId !== b.clickupListId ||
          a.clickupListName !== b.clickupListName ||
+         a.clickupProductName !== b.clickupProductName ||
+         a.clickupProductOptionId !== b.clickupProductOptionId ||
+         a.clickupProductFieldId !== b.clickupProductFieldId ||
          a.color !== b.color ||
          a.insPrefix !== b.insPrefix;
 }
@@ -12983,6 +12989,9 @@ const DB = {
         name: p.name,
         clickupListId: c.clickup_list_id || '',
         clickupListName: c.clickup_list_name || '',
+        clickupProductName: c.clickup_product_name || '',
+        clickupProductOptionId: c.clickup_product_option_id || '',
+        clickupProductFieldId: c.clickup_product_field_id || '',
         color: c.color || '',
         insPrefix: c.ins_prefix || '',
         createdAt: c.created_at_ms || null,
@@ -14277,25 +14286,31 @@ function _oneScaleEnsureLaunchTaskFields(task, sourceAd, visibleTaskName) {
   return fields;
 }
 
-function _clickUpProductNameForTask(task, sourceAd) {
-  task = task || {};
-  sourceAd = sourceAd || {};
-  var activeProduct = (typeof getActiveProduct === 'function') ? getActiveProduct() : null;
-  var mapping = (typeof _oneScaleMappingForTask === 'function') ? _oneScaleMappingForTask(task, sourceAd) : null;
-  var cfgProduct = activeProduct && activeProduct.config && activeProduct.config.production;
-  return String(_oneScaleFirstValue(
-    task.oneScaleProductName,
-    sourceAd.oneScaleProductName,
-    task.productName,
-    sourceAd.productName,
-    task.product,
-    sourceAd.product,
-    task.productProfileName,
-    sourceAd.productProfileName,
-    cfgProduct && (cfgProduct.product_name || cfgProduct.productName),
-    mapping && mapping.productName,
-    activeProduct && activeProduct.name
-  ) || '').trim();
+function _clickUpProductNameForTask(task, sourceAd, owner) {
+  owner = owner || getActiveProduct();
+  var config = owner && owner.config || {};
+  var production = config.production || {};
+  return String((owner && owner.clickupProductName) || config.clickup_product_name || production.product_name || production.productName || (owner && owner.name) || '').trim();
+}
+
+function _clickUpProductWriteContext(owner) {
+  owner = owner || getActiveProduct();
+  return { productId: owner && owner.id, apiKey: CFG.key,
+    product: JSON.parse(JSON.stringify(owner || {})),
+    fieldMap: JSON.parse(JSON.stringify(getActiveFieldMap() || {})) };
+}
+
+function _clickUpProductOptionForOwner(field, context) {
+  var config = context.product.config || {};
+  var options = field.options || [];
+  var name = _clickUpProductNameForTask(null, null, context.product);
+  var optionId = context.product.clickupProductOptionId || config.clickup_product_option_id;
+  var normalize = function(s) { return String(s || '').normalize('NFKC').toLowerCase().replace(/[^\p{L}\p{N}]/gu, ''); };
+  var matches = options.filter(function(o) {
+    return optionId ? o.id === optionId : normalize(o.name) === normalize(name);
+  });
+  if (matches.length !== 1 || !matches[0].id) throw new Error('Product mapping needs review. Refresh before trying again.');
+  return matches[0];
 }
 
 function validateOneScaleLaunchTasks(tasks) {
@@ -28746,7 +28761,9 @@ function _seedCuRawFromTypedFields(ad) {
       for (var i = 0; i < opts.length; i++) {
         if ((opts[i].name || '').trim().toLowerCase() === String(val).trim().toLowerCase()) {
           // raw value Pass 2 expects = orderindex (number)
-          if (typeof opts[i].orderindex === 'number') {
+          if (lcName === 'product' && opts[i].id) {
+            seed[lcName] = opts[i].id;
+          } else if (typeof opts[i].orderindex === 'number') {
             seed[lcName] = opts[i].orderindex;
           } else if (opts[i].id) {
             seed[lcName] = opts[i].id;
@@ -29127,6 +29144,7 @@ function createClickUpTaskFromAction(actionId, onDone, sourceAdOverride) {
   }
   if (act._clickupId) { toast('Already in ClickUp', 'warn'); return; }
   var activeProd = getActiveProduct();
+  var productWriteContext = _clickUpProductWriteContext(activeProd);
   var listId = activeProd && activeProd.clickupListId;
   if (!listId) { toast('Link a ClickUp list first', 'err'); return; }
   var needsFieldSchema = !getActiveFieldMap() ||
@@ -29137,6 +29155,7 @@ function createClickUpTaskFromAction(actionId, onDone, sourceAdOverride) {
     toast('Loading ClickUp fields for this product…', 'info');
     fetchAndStoreFieldMap(listId).then(function (map) {
       act._cu_fieldmap_loading = false;
+      if (activeProductId !== productWriteContext.productId) return;
       if (!map || !Object.keys(map).length) {
         toast('Could not load ClickUp fields for this list. Sync/setup fields first, then try again.', 'err');
         return;
@@ -29336,6 +29355,7 @@ function createClickUpTaskFromAction(actionId, onDone, sourceAdOverride) {
       if (seenIds[meta.fieldId]) return; // already in the legacy payload
       var raw = sourceAd._customFieldsRaw[lcName];
       var lcClean = String(lcName || '').toLowerCase().trim();
+      if (['product', 'product name', 'product profile', 'product profile name'].indexOf(lcClean) !== -1) return;
       if ((lcClean === 'angle tag' || lcClean === 'angle' || lcClean === 'ad angle') && pushIdentity.angle) {
         raw = pushIdentity.angle;
       }
@@ -29481,7 +29501,19 @@ function createClickUpTaskFromAction(actionId, onDone, sourceAdOverride) {
     : _desiredCuStatus;
   if (_initCuStatus) createPayload.status = _initCuStatus;
 
-  apiCreateTask(listId, createPayload)
+  var productField = productWriteContext.fieldMap.productName;
+  if (productField) {
+    try {
+      var productOption = _clickUpProductOptionForOwner(productField, productWriteContext);
+      createPayload.custom_fields = (createPayload.custom_fields || []).filter(function(f) { return f.id !== productField.fieldId; });
+      createPayload.custom_fields.push({ id: productField.fieldId, value: productOption.id });
+    } catch (productError) {
+      act._cu_creating = false;
+      toast(productError.message, 'err');
+      return;
+    }
+  }
+  apiCreateTask(listId, createPayload, productWriteContext)
   .then(async function(resp) {
     if (!resp || !resp.id) { throw new Error('No task ID returned'); }
 
@@ -29575,7 +29607,7 @@ function createClickUpTaskFromAction(actionId, onDone, sourceAdOverride) {
       });
 
       var doFieldPushes = function() {
-        var fieldMap = getActiveFieldMap();
+        var fieldMap = productWriteContext.fieldMap;
         console.log('[fieldSync] fieldMap keys:', fieldMap ? Object.keys(fieldMap) : 'NULL');
         fieldsToSync.forEach(function(pair, idx) {
           var fieldKey = pair[0];
@@ -29583,20 +29615,21 @@ function createClickUpTaskFromAction(actionId, onDone, sourceAdOverride) {
           if (!value) { console.log('[fieldSync] skip', fieldKey, '(empty)'); return; }
           setTimeout(function() {
             console.log('[fieldSync] pushing', fieldKey, '=', value, '→ task', newId);
-            pushFieldToClickUp(pushProxy, fieldKey, value)
+            pushFieldToClickUp(pushProxy, fieldKey, value, productWriteContext)
               .then(function(){ console.log('[fieldSync] ✓', fieldKey); })
               .catch(function(e){ console.warn('[fieldSync] ✗', fieldKey, e && e.message); });
           }, idx * 150);
         });
       };
 
-      var existingMap = getActiveFieldMap();
+      var existingMap = productWriteContext.fieldMap;
       var needsProductMapRefresh = !!(clickUpProductName && existingMap && !existingMap.productName);
       if (existingMap && Object.keys(existingMap).length > 0 && !needsProductMapRefresh) {
         doFieldPushes();
       } else {
         console.log('[fieldSync] Field map missing/stale — fetching from ClickUp first...');
-        fetchAndStoreFieldMap(listId).then(function() {
+        fetchAndStoreFieldMap(listId, productWriteContext).then(function(map) {
+          if (map) productWriteContext.fieldMap = map;
           console.log('[fieldSync] Field map loaded, pushing fields...');
           doFieldPushes();
         }).catch(function() {
@@ -30090,6 +30123,8 @@ function apiFetch(path, opts) {
     'Authorization': opts.apiKey || CFG.key,
     'Content-Type': 'application/json'
   };
+  if (opts.productId) headers['X-Immuvi-Product-Id'] = opts.productId;
+  if (opts.productFieldId) headers['X-Immuvi-Product-Field'] = opts.productFieldId;
   var fetchOpts = {
     method: opts.method || 'GET',
     headers: headers
@@ -30139,7 +30174,7 @@ function apiFetch(path, opts) {
   });
 }
 
-function apiCreateTask(listId, taskPayload) {
+function apiCreateTask(listId, taskPayload, context) {
   // taskPayload: { name, description, due_date, priority, custom_fields, tags, assignees, status }
   var body = { name: taskPayload.name || taskPayload };
   if (taskPayload.description) body.description = taskPayload.description;
@@ -30158,7 +30193,8 @@ function apiCreateTask(listId, taskPayload) {
   if (Array.isArray(taskPayload.assignees) && taskPayload.assignees.length) {
     body.assignees = taskPayload.assignees;
   }
-  return apiFetch('/list/' + listId + '/task', { method: 'POST', body: body });
+  return apiFetch('/list/' + listId + '/task', { method: 'POST', body: body,
+    apiKey: context && context.apiKey, productId: context && context.productId });
 }
 
 function apiUpdateTask(taskId, updates) {
@@ -30238,12 +30274,13 @@ function setupClickUpFields() {
   openModal('Setup ClickUp Fields', body, foot);
 }
 
-function fetchAndStoreFieldMap(listId) {
+function fetchAndStoreFieldMap(listId, context) {
   if (!CFG.key || !listId || !activeProductId) return Promise.resolve();
-  var productIdForMap = activeProductId;
-  return apiFetch('/list/' + listId + '/field').then(function(data) {
+  var productIdForMap = context ? context.productId : activeProductId;
+  var keyForMap = context ? context.apiKey : CFG.key;
+  return apiFetch('/list/' + listId + '/field', { apiKey: keyForMap }).then(function(data) {
     var fields = (data && data.fields) ? data.fields : [];
-    if (typeof _installClickUpFieldSchemaFromList === 'function') {
+    if (activeProductId === productIdForMap && typeof _installClickUpFieldSchemaFromList === 'function') {
       _installClickUpFieldSchemaFromList(listId, fields);
     }
     var map = {};
@@ -30316,7 +30353,9 @@ function fetchAndStoreFieldMap(listId) {
     PRODUCT_FIELD_MAPS[productIdForMap] = map;
     saveFieldMaps();
     // Auto-push any values that were pending because options didn't exist before
-    setTimeout(flushPendingFieldPushes, 500);
+    if (activeProductId === productIdForMap) setTimeout(function() {
+      if (activeProductId === productIdForMap) flushPendingFieldPushes();
+    }, 500);
     return map;
   }).catch(function() { return null; });
 }
@@ -30378,9 +30417,11 @@ function fetchAllTasks(listId) {
 }
 
 // Low-level: set a single ClickUp custom field on a task.
-function _setTaskField(adClickupId, fieldId, payload, adId) {
+function _setTaskField(adClickupId, fieldId, payload, adId, context, isProduct) {
   return apiFetch('/task/' + adClickupId + '/field/' + fieldId, {
-    method: 'POST', body: payload
+    method: 'POST', body: payload, apiKey: context && context.apiKey,
+    productId: isProduct && context && context.productId,
+    productFieldId: isProduct ? fieldId : undefined
   }).then(function() {
     var row = document.getElementById('ad_row_' + adId);
     if (row) {
@@ -30421,11 +30462,21 @@ function fuzzyMatchOption(input, options, threshold) {
   return bestScore >= threshold ? best : null;
 }
 
-function pushFieldToClickUp(ad, fieldKey, value) {
-  if (!ad || !ad._clickupId || !CFG.key) return Promise.resolve();
+function pushFieldToClickUp(ad, fieldKey, value, context) {
+  context = context || _clickUpProductWriteContext();
+  if (!ad || !ad._clickupId || !context.apiKey) return Promise.resolve();
   if (!value || value === '—') return Promise.resolve();
-  var fieldMap = getActiveFieldMap();
+  var fieldMap = context.fieldMap;
   if (!fieldMap) return Promise.resolve();
+
+  if (fieldKey === 'productName') {
+    try {
+      var productField = fieldMap.productName;
+      if (!productField) throw new Error('Product mapping needs review. Refresh before trying again.');
+      var productOption = _clickUpProductOptionForOwner(productField, context);
+      return _setTaskField(ad._clickupId, productField.fieldId, { value: productOption.id }, ad.id, context, true);
+    } catch (error) { return Promise.reject(error); }
+  }
 
   // DUAL PUSH for angle and persona
   if (fieldKey === 'angle' || fieldKey === 'persona') {
@@ -30435,7 +30486,7 @@ function pushFieldToClickUp(ad, fieldKey, value) {
     var textDef = fieldMap[fieldKey]; // 'angle' → Angle Tag, 'persona' → Persona Tag
     if (textDef && (textDef.fieldType === 'short_text' || textDef.fieldType === 'text')) {
       promises.push(
-        _setTaskField(ad._clickupId, textDef.fieldId, { value: value }, ad.id)
+        _setTaskField(ad._clickupId, textDef.fieldId, { value: value }, ad.id, context)
           .catch(function(e) { console.warn('Text field push failed:', e.message); })
       );
     }
@@ -30454,7 +30505,7 @@ function pushFieldToClickUp(ad, fieldKey, value) {
       if (orderindex !== -1) {
         // Option exists in ClickUp dropdown — also set it there
         promises.push(
-          _setTaskField(ad._clickupId, ddDef.fieldId, { value: orderindex }, ad.id)
+          _setTaskField(ad._clickupId, ddDef.fieldId, { value: orderindex }, ad.id, context)
             .catch(function(e) { console.warn('Dropdown push failed:', e.message); })
         );
       }
@@ -30474,6 +30525,7 @@ function pushFieldToClickUp(ad, fieldKey, value) {
   if (fieldKey === 'creativeHypothesis') {
     return apiFetch('/task/' + ad._clickupId, {
       method: 'PUT',
+      apiKey: context.apiKey,
       body: {
         description: '🧠 Creative Hypothesis: ' + value + '\n\n━━━━━━━━━━━━━━━━━━━━━━━━'
       }
@@ -30492,26 +30544,23 @@ function pushFieldToClickUp(ad, fieldKey, value) {
   var fieldId = fieldDef.fieldId;
 
   if (fieldDef.fieldType === 'short_text' || fieldDef.fieldType === 'text' || fieldDef.fieldType === 'url') {
-    return _setTaskField(ad._clickupId, fieldId, { value: value }, ad.id)
+    return _setTaskField(ad._clickupId, fieldId, { value: value }, ad.id, context)
       .catch(function(err) { toast('ClickUp sync failed: ' + (err.message || String(err)), 'err'); });
   } else if (fieldDef.fieldType === 'drop_down') {
     var oi = -1;
-    // For productName use fuzzy matching; all others use exact match
-    var matchName = (fieldKey === 'productName')
-      ? fuzzyMatchOption(value, fieldDef.options, 0.7)
-      : value;
+    var matchName = value;
     for (var j = 0; j < fieldDef.options.length; j++) {
       if (fieldDef.options[j].name === matchName) { oi = fieldDef.options[j].orderindex; break; }
     }
     if (oi !== -1) {
-      return _setTaskField(ad._clickupId, fieldId, { value: oi }, ad.id)
+      return _setTaskField(ad._clickupId, fieldId, { value: oi }, ad.id, context)
         .catch(function(err) { toast('ClickUp sync failed: ' + (err.message || String(err)), 'err'); });
     }
     if (!ad._pendingCUFields) ad._pendingCUFields = {};
     ad._pendingCUFields[fieldKey] = value;
     return Promise.resolve();
   } else {
-    return _setTaskField(ad._clickupId, fieldId, { value: value }, ad.id)
+    return _setTaskField(ad._clickupId, fieldId, { value: value }, ad.id, context)
       .catch(function(err) { toast('ClickUp sync failed: ' + (err.message || String(err)), 'err'); });
   }
 }
@@ -30529,20 +30578,28 @@ function flushPendingFieldPushes() {
     for (var k = 0; k < keys.length; k++) {
       var fk = keys[k];
       var val = ad._pendingCUFields[fk];
+      if (fk === 'productName') {
+        (function(a, context) {
+          pushFieldToClickUp(a, 'productName', 'owner', context).then(function() {
+            delete a._pendingCUFields.productName;
+          }).catch(function() {});
+        })(ad, _clickUpProductWriteContext());
+        continue;
+      }
       var fieldDef = fieldMap[fk];
       if (!fieldDef || fieldDef.fieldType !== 'drop_down') continue;
       // Check if option now exists after sync
       for (var oi = 0; oi < fieldDef.options.length; oi++) {
         if (fieldDef.options[oi].name === val) {
           // Found it — push now
-          (function(a, key, v, idx) {
-            apiFetch('/task/' + a._clickupId + '/field/' + fieldDef.fieldId, {
+          (function(a, key, v, idx, fieldId) {
+            apiFetch('/task/' + a._clickupId + '/field/' + fieldId, {
               method: 'POST', body: { value: idx }
             }).then(function() {
               delete a._pendingCUFields[key];
               pushed++;
             }).catch(function() {});
-          })(ad, fk, val, fieldDef.options[oi].orderindex);
+          })(ad, fk, val, fieldDef.options[oi].orderindex, fieldDef.fieldId);
           break;
         }
       }
@@ -31059,6 +31116,8 @@ function parseClickUpTask(t) {
       // dropdown: ClickUp returns value as orderindex (new_drop_down) or array index (old style)
       if ((field.type === 'drop_down' || field.type === 'labels') && field.type_config && field.type_config.options && field.value != null) {
         var opts = field.type_config.options;
+        var optionById = opts.find(function(o) { return o.id === field.value; });
+        if (optionById) return optionById.name;
         var val = typeof field.value === 'number' ? field.value : parseInt(field.value, 10);
         if (!isNaN(val)) {
           // Try matching by orderindex first (new_drop_down style)
@@ -31425,6 +31484,10 @@ function saveAdFieldUnified(adId, kind, fieldKey, value) {
   if (kind === 'custom') {
     var lcName = fieldKey;
     var meta = (typeof CLICKUP_FIELD_META !== 'undefined') ? CLICKUP_FIELD_META[lcName] : null;
+    if (['product', 'product name', 'product profile', 'product profile name'].indexOf(String(lcName).toLowerCase().trim()) !== -1) {
+      toast('Product follows the owning product and cannot be reassigned here.', 'warn');
+      return;
+    }
     if (!ad._customFields)    ad._customFields = {};
     if (!ad._customFieldsRaw) ad._customFieldsRaw = {};
 
@@ -31812,6 +31875,8 @@ function _formatCuFieldValue(field) {
         }).filter(Boolean);
         return names.join(', ');
       }
+      var optionById = opts.find(function(o) { return o.id === v; });
+      if (optionById) return optionById.name;
       var nv = typeof v === 'number' ? v : parseInt(v, 10);
       if (!isNaN(nv)) {
         var hit = opts.find(function (o) { return o.orderindex === nv; });

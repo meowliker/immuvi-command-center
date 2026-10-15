@@ -1,3 +1,7 @@
+import {createClickUpProductGuard} from '../tools/clickup-product-ownership.mjs';
+
+const guardProductWrite=createClickUpProductGuard();
+
 // Vercel Serverless Function — proxies browser → api.clickup.com
 // Reason: ClickUp's REST API doesn't allow cross-origin browser calls with
 // Authorization headers, so we relay through our own domain.
@@ -9,13 +13,13 @@
 // Security:
 //  - User's ClickUp API key is forwarded as-is (it lives in their browser localStorage).
 //  - No key is stored server-side.
-//  - Only api.clickup.com is contacted; no SSRF risk.
+//  - Product writes also read the fixed, server-configured Supabase catalog.
 
 export default async function handler(req, res) {
   // Basic CORS so the Vercel HTML can call this function
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type');
+  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Immuvi-Product-Id, X-Immuvi-Product-Field');
   res.setHeader('Access-Control-Expose-Headers', 'Retry-After, X-RateLimit-Reset, X-RateLimit-Remaining');
   res.setHeader('Cache-Control', 'private, no-store');
   res.setHeader('Vary', 'Authorization');
@@ -57,7 +61,12 @@ export default async function handler(req, res) {
     let body;
     if (req.method !== 'GET' && req.method !== 'HEAD') {
       // Vercel's default body parser leaves req.body populated for JSON content
-      body = typeof req.body === 'string' ? req.body : JSON.stringify(req.body || {});
+      let parsed;
+      try { parsed=typeof req.body === 'string' ? JSON.parse(req.body) : (req.body || {}); }
+      catch (_) { return res.status(400).json({error:'Invalid JSON request body'}); }
+      const guarded=apiVersion==='v2' ? await guardProductWrite({path,method:req.method,body:parsed,authorization:auth,
+        productId:req.headers['x-immuvi-product-id'],productFieldId:req.headers['x-immuvi-product-field']}) : parsed;
+      body=JSON.stringify(guarded);
     }
 
     const upstream = await fetch(target, {
@@ -88,6 +97,11 @@ export default async function handler(req, res) {
     }
     return res.send(text);
   } catch (err) {
+    if(err.code&&/^PRODUCT_/.test(err.code)) {
+      if(err.retryAfter)res.setHeader('Retry-After',err.retryAfter);
+      if(err.rateLimitReset)res.setHeader('X-RateLimit-Reset',err.rateLimitReset);
+      return res.status(err.status||409).json({error:err.message,code:err.code});
+    }
     const timeout = err && (err.name === 'TimeoutError' || err.name === 'AbortError');
     console.error('[api/clickup] upstream connection failed', {kind: timeout ? 'timeout' : 'network'});
     return res.status(timeout ? 504 : 502).json({error: timeout ? 'ClickUp request timed out' : 'ClickUp connection failed'});

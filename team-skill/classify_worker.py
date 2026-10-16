@@ -26,6 +26,7 @@ import signal
 import socket
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 import traceback
@@ -507,6 +508,7 @@ def probe_capabilities() -> dict:
         "classification_lease": "agent-timeout-v1",
         "asr_cache_recovery": "isolated-checksum-v2-turbo",
         "agent_launcher_revision": "codex-bundle-v2",
+        "classification_workspace": "isolated-cwd-v1",
         "taxonomy_review": "semantic-taxonomy-v1" if (
             shutil.which("node") and _resolve_codex_bin()
             and (_project_root() / "tools/taxonomy-review-worker.mjs").exists()
@@ -587,6 +589,7 @@ def build_agent_cmd(prompt: str, prefer: str = "claude") -> list:
             )
         return [
             codex_bin, "exec",
+            "--skip-git-repo-check",
             "--dangerously-bypass-approvals-and-sandbox",
             "-c", "shell_environment_policy.inherit=all",
             prompt,
@@ -595,6 +598,20 @@ def build_agent_cmd(prompt: str, prefer: str = "claude") -> list:
         "No agent CLI installed on this machine. Install `claude` "
         "(https://claude.ai/download) or Codex (/Applications/Codex.app)."
     )
+
+
+def run_classification_agent(cmd: list, timeout: int):
+    # Never inherit a LaunchAgent's protected/deleted cwd or change the
+    # worker-wide cwd while other product jobs are running.
+    with tempfile.TemporaryDirectory(prefix="immuvi-classify-", dir="/tmp") as workspace:
+        workspace = str(Path(workspace).resolve())
+        env = dict(os.environ)
+        env["PWD"] = workspace
+        env.pop("OLDPWD", None)
+        return subprocess.run(
+            cmd, cwd=workspace, env=env, capture_output=True, text=True,
+            timeout=timeout,
+        )
 
 
 def _agent_auth_failed(output: str) -> bool:
@@ -967,6 +984,7 @@ class Worker:
             "claude": _has_claude(),
             "codex": _has_codex(),
             "agent_launcher_revision": "codex-bundle-v2",
+            "classification_workspace": "isolated-cwd-v1",
         })
         self._caps["taxonomy_review"] = "semantic-taxonomy-v1" if (
             shutil.which("node") and self._caps["codex"]
@@ -2043,11 +2061,7 @@ class Worker:
                     continue
                 tried_agents.append(agent_label)
                 log(f"[{job.get('id')}] running skill on {ins_id} via {agent_label} (timeout {CLAUDE_CLI_TIMEOUT_SECONDS}s)")
-                r = subprocess.run(
-                    cmd,
-                    capture_output=True, text=True,
-                    timeout=CLAUDE_CLI_TIMEOUT_SECONDS,
-                )
+                r = run_classification_agent(cmd, CLAUDE_CLI_TIMEOUT_SECONDS)
                 stdout0 = (r.stdout or "").strip()
                 stderr0 = (r.stderr or "").strip()
                 combined0 = (stdout0 + "\n" + stderr0).strip()
@@ -2232,11 +2246,7 @@ class Worker:
         log(f"[{queue_id}] running brief skill on {drive_file_id} via {agent_label} "
             f"(timeout {CLAUDE_CLI_TIMEOUT_SECONDS}s)")
         try:
-            r = subprocess.run(
-                cmd,
-                capture_output=True, text=True,
-                timeout=CLAUDE_CLI_TIMEOUT_SECONDS,
-            )
+            r = run_classification_agent(cmd, CLAUDE_CLI_TIMEOUT_SECONDS)
             stdout = (r.stdout or "").strip()
             stderr = (r.stderr or "").strip()
             tail = stdout[-500:] if stdout else stderr[-500:]

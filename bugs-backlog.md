@@ -7,6 +7,22 @@ Status legend: 🆕 just-flagged · 📐 plan-locked · 🛠 in-progress · ✅ 
 
 ---
 
+## Classification blocked by inherited macOS working directory (2026-10-16)
+
+HAH-INS-017 through HAH-INS-020 failed before media analysis because the
+Mac mini's Codex subprocess inherited an inaccessible directory
+(getcwd/chdir: Operation not permitted). Zero content attempts were consumed.
+
+Classification agent launches now use independent private temporary workspaces
+and matching child-only PWD values; the worker never changes global cwd.
+63 Python unittest tests and 328 application tests pass. Preserve source/media,
+No Brief, exact-product, taxonomy and result-verification safeguards.
+Recovery is limited to these four backed-up queue rows after worker adoption,
+with completion checked against saved results. See
+docs/repairs/2026-10-16-classification-working-directory.md.
+
+---
+
 ## No Brief blocked by mandatory narration
 **Status:** Fixed and live-verified, 2026-10-07.
 

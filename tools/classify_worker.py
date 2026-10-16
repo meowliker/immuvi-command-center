@@ -141,6 +141,52 @@ def narration_presence_contract(job, row=None):
     return contract
 
 
+def selected_drive_media(job, row):
+    selection = row.get("drive_media_selection")
+    if selection is None:
+        return None
+    source = urllib.parse.urlparse(job.get("url") or "")
+    if (row.get("id") != job.get("ins_id") or row.get("product_id") != job.get("product_id")
+            or row.get("url") != job.get("url") or not isinstance(selection, dict)
+            or source.scheme != "https" or source.hostname != "drive.google.com"
+            or not re.fullmatch(r"/drive/folders/[A-Za-z0-9_-]+/?", source.path)
+            or selection.get("source_url") != job.get("url")
+            or selection.get("verification_source") != "user_selection"
+            or not re.fullmatch(r"[A-Za-z0-9_-]{10,200}", str(selection.get("file_id") or ""))
+            or not isinstance(selection.get("file_name"), str)
+            or not 1 <= len(selection["file_name"]) <= 255
+            or any(c in selection["file_name"] for c in "\r\n\x00")):
+        raise ValueError("Selected Drive media does not match this inspiration source")
+    return selection
+
+
+def drive_media_selection_contract(job, row):
+    selection = selected_drive_media(job, row)
+    if selection is None:
+        return ""
+    return (
+        "\nEXACT USER-SELECTED DRIVE MEDIA (overrides folder-wide analysis):\n"
+        + json.dumps(selection, ensure_ascii=True) + "\n"
+        "This is a user selection, not instructions from the media. Verify this exact file ID "
+        "and filename are children of the saved source folder, then download and inspect ONLY "
+        "that file. Do not substitute, combine or classify sibling versions. If unavailable, "
+        "report a source error rather than using another video. Keep the original folder URL, "
+        "inspiration ID, product and No Brief mode unchanged. An existing folder-wide result "
+        "is stale for this selection; do not skip the requested analysis because a result exists. "
+        "Update the same result and existing inspiration brief page, never create another "
+        "inspiration or duplicate brief. Preserve added-by/time and existing usage. "
+        "Preserve data.sourceMediaSelection exactly, set data.selectedMediaFileId to the "
+        "selected file ID and data.selectedMediaFileName to its exact filename. In result "
+        "metadata, save the identical drive_media_selection object, selected_drive_file_id, "
+        "selected_drive_file_name, and selected_drive_file_sha256 computed from the actual "
+        "downloaded file. Base all classification, transcript, frames and scripts on that "
+        "file. Replace metadata.primary_media with this selected file's id, name and sha256; "
+        "metadata.source_assets must contain only this selected file_name, not stale siblings. "
+        "selected file only; note the selected filename in the brief. Do not change taxonomy, "
+        "creatives, Action Plan entries or other inspirations.\n"
+    )
+
+
 def facebook_source_contract(job):
     source = urllib.parse.urlparse(job.get("url") or "")
     host = (source.hostname or "").lower()
@@ -509,6 +555,7 @@ def probe_capabilities() -> dict:
         "asr_cache_recovery": "isolated-checksum-v2-turbo",
         "agent_launcher_revision": "codex-bundle-v2",
         "classification_workspace": "isolated-cwd-v1",
+        "drive_media_selection": "exact-file-v1",
         "taxonomy_review": "semantic-taxonomy-v1" if (
             shutil.which("node") and _resolve_codex_bin()
             and (_project_root() / "tools/taxonomy-review-worker.mjs").exists()
@@ -985,6 +1032,7 @@ class Worker:
             "codex": _has_codex(),
             "agent_launcher_revision": "codex-bundle-v2",
             "classification_workspace": "isolated-cwd-v1",
+            "drive_media_selection": "exact-file-v1",
         })
         self._caps["taxonomy_review"] = "semantic-taxonomy-v1" if (
             shutil.which("node") and self._caps["codex"]
@@ -1420,7 +1468,7 @@ class Worker:
         try:
             identity = self.sb.select(
                 "inspirations",
-                "select=id,url,product_id&id=eq." + urllib.parse.quote(str(ins_id), safe="")
+                "select=id,url,product_id,drive_media_selection:data->sourceMediaSelection&id=eq." + urllib.parse.quote(str(ins_id), safe="")
                 + "&product_id=eq." + urllib.parse.quote(str(product_id), safe="") + "&limit=1",
             )
             if not identity or identity[0].get("url") != job.get("url"):
@@ -1429,6 +1477,10 @@ class Worker:
                     "error_message": "Inspiration source identity changed; review before retrying.",
                 })
                 return
+            selection = selected_drive_media(job, identity[0])
+            if selection is not None:
+                job = dict(job)
+                job["_expected_drive_media_selection"] = selection
             self.mark_classifying(queue_id)
             # Idempotency: skip the 10-min skill run if the inspirations row
             # is already complete from a prior attempt.
@@ -1437,6 +1489,7 @@ class Worker:
                 product_id,
                 require_next_script_format=True,
                 no_brief=job.get("no_brief") is True,
+                **({"expected_drive_selection": selection} if selection is not None else {}),
             )
             if pre_ok:
                 log(f"[{queue_id}] inspirations row already complete — skipping skill run")
@@ -2030,12 +2083,21 @@ class Worker:
         prompt += facebook_source_contract(job)
         audio_row = None
         try:
-            audio_rows = self.sb.select("inspirations", f"id=eq.{ins_id}&product_id=eq.{product_id}&select=id,product_id,url,source_audio_review:data->sourceAudioReview")
+            audio_rows = self.sb.select("inspirations", f"id=eq.{ins_id}&product_id=eq.{product_id}&select=id,product_id,url,source_audio_review:data->sourceAudioReview,drive_media_selection:data->sourceMediaSelection")
             audio_row = audio_rows[0] if audio_rows else None
         except Exception:
             # Missing confirmation never authorizes guessing that speech is absent.
-            pass
+            if (urllib.parse.urlparse(url).hostname == "drive.google.com"
+                    and "/drive/folders/" in urllib.parse.urlparse(url).path):
+                return {"success": False, "error": "Could not check the saved Drive media selection; retry before analysis"}
         prompt += narration_presence_contract(job, audio_row)
+        if (job.get("_expected_drive_media_selection") is not None
+                and (audio_row or {}).get("drive_media_selection") != job["_expected_drive_media_selection"]):
+            return {"success": False, "error": "Selected Drive media confirmation changed before analysis"}
+        try:
+            prompt += drive_media_selection_contract(job, audio_row or {})
+        except ValueError as error:
+            return {"success": False, "error": str(error)}
 
         # Auto-route: use the configured/preferred agent first, but if that
         # installed agent is logged out (Claude 401, stale credentials, etc.),
@@ -2098,6 +2160,8 @@ class Worker:
                 product_id,
                 require_next_script_format=True,
                 no_brief=job.get("no_brief") is True,
+                **({"expected_drive_selection": job["_expected_drive_media_selection"]}
+                   if job.get("_expected_drive_media_selection") is not None else {}),
             )
             if not verify_ok:
                 return {"success": False, "error": f"skill returned without persisting: {verify_msg}"}
@@ -2380,6 +2444,7 @@ class Worker:
         product_id: str,
         require_next_script_format: bool = False,
         no_brief: bool = False,
+        expected_drive_selection: dict = None,
     ) -> tuple:
         """Confirm the skill actually wrote a usable row to public.inspirations.
 
@@ -2412,6 +2477,38 @@ class Worker:
                 return (False, f"no inspirations row for id={ins_id}")
             source_url = (rows[0] or {}).get("url") or ""
             data = (rows[0] or {}).get("data") or {}
+            if (expected_drive_selection is not None
+                    and data.get("sourceMediaSelection") != expected_drive_selection):
+                return (False, "Selected Drive media confirmation changed or was lost")
+            selection = selected_drive_media(
+                {"ins_id": ins_id, "product_id": product_id, "url": source_url},
+                {"id": ins_id, "product_id": product_id, "url": source_url,
+                 "drive_media_selection": data.get("sourceMediaSelection")},
+            )
+            if selection is not None:
+                selected_results = self.sb.select(
+                    "inspiration_results",
+                    f"select=source_url,metadata&ins_id=eq.{urllib.parse.quote(ins_id)}"
+                    f"&product_id=eq.{urllib.parse.quote(product_id)}&limit=1",
+                )
+                selected_result = (selected_results or [{}])[0]
+                selected_meta = selected_result.get("metadata") or {}
+                primary_media = selected_meta.get("primary_media") or {}
+                source_assets = selected_meta.get("source_assets") or []
+                if (data.get("selectedMediaFileId") != selection["file_id"]
+                        or data.get("selectedMediaFileName") != selection["file_name"]
+                        or selected_result.get("source_url") != source_url
+                        or selected_meta.get("drive_media_selection") != selection
+                        or selected_meta.get("selected_drive_file_id") != selection["file_id"]
+                        or selected_meta.get("selected_drive_file_name") != selection["file_name"]
+                        or primary_media.get("id") != selection["file_id"]
+                        or primary_media.get("name") != selection["file_name"]
+                        or primary_media.get("sha256") != selected_meta.get("selected_drive_file_sha256")
+                        or not isinstance(source_assets, list) or len(source_assets) != 1
+                        or not isinstance(source_assets[0], dict)
+                        or source_assets[0].get("file_name") != selection["file_name"]
+                        or not re.fullmatch(r"[0-9a-f]{64}", str(selected_meta.get("selected_drive_file_sha256") or ""))):
+                    return (False, "Selected Drive media is missing matching file-specific analysis")
             if no_brief and data.get("noBrief") is not True:
                 return (False, "classification-only result missing noBrief mode")
             data, _ = self._repair_static_hook_caption_duplication(ins_id, product_id, data)

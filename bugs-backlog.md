@@ -7,6 +7,28 @@ Status legend: 🆕 just-flagged · 📐 plan-locked · 🛠 in-progress · ✅ 
 
 ---
 
+## Drive folder analysis did not pin a user-selected version (2026-10-16)
+
+**Status:** Fixed and live-verified for the selected Version 2 of T-INS-119.
+
+T-INS-119 linked three numbered source videos. The user selected Version 2 while
+the initial folder-level attempt was already running against Version 1.
+An optional exact-source media selection now pins the chosen Drive file without
+changing immutable source identity, product ownership or brief mode. Verification
+requires matching file metadata, a downloaded-file checksum and no sibling media
+in the selected result. Existing complete results cannot bypass a new selection;
+missing selection after analysis fails verification. No schema or UI changes.
+The selected-file analysis reused the existing result row and eight-section
+brief page, independently read back with three scripts and exact Version 2
+file/checksum evidence. Existing source identity, product and brief mode were
+preserved. All pre-existing creative/taxonomy content and unrelated inspirations
+were retained; concurrent approved placement of TH-139-INS-119 was not undone.
+70 Python and 331 application tests pass. The review cache now distinguishes
+selected files and pending/analyzed evidence without using IDs as category proof.
+See docs/repairs/2026-10-16-drive-version-selection.md for scope and recovery.
+
+---
+
 ## Classification blocked by inherited macOS working directory (2026-10-16)
 
 **Status:** Fixed and live-verified, 2026-10-16.

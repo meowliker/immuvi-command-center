@@ -25,6 +25,19 @@ export function evidenceFor(row) {
       remaining -= clipped.length;
     }
   }
+  const selection = data.sourceMediaSelection;
+  if (selection && selection.source_url === (row?.url || data.sourceUrl)) {
+    try {
+      const url = new URL(selection.source_url);
+      const folder = /^\/drive\/folders\/([A-Za-z0-9_-]+)\/?$/.exec(url.pathname);
+      if (url.protocol === 'https:' && url.hostname === 'drive.google.com' && folder &&
+          typeof selection.file_id === 'string' && /^[A-Za-z0-9_-]{10,200}$/.test(selection.file_id)) {
+        // Cache identity only. File IDs are never persuasive evidence.
+        out.media = {driveFolderId:folder[1], driveFileId:selection.file_id,
+          selectionState:data.selectedMediaFileId === selection.file_id ? 'analyzed' : 'pending'};
+      }
+    } catch {}
+  }
   return out;
 }
 

@@ -67,6 +67,33 @@ test('cache signature changes with source, taxonomy or product but not current l
   assert.notEqual(original,await signature(reviewInput({...product,id:'other'},angles,personas,ins)));
   assert.notEqual(original,await signature(reviewInput(product,[...angles,{id:'a2',name:'Relaxation'}],personas,ins)));
 });
+test('selected Drive versions and pending analysis cannot share taxonomy review cache', async () => {
+  const sourceUrl='https://drive.google.com/drive/folders/folder123';
+  const selection={source_url:sourceUrl,file_id:'drive_file_version_2',file_name:'unused.mp4',credential:'excluded-secret'};
+  const selected={...ins,sourceUrl,sourceMediaSelection:selection};
+  const pending=reviewInput(product,angles,personas,selected);
+  const analyzed=reviewInput(product,angles,personas,{...selected,selectedMediaFileId:selection.file_id});
+  const sibling=reviewInput(product,angles,personas,{...selected,sourceMediaSelection:{...selection,file_id:'drive_file_version_3'}});
+  assert.notEqual(await signature(pending),await signature(input()));
+  assert.notEqual(await signature(pending),await signature(analyzed));
+  assert.notEqual(await signature(pending),await signature(sibling));
+  assert.deepEqual(pending.inspiration.evidence.source,evidenceFor(ins).source);
+  assert.doesNotMatch(JSON.stringify(pending),/excluded-secret|unused\.mp4/);
+  assert.equal(hasEvidence(evidenceFor({sourceUrl,sourceMediaSelection:selection})),false);
+});
+test('foreign Drive selections never enter review evidence or become quoted proof', () => {
+  const wrong={...ins,sourceUrl:'https://drive.google.com/drive/folders/folder123',
+    sourceMediaSelection:{source_url:'https://drive.google.com/drive/folders/foreign',file_id:'drive_file_other'}};
+  assert.equal(evidenceFor(wrong).media,undefined);
+  assert.equal(validateAssessment(recommendation('angle',{evidence:[{field:'media',quote:'drive_file_other'}]}),'angle',
+    reviewInput(product,angles,personas,wrong)).decision,'needs_review');
+});
+test('published and worker review-core copies match', () => {
+  const expected=readFileSync(new URL('../public/taxonomy-review-core.mjs',import.meta.url),'utf8');
+  for(const path of ['tools/taxonomy-review-core.mjs','team-skill/taxonomy-review-core.mjs','public/team-skill/taxonomy-review-core.mjs']) {
+    assert.equal(readFileSync(new URL('../'+path,import.meta.url),'utf8'),expected);
+  }
+});
 
 function clientFixture() {
   let c = {product, userId:'user', generation:1, angles, personas, inspirations:[structuredClone(ins)]};

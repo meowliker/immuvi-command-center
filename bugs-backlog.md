@@ -2750,3 +2750,13 @@ Never infer a product move or revive taxonomy from an incorrect external label.
 Confirmed repairs are Product-only and require private before/after backups.
 Ambiguous historical labels and shared-list placeholders remain for review.
 See `docs/repairs/2026-10-15-clickup-product-ownership.md` for scope and rollback.
+
+## Delete rejected a displayed ClickUp identity (2026-10-16)
+
+The deletion RPC required the displayed ID to equal the saved creative's ID.
+Read-only ClickUp views can carry task IDs instead of serial creative IDs.
+After an explicit missing-row result, resolve only one exact same-product
+ClickUp identity and retain all transactional authorization/conflict checks.
+Never create or overwrite a creative to make deletion work. Wait for its own
+pending save, keep tombstones after confirmation, and remove only action
+references to the verified task. See `docs/repairs/2026-10-16-delete-identity.md`.

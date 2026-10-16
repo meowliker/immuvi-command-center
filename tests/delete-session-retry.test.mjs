@@ -8,7 +8,7 @@ for (const file of ['immuvi-command-center.html', 'public/immuvi-command-center.
   const html = readFileSync(new URL('../' + file, import.meta.url), 'utf8');
   const code = html.slice(html.indexOf('function _isSupabaseAuthError'), html.indexOf('function openEditCreative('));
   function setup() {
-    const calls = {requests: [], clickup: [], broadcasts: [], saves: [], refreshes: 0};
+    const calls = {requests: [], clickup: [], broadcasts: [], saves: [], refreshes: 0, tombstones: []};
     const state = {status: 200, verified: true};
     const c = vm.createContext({console, Date, Set, AbortSignal,
       activeProductId: 'A', _adsProductId: 'A', _uiProductGeneration: 1,
@@ -27,6 +27,7 @@ for (const file of ['immuvi-command-center.html', 'public/immuvi-command-center.
       setTimeout: fn => {fn(); return 1;}, clearTimeout() {},
       localStorage: {getItem: () => null, setItem() {}},
       toast() {}, _rememberAdDeletion() {}, _rememberManualActionDeletion() {},
+      window: {_apTombstoneAdd: x => calls.tombstones.push(x)},
       purgeOrphanedMatrixKeys() {}, process: () => ({}), deriveWinners() {}, genActions() {},
       buildCreativeUsageIndex() {}, populateFilterOptions() {}, renderAll() {},
       apiDeleteTask: async (...args) => calls.clickup.push(args),
@@ -39,7 +40,7 @@ for (const file of ['immuvi-command-center.html', 'public/immuvi-command-center.
         return {ok: state.status === 200, status: state.status, json: async () => state.status === 200 ? {
           id: b.adId, productId: state.wrongProduct ? 'B' : b.productId,
           clickupTaskIds: b.expectedClickUpId ? [b.expectedClickUpId] : [],
-          deletedAt: '2026-10-07T06:00:00Z', verified: state.verified
+          deletedAt: '2026-10-07T06:00:00Z', verified: state.verified, canonicalId: state.canonicalId
         } : {error: 'Rejected'}};
       }
     });
@@ -56,12 +57,13 @@ for (const file of ['immuvi-command-center.html', 'public/immuvi-command-center.
     assert.deepEqual(JSON.parse(calls.requests[0].opts.body), {adId: 'ad', productId: 'A', expectedClickUpId: 'cu'});
   });
   test(file + ': failures preserve all local state and never delete in ClickUp', async () => {
-    for (const change of [{status: 403}, {status: 409}, {status: 503}, {reject: true}, {verified: false}, {wrongProduct: true}]) {
+    for (const change of [{status: 403}, {status: 404}, {status: 409}, {status: 503}, {reject: true}, {verified: false}, {wrongProduct: true}]) {
       const {c, calls, state} = setup(); Object.assign(state, change);
       const before = JSON.stringify([c.ADS, c.MANUAL_ACTIONS, c.PROD]);
       await c.deleteAdEverywhere('ad');
       assert.equal(JSON.stringify([c.ADS, c.MANUAL_ACTIONS, c.PROD]), before);
       assert.equal(calls.clickup.length + calls.broadcasts.length + calls.saves.length, 0);
+      assert.equal(calls.tombstones.length,0);
       assert.equal(calls.requests.length, 1); assert.equal(calls.refreshes, 0);
       assert.equal(c._creativeDeletesInFlight.size, 0);
     }
@@ -101,6 +103,37 @@ for (const file of ['immuvi-command-center.html', 'public/immuvi-command-center.
     c.activeProductId = c._adsProductId = 'B'; c._uiProductGeneration++;
     release(); await c._saveQueue; assert.equal(calls.saves.length, 0);
   });
+  test(file + ': canonical deletion removes only the requested alias and verified canonical record',async()=>{
+    const {c,calls,state}=setup();state.canonicalId='canonical';
+    c.ADS.push({id:'canonical',_clickupId:'cu'});c.MANUAL_ACTIONS.push({id:'canonical-ma',sourceAdId:'canonical'});
+    await c.deleteAdEverywhere('ad');
+    assert.deepEqual(Array.from(c.ADS,a=>a.id),['child']);assert.deepEqual(Array.from(c.MANUAL_ACTIONS,a=>a.id),['other']);
+    assert.deepEqual(calls.clickup,[['cu','cu-key']]);assert.equal(calls.tombstones.length,2);
+    assert.ok(c._deletedAdIdsCache.has('ad')&&c._deletedAdIdsCache.has('canonical'));
+  });
+  test(file + ': deletion waits for only the creative pending save, and stops on failure or product switch',async()=>{
+    for(const mode of ['saved','failed','switched']){
+      const {c,calls}=setup();let release;c.ADS[0]._directWritePromise=new Promise(r=>{release=r;});
+      const pending=c.deleteAdEverywhere('ad');await Promise.resolve();assert.equal(calls.requests.length,0);
+      if(mode==='switched'){c.activeProductId=c._adsProductId='B';c._uiProductGeneration++;}
+      release({ok:mode!=='failed'});await pending;assert.equal(calls.requests.length,mode==='saved'?1:0);
+    }
+  });
+  test(file + ': Action Plan deletion cannot add a tombstone before database confirmation',()=>{
+    const {c,calls}=setup();let deletes=0;c.deleteAdEverywhere=()=>{deletes++;};
+    vm.runInContext(html.slice(html.indexOf('function deleteManualAction('),html.indexOf('function addRecToplan(')),c);
+    c.deleteManualAction('ma');assert.equal(deletes,1);assert.equal(calls.tombstones.length,0);
+  });
+  test(file + ': direct creative save exposes only its pending promise and preserves the row payload',async()=>{
+    const {c}=setup();let release;let saved;
+    c.DB={ready:true};c._adToRow=ad=>({id:ad.id,product_id:'A',notes:'keep'});
+    c.SB.from=()=>({upsert:row=>{saved=row;return new Promise(r=>{release=r;});}});
+    const start=html.indexOf('function _writeAdRowDirect(');
+    vm.runInContext(html.slice(start,html.indexOf('// _writeManualActionRowDirect',start)),c);
+    const ad={id:'new-ad'};const write=c._writeAdRowDirect(ad);
+    assert.equal(ad._directWritePromise,write);assert.deepEqual(saved,{id:'new-ad',product_id:'A',notes:'keep'});
+    release({});assert.equal((await write).ok,true);await Promise.resolve();assert.equal(ad._directWritePromise,undefined);
+  });
 }
 
 function server() {
@@ -111,7 +144,7 @@ function server() {
       if (state.reject) throw new TypeError('Failed to fetch');
       return url.includes('/rpc/') ? {ok: state.status === 200, status: state.status, json: async () => state.code ? {code: state.code} :
         {id: 'ad', productId: 'A', clickupTaskIds: ['cu'], deletedAt: '2026-10-07T06:00:00Z'}} :
-        {ok: true, json: async () => [{id: 'ad', deleted_at: state.deletedAt}]};
+        {ok: true, json: async () => url.includes('clickup_task_id=') ? [] : [{id: 'ad', deleted_at: state.deletedAt}]};
     }});
   const req = {method: 'POST', headers: {authorization: 'Bearer user-token'}, body: {adId: 'ad', productId: 'A', expectedClickUpId: 'cu'}};
   const res = {setHeader() {}, status(n) {this.statusCode = n; return this;}, json(body) {this.body = body; return this;}};
@@ -137,7 +170,7 @@ test('delete API rejects invalid or unauthenticated requests without database ac
 test('delete API preserves auth/conflict failures and does not claim unverified success', async () => {
   for (const [code, status] of [['42501', 403], ['P0002', 404], ['PT409', 409], ['40001', 409], ['PGRST301', 401]]) {
     const {handler, req, res, state, calls} = server(); state.status = status; state.code = code;
-    await handler(req, res); assert.equal(res.statusCode, status); assert.equal(calls.length, 1);
+    await handler(req, res); assert.equal(res.statusCode, status); assert.equal(calls.length, code==='P0002'?2:1);
   }
   for (const change of [{deletedAt: null}, {deletedAt: '2026-01-01'}, {reject: true}]) {
     const {handler, req, res, state} = server(); Object.assign(state, change);

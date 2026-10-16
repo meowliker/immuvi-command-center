@@ -26311,19 +26311,6 @@ function deleteManualAction(id) {
     if (MANUAL_ACTIONS[i].id === id) { act = MANUAL_ACTIONS[i]; break; }
   }
   if (!act) return;
-  // Tombstone first — prevents the next ClickUp poll's auto-adopt loop
-  // from resurrecting this row before the async CU delete lands. See
-  // memory/feedback_bug8_orphan_protection.md.
-  try {
-    if (typeof window._apTombstoneAdd === 'function') {
-      window._apTombstoneAdd({
-        cuid:  act._clickupId || '',
-        adid:  act.sourceAdId || act.adId || '',
-        title: act.title || ''
-      });
-    }
-  } catch (e) {}
-
   var sourceId = act.sourceAdId || act.adId;
   var sourceAd = null;
   if (sourceId) {
@@ -27429,6 +27416,19 @@ async function deleteAdEverywhere(adId) {
     if (ADS[i].id === adId) { ad = ADS[i]; break; }
   }
 
+  // A fresh creative's single-row save may still be in flight. Wait for that
+  // exact write; never flush or recreate a whole product just to delete one row.
+  if (ad && ad._directWritePromise) {
+    var pendingWrite;
+    try { pendingWrite = await _withCloudTimeout(ad._directWritePromise, 'Saving creative', 15000); }
+    catch (_) { toast('This creative has not finished saving. Retry after its save succeeds.', 'err'); return; }
+    if (!pendingWrite || !pendingWrite.ok) {
+      toast('This creative has not finished saving. Retry after its save succeeds.', 'err');
+      return;
+    }
+    if (activeProductId !== deleteProductId || _adsProductId !== deleteProductId || _uiProductGeneration !== deleteGeneration) return;
+  }
+
   // Collect ClickUp task ID for this specific AD
   var cuIdsToDelete = [];
   if (ad && (ad._clickupId || ad.clickupTaskId)) cuIdsToDelete.push(ad._clickupId || ad.clickupTaskId);
@@ -27457,9 +27457,9 @@ async function deleteAdEverywhere(adId) {
   // Commit the product-scoped soft deletion and tombstone together, through
   // the same-origin API. Never mutate local state on an unconfirmed result.
   try {
-    await _softDeleteAdWithSessionRetry(adId, deleteProductId, deleteGeneration, cuIdsToDelete[0]);
+    var deleteResult = await _softDeleteAdWithSessionRetry(adId, deleteProductId, deleteGeneration, cuIdsToDelete[0]);
   } catch (e) {
-    toast('Delete not confirmed: ' + (e.message || 'Connection failed. Refresh before retrying.'), 'err');
+    toast('Delete not confirmed (' + ((ad && ad.formatName) || adId) + '): ' + (e.message || 'Connection failed. Refresh before retrying.'), 'err');
     return;
   }
   if (activeProductId !== deleteProductId || _adsProductId !== deleteProductId || _uiProductGeneration !== deleteGeneration) {
@@ -27472,21 +27472,24 @@ async function deleteAdEverywhere(adId) {
       'Deleted in the original product. Your current product was not changed.', switchedCleanupFailed ? 'err' : 'ok');
     return;
   }
-  try { _deletedAdIdsCache.add(adId); } catch (_) {}
+  var deletedIds = [adId];
+  if (deleteResult.canonicalId && deleteResult.canonicalId !== adId) deletedIds.push(deleteResult.canonicalId);
+  try { deletedIds.forEach(function(id) { _deletedAdIdsCache.add(id); }); } catch (_) {}
   try { cuIdsToDelete.forEach(function (cuid) { if (cuid) _deletedAdClickUpIdsCache.add(cuid); }); } catch (_) {}
 
   // Both Supabase writes committed. Now safe to clear local state.
-  ADS = ADS.filter(function(a) { return a.id !== adId; });
+  ADS = ADS.filter(function(a) { return deletedIds.indexOf(a.id) === -1; });
 
   // Tombstone the AD id so the realtime onChange handler doesn't resurrect it
   // from a stale DB read before the DELETE has propagated to all read replicas.
-  _rememberAdDeletion(adId);
+  deletedIds.forEach(function(id) { _rememberAdDeletion(id); });
 
   // Broadcast delete to other connected clients via realtime channel
   if (typeof _rtChannel !== 'undefined' && _rtChannel) {
-    _rtChannel.send({ type: 'broadcast', event: 'ad-deleted',
-      payload: { adId: adId, adName: (ad && ad.taskName) || adId,
+    deletedIds.forEach(function(id) { _rtChannel.send({ type: 'broadcast', event: 'ad-deleted',
+      payload: { adId: id, adName: (ad && ad.taskName) || adId,
                  deletedBy: (CFG && CFG.userLabel) || 'Someone', clientId: _myClientId, productId: deleteProductId } });
+    });
   }
 
   // Record ClickUp IDs AND the local AD id in a localStorage tombstone so
@@ -27499,7 +27502,7 @@ async function deleteAdEverywhere(adId) {
     // ClickUp IDs (for ClickUp-synced tasks)
     cuIdsToDelete.forEach(function(cuid) { _tomb[cuid] = _now; });
     // Local AD id (for locally-only tasks like Winner Variations without ClickUp task)
-    _tomb[adId] = _now;
+    deletedIds.forEach(function(id) { _tomb[id] = _now; });
     // Expire entries older than 10 minutes
     Object.keys(_tomb).forEach(function(k) { if (_now - _tomb[k] > 600000) delete _tomb[k]; });
     localStorage.setItem(_tombKey, JSON.stringify(_tomb));
@@ -27507,17 +27510,22 @@ async function deleteAdEverywhere(adId) {
 
   // Remove Action Plan entries tied to this AD only
   MANUAL_ACTIONS.forEach(function(a) {
-    if (a.sourceAdId === adId || a.adId === adId) {
+    if (deletedIds.indexOf(a.sourceAdId) !== -1 || deletedIds.indexOf(a.adId) !== -1) {
+      try {
+        if (typeof window !== 'undefined' && typeof window._apTombstoneAdd === 'function') {
+          window._apTombstoneAdd({cuid:a._clickupId || '',adid:a.sourceAdId || a.adId || '',title:a.title || ''});
+        }
+      } catch (_) {}
       _rememberManualActionDeletion(a.id, a._dbId, {persisted: true});
     }
   });
   MANUAL_ACTIONS = MANUAL_ACTIONS.filter(function(a) {
-    return a.sourceAdId !== adId && a.adId !== adId;
+    return deletedIds.indexOf(a.sourceAdId) === -1 && deletedIds.indexOf(a.adId) === -1;
   });
 
   // Remove any PROD entries tied to this AD only
   PROD = PROD.filter(function(p) {
-    return p.adId !== adId && p.sourceAdId !== adId;
+    return deletedIds.indexOf(p.adId) === -1 && deletedIds.indexOf(p.sourceAdId) === -1;
   });
 
   // Clean up any orphaned entries in CELL_CREATIVE_ASSIGNMENTS / MATRIX_CELL_META
@@ -34420,7 +34428,7 @@ function _writeAdRowDirect(ad) {
     if (ad._localNew) {
       row.deleted_at = null;
     }
-    return SB.from('ads').upsert(row).then(function (r) {
+    var write = SB.from('ads').upsert(row).then(function (r) {
       if (r && r.error) {
         console.warn('[SB] _writeAdRowDirect error', r.error);
         return { ok: false, error: r.error };
@@ -34430,6 +34438,9 @@ function _writeAdRowDirect(ad) {
       console.warn('[SB] _writeAdRowDirect exception', e);
       return { ok: false, error: e };
     });
+    ad._directWritePromise = write;
+    write.then(function() { if (ad._directWritePromise === write) delete ad._directWritePromise; });
+    return write;
   } catch (e) {
     console.warn('[SB] _writeAdRowDirect threw', e);
     return Promise.resolve({ ok: false, error: e });

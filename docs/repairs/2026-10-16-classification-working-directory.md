@@ -37,6 +37,38 @@ claims, changed source URLs, different brief modes or non-infrastructure errors.
 It preserves every inspiration and all links, IDs, content and brief settings.
 Completion must be verified from persisted results, not just a cleared badge.
 
+## Live Recovery Verification
+
+Main repair b227607 deployed READY. The Mac mini operator confirmed a graceful
+worker-only restart, with both pools drained and no reset, permission change,
+reinstall or manual data changes. Installed worker SHA-256 matched the deployed
+asset: b1f9c4d308a69847c82c619cb545902af1cfbe9293e66977e29d7efb24542720.
+A fresh Supabase heartbeat independently confirmed isolated-cwd-v1.
+
+The guarded recovery requeued only the four requested HAH queue UUIDs. All four
+finished classified on their first content attempt, with no remaining queue
+error. At 12:17 UTC on October 16, completion readback verified one result per
+inspiration, original product/source/ID/brief mode, original added-by/time and
+existing usage. Independent ClickUp GETs verified each page belongs to the
+selected product library, identifies its inspiration and contains all eight
+sections. Each saved inspiration has three structured next-ad scripts.
+
+Unrelated inspirations in the product were byte-for-byte unchanged. No existing
+creatives, angle rows or persona rows disappeared. Taxonomy differences were
+updated_at only: IDs, names and other content remained unchanged. During the
+wait, browser-tagged Action Plan activity added HA-035-INS-017 and a due date on
+one existing creative, with client stamps/timestamps updated. These concurrent
+changes were preserved, not overwritten by restoring the baseline.
+
+The initial aggregate audit found eight getcwd-blocked jobs across four
+products. This recovery deliberately retried only the four requested HAH jobs;
+other blocked jobs were not changed. The worker report also noted pre-existing
+updater 404 warnings for three strategist/producer support assets. Those are
+outside this launcher repair and were not changed.
+
+Private completed snapshots, per-job retry journal and independent brief
+verification hashes are in the backup directory above. QA remains untouched.
+
 ## Rollback
 
 Pre-change main commit: 3e44cab3d22f72fe65523361770433bfca7ff73b.

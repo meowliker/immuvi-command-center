@@ -2760,3 +2760,15 @@ ClickUp identity and retain all transactional authorization/conflict checks.
 Never create or overwrite a creative to make deletion work. Wait for its own
 pending save, keep tombstones after confirmation, and remove only action
 references to the verified task. See `docs/repairs/2026-10-16-delete-identity.md`.
+
+## Orphan Action Plan source ID belongs to another product (2026-10-16)
+
+The exact AD-12837 case has no saved Astro Rekha creative; its old Action Plan
+reference collides with a deleted Kids Life Skill ID. The normal creative guard
+must not be bypassed. Offer a read-only preview and a separate explicit user
+confirmation to remove only the exact orphan Action Plan row. Use a new
+product/action-scoped marker, never the colliding source marker. Do not delete a
+ClickUp task, creative, inspiration or matrix state through this option.
+The user asked to leave the real entry untouched; installation and preview do so.
+Broader ID-generation/ownership changes remain outside this approved scope.
+See `docs/repairs/2026-10-16-confirmed-orphan-cleanup.md` for evidence and tests.

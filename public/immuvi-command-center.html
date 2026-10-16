@@ -26336,7 +26336,7 @@ function deleteManualAction(id) {
   // ads.deleted_at + deleted_ads tombstone, so a stale app-created AD cannot
   // be lazily healed back into Action Plan on the next render/sync.
   if (!sourceAd && sourceId) {
-    deleteAdEverywhere(sourceId);
+    deleteAdEverywhere(sourceId, { actionId: act._dbId });
     return;
   }
 
@@ -26366,7 +26366,7 @@ function deleteManualAction(id) {
   // ── Every task is independent — delete just this one task via deleteAdEverywhere.
   // deleteAdEverywhere removes: the AD, its Action Plan entry, its ClickUp task,
   // its cell/meta entries, and unlinks any inspiration. No cascade to other tasks.
-  deleteAdEverywhere(sourceAd.id);
+  deleteAdEverywhere(sourceAd.id, { actionId: act._dbId });
 }
 
 function addRecToplan(recId) {
@@ -27367,13 +27367,13 @@ async function _refreshSupabaseWriteSession() {
   }
 }
 
-async function _softDeleteAdWithSessionRetry(adId, productId, generation, expectedClickUpId) {
+async function _softDeleteAdWithSessionRetry(adId, productId, generation, expectedClickUpId, context) {
   function sameProduct() {
     return activeProductId === productId && _adsProductId === productId &&
       _uiProductGeneration === generation && !_productSwitchPending && !_cloudLoadFailed;
   }
   if (!SB || !sameProduct()) throw new Error('Product changed or is still loading. Refresh before deleting.');
-  async function send() {
+  async function send(extra) {
     var current = await _withCloudTimeout(SB.auth.getSession(), 'Checking session', 15000);
     var token = current.data && current.data.session && current.data.session.access_token;
     if (!token) throw new Error('Please sign in before deleting.');
@@ -27381,26 +27381,48 @@ async function _softDeleteAdWithSessionRetry(adId, productId, generation, expect
     var response = await fetch('/api/delete-creative', {
       method: 'POST', signal: AbortSignal.timeout(30000),
       headers: {Authorization: 'Bearer ' + token, 'Content-Type': 'application/json'},
-      body: JSON.stringify({adId: adId, productId: productId, expectedClickUpId: expectedClickUpId || null})
+      body: JSON.stringify(Object.assign({adId: adId, productId: productId,
+        expectedClickUpId: expectedClickUpId || null, actionId: context && context.actionId}, extra || {}))
     });
     var result = await response.json();
     return {response: response, result: result};
   }
-  var saved = await send();
-  if (saved.response.status === 401 && sameProduct()) {
-    var refreshed = await _withCloudTimeout(_refreshSupabaseWriteSession(), 'Refreshing session', 15000);
-    if (refreshed && sameProduct()) saved = await send();
+  var refreshedOnce = false;
+  async function sendWithAuth(extra) {
+    var reply = await send(extra);
+    if (reply.response.status === 401 && !refreshedOnce && sameProduct()) {
+      refreshedOnce = true;
+      var refreshed = await _withCloudTimeout(_refreshSupabaseWriteSession(), 'Refreshing session', 15000);
+      if (refreshed && sameProduct()) reply = await send(extra);
+    }
+    return reply;
+  }
+  var saved = await sendWithAuth();
+  if (saved.response.status === 409 && saved.result.code === 'ORPHAN_ACTION_CONFIRMATION_REQUIRED') {
+    var preview = saved.result.preview;
+    if (!sameProduct() || !preview || preview.id !== adId || preview.productId !== productId ||
+        preview.preview !== true || preview.deletedAt || typeof preview.actionId !== 'string' ||
+        (context && context.actionId && context.actionId !== preview.actionId) ||
+        JSON.stringify(preview.clickupTaskIds) !== JSON.stringify(expectedClickUpId ? [expectedClickUpId] : [])) {
+      throw new Error('The stale Action Plan identity could not be verified. Refresh before deleting.');
+    }
+    if (!confirm('The Action Plan entry "' + (preview.taskName || adId) + '" has no saved creative in this product.\n\nRemove this stale entry from Immuvi only?\n\nNo source creative or ClickUp task will be deleted.')) {
+      throw new Error('Removal cancelled. No records were changed.');
+    }
+    if (!sameProduct()) throw new Error('Product changed. Reopen the Action Plan entry before removing it.');
+    saved = await sendWithAuth({actionId: preview.actionId, confirmOrphanAction: true});
   }
   if (!saved.response.ok) throw new Error(saved.result.error || 'Deletion could not be confirmed. Refresh before retrying.');
   if (!saved.result.verified || saved.result.id !== adId || saved.result.productId !== productId ||
-      !saved.result.deletedAt || JSON.stringify(saved.result.clickupTaskIds) !== JSON.stringify(expectedClickUpId ? [expectedClickUpId] : [])) {
+      !saved.result.deletedAt || JSON.stringify(saved.result.clickupTaskIds) !== JSON.stringify(expectedClickUpId ? [expectedClickUpId] : []) ||
+      (saved.result.kind === 'orphan_action' && saved.result.skipClickUpDelete !== true)) {
     throw new Error('Deletion could not be verified. Refresh before retrying.');
   }
   return saved.result;
 }
 
 var _creativeDeletesInFlight = new Set();
-async function deleteAdEverywhere(adId) {
+async function deleteAdEverywhere(adId, deleteContext) {
   var deleteProductId = activeProductId, deleteGeneration = _uiProductGeneration;
   var deleteApiKey = CFG.key;
   var deleteKey = deleteProductId + '||' + adId;
@@ -27437,6 +27459,7 @@ async function deleteAdEverywhere(adId) {
   for (var j = 0; j < MANUAL_ACTIONS.length; j++) {
     var act = MANUAL_ACTIONS[j];
     if (act.sourceAdId === adId || act.adId === adId) {
+      if (!ad && deleteContext && deleteContext.actionId && act._dbId !== deleteContext.actionId) continue;
       if (act._clickupId && cuIdsToDelete.indexOf(act._clickupId) === -1) {
         cuIdsToDelete.push(act._clickupId);
       }
@@ -27457,15 +27480,16 @@ async function deleteAdEverywhere(adId) {
   // Commit the product-scoped soft deletion and tombstone together, through
   // the same-origin API. Never mutate local state on an unconfirmed result.
   try {
-    var deleteResult = await _softDeleteAdWithSessionRetry(adId, deleteProductId, deleteGeneration, cuIdsToDelete[0]);
+    var deleteResult = await _softDeleteAdWithSessionRetry(adId, deleteProductId, deleteGeneration, cuIdsToDelete[0], deleteContext);
   } catch (e) {
     toast('Delete not confirmed (' + ((ad && ad.formatName) || adId) + '): ' + (e.message || 'Connection failed. Refresh before retrying.'), 'err');
     return;
   }
+  var cuIdsToClean = deleteResult.skipClickUpDelete ? [] : cuIdsToDelete;
   if (activeProductId !== deleteProductId || _adsProductId !== deleteProductId || _uiProductGeneration !== deleteGeneration) {
     var switchedCleanupFailed = false;
-    for (var deleteIndex = 0; deleteIndex < cuIdsToDelete.length; deleteIndex++) {
-      try { await apiDeleteTask(cuIdsToDelete[deleteIndex], deleteApiKey); }
+    for (var deleteIndex = 0; deleteIndex < cuIdsToClean.length; deleteIndex++) {
+      try { await apiDeleteTask(cuIdsToClean[deleteIndex], deleteApiKey); }
       catch (_) { switchedCleanupFailed = true; }
     }
     toast(switchedCleanupFailed ? 'Deleted in the original product, but ClickUp cleanup failed. Review that task in ClickUp.' :
@@ -27474,6 +27498,7 @@ async function deleteAdEverywhere(adId) {
   }
   var deletedIds = [adId];
   if (deleteResult.canonicalId && deleteResult.canonicalId !== adId) deletedIds.push(deleteResult.canonicalId);
+  if (deleteResult.kind !== 'orphan_action') {
   try { deletedIds.forEach(function(id) { _deletedAdIdsCache.add(id); }); } catch (_) {}
   try { cuIdsToDelete.forEach(function (cuid) { if (cuid) _deletedAdClickUpIdsCache.add(cuid); }); } catch (_) {}
 
@@ -27507,33 +27532,45 @@ async function deleteAdEverywhere(adId) {
     Object.keys(_tomb).forEach(function(k) { if (_now - _tomb[k] > 600000) delete _tomb[k]; });
     localStorage.setItem(_tombKey, JSON.stringify(_tomb));
   } catch(e) {}
+  }
 
   // Remove Action Plan entries tied to this AD only
+  function removedAction(a) {
+    if (deleteResult.kind === 'orphan_action') return a._dbId === deleteResult.actionId ||
+      (deleteResult.actionLocalId && a.id === deleteResult.actionLocalId);
+    return deletedIds.indexOf(a.sourceAdId) !== -1 || deletedIds.indexOf(a.adId) !== -1;
+  }
   MANUAL_ACTIONS.forEach(function(a) {
-    if (deletedIds.indexOf(a.sourceAdId) !== -1 || deletedIds.indexOf(a.adId) !== -1) {
+    if (removedAction(a)) {
       try {
         if (typeof window !== 'undefined' && typeof window._apTombstoneAdd === 'function') {
-          window._apTombstoneAdd({cuid:a._clickupId || '',adid:a.sourceAdId || a.adId || '',title:a.title || ''});
+          window._apTombstoneAdd({cuid:a._clickupId || '',
+            adid:deleteResult.kind === 'orphan_action' ? '' : (a.sourceAdId || a.adId || ''),
+            title:deleteResult.kind === 'orphan_action' ? '' : (a.title || '')});
         }
       } catch (_) {}
       _rememberManualActionDeletion(a.id, a._dbId, {persisted: true});
     }
   });
   MANUAL_ACTIONS = MANUAL_ACTIONS.filter(function(a) {
-    return deletedIds.indexOf(a.sourceAdId) === -1 && deletedIds.indexOf(a.adId) === -1;
+    return !removedAction(a);
   });
 
   // Remove any PROD entries tied to this AD only
-  PROD = PROD.filter(function(p) {
-    return deletedIds.indexOf(p.adId) === -1 && deletedIds.indexOf(p.sourceAdId) === -1;
-  });
+  if (deleteResult.kind === 'orphan_action') {
+    if (typeof rebuildProdFromManual === 'function') rebuildProdFromManual();
+  } else {
+    PROD = PROD.filter(function(p) {
+      return deletedIds.indexOf(p.adId) === -1 && deletedIds.indexOf(p.sourceAdId) === -1;
+    });
+  }
 
   // Clean up any orphaned entries in CELL_CREATIVE_ASSIGNMENTS / MATRIX_CELL_META
   // (IDs that are no longer in ADS) — prevents ghost entries in the matrix
-  purgeOrphanedMatrixKeys();
+  if (deleteResult.kind !== 'orphan_action') purgeOrphanedMatrixKeys();
 
   // Unlink inspiration: revert status if nothing else still references it
-  if (unlinkedInspoId) {
+  if (unlinkedInspoId && deleteResult.kind !== 'orphan_action') {
     var stillLinked = ADS.some(function(a) { return a._fromInspoId === unlinkedInspoId; });
     if (!stillLinked) {
       var ins = INSPIRATIONS.find(function(i) { return i.id === unlinkedInspoId; });
@@ -27554,6 +27591,7 @@ async function deleteAdEverywhere(adId) {
 
   // Immediate full flush — bypass the 300ms debounce so the DB is cleaned
   // up BEFORE the next pollFullSync cycle (every 30s) runs and sees stale data.
+  if (deleteResult.kind !== 'orphan_action') {
   if (_saveScheduled) { clearTimeout(_saveScheduled); _saveScheduled = null; }
   _pendingFlushProductId = deleteProductId;
   _saveQueue = _saveQueue.then(function(){
@@ -27562,16 +27600,17 @@ async function deleteAdEverywhere(adId) {
     }
   })
     .catch(function(e){ console.error('[SB] delete flush error', e); });
+  }
 
   // Fire ClickUp deletes (staggered to avoid rate limits). 2026-05-25:
   // track per-task failures and tell the user if any ClickUp side didn't
   // delete — local Matrix/AP/DB are already clean, but if ClickUp still
   // has the task the user needs to know to manually clean it up there.
-  if (cuIdsToDelete.length > 0) {
-    var _cuTotal = cuIdsToDelete.length;
+  if (cuIdsToClean.length > 0) {
+    var _cuTotal = cuIdsToClean.length;
     var _cuFailed = [];
     var _suffix = unlinkedInspoId ? ' · inspiration unlinked' : '';
-    await Promise.all(cuIdsToDelete.map(function (cuId, idx) {
+    await Promise.all(cuIdsToClean.map(function (cuId, idx) {
       return new Promise(function (resolve) {
         setTimeout(function () {
           apiDeleteTask(cuId, deleteApiKey)
@@ -27589,7 +27628,8 @@ async function deleteAdEverywhere(adId) {
     });
   } else {
     var suffix2 = unlinkedInspoId ? ' · inspiration unlinked' : '';
-    toast('Deleted ' + adId + ' everywhere' + suffix2, 'ok');
+    toast(deleteResult.kind === 'orphan_action' ? 'Removed stale Action Plan entry from Immuvi only.' :
+      'Deleted ' + adId + ' everywhere' + suffix2, 'ok');
   }
   } finally {
     _creativeDeletesInFlight.delete(deleteKey);

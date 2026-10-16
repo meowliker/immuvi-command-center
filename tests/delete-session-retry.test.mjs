@@ -170,7 +170,7 @@ test('delete API rejects invalid or unauthenticated requests without database ac
 test('delete API preserves auth/conflict failures and does not claim unverified success', async () => {
   for (const [code, status] of [['42501', 403], ['P0002', 404], ['PT409', 409], ['40001', 409], ['PGRST301', 401]]) {
     const {handler, req, res, state, calls} = server(); state.status = status; state.code = code;
-    await handler(req, res); assert.equal(res.statusCode, status); assert.equal(calls.length, code==='P0002'?2:1);
+    await handler(req, res); assert.equal(res.statusCode, status); assert.equal(calls.length, code==='P0002'?3:1);
   }
   for (const change of [{deletedAt: null}, {deletedAt: '2026-01-01'}, {reject: true}]) {
     const {handler, req, res, state} = server(); Object.assign(state, change);

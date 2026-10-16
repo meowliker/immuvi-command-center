@@ -7,6 +7,7 @@ function setup(change={}) {
   const reply=(status,body)=>({ok:status===200,status,json:async()=>body});let rpc=0;
   const handler=createDeleteCreativeHandler({env:{SUPABASE_URL:'https://db.test',SUPABASE_ANON_KEY:'public-key'},fetchImpl:async(url,opts)=>{
     calls.push({url,opts});assert.equal(opts.headers.Authorization,'Bearer caller');
+    if(url.includes('/rpc/delete_orphan_action'))return reply(404,{code:'P0002'});
     if(url.includes('/rpc/')){
       rpc++;const b=JSON.parse(opts.body);
       assert.equal(b.p_product_id,'A');assert.equal(b.p_expected_clickup_id,'cu');
@@ -40,7 +41,7 @@ test('ambiguous, missing, foreign, changed and unverifiable identities never pro
     [{wrongCommit:true},502,2], [{badReadback:true},502,2],
   ]){
     const {handler,req,res,calls}=setup(change);await handler(req,res);
-    assert.equal(res.statusCode,status);assert.ok(!res.body.verified);assert.equal(calls.filter(c=>c.url.includes('/rpc/')).length,writes);
+    assert.equal(res.statusCode,status);assert.ok(!res.body.verified);assert.equal(calls.filter(c=>c.url.includes('/rpc/delete_creative')).length,writes);
   }
 });
 test('authorization and existing identity conflicts cannot trigger alias resolution',async()=>{

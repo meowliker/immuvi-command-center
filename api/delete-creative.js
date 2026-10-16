@@ -1,3 +1,5 @@
+import {deleteOrphanAction} from '../tools/orphan-action-deletion.mjs';
+
 // Forward the caller's JWT, never elevate deletion to the service role.
 export function createDeleteCreativeHandler({fetchImpl = fetch, env = process.env} = {}) {
   return async function handler(req, res) {
@@ -13,9 +15,12 @@ export function createDeleteCreativeHandler({fetchImpl = fetch, env = process.en
     let body;
     try { body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body; }
     catch { return res.status(400).json({error: 'Invalid deletion request.', code: 'INVALID_REQUEST'}); }
-    const {adId, productId, expectedClickUpId} = body || {};
+    const {adId, productId, expectedClickUpId, actionId, confirmOrphanAction} = body || {};
     if (![adId, productId].every(v => typeof v === 'string' && v.length > 0 && v.length <= 200) ||
-        !(expectedClickUpId === null || (typeof expectedClickUpId === 'string' && expectedClickUpId.length <= 200))) {
+        !(expectedClickUpId === null || (typeof expectedClickUpId === 'string' && expectedClickUpId.length <= 200)) ||
+        !(actionId == null || (typeof actionId==='string'&&/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(actionId))) ||
+        !(confirmOrphanAction==null||typeof confirmOrphanAction==='boolean') ||
+        (confirmOrphanAction===true&&!actionId)) {
       return res.status(400).json({error: 'Invalid deletion request.', code: 'INVALID_REQUEST'});
     }
     const url = env.SUPABASE_URL, key = env.SUPABASE_ANON_KEY || env.SUPABASE_SERVICE_ROLE_KEY;
@@ -29,6 +34,11 @@ export function createDeleteCreativeHandler({fetchImpl = fetch, env = process.en
         body: JSON.stringify({p_ad_id: id, p_product_id: productId, p_expected_clickup_id: expectedClickUpId})
       });
       let canonicalId = adId;
+      if(confirmOrphanAction===true) {
+        const orphan=await deleteOrphanAction({fetchImpl,url,headers,requestSignal,adId,productId,
+          expectedClickUpId,actionId,confirmOrphanAction:true});
+        return res.status(orphan.status).json(orphan.body);
+      }
       let response = await commit(canonicalId);
       let result = await response.json();
       // Read-only ClickUp refreshes can display task IDs rather than the saved
@@ -60,6 +70,11 @@ export function createDeleteCreativeHandler({fetchImpl = fetch, env = process.en
         }
       }
       if (!response.ok) {
+        if(result.code==='P0002') {
+          const orphan=await deleteOrphanAction({fetchImpl,url,headers,requestSignal,adId,productId,
+            expectedClickUpId,actionId});
+          return res.status(orphan.status).json(orphan.body);
+        }
         const code = String(result.code || 'DATABASE_ERROR');
         const status = response.status === 401 ? 401 : code === '42501' ? 403 :
           code === 'P0002' ? 404 : ['PT409', '40001'].includes(code) ? 409 : 502;

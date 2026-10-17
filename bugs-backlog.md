@@ -51,6 +51,14 @@ Unrelated inspirations and taxonomy content were preserved; concurrent
 browser-tagged creative creation/due-date edits were left intact. See
 docs/repairs/2026-10-16-classification-working-directory.md.
 
+Follow-up recovery audit (2026-10-17): a code deployment does not automatically
+retry old blocked rows. The remaining exact-directory-error jobs were privately
+backed up and recovered on a verified worker; persisted results and full briefs
+were read back, and the exact blocked-error cohort was empty afterward. Existing
+creative, taxonomy, matrix, Action Plan and unrelated-inspiration records were
+unchanged. The repair runbook now requires an all-product cohort inventory and
+explicit reporting of unrecovered rows before declaring recovery complete.
+
 ---
 
 ## No Brief blocked by mandatory narration

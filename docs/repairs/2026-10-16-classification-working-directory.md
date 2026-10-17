@@ -74,3 +74,23 @@ verification hashes are in the backup directory above. QA remains untouched.
 Pre-change main commit: 3e44cab3d22f72fe65523361770433bfca7ff73b.
 Revert the worker repair commit to roll back code. Never restore stale queue
 snapshots over active/completed jobs. QA is not modified.
+
+## Recovery Completion Checklist
+
+A deployed launcher fix does not reset existing blocked queue rows. Distinguish
+code deployment, worker adoption and queue recovery in every completion report.
+
+1. Inventory the exact infrastructure-error cohort across all products before
+   retrying. Do not treat unrelated source, audio, permission or identity blocks
+   as the same failure.
+2. Require a fresh enabled worker heartbeat advertising the repaired capability.
+   Preserve source/product identity and brief mode; never interrupt active jobs.
+3. Back up each authorized recovery scope privately. Retry only matching,
+   unclaimed rows with unchanged identity and no completed result to overwrite.
+4. Verify saved classifications and readable product-library briefs, then
+   compare pre-existing records against the backup. Preserve concurrent edits.
+5. Recount the exact error cohort across all products. Explicitly report any
+   rows outside the authorized recovery scope instead of calling recovery
+   complete merely because the worker is fixed or one product succeeded.
+
+Keep live source identifiers, media and credentials out of public repair notes.

@@ -30,11 +30,27 @@ credential or permission changes are included.
 
 ## Verification And Recovery
 
-72 Python worker tests and 331 application regression tests pass. Coverage
+75 Python worker tests and 331 application regression tests pass. Coverage
 includes every platform in both brief modes, checksum and speech safeguards,
 precise infrastructure-error detection, retry preservation and mirror parity.
 This verifies prompt/routing behavior, not the accuracy of every future model
 analysis. A readable source and actual evidence remain required.
+
+The skill's embedded pipeline also imports the existing checksum-safe model
+loader rather than calling the shared-cache Whisper loader directly.
+
+The main deployment was verified READY, with served worker/skill assets matching
+the tested files. A fresh Mac mini heartbeat advertised local-only-v1 before the
+single backed-up queue row was retried. It completed on that operator retry
+without resetting the previous attempt count. Independent readback confirmed
+exactly one result, the original source/product/ID/full-brief setting, the
+original product library, all eight brief sections and three structured scripts.
+Saved audio evidence names local ffmpeg and cached AST/CLAP inference, explicitly
+distinguishing incidental speech from ad narration and recording uncertainty.
+No exact dialogue was invented. Existing creatives, taxonomy, matrix cells,
+Action Plan entries and unrelated inspirations were byte-for-byte unchanged.
+No matching credit-dependent failures remained in the all-product queue audit.
+Detailed source/audio evidence and page verification remain in private backups.
 
 Before a recovery, privately back up the selected product state and queue row.
 Wait for an enabled fresh worker to advertise the new capability. Retry only

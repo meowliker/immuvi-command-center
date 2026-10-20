@@ -9,7 +9,7 @@ Status legend: 🆕 just-flagged · 📐 plan-locked · 🛠 in-progress · ✅ 
 
 ## Audio verification selected a credit-based external analyzer (2026-10-20)
 
-**Status:** Tested; deployment and scoped recovery require live verification.
+**Status:** Fixed and live-verified, 2026-10-20.
 
 The shared classification contract did not explicitly constrain audio analysis
 to local tools outside the Facebook-specific path. A remote analyzer credit
@@ -18,8 +18,13 @@ All platforms now receive the same local-only audio routing rule, without
 weakening narration evidence, music-only support or No Brief behavior. Workers
 advertise local-only-v1; a concrete local-tool failure is infrastructure rather
 than a content retry. No schema, frontend, taxonomy or permission changes.
-72 worker and 331 application tests pass. Follow exact-source private backup,
-fresh worker adoption and final result/brief readback before reporting recovery.
+75 worker and 331 application tests pass. The worker adopted local-only-v1 before
+the backed-up failed row was retried; it completed with one verified result and
+a readable eight-section brief with three scripts. Its original source/product,
+brief setting and historical attempts were preserved. Existing product records
+and unrelated inspirations were unchanged. No matching credit-dependent failures
+remained across products. Keep exact-source private backup, fresh worker adoption
+and final result/brief readback as mandatory recovery checks.
 See docs/repairs/2026-10-20-local-audio-routing.md.
 
 ---

@@ -333,7 +333,7 @@ for _SKILL_DIR in (
 ):
     if os.path.isdir(_SKILL_DIR) and _SKILL_DIR not in sys.path:
         sys.path.insert(0, _SKILL_DIR)
-from fb_ad_classifier import fetch_ad_snapshot, download_instagram_media, download_tiktok_media, download_video, extract_frames, extract_ad_id, decode_unicode, USER_AGENT, OUTPUT_BASE
+from fb_ad_classifier import fetch_ad_snapshot, download_instagram_media, download_tiktok_media, download_video, extract_frames, extract_ad_id, decode_unicode, load_transcription_model, USER_AGENT, OUTPUT_BASE
 
 def detect_platform(url):
     u = url.lower()
@@ -363,9 +363,8 @@ def _fmt_time(seconds):
 
 def transcribe_audio(wav_path):
     try:
-        import whisper
         model_name = os.environ.get("WHISPER_MODEL", "base")
-        model = whisper.load_model(model_name)
+        model = load_transcription_model(model_name)
         result = model.transcribe(wav_path, fp16=False, verbose=False)
         segments = []
         for seg in result.get("segments") or []:

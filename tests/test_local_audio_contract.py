@@ -56,6 +56,42 @@ class LocalAudioContractTests(unittest.TestCase):
         self.assertEqual(values["attempts"], 0)
         self.assertIsNone(values["claimed_by"])
 
+    def test_execution_routes_local_tool_failure_to_infrastructure_handling(self):
+        w = worker.Worker.__new__(worker.Worker)
+        job = {"id": "exact-queue", "ins_id": "INS-test", "product_id": "product",
+               "url": "https://tiktok.com/@creator/video/123", "no_brief": False}
+        w.sb = Mock()
+        w.sb.select.return_value = [{"id": job["ins_id"], "product_id": job["product_id"],
+                                     "url": job["url"]}]
+        w.mark_classifying = Mock()
+        w._verify_inspirations_row = Mock(return_value=(False, "Not analyzed"))
+        message = "FAIL INS-test: LOCAL_AUDIO_TOOL_UNAVAILABLE: missing local executable"
+        w.run_skill_on_job = Mock(return_value={"success": False, "error": message})
+        w.mark_agent_infra_failure = Mock()
+        w.mark_failure = Mock()
+        w.increment_failed = Mock()
+        with patch.object(worker, "log"):
+            w._execute_classify_job(job)
+        w.mark_agent_infra_failure.assert_called_once_with(job, message)
+        w.mark_failure.assert_not_called()
+        w.increment_failed.assert_not_called()
+
+    def test_heartbeat_reports_the_active_routing_revision(self):
+        w = worker.Worker.__new__(worker.Worker)
+        w._caps = {}
+        with patch.object(worker, "_has_claude", return_value=False), \
+             patch.object(worker, "_has_codex", return_value=False):
+            w.refresh_agent_capabilities()
+        self.assertEqual(w._caps["local_audio_verification"], "local-only-v1")
+
+    def test_skill_pipeline_uses_the_existing_checksum_safe_loader(self):
+        root = Path(__file__).resolve().parents[1]
+        for directory in ("team-skill", "public/team-skill"):
+            skill = (root / directory / "SKILL.md").read_text()
+            self.assertIn("decode_unicode, load_transcription_model, USER_AGENT", skill)
+            self.assertIn("model = load_transcription_model(model_name)", skill)
+            self.assertNotIn("model = whisper.load_model(model_name)", skill)
+
     def test_worker_advertises_route_and_published_copies_match(self):
         root = Path(__file__).resolve().parents[1]
         source = (root / "tools/classify_worker.py").read_bytes()

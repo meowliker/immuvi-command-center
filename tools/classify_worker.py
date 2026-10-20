@@ -103,6 +103,43 @@ CODEX_BIN_CANDIDATES = [
 ]
 
 
+def local_audio_contract(job):
+    contract = (
+        "\nLOCAL AUDIO VERIFICATION (all platforms):\n"
+        "Use the exact downloaded source media and local tools on this worker. "
+        "Do not use Arcads or any remote media-analysis/transcription MCP or API, "
+        "upload source media to an external analyzer, submit a credit-based analysis job, "
+        "or wait/poll for an external queued analysis. No paid or third-party audio fallback "
+        "is authorized. Downloading official local model weights does not require uploading media. "
+        "For an actual audio track, extract mono 16 kHz WAV with ffmpeg. Establish narration "
+        "presence with local source-audio inspection/acoustic evidence, such as an already "
+        "installed AudioSet/AST model, and corroborating source visuals/captions. "
+        "Record the actual local method and limitations in audio_probe. A sound classifier "
+        "score is evidence, not proof of an ad narrator; music and incidental speech are not "
+        "automatically narration. Text-only and image sources skip audio analysis. "
+        "Preserve the claimed source, product, ID and No Brief setting.\n"
+    )
+    if job.get("no_brief") is True:
+        return contract + (
+            "No Brief: keep the optional-narration visual/text evidence path. Do not require "
+            "speech verification, retry ASR, load larger models or create a brief.\n"
+        )
+    return contract + (
+        "Full brief: transcribe confirmed narration locally with Whisper. Use "
+        "fb_ad_classifier.load_transcription_model so shared-cache checksum errors receive "
+        "one isolated verified recovery. If needed, make at most one stronger turbo "
+        "task=transcribe attempt in a fresh Python subprocess; never run parallel large models. "
+        "Check the words and timing against the exact source; do not infer language from "
+        "the Immuvi product. Confirmed music-only media still gets a full visual/text-led "
+        "brief with 'No voice over'. Never infer no narration from failed ASR. "
+        "If the required local executable/import cannot run, print FAIL with "
+        "LOCAL_AUDIO_TOOL_UNAVAILABLE: and its concrete local error; do not silently switch "
+        "providers. That marker is only for local tool failure, not unclear speech or an "
+        "inaccessible source. Genuine unverifiable narration keeps the existing evidence "
+        "guard: preserve the source and report uncertainty, never fabricate a transcript.\n"
+    )
+
+
 def narration_presence_contract(job, row=None):
     contract = (
         "\nNARRATION PRESENCE BEFORE TRANSCRIPTION (all platforms and both brief modes):\n"
@@ -119,6 +156,7 @@ def narration_presence_contract(job, row=None):
         "produced unreliable fragments. If genuine narration is present but unclear, preserve "
         "the existing transcript-verification guard. Never infer absence from ASR failure alone.\n"
     )
+    contract += local_audio_contract(job)
     row = row if isinstance(row, dict) else {}
     review = row.get("source_audio_review")
     if (row.get("id") == job.get("ins_id") and row.get("product_id") == job.get("product_id")
@@ -548,6 +586,7 @@ def probe_capabilities() -> dict:
         "classification_only": True,
         "classification_only_evidence": "optional-narration-v1",
         "narration_presence": "music-aware-v1",
+        "local_audio_verification": "local-only-v1",
         "provider_outage": "cooldown-v1",
         "reddit_text": "reddit-text-v1",
         "facebook_evidence": "exact-ad-v1",
@@ -685,6 +724,7 @@ def _agent_infra_failed(output: str) -> bool:
         or "no usable agent cli found" in text
         or "agent cli not found" in text
         or "no agent cli installed" in text
+        or "local_audio_tool_unavailable:" in text
     )
 
 
@@ -1033,6 +1073,7 @@ class Worker:
             "agent_launcher_revision": "codex-bundle-v2",
             "classification_workspace": "isolated-cwd-v1",
             "drive_media_selection": "exact-file-v1",
+            "local_audio_verification": "local-only-v1",
         })
         self._caps["taxonomy_review"] = "semantic-taxonomy-v1" if (
             shutil.which("node") and self._caps["codex"]

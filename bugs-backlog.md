@@ -7,6 +7,23 @@ Status legend: 🆕 just-flagged · 📐 plan-locked · 🛠 in-progress · ✅ 
 
 ---
 
+## Audio verification selected a credit-based external analyzer (2026-10-20)
+
+**Status:** Tested; deployment and scoped recovery require live verification.
+
+The shared classification contract did not explicitly constrain audio analysis
+to local tools outside the Facebook-specific path. A remote analyzer credit
+failure and queued fallback exhausted a TikTok inspiration's content retries.
+All platforms now receive the same local-only audio routing rule, without
+weakening narration evidence, music-only support or No Brief behavior. Workers
+advertise local-only-v1; a concrete local-tool failure is infrastructure rather
+than a content retry. No schema, frontend, taxonomy or permission changes.
+72 worker and 331 application tests pass. Follow exact-source private backup,
+fresh worker adoption and final result/brief readback before reporting recovery.
+See docs/repairs/2026-10-20-local-audio-routing.md.
+
+---
+
 ## Drive folder analysis did not pin a user-selected version (2026-10-16)
 
 **Status:** Fixed and live-verified for the selected Version 2 of T-INS-119.

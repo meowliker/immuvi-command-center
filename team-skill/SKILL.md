@@ -129,6 +129,31 @@ genuinely matching target-product taxonomy; keep new suggestions local.
 
 ### Establish narration presence before transcription
 
+Audio verification runs locally on the worker for every platform. Do not use
+Arcads or remote media-analysis/transcription MCPs/APIs, upload source media to
+an external analyzer, submit credit-based analysis jobs, or poll a queued remote
+fallback. A third-party credit balance must not become a classification
+dependency. Use the exact downloaded media, ffmpeg and local audio tools;
+official model-weight downloads do not upload source media.
+
+Extract mono 16 kHz WAV from an actual audio track. Establish narration presence
+with local audio inspection/acoustic evidence (for example, an already installed
+AudioSet/AST model), corroborated by the exact source visuals and captions.
+Record the local method and uncertainty in audio_probe. Classifier scores,
+captions and ASR fragments alone do not prove a narrator is present or absent.
+Text/image sources skip audio work.
+
+For confirmed narration in full-brief mode, use local Whisper through
+fb_ad_classifier.load_transcription_model. A damaged shared cache gets one
+isolated checksum-verified recovery; never delete shared cache files or bypass
+verification. At most one stronger turbo task=transcribe attempt may run in a
+fresh subprocess; do not run parallel large models or infer language from the
+selected product. If a required local executable/import cannot run, report
+FAIL <ins_id>: LOCAL_AUDIO_TOOL_UNAVAILABLE: <concrete local error>, rather than
+switching providers. Do not use that marker for unclear speech or unavailable
+source media. No Brief retains its optional-narration evidence path; missing
+transcription must not make it generate a brief or require larger ASR models.
+
 Music-only, ambient-audio and silent videos remain eligible for the complete
 normal brief. No Brief is not required. An audio stream or a nonempty Whisper
 result is NOT proof of spoken ad narration: ASR can hallucinate fragments from

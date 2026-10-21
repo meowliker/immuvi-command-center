@@ -13,10 +13,17 @@
    bash /tmp/immuvi-personal-worker-install.sh
    ```
 
-3. The installer creates a private Python environment, installs local media/audio
+3. The installer reuses working Python 3.12 and ffmpeg/ffprobe, without upgrading
+   them just because newer versions exist. yt-dlp is installed only inside the
+   private worker environment, not through a global Homebrew/Python upgrade.
+   Missing Python/ffmpeg may still require their normal Homebrew dependencies;
+   automatic Homebrew updates and cleanup are disabled for this installer.
+   It creates a private Python environment, installs local media/audio
    dependencies, downloads baseline audio models, and checks the AI login. Codex
    gets a separate worker profile and may request a one-time sign-in. It does not
    copy or modify your ordinary Codex configuration or MCP connections.
+   If installation stops, it reports the failed stage. Do not force Homebrew
+   symlink overwrites or paste a pairing code at the normal shell prompt.
 4. When Terminal asks for a pairing code, generate one in My Mac. Paste the code
    and the same personal ClickUp key into the hidden Terminal prompts. Codes
    expire in ten minutes and work once. Do not send keys/codes to a chat.

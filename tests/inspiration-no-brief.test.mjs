@@ -23,7 +23,7 @@ for (const file of ['immuvi-command-center.html','public/immuvi-command-center.h
       getProductInsPrefix:()=> 'Q',detectPlatform:()=> 'instagram',
       getCurrentInspirationAddedBy:()=> 'tester',saveInspirations(){},renderInspirations(){},
       updateQueueCounter(){},showInsStatus(){},autoPushToBridge(){}});
-    load(c,'async function addToInsQueue()','async function autoPushToBridge()');
+    load(c,'async function addToInsQueue()','async function autoPushToBridge(');
     await c.addToInsQueue();
     box.checked=false;input.value='https://example.com/two';await c.addToInsQueue();
     assert.equal(c.INSPIRATIONS[0].noBrief,false);
@@ -34,13 +34,23 @@ for (const file of ['immuvi-command-center.html','public/immuvi-command-center.h
   test(file+': auto queue and Process All retain mixed per-item modes',async()=>{
     const items=[{id:'a',sourceUrl:'https://a',noBrief:true},{id:'b',sourceUrl:'https://b',noBrief:false},{id:'legacy',sourceUrl:'https://c'}];
     const payloads=[];
-    const c=vm.createContext({getQueuedItems:()=>items,activeProductId:'p',console,_inspirationCanCreate:()=>true,
+    const c=vm.createContext({window:{},getQueuedItems:()=>items,activeProductId:'p',console,_inspirationCanCreate:()=>true,
       DB:{ready:true,getResults:async()=>[],enqueueInspirations:async(_,rows)=>{payloads.push(rows);return {ok:true};}},
       showInsStatus(){},showProcessModal(){}});
-    load(c,'async function autoPushToBridge()','function getQueuedItems()');
+    load(c,'async function autoPushToBridge(','function getQueuedItems()');
     load(c,'async function processAllWithClaude()','function showProcessModal(');
     await c.autoPushToBridge();await c.processAllWithClaude();
     for(const rows of payloads) assert.deepEqual(Array.from(rows,r=>r.noBrief),[true,false,false]);
+  });
+  test(file+': personal auto queue includes only the newly added source, never other queued links',async()=>{
+    const payloads=[];
+    const c=vm.createContext({window:{_insRunOnAssignment:'personal:fixture'},
+      getQueuedItems:()=>[{id:'new',sourceUrl:'https://example.test/new',noBrief:true},{id:'other',sourceUrl:'https://example.test/other'}],
+      activeProductId:'p',console,_inspirationCanCreate:()=>true,DB:{ready:true,getResults:async()=>[],enqueueInspirations:async(_,rows)=>{payloads.push(rows);return{ok:true};}},showInsStatus(){}});
+    load(c,'async function autoPushToBridge(','function getQueuedItems()');
+    await c.autoPushToBridge('new');
+    assert.deepEqual(Array.from(payloads[0],row=>row.id),['new']);assert.equal(payloads[0][0].noBrief,true);
+    await c.autoPushToBridge();assert.equal(payloads.length,1);
   });
   test(file+': DB persists strict no_brief boolean without consulting current checkbox',async()=>{
     let queued;

@@ -7,6 +7,21 @@ Status legend: 🆕 just-flagged · 📐 plan-locked · 🛠 in-progress · ✅ 
 
 ---
 
+## Personal classification worker isolation (2026-10-21)
+
+The personal Mac path is separate from the shared registry and job dispatcher.
+Preserve server-verified ClickUp ownership in addition to the shared app login,
+one-use pairing, hashed device secrets, exact source/product and fenced leases.
+Personal Add to Queue must submit only the new inspiration, never sweep other
+people's queue entries. Shared assignments cannot be stolen; offline personal
+jobs cannot silently fall back. Idle claims must not produce repeated queue
+writes or realtime subscriptions. Keep No Brief, locked taxonomy, existing
+notes/briefs/scripts and lifecycle status intact. Publication ambiguity retains
+analysis for review instead of creating a duplicate page. Regression checks and
+setup/rollback limitations are documented in docs/personal-classification-worker.md.
+
+---
+
 ## Audio verification selected a credit-based external analyzer (2026-10-20)
 
 **Status:** Fixed and live-verified, 2026-10-20.

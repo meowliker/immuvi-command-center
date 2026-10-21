@@ -1,4 +1,5 @@
 import { build } from 'esbuild';
+import './build-personal-worker.mjs';
 import { copyFile, cp, mkdir } from 'node:fs/promises';
 await mkdir('strategist-assets',{recursive:true});
 await mkdir('strategist/server',{recursive:true});

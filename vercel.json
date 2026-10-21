@@ -1,11 +1,21 @@
 {
   "buildCommand": "npm run build:strategist",
   "outputDirectory": "public",
+  "functions": {
+    "api/personal-worker.js": {"maxDuration": 60}
+  },
   "rewrites": [
     { "source": "/", "destination": "/immuvi-command-center.html" },
     { "source": "/install-skill.sh", "destination": "/team-skill/install-skill.sh" }
   ],
   "headers": [
+    {
+      "source": "/personal-worker/(.*)",
+      "headers": [
+        {"key": "Cache-Control", "value": "no-store"},
+        {"key": "X-Content-Type-Options", "value": "nosniff"}
+      ]
+    },
     {
       "source": "/strategist.html",
       "headers": [

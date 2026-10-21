@@ -164,6 +164,8 @@ def _tiktok_download_ytdlp(url: str, work_dir: str, cookies: bool) -> str:
         url,
     ]
     if cookies:
+        if os.environ.get('IMMUVI_DISABLE_BROWSER_COOKIES') == '1':
+            raise RuntimeError('Browser-cookie access is disabled for personal workers')
         cmd[1:1] = ["--cookies-from-browser", "chrome"]
 
     r = subprocess.run(cmd, capture_output=True, text=True, timeout=45)

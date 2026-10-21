@@ -75,7 +75,7 @@ test('completed result replay does not recreate documents or revalidate a change
   assert.equal(out.code,200);assert.deepEqual(out.body,{done:true});assert.equal(calls,1);
 });
 test('brief readback tolerates formatting whitespace but rejects lost or changed source content',()=>{
-  assert.ok(briefContentMatches('## 1. SNAPSHOT\n| A | B |\n','## 1\\. SNAPSHOT\r\n|A|B|'));
+  assert.ok(briefContentMatches('## 1. SNAPSHOT\n| A | B |\n|---|---|\n|One|Two|','## 1\\. SNAPSHOT\r\n|A|B|\n| --- | --- |\n| One | Two |'));
   assert.equal(briefContentMatches('Source changed','Source original'),false);
   assert.equal(briefContentMatches('',''),false);
 });
@@ -89,11 +89,90 @@ test('a publishing reservation is never used to create a duplicate page',async()
     if(url.endsWith('/api/v2/user'))return response({user:{id:123}});
     assert.ok(url.includes('/rpc/'));const op=JSON.parse(opts.body).p_op;operations.push(op);
     if(op==='inspect')return response({...context,no_brief:false,clickup_user_id:'123'});
-    if(op==='prepare')return response({publishing:true,page:null,artifactHash:'already-reserved'});
-    if(op==='review')return response({ok:true});
+    if(op==='prepare')return response({publishing:true,page:null,noBrief:false,artifactHash:createHash('sha256').update(JSON.stringify(validatePersonalResult(r,{...context,no_brief:false}))).digest('hex')});
     throw new Error('Unexpected write');
   },{authorization:'Device '+'x'.repeat(43),'x-clickup-key':'pk_'+'x'.repeat(25)});
-  assert.equal(out.code,409);assert.deepEqual(operations,['inspect','prepare','review']);
+  assert.equal(out.code,503);assert.deepEqual(operations,['inspect','prepare']);
+});
+test('Markdown verification preserves complete content while ignoring bullet glyphs and escaping',()=>{
+  const expected='## 1. Example\n\n- Use [PRODUCT] carefully.\n- See [source](https://example.test/a?x=1).\n\n| Time | Script |\n|---|---|\n|0:01|Keep all words.|';
+  const actual='## 1\\. Example\n\n* Use \\[PRODUCT\\] carefully.\n* See [source](https://example.test/a?x=1).\n\n|Time|Script|\n|:-----|-----:|\n|0:01|Keep all words.|';
+  assert.ok(briefContentMatches(actual,expected));
+  for(const changed of [actual.replace('all words','some words'),actual.replace('x=1','x=2'),actual.replace('0:01','0:02'),actual.replace('Use \\[PRODUCT\\] carefully.',''),actual.replace('Keep all words.','Keepall words.')])assert.equal(briefContentMatches(changed,expected),false);
+  assert.equal(briefContentMatches('1. First\n2. Second','2. First\n3. Second'),false);
+  assert.equal(briefContentMatches('- [x] Done','- [ ] Done'),false);
+});
+function fullResult(){
+  const r=result(),names=['SNAPSHOT','CREATIVE BREAKDOWN','WHY IT WORKS','REPLICATION BRIEF','WHAT TO TEST','COMPETITOR INTEL','OUR NEXT AD','NEXT AD SCRIPTS'];
+  r.markdown=names.map((name,i)=>'## '+(i+1)+'. '+name+'\n\n- '+('Complete evidence and product adaptation. '.repeat(10))).join('\n\n')+'\n\n'+context.source_url+
+    ('\n\n| Time | Label | Caption / Voice Over |\n|---|---|---|\n|0:00|Hook|Complete script.|').repeat(4);
+  r.brief={next_ad_scripts:Array.from({length:3},()=>({name:'Script',voice_over_script:'Complete script',source_format_match:'Source skeleton',script_breakdown:[{}]}))};return r;
+}
+const receipt={id:'fixture-page',docId:'fixture-doc',url:'https://app.clickup.com/9016762494/docs/fixture-doc/fixture-page'};
+test('publishing records an unverified page receipt before readback and commits only after verification',async()=>{
+  const r=fullResult(),events=[];
+  const out=await invoke({op:'complete',jobId:id,lease:id,result:r},async(url,opts)=>{
+    if(url.endsWith('/api/v2/user'))return response({user:{id:123}});
+    if(url.includes('/rpc/')){const body=JSON.parse(opts.body);events.push(body.p_op);
+      if(body.p_op==='inspect')return response({...context,no_brief:false,clickup_user_id:'123'});
+      if(body.p_op==='prepare')return response({reserved:true,noBrief:false,docId:receipt.docId,insId:context.ins_id});
+      if(body.p_op==='receipt')assert.deepEqual(body.p_args.page,receipt);
+      return response(body.p_op==='commit'?{done:true}:{ok:true});
+    }
+    events.push(opts.method==='POST'?'create':'read');
+    return response(opts.method==='POST'?{id:receipt.id}:{id:receipt.id,content:r.markdown.replace(/^- /gm,'* ')});
+  },{authorization:'Device '+'x'.repeat(43),'x-clickup-key':'pk_'+'x'.repeat(25)});
+  assert.equal(out.code,200);assert.deepEqual(events,['inspect','prepare','create','receipt','read','page','commit']);
+});
+test('readback mismatch preserves the receipt for review and cannot commit or create twice',async()=>{
+  const r=fullResult(),events=[];let code;
+  const out=await invoke({op:'complete',jobId:id,lease:id,result:r},async(url,opts)=>{
+    if(url.endsWith('/api/v2/user'))return response({user:{id:123}});
+    if(url.includes('/rpc/')){const body=JSON.parse(opts.body);events.push(body.p_op);
+      if(body.p_op==='inspect')return response({...context,no_brief:false,clickup_user_id:'123'});
+      if(body.p_op==='prepare')return response({reserved:true,noBrief:false,docId:receipt.docId,insId:context.ins_id});
+      if(body.p_op==='review')code=body.p_args.code;return response({ok:true});
+    }
+    events.push(opts.method==='POST'?'create':'read');return response(opts.method==='POST'?{id:receipt.id}:{id:receipt.id,content:'Incomplete'});
+  },{authorization:'Device '+'x'.repeat(43),'x-clickup-key':'pk_'+'x'.repeat(25)});
+  assert.equal(out.code,409);assert.equal(code,'BRIEF_READBACK_MISMATCH');assert.deepEqual(events,['inspect','prepare','create','receipt','read','review']);
+});
+test('browser verification uses only its scoped stored receipt and never creates a ClickUp page',async()=>{
+  const r=fullResult(),artifact=validatePersonalResult(r,{...context,no_brief:false}),events=[];
+  const out=await invoke({op:'verify',deviceId:id,jobId:id},async(url,opts)=>{
+    if(url.includes('/auth/v1/user'))return response({id});if(url.endsWith('/api/v2/user'))return response({user:{id:123}});
+    if(url.includes('/rpc/')){const body=JSON.parse(opts.body);events.push(body.p_op);
+      if(body.p_op==='review_context')return response({artifact,artifactHash:'stored-hash',page:receipt});
+      if(body.p_op==='resume_review')return response({token_hash:'server-only-hash',job_id:id,lease:id,contract:'personal-artifact-v1'});
+      return response(body.p_op==='commit'?{done:true}:{ok:true});
+    }
+    assert.notEqual(opts.method,'POST');events.push('read');return response({id:receipt.id,content:r.markdown});
+  },{authorization:'Bearer app-session','x-clickup-key':'pk_'+'x'.repeat(25)});
+  assert.equal(out.code,200);assert.deepEqual(out.body,{done:true});assert.deepEqual(events,['review_context','read','resume_review','page','commit']);
+});
+test('No Brief completion cannot read or create ClickUp documents',async()=>{
+  const events=[];
+  const out=await invoke({op:'complete',jobId:id,lease:id,result:result()},async(url,opts)=>{
+    assert.ok(url.includes('/rpc/'));const op=JSON.parse(opts.body).p_op;events.push(op);
+    if(op==='inspect')return response(context);
+    if(op==='prepare')return response({reserved:true,noBrief:true});
+    assert.equal(op,'commit');return response({done:true});
+  },{authorization:'Device '+'x'.repeat(43)});
+  assert.equal(out.code,200);assert.deepEqual(events,['inspect','prepare','commit']);
+});
+test('replaying a recorded receipt verifies it without a second create',async()=>{
+  const r=fullResult(),fullContext={...context,no_brief:false,clickup_user_id:'123'},events=[];
+  const hash=createHash('sha256').update(JSON.stringify(validatePersonalResult(r,fullContext))).digest('hex');
+  const out=await invoke({op:'complete',jobId:id,lease:id,result:r},async(url,opts)=>{
+    if(url.endsWith('/api/v2/user'))return response({user:{id:123}});
+    if(url.includes('/rpc/')){const op=JSON.parse(opts.body).p_op;events.push(op);
+      if(op==='inspect')return response(fullContext);
+      if(op==='prepare')return response({publishing:true,noBrief:false,artifactHash:hash,createdPage:receipt});
+      return response(op==='commit'?{done:true}:{ok:true});
+    }
+    assert.notEqual(opts.method,'POST');events.push('read');return response({id:receipt.id,content:r.markdown});
+  },{authorization:'Device '+'x'.repeat(43),'x-clickup-key':'pk_'+'x'.repeat(25)});
+  assert.equal(out.code,200);assert.deepEqual(events,['inspect','prepare','read','page','commit']);
 });
 test('personal bundle excludes app/admin credentials and shared queue runners',()=>{
   const worker=readFileSync(new URL('../tools/personal-worker/worker.py',import.meta.url),'utf8');

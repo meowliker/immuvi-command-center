@@ -9,7 +9,7 @@ const preferences=readFileSync(new URL('../../public/personal-worker-preference.
 const picker=source.slice(source.indexOf('  var _insRunOnPickerGeneration = 0;'),source.indexOf('  // Hook addToInsQueue to apply the worker_assignment'));
 const wrapper=source.slice(source.indexOf('  // Hook addToInsQueue to apply the worker_assignment'),source.indexOf('  setTimeout(_insInjectRunOnPicker, 800);'));
 const a='11111111-1111-4111-8111-111111111111',b='22222222-2222-4222-8222-222222222222',requests=[];
-let offline=false,unavailable=false;
+let offline=false,unavailable=false,reviewPending=true;
 const revoked=new Set();
 const server=createServer(async(req,res)=>{
   if(req.url==='/personal-worker-client.mjs'){res.setHeader('Content-Type','text/javascript');return res.end(module);}
@@ -22,10 +22,11 @@ const server=createServer(async(req,res)=>{
       const id=req.headers['x-clickup-key']==='owner-a'?a:b;
       return res.end(JSON.stringify({devices:revoked.has(id)?[]:[{id,
         name:req.headers['x-clickup-key']==='owner-a'?'Owner A private Mac':'Owner B private Mac',paired:true,
-        lastSeen:new Date(Date.now()-(offline?600000:0)).toISOString(),attention:[]}]}));
+        lastSeen:new Date(Date.now()-(offline?600000:0)).toISOString(),attention:reviewPending?[{id:a,insId:'TEST-INS-REVIEW',state:'review',code:'BRIEF_READBACK_MISMATCH'}]:[]}]}));
     }
     if(body.op==='create')return res.end(JSON.stringify({pairingCode:a+'.'+'x'.repeat(43)}));
     if(body.op==='revoke')revoked.add(body.deviceId);
+    if(body.op==='verify')reviewPending=false;
     return res.end(JSON.stringify({ok:true,count:body.items?.length||0}));
   }
   res.setHeader('Content-Type','text/html');res.end(`<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><style>${css}</style></head><body>
@@ -52,6 +53,9 @@ try{
   await page.goto(origin);await page.waitForFunction(()=>typeof _openPersonalWorkerDialog==='function');await ready(page,'auto');
   await page.click('#open');await page.locator('dialog').getByText('Owner A private Mac',{exact:false}).waitFor();
   assert.equal(await page.getByText('Owner B private Mac',{exact:false}).count(),0);
+  await page.getByRole('button',{name:'Verify existing brief',exact:true}).click();
+  await page.waitForFunction(()=>!document.querySelector('dialog')?.textContent.includes('TEST-INS-REVIEW'));
+  assert.equal(requests.filter(request=>request.op==='verify').length,1);
   await page.getByRole('button',{name:'Create pairing code'}).click();assert.match(await page.getByRole('textbox',{name:'One-time pairing code'}).inputValue(),/^11111111/);
   await page.getByText('Mac setup',{exact:true}).click();
   const prompt=page.getByRole('textbox',{name:'Codex setup prompt',exact:true});

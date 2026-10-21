@@ -167,6 +167,11 @@ window._openPersonalWorkerDialog=async function(){
           const issue=document.createElement('div');issue.style.padding='8px 0';
           const description=document.createElement('span');description.textContent=job.insId+' · '+(job.state==='review'?'Brief publishing needs review':job.code||'Blocked')+' ';
           issue.appendChild(description);
+          if(job.state==='review')issue.appendChild(button('Verify existing brief',async()=>{
+            try{assertIdentity();status.textContent='Verifying the saved brief. No new page will be created...';
+              await personalWorkerRequest('verify',{deviceId:device.id,jobId:job.id});status.textContent='Existing brief verified and classification saved.';await load(true);}
+            catch(error){status.textContent=error.message;}
+          }));
           if(job.state==='blocked')issue.appendChild(button('Retry',async()=>{
             try{assertIdentity();await personalWorkerRequest('retry',{deviceId:device.id,jobId:job.id});status.textContent='Job queued on your Mac';await load(true);}
             catch(error){status.textContent=error.message;}

@@ -61,7 +61,26 @@ An offline personal assignment waits; it never falls back to the shared worker.
 New personal submissions enqueue only the just-added inspiration, not everybody
 else's queued links. Existing shared assignments cannot be stolen by this path.
 Use My Mac > Retry for a blocked personal job. A publishing exception requires
-review rather than an automatic second brief creation.
+review rather than an automatic second brief creation. My Mac > Verify existing
+brief reads only the exact recorded page and finishes the retained result after
+verification; it cannot create a new ClickUp page or run classification again.
+Old jobs without a recorded receipt need explicit, content-verified recovery.
+
+Brief verification parses CommonMark/GFM content, accepting harmless bullet,
+escape and table-formatting changes while retaining text, word boundaries,
+links, table cells and script structure. An unverified created-page receipt is
+stored separately from verified-page state before readback. A receipt alone
+cannot authorize a commit, and a concurrent completion cannot create a second
+page or cancel an in-flight publisher.
+
+`20261021000200_personal_worker_publishing.sql` adds only private publishing
+state and a service-only dispatcher wrapper. Its application helper defaults to
+rollback, checks existing public/private row digests, and is idempotent. The
+one-job recovery helper also defaults to rollback, performs only ClickUp GETs,
+requires exactly one existing matching brief with verified complete content,
+backs up the selected records privately when configured, and compares every
+unrelated business/private-job row before committing. Never put live recovery
+IDs, source URLs, artifacts or credentials in this public repository.
 
 ## Privacy And Scope
 

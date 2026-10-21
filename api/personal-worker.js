@@ -3,7 +3,7 @@ import {PersonalWorkerError,validatePersonalResult,briefContentMatches} from '..
 const digest=value=>createHash('sha256').update(value).digest('hex');
 const secret=()=>randomBytes(32).toString('base64url');
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const browserOps=new Set(['create','list','revoke','enqueue','retry']);
+const browserOps=new Set(['create','list','revoke','enqueue','retry','verify']);
 export function createPersonalWorkerHandler({fetchImpl=fetch,env=process.env}={}) {
   return async function handler(req,res) {
     res.setHeader('Cache-Control','no-store');
@@ -39,6 +39,16 @@ export function createPersonalWorkerHandler({fetchImpl=fetch,env=process.env}={}
         if(!Number.isSafeInteger(account.user?.id)||account.user.id<=0) throw new PersonalWorkerError('ClickUp identity could not be verified',401);
         return String(account.user.id);
       };
+      const readBrief=async(page,artifact)=>{
+        if(!page||![page.id,page.docId].every(value=>typeof value==='string'&&/^[A-Za-z0-9_-]{1,100}$/.test(value))||
+          page.url!=='https://app.clickup.com/9016762494/docs/'+page.docId+'/'+page.id)throw new PersonalWorkerError('Invalid saved brief receipt',409);
+        const address='https://api.clickup.com/api/v3/workspaces/9016762494/docs/'+encodeURIComponent(page.docId)+'/pages/'+encodeURIComponent(page.id)+'?content_format=text%2Fmd';
+        const check=await call(address,{headers:{Authorization:clickupKey}});
+        if(check.id!==page.id||!briefContentMatches(check.content,artifact.markdown)){
+          const error=new PersonalWorkerError('Brief content differs from the saved analysis. Review is required; no duplicate will be created.',409);
+          error.publishingCode='BRIEF_READBACK_MISMATCH';throw error;
+        }
+      };
       if(browserOps.has(op)) {
         const auth=req.headers.authorization;
         if(typeof auth!=='string'||!/^Bearer [^\s]+$/.test(auth)) throw new PersonalWorkerError('Sign in first',401);
@@ -64,9 +74,20 @@ export function createPersonalWorkerHandler({fetchImpl=fetch,env=process.env}={}
             return {id:it.id,url:it.url,no_brief:it.no_brief};
           });
         }
-        if(op==='retry') {
+        if(op==='retry'||op==='verify') {
           if(!uuid.test(body.jobId)) throw new PersonalWorkerError('Select a blocked personal job');
           args.job_id=body.jobId;
+        }
+        if(op==='verify'){
+          const saved=await rpc('review_context',args);
+          if(saved.done)return res.status(200).json({done:true});
+          await readBrief(saved.page,saved.artifact);
+          const resumed=await rpc('resume_review',{...args,artifact_hash:saved.artifactHash,page:saved.page});
+          if(resumed.done)return res.status(200).json({done:true});
+          try{
+            await rpc('page',{...resumed,page:saved.page});
+            return res.status(200).json(await rpc('commit',{...resumed,artifact_hash:saved.artifactHash}));
+          }catch(error){try{await rpc('review',{...resumed,code:'BRIEF_COMMIT_PENDING'});}catch{}throw error;}
         }
         return res.status(200).json(await rpc(op,args));
       }
@@ -96,26 +117,39 @@ export function createPersonalWorkerHandler({fetchImpl=fetch,env=process.env}={}
       if(!context.no_brief && await clickupIdentity()!==context.clickup_user_id) throw new PersonalWorkerError('Use the ClickUp key that paired this Mac',403);
       const reserved=await rpc('prepare',{...args,artifact,artifact_hash:hash});
       if(reserved.done) return res.status(200).json({done:true});
+      let stage='';
       try {
+      let receipt=reserved.createdPage||reserved.page;
       if(reserved.publishing) {
-        if(reserved.artifactHash!==hash||!reserved.page) throw new PersonalWorkerError('Publishing needs review; no duplicate brief will be created',409);
+        if(reserved.artifactHash!==hash)throw new PersonalWorkerError('Publishing analysis differs; no duplicate brief will be created',409);
+        // Another request may still be creating the page. Leave its lease and
+        // state intact; old clients retain their journal and back off on 503.
+        if(!reserved.noBrief&&!receipt)throw new PersonalWorkerError('Brief publishing is already in progress. Saved analysis is retained; no duplicate will be created.',503);
       } else if(!reserved.noBrief) {
+        stage='BRIEF_LIBRARY_UNCONFIGURED';
         if(!/^[A-Za-z0-9_-]{1,100}$/.test(reserved.docId||'')) throw new PersonalWorkerError('The product needs its Inspiration Library configured. Analysis is preserved.',409);
         const base='https://api.clickup.com/api/v3/workspaces/9016762494/docs/'+encodeURIComponent(reserved.docId)+'/pages';
         // Never update an existing page by task name/number. At most one create
         // is attempted per reserved job; ambiguous responses require review.
+        stage='BRIEF_CREATE_UNCONFIRMED';
         const page=await call(base,{method:'POST',headers:{Authorization:clickupKey,'Content-Type':'application/json'},
           body:JSON.stringify({name:reserved.insId+' | '+artifact.patch.formatName,content:artifact.markdown,content_format:'text/md'})});
         if(typeof page.id!=='string'||!/^[A-Za-z0-9_-]{1,100}$/.test(page.id)) throw new PersonalWorkerError('Brief creation needs review',502);
-        const check=await call(base+'/'+encodeURIComponent(page.id)+'?content_format=text%2Fmd',{headers:{Authorization:clickupKey}});
-        if(check.id!==page.id||!briefContentMatches(check.content,artifact.markdown)) throw new PersonalWorkerError('Brief readback needs review; no duplicate will be created',502);
-        await rpc('page',{...args,page:{id:page.id,docId:reserved.docId,url:'https://app.clickup.com/9016762494/docs/'+reserved.docId+'/'+page.id}});
+        receipt={id:page.id,docId:reserved.docId,url:'https://app.clickup.com/9016762494/docs/'+reserved.docId+'/'+page.id};
+        stage='BRIEF_RECEIPT_UNCONFIRMED';
+        await rpc('receipt',{...args,page:receipt});
       }
+      if(!reserved.noBrief){
+        stage='BRIEF_READBACK_UNAVAILABLE';
+        await readBrief(receipt,artifact);
+        await rpc('page',{...args,page:receipt});
+      }
+      stage='BRIEF_COMMIT_PENDING';
       return res.status(200).json(await rpc('commit',{...args,artifact_hash:hash}));
       } catch(error) {
         // A reserved create is never automatically repeated after an ambiguous
         // response. Keep both the artifact and any existing page for review.
-        try {await rpc('review',args);} catch {}
+        if(stage)try {await rpc('review',{...args,code:error.publishingCode||stage});} catch {}
         throw error;
       }
     } catch(error) {

@@ -5974,6 +5974,7 @@ button.mx-dt-action-sent .open { color:#0a84ff; font-weight:700; margin-left:4px
 .ins-platform-badge.other { background:var(--el); color:var(--t2); }
 .ins-status-badge { display:inline-block; padding:3px 9px; border-radius:20px; font-size:0.65rem; font-weight:600; }
 .ins-status-badge.saved { background:#f3f4f6; color:#6b7280; }
+.ins-status-badge.brief-needs-review { background:#fff7ed; color:#9a3412; }
 .ins-status-badge.classifying { background:#dbeafe; color:#1d4ed8; }
 .ins-status-badge.classified { background:#d1fae5; color:#065f46; }
 .ins-status-badge.briefed { background:#fef3c7; color:#92400e; }
@@ -10620,7 +10621,7 @@ body:not(.booting) #__bootLoader {
           <span class="lbl">Status</span>
           <select id="insFiltStatus" onchange="_insFltPaint();renderInspirations()">
             <option value="">All Statuses</option>
-            <option>Queued</option><option>Classifying</option><option>Blocked</option><option>Failed</option><option>Saved</option><option>Classified</option><option>Briefed</option><option>Live</option><option>Winner</option><option>Loser</option>
+            <option>Queued</option><option>Classifying</option><option>Blocked</option><option>Brief needs review</option><option>Failed</option><option>Saved</option><option>Classified</option><option>Briefed</option><option>Live</option><option>Winner</option><option>Loser</option>
           </select>
           <span class="caret">▾</span>
         </label>
@@ -47689,6 +47690,7 @@ function _insQueueDisplayStatus(ins, queueByInsId) {
   }
   var q = ins && queueByInsId[ins.id];
   var qs = String((q && q.status) || '').toLowerCase();
+  if (qs === 'blocked' && q.worker_assignment === 'private' && /brief (?:publishing|verification) needs review/i.test(q.error_message || '')) return 'Brief needs review';
   if (qs === 'blocked') return 'Blocked';
   if (qs === 'failed') return _insQueueIsWorkerBlocked(q) ? 'Blocked' : 'Failed';
   if (qs === 'classifying' || qs === 'claimed' || qs === 'private_running' || qs === 'private_publishing') return 'Classifying';
@@ -48752,7 +48754,8 @@ function renderInspirations() {
   var filtered = INSPIRATIONS.filter(function(ins) {
     if (platform && ins.platform !== platform) return false;
     if (format && ins.formatName !== format) return false;
-    if (status && _insQueueDisplayStatus(ins, queueByInsId) !== status) return false;
+    var effectiveStatus = _insQueueDisplayStatus(ins, queueByInsId);
+    if (status && effectiveStatus !== status && !(status === 'Blocked' && effectiveStatus === 'Brief needs review')) return false;
     if (hook && ins.hookType !== hook) return false;
     if (typeFlt && (ins.adType || '') !== typeFlt) return false;
     if (perfFlt && perfVerdicts[ins.id] !== perfFlt) return false;
@@ -48851,7 +48854,7 @@ function renderInspirations() {
     var queueRow = queueByInsId[ins.id] || null;
     var displayStatus = _insQueueDisplayStatus(ins, queueByInsId);
     var isFailedQueue = displayStatus === 'Failed';
-    var isBlockedQueue = displayStatus === 'Blocked';
+    var isBlockedQueue = displayStatus === 'Blocked' || displayStatus === 'Brief needs review';
     var isQueued = displayStatus === 'Queued' || displayStatus === 'Classifying';
     var isHeldQueue = isQueued || isFailedQueue || isBlockedQueue;
     var queueError = (queueRow && queueRow.error_message) || '';

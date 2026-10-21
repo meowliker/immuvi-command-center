@@ -5,11 +5,13 @@ import {validatePersonalResult} from '../../tools/personal-worker-result.mjs';
 const {default:postgres}=await import(process.env.IMMUVI_TEST_POSTGRES_MODULE||'postgres');
 const sql=postgres(targetEnv().STRATEGIST_DATABASE_URL,{prepare:false,max:1,ssl:'require',connect_timeout:15});
 const migration=await readFile(new URL('../../supabase/migrations/20261021000100_personal_classification_workers.sql',import.meta.url),'utf8');
+const publishingMigration=await readFile(new URL('../../supabase/migrations/20261021000200_personal_worker_publishing.sql',import.meta.url),'utf8');
 const prefix='personal-worker-probe-'+Date.now(),rollback=new Error('ROLLBACK_SUCCESS');
 try{
   try{await sql.begin(async tx=>{
     await tx`set local lock_timeout='5s'`;await tx`set local statement_timeout='30s'`;
     await tx.unsafe(migration);await tx.unsafe(migration);
+    await tx.unsafe(publishingMigration);await tx.unsafe(publishingMigration);
     const [owner]=await tx`select id from profiles where role='admin' and is_active limit 1`;assert.ok(owner);
     await tx`select set_config('request.jwt.claim.role','service_role',true)`;
     const rpc=async(op,args)=>{
@@ -72,6 +74,32 @@ try{
     assert.equal(saved.data.notes,'Keep notes');assert.equal(saved.data._clickupDocPageUrl,before._clickupDocPageUrl);
     assert.deepEqual(saved.data.nextAdScripts,before.nextAdScripts);assert.equal(saved.data._angleScope,'product');assert.equal(saved.data.angle,before.angle);
     const [untouched]=await tx`select * from inspirations where id=${second}`;assert.equal(untouched.title,'Unrelated inspiration');assert.deepEqual(untouched.data,{});
+    const full=prefix+'-INS-FULL',fullUrl=url+'-full';
+    await tx`insert into inspirations(id,product_id,url,title,status,data) values(${full},${prefix},${fullUrl},'Full brief fixture','Saved','{}')`;
+    await rpc('enqueue',{...own,device_id:a.id,product_id:prefix,items:[{id:full,url:fullUrl,no_brief:false}]});
+    const fullJob=await rpc('claim',device),fullScope={...device,job_id:fullJob.id,lease:fullJob.lease};
+    await tx`update products set config='{"doc_id":"fixture-doc"}' where id=${prefix}`;
+    const fullArtifact=structuredClone(artifact);fullArtifact.metadata.source_url=fullUrl;
+    fullArtifact.patch.sourceUrl=fullUrl;fullArtifact.patch.noBrief=false;
+    await rpc('prepare',{...fullScope,artifact:fullArtifact,artifact_hash:'full-hash'});
+    const page={id:'fixture-page',docId:'fixture-doc',url:'https://app.clickup.com/9016762494/docs/fixture-doc/fixture-page'};
+    await bad('receipt',{...fullScope,page:{...page,docId:'foreign-doc'}},'PT409');
+    await rpc('receipt',{...fullScope,page});
+    await bad('commit',{...fullScope,artifact_hash:'full-hash'},'PT409');
+    await tx`update personal_workers.jobs set lease_until=now()-interval '1 second' where id=${fullJob.id}`;
+    const visibleReview=(await rpc('list',own)).devices.find(device=>device.id===a.id).attention;
+    assert.ok(visibleReview.some(job=>job.id===fullJob.id&&job.state==='review'));
+    await tx`update personal_workers.jobs set lease_until=now()+interval '35 minutes' where id=${fullJob.id}`;
+    await rpc('fail',{...fullScope,code:'EVIDENCE_UNVERIFIED'});
+    const [stillPublishing]=await tx`select state from personal_workers.jobs where id=${fullJob.id}`;assert.equal(stillPublishing.state,'publishing');
+    await rpc('review',{...fullScope,code:'BRIEF_READBACK_MISMATCH'});
+    const reviewArgs={...own,device_id:a.id,job_id:fullJob.id};
+    await bad('review_context',{...reviewArgs,...other},'42501');
+    const review=await rpc('review_context',reviewArgs);assert.deepEqual(review.page,page);
+    const resumed=await rpc('resume_review',{...reviewArgs,artifact_hash:'full-hash',page});
+    await bad('page',{...fullScope,page},'PT409');
+    await rpc('page',{...resumed,page});await rpc('page',{...resumed,page});
+    assert.equal((await rpc('commit',{...resumed,artifact_hash:'full-hash'})).done,true);
     await rpc('enqueue',{...own,device_id:a.id,product_id:prefix,items:[{id:second,url:url+'-2',no_brief:true}]});
     const expired=await rpc('claim',device);
     await tx`update personal_workers.jobs set lease_until=now()-interval '1 second' where id=${expired.id}`;

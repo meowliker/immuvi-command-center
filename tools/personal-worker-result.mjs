@@ -1,3 +1,7 @@
+import {fromMarkdown} from 'mdast-util-from-markdown';
+import {gfmFromMarkdown} from 'mdast-util-gfm';
+import {gfm} from 'micromark-extension-gfm';
+
 const required = ['brand','angle','persona','hook_type','creative_structure','production_style','funnel_type','photo_video','media_kind'];
 const sections = ['SNAPSHOT','CREATIVE BREAKDOWN','WHY IT WORKS','REPLICATION BRIEF','WHAT TO TEST','COMPETITOR INTEL','OUR NEXT AD','NEXT AD SCRIPTS'];
 export class PersonalWorkerError extends Error {
@@ -6,8 +10,23 @@ export class PersonalWorkerError extends Error {
 const reject = message => { throw new PersonalWorkerError(message); };
 const pick=(value,keys)=>Object.fromEntries(keys.filter(key=>Object.hasOwn(value,key)).map(key=>[key,value[key]]));
 export function briefContentMatches(actual,expected){
-  const normalize=value=>String(value||'').replace(/\\([.!_*|\-])/g,'$1').replace(/\s+/g,'');
-  return !!actual&&normalize(actual)===normalize(expected);
+  if(typeof actual!=='string'||typeof expected!=='string'||!actual.trim()||!expected.trim()||actual.length>180000||expected.length>180000)return false;
+  // Parse content, retaining word boundaries, link destinations, table cells and
+  // ordered-list starts. Bullet glyphs, escapes and table alignment are syntax.
+  const canonical=node=>{
+    const out={type:node.type};
+    for(const key of ['depth','ordered','checked','url','title','identifier','label','alt','lang','meta']){
+      if(node[key]!=null)out[key]=node[key];
+    }
+    if(node.ordered)out.start=node.start;
+    if(typeof node.value==='string')out.value=node.type==='text'?node.value.replace(/\s+/g,' '):node.value;
+    if(node.children)out.children=node.children.map(canonical);
+    return out;
+  };
+  try{
+    const parse=value=>canonical(fromMarkdown(value,{extensions:[gfm()],mdastExtensions:[gfmFromMarkdown()]}));
+    return JSON.stringify(parse(actual))===JSON.stringify(parse(expected));
+  }catch{return false;}
 }
 export function validatePersonalResult(raw, context, now=new Date().toISOString()) {
   if (!raw || typeof raw!=='object' || Array.isArray(raw)) reject('Invalid result artifact');

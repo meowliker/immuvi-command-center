@@ -31,6 +31,21 @@
    result and, unless No Brief is selected, open its complete brief. Repeat the
    same installation and pairing process on another colleague's Mac.
 
+My Mac > Mac setup includes copyable first-time setup and interrupted-pairing
+recovery commands, plus the installer download. The web app cannot silently run
+a shell command or install a background service; the user runs the command once
+on the target Mac. No full application checkout is needed.
+
+The selected personal Mac is remembered in this browser across reloads and new
+tabs. The preference stores only a device ID under a SHA-256-scoped key derived
+from the app-user and personal ClickUp identity; it adds no raw API key, device
+token, Mac name or pairing code to browser storage. Another ClickUp key or app
+account has a separate preference. Auto/shared selection clears only the current
+identity's choice. Clearing browser storage or changing browsers requires a new
+selection, not another worker installation. Offline/unavailable selections do
+not silently fall back to the shared queue. No storage-event broadcast or extra
+refresh timer is added.
+
 The Mac must be awake, online and logged in. The LaunchAgent starts after login.
 One job runs at a time. Idle claims poll every 15 seconds; heartbeats write at
 most once per 55 seconds. There is no guaranteed instant classification: source

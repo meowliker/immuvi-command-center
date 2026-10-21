@@ -30415,6 +30415,7 @@ function fetchAndStoreFieldMap(listId, context) {
 async function syncClickUp() {
   var keyInput = document.getElementById('apiKeyInput');
   CFG.key = keyInput ? keyInput.value.trim() : CFG.key;
+  if (window._insRefreshRunOnPicker) window._insRefreshRunOnPicker();
   if (!CFG.key) { toast('Enter your ClickUp API key first', 'err'); return; }
   var prod = getActiveProduct();
   if (!prod || !prod.clickupListId) { toast('Link a ClickUp list to this product first', 'err'); return; }
@@ -37071,6 +37072,8 @@ window.addEventListener('load', async function () {
     if (typeof _fetchClickUpUser === 'function') _fetchClickUpUser();
   }
 
+  // The toolbar can mount before authentication and the local ClickUp key are ready.
+  if (window._insRefreshRunOnPicker) window._insRefreshRunOnPicker();
   // Clean up stale CELL_CREATIVE_ASSIGNMENTS / MATRIX_CELL_META keys from past renames
   var _purged = purgeOrphanedMatrixKeys();
   P = process(ADS);
@@ -52902,11 +52905,20 @@ window._clearPendingCu = _clearPendingCu;
     addBtn.parentNode.insertBefore(personalBtn, pill);
     _insRefreshRunOnPicker();
   }
+  var _insRunOnPickerGeneration = 0;
   async function _insRefreshRunOnPicker() {
     var sel = document.getElementById('insRunOnSelect');
     if (!sel) return;
+    var generation = ++_insRunOnPickerGeneration;
+    sel.disabled = true;
+    if (!AUTH.user || !CFG.key) {
+      try { if (window._appendPersonalWorkerOptions) await window._appendPersonalWorkerOptions(sel); }
+      finally { if (generation === _insRunOnPickerGeneration) sel.disabled = false; }
+      return;
+    }
     try {
-      var r = await SB.from('worker_registry').select('worker_id, status, last_heartbeat, enabled, capabilities');
+      var r = await _withCloudTimeout(SB.from('worker_registry').select('worker_id, status, last_heartbeat, enabled, capabilities'), 'Load workers', 10000);
+      if (generation !== _insRunOnPickerGeneration) return;
       var workers = r.data || [];
       var prev = sel.value;
       sel.innerHTML = '<option value="auto">Auto (any free worker)</option>';
@@ -52923,8 +52935,10 @@ window._clearPendingCu = _clearPendingCu;
         sel.appendChild(opt);
       });
       sel.value = prev || 'auto';
-      if (window._appendPersonalWorkerOptions) await window._appendPersonalWorkerOptions(sel);
     } catch (e) { /* keep default */ }
+    try {
+      if (generation === _insRunOnPickerGeneration && window._appendPersonalWorkerOptions) await window._appendPersonalWorkerOptions(sel);
+    } finally { if (generation === _insRunOnPickerGeneration) sel.disabled = false; }
   }
   window._insRefreshRunOnPicker = _insRefreshRunOnPicker;
 
@@ -52934,6 +52948,7 @@ window._clearPendingCu = _clearPendingCu;
     var origAdd = window.addToInsQueue;
     window.addToInsQueue = function () {
       var sel = document.getElementById('insRunOnSelect');
+      if (sel && sel.disabled) { toast('Worker selection is loading. Please try again in a moment.', 'err'); return; }
       window._insRunOnAssignment = (sel && sel.value) || 'auto';
       return origAdd.apply(this, arguments);
     };

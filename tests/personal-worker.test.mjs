@@ -100,8 +100,21 @@ test('personal bundle excludes app/admin credentials and shared queue runners',(
   assert.doesNotMatch(worker,/SUPABASE_SERVICE_ROLE_KEY|SUPABASE_DB_PASSWORD|producer_runs|strategist_runs|worker_registry/);
   assert.match(worker,/start_new_session=True/);assert.match(worker,/isolated/);assert.match(worker,/STOP.wait\(60\)/);
   const client=readFileSync(new URL('../public/personal-worker-client.mjs',import.meta.url),'utf8');
-  assert.doesNotMatch(client,/\.channel\(|setInterval\(|localStorage/);
+  assert.doesNotMatch(client,/\.channel\(|setInterval\(/);
+  assert.match(client,/personal-worker-preference\.mjs/);
   const migration=readFileSync(new URL('../supabase/migrations/20261021000100_personal_classification_workers.sql',import.meta.url),'utf8');
   assert.match(migration,/revoke all on schema personal_workers from public, anon, authenticated/);
   assert.doesNotMatch(migration,/insert into (?:public\.)?(?:ads|angles|personas|matrix_cells|manual_actions)\b/i);
+});
+test('both app entry points restore selection after credentials and guard early submissions',()=>{
+  for(const file of ['../immuvi-command-center.html','../public/immuvi-command-center.html']){
+    const app=readFileSync(new URL(file,import.meta.url),'utf8');
+    const start=app.indexOf('  // Restore saved API key');
+    const end=app.indexOf('  // Clean up stale CELL_CREATIVE_ASSIGNMENTS',start);
+    assert.ok(start>=0&&end>start);
+    assert.match(app.slice(start,end),/CFG\.key = savedKey;[\s\S]*window\._insRefreshRunOnPicker\(\)/);
+    assert.match(app,/CFG\.key = keyInput \? keyInput\.value\.trim\(\) : CFG\.key;\s*if \(window\._insRefreshRunOnPicker\)/);
+    assert.match(app,/if \(sel && sel\.disabled\).*Worker selection is loading/);
+    assert.match(app,/if \(!AUTH\.user \|\| !CFG\.key\)/);
+  }
 });

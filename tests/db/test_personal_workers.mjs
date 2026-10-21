@@ -7,6 +7,7 @@ const sql=postgres(targetEnv().STRATEGIST_DATABASE_URL,{prepare:false,max:1,ssl:
 const migration=await readFile(new URL('../../supabase/migrations/20261021000100_personal_classification_workers.sql',import.meta.url),'utf8');
 const publishingMigration=await readFile(new URL('../../supabase/migrations/20261021000200_personal_worker_publishing.sql',import.meta.url),'utf8');
 const runtimeMigration=await readFile(new URL('../../supabase/migrations/20261021000300_personal_worker_runtime.sql',import.meta.url),'utf8');
+const parallelMigration=await readFile(new URL('../../supabase/migrations/20261021000400_personal_worker_parallel_cancel.sql',import.meta.url),'utf8');
 const prefix='personal-worker-probe-'+Date.now(),rollback=new Error('ROLLBACK_SUCCESS');
 try{
   try{await sql.begin(async tx=>{
@@ -14,6 +15,7 @@ try{
     await tx.unsafe(migration);await tx.unsafe(migration);
     await tx.unsafe(publishingMigration);await tx.unsafe(publishingMigration);
     await tx.unsafe(runtimeMigration);await tx.unsafe(runtimeMigration);
+    await tx.unsafe(parallelMigration);await tx.unsafe(parallelMigration);
     const [owner]=await tx`select id from profiles where role='admin' and is_active limit 1`;assert.ok(owner);
     await tx`select set_config('request.jwt.claim.role','service_role',true)`;
     const rpc=async(op,args)=>{
@@ -129,8 +131,62 @@ try{
     await rpc('revoke',{...own,device_id:a.id});await bad('claim',device,'42501');
     const [cancelled]=await tx`select status from inspiration_queue where ins_id=${second}`;assert.equal(cancelled.status,'blocked');
     const [global]=await tx`select count(*)::int as n from worker_registry where worker_id in (${a.id},${b.id})`;assert.equal(global.n,0);
+    const c=await rpc('create',{...own,name:'Parallel fixture Mac',pair_hash:'pair-c'});
+    await rpc('pair',{device_id:c.id,pair_hash:'pair-c',token_hash:'token-c',clickup_user_id:own.clickup_user_id});
+    const parallel={token_hash:'token-c',contract:'personal-artifact-v1',worker_version:'personal-parallel-v1',capacity:3};
+    const items=Array.from({length:4},(_,n)=>({id:prefix+'-PAR-'+n,url:'https://example.test/parallel-'+n,no_brief:n!==1}));
+    for(const item of items)await tx`insert into inspirations(id,product_id,url,title,status,data) values(${item.id},${prefix},${item.url},'Parallel fixture','Saved','{}')`;
+    await rpc('enqueue',{...own,device_id:c.id,product_id:prefix,items});
+    for(let n=0;n<items.length;n++)await tx`update personal_workers.jobs set created_at=now()+${n}*interval '1 millisecond' where ins_id=${items[n].id} and product_id=${prefix}`;
+    const parallelJobs=[];for(let n=0;n<3;n++)parallelJobs.push(await rpc('claim',parallel));
+    assert.equal(new Set(parallelJobs.map(job=>job.id)).size,3);
+    assert.equal(await rpc('claim',parallel),null);
+    assert.equal((await rpc('list',own)).devices.find(device=>device.id===c.id).capacity,3);
+    const otherProduct=prefix+'-OTHER';
+    await tx`insert into products(id,name,config) values(${otherProduct},'Unrelated cancellation fixture','{}')`;
+    await assert.rejects(()=>tx.savepoint(sp=>sp`insert into inspirations(id,product_id,url,title,status,data) values(${items[0].id},${otherProduct},'https://example.test/unrelated','Rejected duplicate-ID fixture','Saved','{}')`),e=>e.code==='23514');
+    const otherIns=prefix+'-UNRELATED';
+    await tx`insert into inspirations(id,product_id,url,title,status,data) values(${otherIns},${otherProduct},'https://example.test/unrelated','Unrelated source','Saved','{}')`;
+    await rpc('enqueue',{...other,device_id:b.id,product_id:otherProduct,items:[{id:otherIns,url:'https://example.test/unrelated',no_brief:true}]});
+    await bad('claim',{...parallel,capacity:4},'22023');
+    await bad('cancel',{...other,product_id:prefix,ins_id:items[0].id},'42501');
+    await assert.rejects(()=>tx.savepoint(sp=>sp`delete from inspirations where id=${items[0].id} and product_id=${prefix}`),e=>e.code==='PT409');
+    await rpc('cancel',{...own,product_id:prefix,ins_id:items[0].id});
+    const checked=await rpc('leases',{...parallel,jobs:parallelJobs.map(job=>({id:job.id,lease:job.lease}))});
+    assert.equal(checked.jobs[0].active,false);assert.equal(checked.jobs[1].active,true);
+    assert.equal((await rpc('inspect',{...parallel,job_id:parallelJobs[0].id,lease:parallelJobs[0].lease})).cancelled,true);
+    await tx`delete from inspirations where id=${items[0].id} and product_id=${prefix}`;
+    await tx`delete from inspiration_queue where ins_id=${items[0].id} and product_id=${prefix}`;
+    const [otherSource]=await tx`select status from inspirations where id=${otherIns} and product_id=${otherProduct}`;
+    const [otherJob]=await tx`select state,cancel_requested from personal_workers.jobs where ins_id=${otherIns} and product_id=${otherProduct}`;
+    assert.equal(otherSource.status,'Saved');assert.deepEqual(otherJob,{state:'pending',cancel_requested:false});
+    const nextParallel=await rpc('claim',parallel);assert.equal(nextParallel.ins_id,items[3].id);
+    const publishingJob=parallelJobs[1],publishingScope={...parallel,job_id:publishingJob.id,lease:publishingJob.lease};
+    const cancelledArtifact=structuredClone(fullArtifact);cancelledArtifact.metadata.source_url=items[1].url;
+    cancelledArtifact.patch.sourceUrl=items[1].url;
+    await rpc('prepare',{...publishingScope,artifact:cancelledArtifact,artifact_hash:'cancelled-hash'});
+    await rpc('cancel',{...own,product_id:prefix,ins_id:items[1].id});
+    await tx`delete from inspirations where id=${items[1].id} and product_id=${prefix}`;
+    assert.equal((await rpc('commit',publishingScope)).cancelled,true);
+    const cancelledReceipt={...page,id:'cancelled-page',url:'https://app.clickup.com/9016762494/docs/fixture-doc/cancelled-page'};
+    await rpc('receipt',{...publishingScope,page:cancelledReceipt});
+    const [retained]=await tx`select state,artifact,created_page from personal_workers.jobs where id=${publishingJob.id}`;
+    assert.equal(retained.state,'cancelled');assert.deepEqual(retained.artifact,cancelledArtifact);assert.deepEqual(retained.created_page,cancelledReceipt);
+    const [cancelledResults]=await tx`select count(*)::int as n from inspiration_results where ins_id=${items[1].id} and product_id=${prefix}`;
+    assert.equal(cancelledResults.n,0);
+    const orphan=prefix+'-ORPHAN';
+    await tx`insert into inspirations(id,product_id,url,title,status,data) values(${orphan},${prefix},'https://example.test/deleted','Legacy orphan fixture','Saved','{}')`;
+    await tx`insert into inspiration_queue(ins_id,product_id,url,platform,status,worker_assignment) values(${orphan},${prefix},'https://example.test/deleted','Other','private_running','private')`;
+    const [orphanJob]=await tx`insert into personal_workers.jobs(device_id,ins_id,product_id,source_url,no_brief,snapshot,state,lease,lease_until)
+      values(${c.id},${orphan},${prefix},'https://example.test/deleted',true,'{}','cancelled',gen_random_uuid(),now()+interval '30 minutes') returning id`;
+    await tx`delete from inspirations where id=${orphan} and product_id=${prefix}`;
+    await tx`update personal_workers.jobs set state='running' where id=${orphanJob.id}`;
+    await rpc('claim',parallel);
+    const [orphanState]=await tx`select state,cancel_requested from personal_workers.jobs where id=${orphanJob.id}`;
+    assert.deepEqual(orphanState,{state:'cancelled',cancel_requested:true});
+    const [orphanQueue]=await tx`select count(*)::int as n from inspiration_queue where ins_id=${orphan} and product_id=${prefix}`;assert.equal(orphanQueue.n,0);
     throw rollback;
   });}catch(error){if(error!==rollback)throw error;}
   const [left]=await sql`select count(*)::int as count from products where id=${prefix}`;assert.equal(left.count,0);
-  console.log('Passed private identity, one-use pairing, colleague isolation, database denial, queue protection, single lease, result replay, No Brief preservation, product boundaries, expired-lease fencing and revocation. All fixture/schema changes rolled back.');
+  console.log('Passed private identity, colleague isolation, queue protection, bounded parallel leases, owned cancellation, orphan cleanup, late receipt retention, result replay, No Brief, product boundaries and revocation. All fixture/schema changes rolled back.');
 }finally{await sql.end({timeout:2});}

@@ -28,6 +28,15 @@ models for No Brief, expose raw agent logs, revoke pairing to update, or reset
 pending results. Legacy Macs need an explicit client update; a server deployment
 does not remotely replace their installed code or recover old blocked jobs.
 
+Cancellation/parallel follow-up: deletion must first cancel the exact private
+assignment using the verified ClickUp identity, then delete only that product's
+rows after confirmation. Reject old-browser deletion while private work is live.
+Deleted-source jobs must not retain capacity or resurrect their source. Keep
+late publishing receipts/artifacts even after cancellation. Updated personal
+Macs have two/three isolated slots with a server cap of three; preserve separate
+slot journals, the minute heartbeat and local audio resource lock. Never apply
+these concurrency changes to the shared registry or consume another owner's jobs.
+
 ---
 
 ## Audio verification selected a credit-based external analyzer (2026-10-20)

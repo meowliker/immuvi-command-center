@@ -6,6 +6,10 @@ Use that Python for every helper/import and Python module command, never an
 unqualified system python/python3 or an interpreter from another installation.
 Use the writable model cache specified by runtime.json. Do not install packages,
 change system tools/permissions, or switch to paid/remote analyzers during a job.
+Other jobs can run concurrently. Wrap all local audio-model loading and inference
+(AST, Whisper, stronger-model attempts) in fb_ad_classifier.personal_audio_session().
+Keep that lock until audio inference ends and the models are released; source
+download, frame inspection and creative analysis may proceed in parallel.
 Never load /classify-inspiration, environment files, database credentials or MCPs.
 Do not call Supabase or ClickUp, edit records, update skills, spawn agents,
 use another browser's login/cookies, delete files outside this workspace, or scan other jobs.

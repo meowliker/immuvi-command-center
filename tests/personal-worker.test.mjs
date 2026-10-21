@@ -139,7 +139,7 @@ test('publishing records an unverified page receipt before readback and commits 
     events.push(opts.method==='POST'?'create':'read');
     return response(opts.method==='POST'?{id:receipt.id}:{id:receipt.id,content:r.markdown.replace(/^- /gm,'* ')});
   },{authorization:'Device '+'x'.repeat(43),'x-clickup-key':'pk_'+'x'.repeat(25)});
-  assert.equal(out.code,200);assert.deepEqual(events,['inspect','prepare','create','receipt','read','page','commit']);
+  assert.equal(out.code,200);assert.deepEqual(events,['inspect','prepare','inspect','create','receipt','read','page','commit']);
 });
 test('readback mismatch preserves the receipt for review and cannot commit or create twice',async()=>{
   const r=fullResult(),events=[];let code;
@@ -152,7 +152,34 @@ test('readback mismatch preserves the receipt for review and cannot commit or cr
     }
     events.push(opts.method==='POST'?'create':'read');return response(opts.method==='POST'?{id:receipt.id}:{id:receipt.id,content:'Incomplete'});
   },{authorization:'Device '+'x'.repeat(43),'x-clickup-key':'pk_'+'x'.repeat(25)});
-  assert.equal(out.code,409);assert.equal(code,'BRIEF_READBACK_MISMATCH');assert.deepEqual(events,['inspect','prepare','create','receipt','read','review']);
+  assert.equal(out.code,409);assert.equal(code,'BRIEF_READBACK_MISMATCH');assert.deepEqual(events,['inspect','prepare','inspect','create','receipt','read','review']);
+});
+test('cancel requires verified browser ownership and capacity/lease polling are bounded',async()=>{
+  const calls=[];const mock=async(url,opts)=>{
+    if(url.includes('/auth/v1/user'))return response({id});
+    if(url.endsWith('/api/v2/user'))return response({user:{id:123}});
+    calls.push(JSON.parse(opts.body));return response({ok:true});
+  };
+  assert.equal((await invoke({op:'cancel',productId:'product',insId:'TEST-INS-1'},mock,{authorization:'Device '+'x'.repeat(43)})).code,401);
+  assert.equal((await invoke({op:'cancel',productId:'product',insId:'TEST-INS-1'},mock,{authorization:'Bearer app-session','x-clickup-key':'pk_'+'x'.repeat(25)})).code,200);
+  assert.equal(calls[0].p_args.clickup_user_id,'123');assert.equal(calls[0].p_args.product_id,'product');
+  const headers={authorization:'Device '+'x'.repeat(43)};
+  assert.equal((await invoke({op:'claim',workerVersion:'personal-parallel-v1',capacity:3},mock,headers)).code,200);
+  assert.equal(calls[1].p_args.capacity,3);
+  assert.equal((await invoke({op:'claim',workerVersion:'personal-parallel-v1',capacity:4},mock,headers)).code,400);
+  assert.equal((await invoke({op:'leases',jobs:[{id,lease:id}]},mock,headers)).code,200);
+  assert.equal((await invoke({op:'leases',jobs:Array(4).fill({id,lease:id})},mock,headers)).code,400);
+});
+test('cancellation after reservation prevents a new brief create',async()=>{
+  let inspected=0;const events=[];
+  const out=await invoke({op:'complete',jobId:id,lease:id,result:fullResult()},async(url,opts)=>{
+    if(url.endsWith('/api/v2/user'))return response({user:{id:123}});
+    assert.ok(url.includes('/rpc/'));const op=JSON.parse(opts.body).p_op;events.push(op);
+    if(op==='inspect')return response(++inspected===1?{...context,no_brief:false,clickup_user_id:'123'}:{done:true,cancelled:true});
+    if(op==='prepare')return response({reserved:true,noBrief:false,docId:'fixture-doc'});
+    throw Error('Unexpected write');
+  },{authorization:'Device '+'x'.repeat(43),'x-clickup-key':'pk_'+'x'.repeat(25)});
+  assert.equal(out.code,200);assert.equal(out.body.cancelled,true);assert.deepEqual(events,['inspect','prepare','inspect']);
 });
 test('browser verification uses only its scoped stored receipt and never creates a ClickUp page',async()=>{
   const r=fullResult(),artifact=validatePersonalResult(r,{...context,no_brief:false}),events=[];
@@ -194,7 +221,8 @@ test('replaying a recorded receipt verifies it without a second create',async()=
 test('personal bundle excludes app/admin credentials and shared queue runners',()=>{
   const worker=readFileSync(new URL('../tools/personal-worker/worker.py',import.meta.url),'utf8');
   assert.doesNotMatch(worker,/SUPABASE_SERVICE_ROLE_KEY|SUPABASE_DB_PASSWORD|producer_runs|strategist_runs|worker_registry/);
-  assert.match(worker,/start_new_session=True/);assert.match(worker,/isolated/);assert.match(worker,/STOP.wait\(60\)/);
+  assert.match(worker,/start_new_session=True/);assert.match(worker,/isolated/);
+  assert.match(worker,/time.monotonic\(\) - last_heartbeat >= 60/);assert.match(worker,/STOP.wait\(15\)/);
   const client=readFileSync(new URL('../public/personal-worker-client.mjs',import.meta.url),'utf8');
   assert.doesNotMatch(client,/\.channel\(|setInterval\(/);
   assert.match(client,/personal-worker-preference\.mjs/);

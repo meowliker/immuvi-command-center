@@ -16,6 +16,10 @@ Use that Python for every helper/import and Python module command, never an
 unqualified system python/python3 or an interpreter from another installation.
 Use the writable model cache specified by runtime.json. Do not install packages,
 change system tools/permissions, or switch to paid/remote analyzers during a job.
+Other jobs can run concurrently. Wrap all local audio-model loading and inference
+(AST, Whisper, stronger-model attempts) in fb_ad_classifier.personal_audio_session().
+Keep that lock until audio inference ends and the models are released; source
+download, frame inspection and creative analysis may proceed in parallel.
 Never load /classify-inspiration, environment files, database credentials or MCPs.
 Do not call Supabase or ClickUp, edit records, update skills, spawn agents,
 use another browser's login/cookies, delete files outside this workspace, or scan other jobs.
@@ -86,6 +90,24 @@ const out=path.join(root,'public/personal-worker');
 mkdirSync(out,{recursive:true});
 for(const name of ['worker.py','requirements.txt','install.sh']) copyFileSync(path.join(root,'tools/personal-worker',name),path.join(out,name));
 copyFileSync(path.join(root,'team-skill/fb_ad_classifier.py'),path.join(out,'fb_ad_classifier.py'));
+const classifierPath=path.join(out,'fb_ad_classifier.py');
+writeFileSync(classifierPath,readFileSync(classifierPath,'utf8')+`
+
+# Personal workers share only an audio inference lock, never job workspaces.
+from contextlib import contextmanager as _personal_contextmanager
+@_personal_contextmanager
+def personal_audio_session():
+    import fcntl
+    root = os.environ.get('XDG_CACHE_HOME')
+    if not root:
+        raise RuntimeError('Private audio cache is not configured')
+    with open(os.path.join(root, '.personal-audio-inference.lock'), 'a') as lock:
+        fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(lock.fileno(), fcntl.LOCK_UN)
+`);
 writeFileSync(path.join(out,'GUIDE.md'),guide);
 const files={};
 for(const name of ['worker.py','GUIDE.md','fb_ad_classifier.py','requirements.txt']) files[name]=createHash('sha256').update(readFileSync(path.join(out,name))).digest('hex');

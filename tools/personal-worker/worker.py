@@ -22,11 +22,13 @@ ROOT = Path.home() / "Library/Application Support/Immuvi Personal Worker"
 SERVICE = "com.immuvi.personal-classifier"
 CONTRACT = "personal-artifact-v1"
 RUNTIME_VERSION = "personal-runtime-v1"
+PARALLEL_VERSION = 'personal-parallel-v1'
 DIAGNOSTICS = frozenset(("FFMPEG_UNAVAILABLE", "FFPROBE_UNAVAILABLE", "PYTHON_UNAVAILABLE",
                         "REQUESTS_UNAVAILABLE", "YTDLP_UNAVAILABLE", "PLAYWRIGHT_UNAVAILABLE",
                         "WHISPER_UNAVAILABLE", "TRANSFORMERS_UNAVAILABLE", "TORCH_UNAVAILABLE",
                         "SOUNDFILE_UNAVAILABLE", "AGENT_UNAVAILABLE", "LOCAL_TOOL_UNIDENTIFIED"))
 STOP = threading.Event()
+ANALYSIS = threading.local()
 
 
 def keychain(read=True, value=None):
@@ -166,6 +168,64 @@ def runtime_context(workspace):
             'version': RUNTIME_VERSION}
 
 
+def default_concurrency():
+    try:
+        memory = subprocess.run(['/usr/sbin/sysctl', '-n', 'hw.memsize'],
+                                capture_output=True, text=True, timeout=5, check=True)
+        return 3 if int(memory.stdout.strip()) >= 16 * 1024**3 else 2
+    except (OSError, ValueError, subprocess.SubprocessError):
+        return 2
+
+
+class RuntimeController:
+    def __init__(self, credentials, capacity):
+        self.credentials, self.capacity = credentials, capacity
+        self.lock = threading.RLock()
+        self.health, self.checked_at = None, 0
+        self.active = {}
+
+    def check(self, force=False):
+        with self.lock:
+            if force or self.health is None or time.monotonic() - self.checked_at >= 300:
+                self.health = runtime_health()
+                atomic_json(ROOT/'runtime-health.json', self.health)
+                request('heartbeat', self.credentials, runtime=self.health,
+                        workerVersion=PARALLEL_VERSION, capacity=self.capacity)
+                self.checked_at = time.monotonic()
+            return dict(self.health)
+
+    def pause(self, detail):
+        with self.lock:
+            atomic_json(ROOT/'analysis-paused.json', {'version': RUNTIME_VERSION, 'code': detail})
+            self.health = {'version': RUNTIME_VERSION, 'ready': False, 'codes': [detail]}
+
+    def monitor(self):
+        last_heartbeat = -60
+        while not STOP.is_set():
+            try:
+                with self.lock:
+                    health = self.health
+                    active = list(self.active.items())
+                if time.monotonic() - last_heartbeat >= 60:
+                    last_heartbeat = time.monotonic()
+                    request('heartbeat', self.credentials, workerVersion=PARALLEL_VERSION,
+                            capacity=self.capacity, **({'runtime': health} if health else {}))
+                if active:
+                    response = request('leases', self.credentials,
+                        jobs=[{'id': job['id'], 'lease': job['lease']} for _, (job, _) in active])
+                    for status in response.get('jobs', []):
+                        if status.get('active') is False:
+                            for _, (job, event) in active:
+                                if job['id'] == status.get('id'):
+                                    event.set()
+            except ServiceError as error:
+                if error.status in (401, 403):
+                    STOP.set()
+            except Exception:
+                pass  # A transient status failure never cancels valid analysis.
+            STOP.wait(15)
+
+
 def atomic_json(path, value):
     temp = path.with_suffix(".tmp")
     temp.write_text(json.dumps(value))
@@ -173,7 +233,10 @@ def atomic_json(path, value):
     temp.replace(path)
 
 
-def analyze(job, recovery=False, timeout=1800):
+def analyze(job, recovery=False, timeout=1800, cancel_event=None):
+    ANALYSIS.detail = None
+    if cancel_event and cancel_event.is_set():
+        return None, 'CANCELLED'
     kind, binary = find_agent()
     with tempfile.TemporaryDirectory(prefix="immuvi-personal-", dir="/tmp") as tmp:
         workspace = Path(tmp)
@@ -205,16 +268,38 @@ def analyze(job, recovery=False, timeout=1800):
                                    stdin=subprocess.PIPE if stdin else subprocess.DEVNULL,
                                    stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
                                    text=True, start_new_session=True)
-        try:
-            _, error_output = process.communicate(input=stdin, timeout=timeout)
-        except subprocess.TimeoutExpired:
-            os.killpg(process.pid, signal.SIGTERM)
+        deadline = time.monotonic() + timeout
+        first = True
+        cancelled = False
+        completed = False
+        while True:
+            if cancel_event and cancel_event.is_set():
+                cancelled = True
+                break
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                break
+            try:
+                _, error_output = process.communicate(input=stdin if first else None,
+                                                     timeout=min(1, remaining))
+                completed = True
+                break
+            except subprocess.TimeoutExpired:
+                first = False
+        if not completed:
+            try:
+                os.killpg(process.pid, signal.SIGTERM)
+            except ProcessLookupError:
+                pass
             try:
                 process.wait(timeout=15)
             except subprocess.TimeoutExpired:
-                os.killpg(process.pid, signal.SIGKILL)
+                try:
+                    os.killpg(process.pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
                 process.wait()
-            return None, "TIMEOUT"
+            return None, 'CANCELLED' if cancelled else 'TIMEOUT'
         if process.returncode and any(marker in (error_output or '').lower() for marker in
                                       ('rate limit', 'rate_limit', '429', 'overloaded', 'usage limit', 'not logged in', 'authentication')):
             return None, "PROVIDER_UNAVAILABLE"
@@ -231,32 +316,19 @@ def analyze(job, recovery=False, timeout=1800):
                 if code in ("SOURCE_UNAVAILABLE", "EVIDENCE_UNVERIFIED", "LOCAL_TOOL_UNAVAILABLE", "PROVIDER_UNAVAILABLE"):
                     if code == 'LOCAL_TOOL_UNAVAILABLE':
                         detail = json.loads(failure.read_text()).get('detail')
-                        atomic_json(ROOT/'last-local-diagnostic.json', {
-                            'version': RUNTIME_VERSION,
-                            'code': detail if isinstance(detail, str) and detail in DIAGNOSTICS else 'LOCAL_TOOL_UNIDENTIFIED'})
+                        ANALYSIS.detail = detail if isinstance(detail, str) and detail in DIAGNOSTICS else 'LOCAL_TOOL_UNIDENTIFIED'
                     return None, code
             except (ValueError, UnicodeError):
                 pass
         return None, "AGENT_FAILED"
 
 
-def run():
-    credentials = keychain()
-    journal = ROOT / "pending-result.json"
-    failure_journal = ROOT / 'pending-failure.json'
-
-    health = None
-    def heartbeat():
-        while not STOP.is_set():
-            try:
-                request("heartbeat", credentials, **({'runtime': health} if health else {}))
-            except Exception:
-                pass
-            STOP.wait(60)
-    thread = threading.Thread(target=heartbeat, daemon=True)
-    thread.start()
+def run_slot(credentials, controller, slot):
+    local = ROOT if slot == 0 else ROOT/'slots'/str(slot)
+    local.mkdir(mode=0o700, parents=True, exist_ok=True)
+    journal = local / 'pending-result.json'
+    failure_journal = local / 'pending-failure.json'
     backoff = 15
-    checked_at = 0
     while not STOP.is_set():
         try:
             if journal.exists():
@@ -276,41 +348,46 @@ def run():
                 print('Analysis paused: ' + pending['code'] + '. Existing records preserved.', flush=True)
                 backoff = 15
                 continue
-            if time.monotonic() - checked_at >= 300 or checked_at == 0:
-                health = runtime_health()
-                atomic_json(ROOT/'runtime-health.json', health)
-                request('heartbeat', credentials, runtime=health)
-                checked_at = time.monotonic()
+            if slot >= controller.capacity:
+                STOP.wait(15)
+                continue
+            health = controller.check()
             if not health['ready']:
                 print('Personal Mac needs repair: ' + ','.join(health['codes']) + '. No new job claimed.', flush=True)
                 STOP.wait(300)
                 continue
-            job = request("claim", credentials, runtime=health)
+            if STOP.is_set():
+                break
+            job = request("claim", credentials, runtime=health,
+                          workerVersion=PARALLEL_VERSION, capacity=controller.capacity)
             if job:
                 print("Analyzing one personally assigned inspiration.", flush=True)
                 deadline = time.monotonic() + 1800
-                result, failure = analyze(job)
-                if failure == 'LOCAL_TOOL_UNAVAILABLE' and not STOP.is_set():
-                    # Analysis has no service credentials or publishing side effects.
-                    # Correct invocation once, never loop over an unavailable source.
-                    health = runtime_health()
-                    request('heartbeat', credentials, runtime=health)
-                    remaining = deadline - time.monotonic()
-                    if health['ready'] and remaining >= 60:
-                        result, failure = analyze(job, recovery=True, timeout=remaining)
+                cancel_event = threading.Event()
+                with controller.lock:
+                    controller.active[slot] = (job, cancel_event)
+                try:
+                    result, failure = analyze(job, cancel_event=cancel_event)
+                    if failure == 'LOCAL_TOOL_UNAVAILABLE' and not STOP.is_set() and not cancel_event.is_set():
+                        health = controller.check(force=True)
+                        remaining = deadline - time.monotonic()
+                        if health['ready'] and remaining >= 60:
+                            result, failure = analyze(job, recovery=True, timeout=remaining, cancel_event=cancel_event)
+                finally:
+                    with controller.lock:
+                        controller.active.pop(slot, None)
+                if failure == 'CANCELLED' or cancel_event.is_set():
+                    print('Cancelled personal analysis stopped; no result published.', flush=True)
+                    continue
                 if result is not None:
                     atomic_json(journal, {"job": job, "result": result})
                     continue
                 detail = None
                 if failure == 'LOCAL_TOOL_UNAVAILABLE':
-                    try:
-                        detail = json.loads((ROOT/'last-local-diagnostic.json').read_text()).get('code')
-                    except (OSError, ValueError, AttributeError):
-                        pass
+                    detail = getattr(ANALYSIS, 'detail', None)
                     if not isinstance(detail, str) or detail not in DIAGNOSTICS or detail == 'LOCAL_TOOL_UNIDENTIFIED':
                         detail = next(iter(health['codes']), 'LOCAL_TOOL_UNIDENTIFIED')
-                    atomic_json(ROOT/'analysis-paused.json', {'version': RUNTIME_VERSION, 'code': detail})
-                    health = {'version': RUNTIME_VERSION, 'ready': False, 'codes': [detail]}
+                    controller.pause(detail)
                 atomic_json(failure_journal, {'jobId': job['id'], 'lease': job['lease'], 'code': failure,
                     **({'detail': detail} if isinstance(detail, str) and detail in DIAGNOSTICS else {})})
                 continue
@@ -320,12 +397,12 @@ def run():
             if error.status in (401, 403):
                 STOP.set()
             if failure_journal.exists() and error.status in (400, 409):
-                failure_journal.replace(ROOT / ('review-failure-' + str(int(time.time())) + '.json'))
+                failure_journal.replace(local / ('review-failure-' + str(int(time.time())) + '.json'))
             if journal.exists() and error.status in (400, 409):
                 # Preserve the artifact for review, but do not hammer a rejected
                 # result or let it block later assigned jobs forever.
                 retained=json.loads(journal.read_text())
-                journal.replace(ROOT / ("review-" + str(int(time.time())) + ".json"))
+                journal.replace(local / ("review-" + str(int(time.time())) + ".json"))
                 try:
                     request('fail', {'token':credentials['token']},jobId=retained['job']['id'],
                             lease=retained['job']['lease'],code='EVIDENCE_UNVERIFIED')
@@ -336,6 +413,25 @@ def run():
             print("Local worker unavailable; retained work will be retried.", flush=True)
             backoff = min(max(backoff * 2, 60), 300)
         STOP.wait(backoff)
+
+
+def run(concurrency=None):
+    credentials = keychain()
+    capacity = default_concurrency() if concurrency is None else concurrency
+    if capacity not in (1, 2, 3):
+        raise RuntimeError('Personal worker capacity must be between one and three')
+    controller = RuntimeController(credentials, capacity)
+    monitor = threading.Thread(target=controller.monitor, daemon=True)
+    monitor.start()
+    if capacity == 1:
+        run_slot(credentials, controller, 0)
+    else:
+        # All slots drain old journals, even after a lower-memory capacity change.
+        slots = [threading.Thread(target=run_slot, args=(credentials, controller, slot)) for slot in range(3)]
+        for thread in slots:
+            thread.start()
+        for thread in slots:
+            thread.join()
 
 
 def setup(resume=False):

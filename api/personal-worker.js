@@ -3,7 +3,7 @@ import {PersonalWorkerError,validatePersonalResult,briefContentMatches} from '..
 const digest=value=>createHash('sha256').update(value).digest('hex');
 const secret=()=>randomBytes(32).toString('base64url');
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const browserOps=new Set(['create','list','revoke','enqueue','retry','verify']);
+const browserOps=new Set(['create','list','revoke','enqueue','retry','verify','cancel']);
 const runtimeCodes=new Set(['FFMPEG_UNAVAILABLE','FFPROBE_UNAVAILABLE','PYTHON_UNAVAILABLE',
   'REQUESTS_UNAVAILABLE','YTDLP_UNAVAILABLE','PLAYWRIGHT_UNAVAILABLE','WHISPER_UNAVAILABLE',
   'TRANSFORMERS_UNAVAILABLE','TORCH_UNAVAILABLE','SOUNDFILE_UNAVAILABLE','AGENT_UNAVAILABLE','LOCAL_TOOL_UNIDENTIFIED']);
@@ -64,9 +64,14 @@ export function createPersonalWorkerHandler({fetchImpl=fetch,env=process.env}={}
           const created=await rpc(op,{...args,name:body.name.trim(),pair_hash:digest(pairing)});
           return res.status(200).json({...created,pairingCode:created.id+'.'+pairing});
         }
-        if(op!=='list') {
+        if(op!=='list'&&op!=='cancel') {
           if(!uuid.test(body.deviceId)) throw new PersonalWorkerError('Select your paired Mac');
           args.device_id=body.deviceId;
+        }
+        if(op==='cancel'){
+          if(typeof body.productId!=='string'||!body.productId||body.productId.length>200||
+            typeof body.insId!=='string'||!body.insId||body.insId.length>200)throw new PersonalWorkerError('Select an inspiration in its product');
+          args.product_id=body.productId;args.ins_id=body.insId;
         }
         if(op==='enqueue') {
           if(typeof body.productId!=='string'||body.productId.length>200||!Array.isArray(body.items)||!body.items.length||body.items.length>20) throw new PersonalWorkerError('Select up to 20 inspirations in one product');
@@ -101,11 +106,19 @@ export function createPersonalWorkerHandler({fetchImpl=fetch,env=process.env}={}
         await rpc('pair',{device_id:parts[0],pair_hash:digest(parts[1]),token_hash:digest(token),clickup_user_id:await clickupIdentity()});
         return res.status(200).json({token});
       }
-      if(!['heartbeat','claim','fail','complete'].includes(op)) throw new PersonalWorkerError('Unknown operation');
+      if(!['heartbeat','claim','leases','fail','complete'].includes(op)) throw new PersonalWorkerError('Unknown operation');
       const deviceAuth=req.headers.authorization||'';
       if(!/^Device [A-Za-z0-9_-]{43}$/.test(deviceAuth)) throw new PersonalWorkerError('Pair this Mac first',401);
       const args={token_hash:digest(deviceAuth.slice(7)),contract:'personal-artifact-v1'};
+      if(op==='leases'){
+        if(!Array.isArray(body.jobs)||body.jobs.length>3||body.jobs.some(job=>!job||!uuid.test(job.id)||!uuid.test(job.lease)))throw new PersonalWorkerError('Invalid lease check');
+        return res.status(200).json(await rpc(op,{...args,jobs:body.jobs.map(job=>({id:job.id,lease:job.lease}))}));
+      }
       if(op==='heartbeat'||op==='claim') {
+        if(body.workerVersion!==undefined||body.capacity!==undefined){
+          if(body.workerVersion!=='personal-parallel-v1'||!Number.isInteger(body.capacity)||body.capacity<1||body.capacity>3)throw new PersonalWorkerError('Invalid personal capacity');
+          args.worker_version=body.workerVersion;args.capacity=body.capacity;
+        }
         if(body.runtime!==undefined){
           const health=body.runtime;
           if(!health||health.version!=='personal-runtime-v1'||typeof health.ready!=='boolean'||
@@ -139,6 +152,8 @@ export function createPersonalWorkerHandler({fetchImpl=fetch,env=process.env}={}
         // state intact; old clients retain their journal and back off on 503.
         if(!reserved.noBrief&&!receipt)throw new PersonalWorkerError('Brief publishing is already in progress. Saved analysis is retained; no duplicate will be created.',503);
       } else if(!reserved.noBrief) {
+        const live=await rpc('inspect',args);
+        if(live.done)return res.status(200).json(live);
         stage='BRIEF_LIBRARY_UNCONFIGURED';
         if(!/^[A-Za-z0-9_-]{1,100}$/.test(reserved.docId||'')) throw new PersonalWorkerError('The product needs its Inspiration Library configured. Analysis is preserved.',409);
         const base='https://api.clickup.com/api/v3/workspaces/9016762494/docs/'+encodeURIComponent(reserved.docId)+'/pages';

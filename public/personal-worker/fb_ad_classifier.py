@@ -924,3 +924,19 @@ if __name__ == "__main__":
         print(__doc__)
         sys.exit(1)
     asyncio.run(run(sys.argv[1]))
+
+
+# Personal workers share only an audio inference lock, never job workspaces.
+from contextlib import contextmanager as _personal_contextmanager
+@_personal_contextmanager
+def personal_audio_session():
+    import fcntl
+    root = os.environ.get('XDG_CACHE_HOME')
+    if not root:
+        raise RuntimeError('Private audio cache is not configured')
+    with open(os.path.join(root, '.personal-audio-inference.lock'), 'a') as lock:
+        fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(lock.fileno(), fcntl.LOCK_UN)

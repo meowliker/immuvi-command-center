@@ -23,7 +23,7 @@ const server=createServer(async(req,res)=>{
       return res.end(JSON.stringify({devices:revoked.has(id)?[]:[{id,
         name:req.headers['x-clickup-key']==='owner-a'?'Owner A private Mac':'Owner B private Mac',paired:true,
         lastSeen:new Date(Date.now()-(offline?600000:0)).toISOString(),
-        runtime:{version:'personal-runtime-v1',ready:false,codes:['FFMPEG_UNAVAILABLE']},
+        capacity:3,runtime:{version:'personal-runtime-v1',ready:id===b,codes:id===a?['FFMPEG_UNAVAILABLE']:[]},
         attention:[...(reviewPending?[{id:a,insId:'TEST-INS-REVIEW',state:'review',code:'BRIEF_READBACK_MISMATCH'}]:[]),
           {id:b,insId:'TEST-INS-LOCAL',state:'blocked',code:'LOCAL_TOOL_UNAVAILABLE',diagnostic:'FFPROBE_UNAVAILABLE'}]}]}));
     }
@@ -110,6 +110,7 @@ try{
   const oldAssignment=await page.evaluate(async(a)=>{try{await _personalWorkerEnqueue('product-a',[],'personal:'+a);return 'allowed';}catch(error){return error.message;}},a);
   assert.match(oldAssignment,/Select your Mac again/);
   await page.click('#open');await page.locator('dialog').getByText('Owner B private Mac',{exact:false}).waitFor();
+  assert.match(await page.locator('dialog').textContent(),/3 slots/);
   assert.equal(await page.getByText('Owner A private Mac',{exact:false}).count(),0);
   await page.getByRole('button',{name:'Use this Mac',exact:true}).click();await ready(page,'personal:'+b);
   await page.goto(origin+'/?owner=owner-b');await ready(page,'personal:'+b);

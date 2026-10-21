@@ -53,6 +53,7 @@ window._personalWorkerEnqueue=async function(productId,items,assignment){
     items:items.map(item=>({id:item.id||item.ins_id,url:item.url,no_brief:item.noBrief===true}))});}
   catch(error){if(typeof showInsStatus==='function')showInsStatus('error',error.message);throw error;}
 };
+window._personalWorkerCancel=(productId,insId)=>personalWorkerRequest('cancel',{productId,insId});
 window._appendPersonalWorkerOptions=async function(select){
   const identity=syncIdentity(),samePicker=pickerIdentities.get(select)===identity;
   const visibleChoice=samePicker&&isPersonalWorkerChoice(select.value)?select.value:'';
@@ -104,13 +105,13 @@ Complete setup on this Mac, using the official installer and its manifest checks
 
 If setup previously failed, diagnose the actual local error. For incomplete Torch or Playwright downloads, inspect the download path and pip configuration without exposing credentials. Do not assume Wi-Fi is faulty or repeatedly rerun the same failing command. Use bounded retries; report the exact sanitized blocker if it cannot be resolved safely.
 
-Reuse working dependencies and preserve existing login/model state. If the personal service is installed, use the official installer's --repair mode: it verifies staged assets, requests graceful shutdown, waits for the current analysis without force-killing it, updates only the private installation and restarts the same service. It preserves pairing and pending-result.json. Never revoke the device or delete retained work to update it. If initial pairing already succeeded but the service did not start, use --resume-pairing instead of consuming another code. Run the private worker's diagnose command and report only its sanitized diagnostic codes; never print stored credentials or source material.
+Reuse working dependencies and preserve existing login/model state. If the personal service is installed, use the official installer's --repair mode: it verifies staged assets, requests graceful shutdown, waits for active analyses without force-killing them, updates only the private installation and restarts the same service. It preserves pairing, pending-result.json and the entire slots directory. Never revoke the device or delete retained work to update it. If initial pairing already succeeded but the service did not start, use --resume-pairing instead of consuming another code. Run the private worker's diagnose command and report only its sanitized diagnostic codes; never print stored credentials or source material.
 
 Do not disable HTTPS verification, use untrusted mirrors, force Homebrew overwrites, skip audio/evidence verification, or change app code. Do not manually modify Supabase records, ClickUp tasks, or other services. Use only the official setup, pairing and heartbeat paths for this device. Request approval before changes outside this personal worker's setup scope.
 
 Do not read or print stored credentials, dump Keychain, copy AI credential files, or put secrets in plaintext files or logs. Let the official worker manage its credentials in macOS Keychain. Never ask me to paste keys or pairing codes into this chat. At pairing, pause and let me enter a fresh pairing code and my personal ClickUp key directly into hidden prompts in my own Terminal. Let me complete any required AI sign-in or macOS approvals myself.
 
-After setup, verify the personal worker service com.immuvi.personal-classifier is running and guide me to confirm its live heartbeat in Immuvi > Inspiration > My Mac. Do not claim success before verifying. Do not queue or reclassify inspirations without my explicit instruction. If blocked, report the exact sanitized error and what remains.`;
+After setup, verify the personal worker service com.immuvi.personal-classifier is running and guide me to confirm its live heartbeat and two or three slots in Immuvi > Inspiration > My Mac. Updated Macs use two analysis slots below 16 GB RAM and three at or above 16 GB. Do not claim success before verifying. Do not queue or reclassify inspirations without my explicit instruction. If blocked, report the exact sanitized error and what remains.`;
   const copy=button('⧉',async()=>{
     try{await navigator.clipboard.writeText(prompt.value);status.textContent='Codex setup prompt copied.';}
     catch{prompt.focus();prompt.select();status.textContent='Copy unavailable. The Codex setup prompt is selected.';}
@@ -147,7 +148,7 @@ window._openPersonalWorkerDialog=async function(){
       if(!rows.some(device=>device.paired))setup.open=true;
       for(const device of rows){
         const row=document.createElement('div');Object.assign(row.style,{display:'flex',alignItems:'center',gap:'12px',padding:'12px 0',borderBottom:'1px solid #e5e7eb',flexWrap:'wrap'});
-        const text=document.createElement('span');text.textContent=device.name+' · '+(!device.paired?'Awaiting pairing':device.lastSeen&&Date.now()-Date.parse(device.lastSeen)<150000?device.runtime?.ready===false?'Needs repair':'Online':'Offline');text.style.flex='1';row.appendChild(text);
+        const text=document.createElement('span');text.textContent=device.name+' · '+(!device.paired?'Awaiting pairing':device.lastSeen&&Date.now()-Date.parse(device.lastSeen)<150000?device.runtime?.ready===false?'Needs repair':'Online'+(device.capacity>1?' · '+device.capacity+' slots':''):'Offline');text.style.flex='1';row.appendChild(text);
         if(device.runtime?.ready===false){
           const diagnosis=document.createElement('span');diagnosis.textContent=(device.runtime.codes||[]).join(', ');row.appendChild(diagnosis);
           row.appendChild(button('Repair Mac',()=>{setup.open=true;setup.querySelector('textarea')?.focus();}));

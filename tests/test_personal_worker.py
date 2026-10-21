@@ -3,6 +3,7 @@ import json
 import os
 from pathlib import Path
 import tempfile
+import threading
 import unittest
 from unittest.mock import patch, Mock
 
@@ -144,7 +145,7 @@ class PersonalWorkerTests(unittest.TestCase):
             worker.STOP.clear()
             try:
                 with patch.object(worker,'ROOT',root),patch.object(worker,'keychain',return_value={'token':'fixture-token'}),patch.object(worker,'request',side_effect=request),patch.object(worker.threading,'Thread',Thread):
-                    worker.run()
+                    worker.run(concurrency=1)
                 self.assertEqual(operations,['complete','fail'])
                 self.assertFalse((root/'pending-result.json').exists())
                 self.assertEqual(len(list(root.glob('review-*.json'))),1)
@@ -214,9 +215,8 @@ class PersonalWorkerTests(unittest.TestCase):
             with patch.object(worker,'ROOT',root), patch.object(worker,'find_agent',return_value=('claude','/fake/claude')), \
                     patch.object(worker.subprocess,'Popen',Process):
                 self.assertEqual(worker.analyze({'ins_id':'SYNTHETIC'}, recovery=True), (None,'LOCAL_TOOL_UNAVAILABLE'))
-            diagnostic = json.loads((root/'last-local-diagnostic.json').read_text())
-            self.assertEqual(diagnostic['code'],'LOCAL_TOOL_UNIDENTIFIED')
-            self.assertNotIn('secret',json.dumps(diagnostic))
+            self.assertEqual(worker.ANALYSIS.detail,'LOCAL_TOOL_UNIDENTIFIED')
+            self.assertFalse((root/'last-local-diagnostic.json').exists())
 
     def test_local_failure_retries_at_most_once_and_never_publishes(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -240,7 +240,7 @@ class PersonalWorkerTests(unittest.TestCase):
                         patch.object(worker,'request',side_effect=request),patch.object(worker.threading,'Thread',Thread), \
                         patch.object(worker,'runtime_health',return_value=health), \
                         patch.object(worker,'analyze',return_value=(None,'LOCAL_TOOL_UNAVAILABLE')) as analyze:
-                    worker.run()
+                    worker.run(concurrency=1)
                 self.assertEqual(analyze.call_count,2)
                 self.assertEqual(analyze.call_args_list[0].args[0],job)
                 self.assertEqual(analyze.call_args_list[1].args[0],job)
@@ -263,7 +263,7 @@ class PersonalWorkerTests(unittest.TestCase):
                 with patch.object(worker,'ROOT',Path(tmp)),patch.object(worker,'keychain',return_value={}), \
                         patch.object(worker.threading,'Thread',Thread),patch.object(worker,'runtime_health',return_value=health), \
                         patch.object(worker,'request',side_effect=request):
-                    worker.run()
+                    worker.run(concurrency=1)
                 self.assertEqual(operations,['heartbeat'])
             finally: worker.STOP.clear()
 
@@ -285,7 +285,7 @@ class PersonalWorkerTests(unittest.TestCase):
                         patch.object(worker.threading,'Thread',Thread),patch.object(worker,'request',side_effect=request), \
                         patch.object(worker,'runtime_health',return_value={'version':worker.RUNTIME_VERSION,'ready':True,'codes':[]}), \
                         patch.object(worker,'analyze',side_effect=[(None,'LOCAL_TOOL_UNAVAILABLE'),({'fixture':'verified'},None)]):
-                    worker.run()
+                    worker.run(concurrency=1)
                 self.assertEqual(operations.count('complete'),1)
                 self.assertNotIn('fail',operations)
                 self.assertFalse((root/'pending-result.json').exists())
@@ -312,10 +312,77 @@ class PersonalWorkerTests(unittest.TestCase):
                         patch.object(worker.threading,'Thread',Thread),patch.object(worker,'request',side_effect=request), \
                         patch.object(worker.STOP,'wait',return_value=False), \
                         patch.object(worker,'runtime_health',side_effect=AssertionError('No new claim while reporting failure')):
-                    worker.run()
+                    worker.run(concurrency=1)
                 self.assertEqual(operations,['fail','fail'])
                 self.assertFalse((root/'pending-failure.json').exists())
             finally:worker.STOP.clear()
+
+    def test_three_slots_analyze_concurrently_with_independent_results(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp);lock=threading.Lock();barrier=threading.Barrier(3,timeout=5)
+            jobs=[{'id':str(n),'lease':str(n),'source_url':'https://example.test/'+str(n),'no_brief':True} for n in range(3)]
+            claimed=[];saved=[]
+            def request(op,credentials,**payload):
+                with lock:
+                    if op=='claim':
+                        if not jobs:return None
+                        job=jobs.pop();claimed.append(job['id']);return job
+                    if op=='complete':
+                        self.assertEqual(payload['result']['id'],payload['jobId'])
+                        self.assertNotIn('clickupKey',credentials)
+                        saved.append(payload['jobId'])
+                        if len(saved)==3:worker.STOP.set()
+                        return {'done':True}
+                return {'ok':True}
+            def analyze(job,**kwargs):
+                barrier.wait();return {'id':job['id']},None
+            worker.STOP.clear()
+            try:
+                with patch.object(worker,'ROOT',root),patch.object(worker,'keychain',return_value={'token':'fixture','clickupKey':'private'}), \
+                        patch.object(worker.RuntimeController,'monitor',return_value=None),patch.object(worker,'request',side_effect=request), \
+                        patch.object(worker,'analyze',side_effect=analyze), \
+                        patch.object(worker,'runtime_health',return_value={'version':worker.RUNTIME_VERSION,'ready':True,'codes':[]}):
+                    worker.run(concurrency=3)
+                self.assertEqual(set(claimed),{'0','1','2'})
+                self.assertEqual(sorted(saved),['0','1','2'])
+                self.assertEqual(list(root.rglob('pending-result.json')),[])
+            finally:worker.STOP.clear()
+
+    def test_cancelled_analysis_terminates_only_its_process_group_and_never_returns_result(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp)
+            for name in ('GUIDE.md','fb_ad_classifier.py'):(root/name).write_text('fixture')
+            event=threading.Event()
+            class Process:
+                returncode=None;pid=12345
+                def __init__(self,*args,**kwargs):pass
+                def communicate(self,**kwargs):
+                    event.set();raise worker.subprocess.TimeoutExpired('fixture',1)
+                def wait(self,**kwargs):self.returncode=0
+            with patch.object(worker,'ROOT',root),patch.object(worker,'find_agent',return_value=('claude','/fake/claude')), \
+                    patch.object(worker.subprocess,'Popen',Process),patch.object(worker.os,'killpg') as kill:
+                self.assertEqual(worker.analyze({'ins_id':'fixture'},cancel_event=event),(None,'CANCELLED'))
+                kill.assert_called_once_with(12345,worker.signal.SIGTERM)
+
+    def test_memory_capacity_is_bounded_to_two_or_three(self):
+        for memory,expected in [(8*1024**3,2),(16*1024**3,3),(64*1024**3,3)]:
+            with patch.object(worker.subprocess,'run',return_value=Mock(stdout=str(memory))):
+                self.assertEqual(worker.default_concurrency(),expected)
+
+    def test_personal_audio_sessions_serialize_without_serializing_analysis_slots(self):
+        spec=importlib.util.spec_from_file_location('personal_audio_fixture',Path(__file__).parents[1]/'public/personal-worker/fb_ad_classifier.py')
+        classifier=importlib.util.module_from_spec(spec);spec.loader.exec_module(classifier)
+        with tempfile.TemporaryDirectory() as tmp,patch.dict(os.environ,{'XDG_CACHE_HOME':tmp}):
+            first=threading.Event();release=threading.Event();second=threading.Event()
+            def hold():
+                with classifier.personal_audio_session():first.set();release.wait(5)
+            def wait():
+                with classifier.personal_audio_session():second.set()
+            a=threading.Thread(target=hold);b=threading.Thread(target=wait)
+            a.start();self.assertTrue(first.wait(2));b.start()
+            try:self.assertFalse(second.wait(0.05))
+            finally:release.set();a.join(2);b.join(2)
+            self.assertTrue(second.is_set())
 
 
 if __name__ == '__main__':

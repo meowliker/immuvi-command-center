@@ -1,9 +1,9 @@
 {
   "contract": "personal-artifact-v1",
   "files": {
-    "worker.py": "249b997da0658cdff66813c91ff0f95d88e230601bdbb0c6ef73f4e1aa936bd0",
-    "GUIDE.md": "2b820ad3ea87e5ecf68985d8cfb243821b4c5f9bcba0fc0b91456bc2777c2b92",
-    "fb_ad_classifier.py": "89e45b556575351f93688e54fe1d9ec82eac5292baf09c3f7193b262ad9f57fb",
+    "worker.py": "48637aeb4046f309335657433fc176d0c2b95a5c2edce876e0db67de54349c1d",
+    "GUIDE.md": "7c72775bdcf5a5f436788620e3c3d95d6f6a96902ab824994d1ebe9f662f5206",
+    "fb_ad_classifier.py": "6b8d3f9465b2a13397c46754a13f85276b50384e5ee528ae4af0cb932f7a0307",
     "requirements.txt": "cca648b415b21debaf9c0899be64e60e5d335c32042c8c806123ad0f82a8353a"
   }
 }

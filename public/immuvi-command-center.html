@@ -49097,33 +49097,33 @@ function renderInspirations() {
 }
 
 async function deleteInspiration(id) {
-  // Capture product_id before we strip the row from local state
   var victim = INSPIRATIONS.find(function(ins){ return ins.id === id; });
   var pid = (victim && victim.product_id) || activeProductId;
-
-  // 1. Remove from local in-memory state + re-render immediately (optimistic)
-  INSPIRATIONS = INSPIRATIONS.filter(function(ins){ return ins.id !== id; });
-  renderInspirations();
-
-  // 2. Explicitly DELETE from Supabase. saveInspirations() only upserts the
-  //    remaining rows — it never removes deleted ones, so without this call
-  //    the row resurrects on next refresh / realtime refetch.
+  if (!id || !pid) return;
   if (SB && id) {
     try {
-      var delIns = await SB.from('inspirations').delete().eq('id', id);
-      if (delIns && delIns.error) console.error('[SB] deleteInspiration inspirations', delIns.error);
-      // Also drop any queue entry so it doesn't get picked up by the classifier later
-      var delQ = await SB.from('inspiration_queue').delete().eq('ins_id', id);
-      if (delQ && delQ.error) console.error('[SB] deleteInspiration queue', delQ.error);
-      // And any prior classification result (safe if nothing matches)
-      if (pid) {
-        var delR = await SB.from('inspiration_results').delete().eq('ins_id', id).eq('product_id', pid);
-        if (delR && delR.error) console.error('[SB] deleteInspiration results', delR.error);
+      var assignment = await SB.from('inspiration_queue').select('worker_assignment').eq('ins_id', id).eq('product_id', pid).maybeSingle();
+      if (assignment.error) throw new Error('Could not verify the assignment. Refresh before deleting.');
+      if (assignment.data && assignment.data.worker_assignment === 'private') {
+        if (typeof window._personalWorkerCancel !== 'function') throw new Error('My Mac is still loading. Retry shortly.');
+        await window._personalWorkerCancel(pid, id);
       }
-    } catch (e) { console.error('[SB] deleteInspiration exception', e); }
+      var delIns = await SB.from('inspirations').delete().eq('id', id).eq('product_id', pid);
+      if (delIns && delIns.error) throw new Error('Deletion was not confirmed. The inspiration was kept on screen.');
+      INSPIRATIONS = INSPIRATIONS.filter(function(ins){ return !(ins.id === id && (ins.product_id || pid) === pid); });
+      renderInspirations();
+      var delQ = await SB.from('inspiration_queue').delete().eq('ins_id', id).eq('product_id', pid);
+      var delR = await SB.from('inspiration_results').delete().eq('ins_id', id).eq('product_id', pid);
+      if ((delQ && delQ.error) || (delR && delR.error)) {
+        if (typeof toast === 'function') toast('Inspiration removed. Queue cleanup needs a refresh; cancelled work cannot publish.', 'warn');
+      }
+    } catch (e) {
+      if (typeof toast === 'function') toast(e.message || 'Deletion could not be confirmed.', 'error');
+    }
+    return;
   }
-
-  // 3. Persist the remaining rows (unchanged rows get no-op upserts, harmless)
+  INSPIRATIONS = INSPIRATIONS.filter(function(ins){ return ins.id !== id; });
+  renderInspirations();
   saveInspirations();
 }
 

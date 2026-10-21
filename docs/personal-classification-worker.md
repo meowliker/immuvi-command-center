@@ -185,6 +185,42 @@ Codex CLI login/profile behavior follows the [official authentication guidance](
 
 ## Release And Rollback
 
+### Cancellation And Parallel Jobs
+
+Updated `personal-parallel-v1` Macs run two independent analysis slots below
+16 GB RAM and three at or above 16 GB, with a hard server limit of three. Older
+clients retain one slot. Each slot has separate retained result/failure journals;
+slot zero continues to drain legacy journals. All retained slots are drained
+even if a Mac's capacity later decreases. The service still has one minute
+heartbeat; a single control thread checks up to three active leases every
+15 seconds. These checks do not refresh the browser or broadcast app saves.
+The personal classifier bundle provides a cross-process audio inference lock;
+the agent must hold it around local model loading/inference to avoid parallel
+large audio models exhausting a small Mac. Frame/creative analysis remains
+parallel. Graceful updates stop new claims and retain/drain all slots.
+
+Deleting a private inspiration first sends an app-JWT plus verified-ClickUp
+cancellation for that exact product/source. Another ClickUp user's assignment
+cannot be cancelled. Only after success does the browser delete the selected
+product's rows; a failure stays visible, and no bulk save can resurrect it.
+An old browser's uncoordinated deletion is rejected before the inspiration is
+removed. Shared deletions need no personal key or worker cancellation.
+
+Cancelled analyses release server capacity immediately. The updated client
+stops only the cancelled job's process group on the next successful lease poll;
+late results acknowledge cancellation without publication. Already reserved
+publishing is fenced with `cancel_requested`: saved analysis and any late page
+receipt are retained, but no classification is committed or replacement brief
+created. A ClickUp create already in flight cannot be recalled; its receipt must
+remain recorded for review. Never delete that page automatically.
+
+Claims/status checks cancel only their own device's active jobs whose exact
+source row is already missing, and remove only those orphan private queue
+markers. `scripts/recover-personal-orphan.mjs` provides a rollback-first,
+single-job repair for historical orphan leases with no artifact/brief, private
+backups and unrelated-row digest checks. The parallel migration itself rewrites
+no existing business data and does not retry any inspiration.
+
 Apply `20261021000100_personal_classification_workers.sql` before enabling the UI.
 The migration script first compares counts/digests for all existing rows in nine
 content tables inside a repeatable-read transaction; it aborts on a difference.

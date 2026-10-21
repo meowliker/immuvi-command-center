@@ -34,7 +34,7 @@ def keychain(read=True, value=None):
     encoded = base64.urlsafe_b64encode(json.dumps(value).encode()).decode()
     # Pass the secret through stdin, not the process list or shell history.
     result = subprocess.run(["/usr/bin/security", "-i"], input=
-                            f"add-generic-password -U -a immuvi-personal -s {SERVICE} -w {encoded}\nquit\n",
+                            f"add-generic-password -U -a immuvi-personal -s {SERVICE} -w {encoded}\n",
                             text=True, capture_output=True)
     if result.returncode:
         raise RuntimeError("Could not save credentials in the login Keychain")
@@ -219,20 +219,40 @@ def run():
         STOP.wait(backoff)
 
 
-def setup():
+def setup(resume=False):
     if sys.platform != "darwin":
         raise RuntimeError("This installer supports macOS only")
+    launch = Path.home() / "Library/LaunchAgents" / (SERVICE + ".plist")
+    if launch.exists():
+        raise RuntimeError("A personal worker is already installed; setup will not replace it")
     find_agent()
-    print("Use your own ClickUp key. No Supabase credentials or repository are needed.")
-    code = getpass.getpass("Paste the one-time pairing code from Immuvi > My Mac: ").strip()
-    clickup = getpass.getpass("Your ClickUp personal API key: ").strip()
-    paired = request("pair", {"clickupKey": clickup}, code=code)
-    keychain(False, {"token": paired["token"], "clickupKey": clickup})
+    if resume:
+        try:
+            credentials = keychain()
+            if not isinstance(credentials, dict) or not all(
+                    isinstance(credentials.get(name), str) and credentials[name] for name in ('token', 'clickupKey')):
+                raise ValueError()
+        except (RuntimeError, ValueError, TypeError):
+            raise RuntimeError("No readable saved pairing. Unlock the login Keychain and retry; "
+                               "if none was saved, run the normal installer with a fresh pairing code.") from None
+        try:
+            request("heartbeat", {"token": credentials['token']})
+        except ServiceError as error:
+            if error.status in (401, 403):
+                raise RuntimeError("The saved pairing is no longer valid. Run the normal installer "
+                                   "with a fresh pairing code.") from None
+            raise
+        print("Saved pairing verified. Resuming without another pairing code or key.")
+    else:
+        print("Use your own ClickUp key. No Supabase credentials or repository are needed.")
+        code = getpass.getpass("Paste the one-time pairing code from Immuvi > My Mac: ").strip()
+        clickup = getpass.getpass("Your ClickUp personal API key: ").strip()
+        paired = request("pair", {"clickupKey": clickup}, code=code)
+        keychain(False, {"token": paired["token"], "clickupKey": clickup})
     agents = Path.home() / "Library/LaunchAgents"
     agents.mkdir(parents=True, exist_ok=True)
     logs = ROOT / "logs"
     logs.mkdir(mode=0o700, exist_ok=True)
-    launch = agents / (SERVICE + ".plist")
     payload = {"Label": SERVICE, "ProgramArguments": [str(ROOT / "venv/bin/python"), str(ROOT / "worker.py"), "run"],
                "WorkingDirectory": str(ROOT), "RunAtLoad": True, "KeepAlive": {"SuccessfulExit": False},
                "ThrottleInterval": 60, "ExitTimeOut": 1900,
@@ -249,11 +269,11 @@ def setup():
 def main():
     os.umask(0o077)
     parser = argparse.ArgumentParser()
-    parser.add_argument("command", choices=("setup", "run", "check"))
+    parser.add_argument("command", choices=("setup", "resume-setup", "run", "check"))
     args = parser.parse_args()
     ROOT.mkdir(mode=0o700, parents=True, exist_ok=True)
-    if args.command == "setup":
-        setup()
+    if args.command in ("setup", "resume-setup"):
+        setup(resume=args.command == "resume-setup")
     elif args.command == "check":
         kind, binary = find_agent()
         os.environ['XDG_CACHE_HOME']=str(ROOT/'models')

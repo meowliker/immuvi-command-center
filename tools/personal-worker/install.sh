@@ -4,7 +4,12 @@ umask 077
 STEP='checking prerequisites'
 trap 'STATUS=$?; printf "\nInstaller stopped during: %s (exit %s).\nExisting Immuvi records were not reset. Pairing codes are entered only when prompted.\n" "$STEP" "$STATUS" >&2; exit "$STATUS"' ERR
 if [[ "$(uname -s)" != Darwin ]]; then echo 'macOS is required.'; exit 1; fi
-if ! command -v brew >/dev/null; then
+MODE="${1:-}"
+if [[ $# -gt 1 || ( -n "$MODE" && "$MODE" != '--resume-pairing' ) ]]; then
+  echo 'Usage: bash install.sh [--resume-pairing]'
+  exit 1
+fi
+if [[ "$MODE" != '--resume-pairing' ]] && ! command -v brew >/dev/null; then
   echo 'Install Homebrew from https://brew.sh, reopen Terminal, then run this installer again.'
   exit 1
 fi
@@ -16,6 +21,13 @@ if [[ -f "$HOME/Library/LaunchAgents/com.immuvi.personal-classifier.plist" ]]; t
   echo 'A personal worker is already installed. Stop it from My Mac before updating; retained results must not be interrupted.'
   exit 1
 fi
+if [[ "$MODE" == '--resume-pairing' ]]; then
+  PYTHON="$ROOT/venv/bin/python"
+  if [[ ! -x "$PYTHON" ]]; then
+    echo 'The private worker environment is missing. Run the installer without --resume-pairing first.'
+    exit 1
+  fi
+else
 export HOMEBREW_NO_AUTO_UPDATE=1
 export HOMEBREW_NO_INSTALL_CLEANUP=1
 export HOMEBREW_NO_INSTALL_UPGRADE=1
@@ -40,6 +52,7 @@ if ! command -v ffmpeg >/dev/null || ! command -v ffprobe >/dev/null ||
 fi
 ffmpeg -version >/dev/null 2>&1
 ffprobe -version >/dev/null 2>&1
+fi
 STEP='downloading verified worker files'
 STAGE="$(mktemp -d "${TMPDIR:-/tmp}/immuvi-personal-install.XXXXXX")"
 trap 'rm -rf "$STAGE"' EXIT
@@ -61,6 +74,11 @@ PY
 for FILE in worker.py GUIDE.md fb_ad_classifier.py requirements.txt manifest.json; do
   cp "$STAGE/$FILE" "$ROOT/$FILE"
 done
+if [[ "$MODE" == '--resume-pairing' ]]; then
+  STEP='verifying and resuming the saved pairing'
+  "$PYTHON" "$ROOT/worker.py" resume-setup </dev/tty
+  exit 0
+fi
 STEP='creating the private Python environment'
 echo 'Creating the private worker environment...'
 "$PYTHON" -m venv "$ROOT/venv"

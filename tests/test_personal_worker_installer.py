@@ -13,7 +13,7 @@ INSTALLER=REPO/'tools/personal-worker/install.sh'
 
 
 class InstallerTests(unittest.TestCase):
-    def run_installer(self, *, pip_failure=False, already_installed=False):
+    def run_installer(self, *, pip_failure=False, already_installed=False, resume=False, environment=True):
         with tempfile.TemporaryDirectory(prefix='immuvi-installer-test-') as tmp:
             base=Path(tmp); home=base/'Fixture Home'; home.mkdir(); binaries=base/'bin'; binaries.mkdir()
             log=base/'commands.jsonl'
@@ -43,11 +43,14 @@ elif args[:2]==['-m','venv']:
 elif args[:2]==['-m','pip']:
     if os.environ.get('FAKE_PIP_FAILURE')=='1': sys.exit(42)
 elif args[:2]==['-m','playwright']: pass
-elif args and args[-1] in ('check','setup'): pass
+elif args and args[-1] in ('check','setup','resume-setup'): pass
 else: sys.exit(89)
 '''
             for name in ('uname','brew','python3.12','ffmpeg','ffprobe','curl'):
                 file=binaries/name; file.write_text(stub); file.chmod(0o700)
+            if resume and environment:
+                venv=home/'Library/Application Support/Immuvi Personal Worker/venv/bin'
+                venv.mkdir(parents=True); (venv/'python').symlink_to(binaries/'python3.12')
             marker=home/'Library/LaunchAgents/com.immuvi.personal-classifier.plist'
             if already_installed:
                 marker.parent.mkdir(parents=True); marker.write_text('preserve-existing-worker')
@@ -56,7 +59,7 @@ else: sys.exit(89)
                  'FAKE_PIP_FAILURE':'1' if pip_failure else '0'}
             pid,fd=pty.fork()
             if pid==0:
-                os.execve('/bin/bash',['/bin/bash',str(INSTALLER)],env)
+                os.execve('/bin/bash',['/bin/bash',str(INSTALLER)]+(['--resume-pairing'] if resume else []),env)
             output=b''; deadline=time.monotonic()+20
             try:
                 while time.monotonic()<deadline:
@@ -95,6 +98,20 @@ else: sys.exit(89)
         code,output,commands=self.run_installer(already_installed=True)
         self.assertEqual(code,1,output)
         self.assertIn('already installed',output)
+        self.assertFalse(any(name in ('brew','curl','python3.12') for name,_ in commands))
+
+    def test_resume_downloads_verified_files_without_dependency_install_or_new_pairing(self):
+        code,output,commands=self.run_installer(resume=True)
+        self.assertEqual(code,0,output)
+        self.assertFalse(any(name=='brew' for name,_ in commands))
+        self.assertFalse(any(args and args[0]=='-m' for _,args in commands))
+        self.assertEqual(commands[-1][1][-1],'resume-setup')
+        self.assertFalse(any(args and args[-1] in ('check','setup') for _,args in commands))
+
+    def test_resume_missing_environment_stops_without_downloading_or_pairing(self):
+        code,output,commands=self.run_installer(resume=True,environment=False)
+        self.assertEqual(code,1,output)
+        self.assertIn('private worker environment is missing',output)
         self.assertFalse(any(name in ('brew','curl','python3.12') for name,_ in commands))
 
 

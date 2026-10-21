@@ -73,6 +73,22 @@ review rather than an automatic second brief creation.
 My Mac > Revoke invalidates only that device. Pending/running jobs stop accepting
 results; no inspirations, creatives or existing briefs are deleted. Never reuse
 the shared Mac mini installer or supply a Supabase key to a personal worker.
+
+If initial setup completed login and pairing but stopped with a Keychain-save
+error before starting the service, download the latest installer and run:
+
+```bash
+bash /tmp/immuvi-personal-worker-install.sh --resume-pairing
+```
+
+This verifies the downloaded files, reads the saved credentials from Keychain,
+checks that the device token is still valid, and starts only this personal
+worker. It does not reinstall dependencies, request another key/code, or replace
+an installed service. The earlier Keychain utility exit-command bug could report
+failure after credentials were saved. If credentials are genuinely missing or
+the pairing was revoked, resume stops with guidance instead of storing secrets
+in a file or weakening Keychain security.
+
 The installer currently refuses to replace an already installed worker while
 it might be processing. Updates should be supervised and drained first; there
 is deliberately no unattended code replacement during an active job.

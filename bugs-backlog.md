@@ -20,6 +20,14 @@ notes/briefs/scripts and lifecycle status intact. Publication ambiguity retains
 analysis for review instead of creating a duplicate page. Regression checks and
 setup/rollback limitations are documented in docs/personal-classification-worker.md.
 
+Personal runtime follow-up: private interpreter/executable paths, cached runtime
+checks before claims, owner-scoped safe diagnostic codes, one bounded
+analysis-only retry and supervised `--repair` updates are regression-covered.
+Never blindly retry unavailable sources or publishing exceptions, require audio
+models for No Brief, expose raw agent logs, revoke pairing to update, or reset
+pending results. Legacy Macs need an explicit client update; a server deployment
+does not remotely replace their installed code or recover old blocked jobs.
+
 ---
 
 ## Audio verification selected a credit-based external analyzer (2026-10-20)

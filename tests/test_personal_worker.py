@@ -4,7 +4,7 @@ import os
 from pathlib import Path
 import tempfile
 import unittest
-from unittest.mock import patch
+from unittest.mock import patch, Mock
 
 SPEC = importlib.util.spec_from_file_location('personal_worker', Path(__file__).parents[1] / 'tools/personal-worker/worker.py')
 worker = importlib.util.module_from_spec(SPEC)
@@ -150,6 +150,172 @@ class PersonalWorkerTests(unittest.TestCase):
                 self.assertEqual(len(list(root.glob('review-*.json'))),1)
             finally:
                 worker.STOP.clear()
+
+    def test_runtime_paths_include_private_python_and_brew_without_ambient_secrets(self):
+        with tempfile.TemporaryDirectory() as tmp, patch.object(worker, 'ROOT', Path(tmp)), \
+                patch.dict(os.environ, {'PATH': '/usr/bin:/bin', 'CLICKUP_API_KEY': 'secret'}):
+            env = worker.agent_environment(Path(tmp), 'claude')
+            self.assertEqual(env['PATH'].split(os.pathsep)[0], str(Path(tmp)/'venv/bin'))
+            self.assertIn('/opt/homebrew/bin', env['PATH'].split(os.pathsep))
+            self.assertEqual(env['PYTHONNOUSERSITE'], '1')
+            self.assertNotIn('CLICKUP_API_KEY', env)
+
+    def test_health_checks_private_interpreter_and_does_not_gate_on_optional_audio(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            calls = []
+            def run(command, **kwargs):
+                calls.append((command, kwargs))
+                return Mock(returncode=0, stdout='["WHISPER_UNAVAILABLE"]' if '-c' in command else '')
+            with patch.object(worker, 'ROOT', root), patch.object(worker, 'find_agent', return_value=('claude','/fake/claude')), \
+                    patch.object(worker.shutil, 'which', side_effect=lambda tool, **kw: '/opt/homebrew/bin/'+tool), \
+                    patch.object(worker.subprocess, 'run', side_effect=run):
+                health = worker.runtime_health()
+            self.assertTrue(health['ready'])
+            self.assertEqual(health['codes'], ['WHISPER_UNAVAILABLE'])
+            self.assertEqual(calls[-1][0][0], str(root/'venv/bin/python'))
+            self.assertEqual(calls[-1][1]['cwd'], root)
+
+    def test_missing_executable_or_broken_python_pauses_claims(self):
+        with tempfile.TemporaryDirectory() as tmp, patch.object(worker, 'ROOT', Path(tmp)), \
+                patch.object(worker, 'find_agent', return_value=('claude','/fake/claude')), \
+                patch.object(worker.shutil, 'which', return_value=None), \
+                patch.object(worker.subprocess, 'run', side_effect=OSError('untrusted source secret')):
+            health = worker.runtime_health()
+        self.assertFalse(health['ready'])
+        self.assertEqual(set(health['codes']), {'FFMPEG_UNAVAILABLE','FFPROBE_UNAVAILABLE','PYTHON_UNAVAILABLE'})
+        self.assertNotIn('secret', json.dumps(health))
+
+    def test_persistent_local_failure_pauses_later_jobs_until_supervised_repair(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp)
+            worker.atomic_json(root/'analysis-paused.json',{'code':'LOCAL_TOOL_UNIDENTIFIED'})
+            with patch.object(worker,'ROOT',root),patch.object(worker,'find_agent',return_value=('claude','/fake/claude')), \
+                    patch.object(worker.shutil,'which',return_value='/fake/tool'), \
+                    patch.object(worker.subprocess,'run',return_value=Mock(returncode=0,stdout='[]')):
+                self.assertFalse(worker.runtime_health()['ready'])
+                self.assertEqual(worker.runtime_health()['codes'],['LOCAL_TOOL_UNIDENTIFIED'])
+                self.assertTrue(worker.runtime_health(ignore_pause=True)['ready'])
+
+    def test_local_failure_is_sanitized_and_one_recovery_uses_same_source(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            for name in ('GUIDE.md','fb_ad_classifier.py'):
+                (root/name).write_text('fixture')
+            class Process:
+                returncode = 0
+                def __init__(self, command, **kwargs):
+                    self.cwd = kwargs['cwd']
+                    runtime = json.loads((self.cwd/'runtime.json').read_text())
+                    assert runtime['python'] == str(root/'venv/bin/python')
+                def communicate(self, **kwargs):
+                    (self.cwd/'failure.json').write_text(json.dumps({'code':'LOCAL_TOOL_UNAVAILABLE','detail':'secret source https://example.test'}))
+                    return '', 'private error should not be retained'
+            with patch.object(worker,'ROOT',root), patch.object(worker,'find_agent',return_value=('claude','/fake/claude')), \
+                    patch.object(worker.subprocess,'Popen',Process):
+                self.assertEqual(worker.analyze({'ins_id':'SYNTHETIC'}, recovery=True), (None,'LOCAL_TOOL_UNAVAILABLE'))
+            diagnostic = json.loads((root/'last-local-diagnostic.json').read_text())
+            self.assertEqual(diagnostic['code'],'LOCAL_TOOL_UNIDENTIFIED')
+            self.assertNotIn('secret',json.dumps(diagnostic))
+
+    def test_local_failure_retries_at_most_once_and_never_publishes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp); operations=[]
+            job={'id':'fixture-id','lease':'fixture-lease','source_url':'https://example.test/one','no_brief':True}
+            health={'version':worker.RUNTIME_VERSION,'ready':True,'codes':[]}
+            def request(op,credentials,**payload):
+                operations.append(op)
+                if op=='claim': return job
+                if op=='fail':
+                    self.assertEqual(payload['code'],'LOCAL_TOOL_UNAVAILABLE')
+                    self.assertEqual(payload['detail'],'LOCAL_TOOL_UNIDENTIFIED')
+                    worker.STOP.set()
+                return {'ok':True}
+            class Thread:
+                def __init__(self,**kwargs): pass
+                def start(self): pass
+            worker.STOP.clear()
+            try:
+                with patch.object(worker,'ROOT',root),patch.object(worker,'keychain',return_value={'token':'fixture-token'}), \
+                        patch.object(worker,'request',side_effect=request),patch.object(worker.threading,'Thread',Thread), \
+                        patch.object(worker,'runtime_health',return_value=health), \
+                        patch.object(worker,'analyze',return_value=(None,'LOCAL_TOOL_UNAVAILABLE')) as analyze:
+                    worker.run()
+                self.assertEqual(analyze.call_count,2)
+                self.assertEqual(analyze.call_args_list[0].args[0],job)
+                self.assertEqual(analyze.call_args_list[1].args[0],job)
+                self.assertTrue(analyze.call_args.kwargs['recovery'])
+                self.assertLessEqual(analyze.call_args.kwargs['timeout'],1800)
+                self.assertNotIn('complete',operations)
+            finally: worker.STOP.clear()
+
+    def test_unhealthy_worker_never_claims_or_mutates_a_job(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            class Thread:
+                def __init__(self,**kwargs): pass
+                def start(self): pass
+            health={'version':worker.RUNTIME_VERSION,'ready':False,'codes':['FFMPEG_UNAVAILABLE']}
+            operations=[]
+            def request(op,*args,**kwargs):
+                operations.append(op);worker.STOP.set();return {'ok':True}
+            worker.STOP.clear()
+            try:
+                with patch.object(worker,'ROOT',Path(tmp)),patch.object(worker,'keychain',return_value={}), \
+                        patch.object(worker.threading,'Thread',Thread),patch.object(worker,'runtime_health',return_value=health), \
+                        patch.object(worker,'request',side_effect=request):
+                    worker.run()
+                self.assertEqual(operations,['heartbeat'])
+            finally: worker.STOP.clear()
+
+    def test_local_recovery_success_uploads_one_result_and_no_failure(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp);operations=[]
+            job={'id':'fixture-id','lease':'fixture-lease','source_url':'https://example.test/one','no_brief':True}
+            def request(op,*args,**kwargs):
+                operations.append(op)
+                if op=='claim':return job
+                if op=='complete':worker.STOP.set();return {'done':True}
+                return {'ok':True}
+            class Thread:
+                def __init__(self,**kwargs):pass
+                def start(self):pass
+            worker.STOP.clear()
+            try:
+                with patch.object(worker,'ROOT',root),patch.object(worker,'keychain',return_value={'token':'fixture'}), \
+                        patch.object(worker.threading,'Thread',Thread),patch.object(worker,'request',side_effect=request), \
+                        patch.object(worker,'runtime_health',return_value={'version':worker.RUNTIME_VERSION,'ready':True,'codes':[]}), \
+                        patch.object(worker,'analyze',side_effect=[(None,'LOCAL_TOOL_UNAVAILABLE'),({'fixture':'verified'},None)]):
+                    worker.run()
+                self.assertEqual(operations.count('complete'),1)
+                self.assertNotIn('fail',operations)
+                self.assertFalse((root/'pending-result.json').exists())
+                self.assertFalse((root/'analysis-paused.json').exists())
+            finally:worker.STOP.clear()
+
+    def test_failed_failure_upload_is_retained_before_paused_health_gate(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp)
+            payload={'jobId':'fixture-id','lease':'fixture-lease','code':'LOCAL_TOOL_UNAVAILABLE','detail':'FFMPEG_UNAVAILABLE'}
+            worker.atomic_json(root/'pending-failure.json',payload)
+            operations=[]
+            def request(op,*args,**kwargs):
+                operations.append(op)
+                self.assertEqual(kwargs,payload)
+                if len(operations)==1:raise worker.ServiceError(503)
+                worker.STOP.set();return {'ok':True}
+            class Thread:
+                def __init__(self,**kwargs):pass
+                def start(self):pass
+            worker.STOP.clear()
+            try:
+                with patch.object(worker,'ROOT',root),patch.object(worker,'keychain',return_value={'token':'fixture'}), \
+                        patch.object(worker.threading,'Thread',Thread),patch.object(worker,'request',side_effect=request), \
+                        patch.object(worker.STOP,'wait',return_value=False), \
+                        patch.object(worker,'runtime_health',side_effect=AssertionError('No new claim while reporting failure')):
+                    worker.run()
+                self.assertEqual(operations,['fail','fail'])
+                self.assertFalse((root/'pending-failure.json').exists())
+            finally:worker.STOP.clear()
 
 
 if __name__ == '__main__':

@@ -1,6 +1,11 @@
 # Personal Classification Artifact Contract
 
 Read job.json. You have ONE assigned inspiration, not access to the queue.
+Read runtime.json and use its exact private Python, ffmpeg and ffprobe paths.
+Use that Python for every helper/import and Python module command, never an
+unqualified system python/python3 or an interpreter from another installation.
+Use the writable model cache specified by runtime.json. Do not install packages,
+change system tools/permissions, or switch to paid/remote analyzers during a job.
 Never load /classify-inspiration, environment files, database credentials or MCPs.
 Do not call Supabase or ClickUp, edit records, update skills, spawn agents,
 use another browser's login/cookies, delete files outside this workspace, or scan other jobs.
@@ -55,6 +60,13 @@ scripts for job.product, not the competitor. Each script needs Strategy Snapshot
 and Script Breakdown tables. Keep source facts separate from proposed adaptation.
 Do not return placeholders or pretend unavailable evidence was verified.
 If unable, write failure.json={"code":"SOURCE_UNAVAILABLE|EVIDENCE_UNVERIFIED|LOCAL_TOOL_UNAVAILABLE|PROVIDER_UNAVAILABLE"}.
+For LOCAL_TOOL_UNAVAILABLE also set detail to the concrete failing check:
+FFMPEG_UNAVAILABLE, FFPROBE_UNAVAILABLE, PYTHON_UNAVAILABLE, REQUESTS_UNAVAILABLE,
+YTDLP_UNAVAILABLE, PLAYWRIGHT_UNAVAILABLE, WHISPER_UNAVAILABLE,
+TRANSFORMERS_UNAVAILABLE, TORCH_UNAVAILABLE, SOUNDFILE_UNAVAILABLE,
+AGENT_UNAVAILABLE, or LOCAL_TOOL_UNIDENTIFIED. Never label an inaccessible source,
+unclear narration or incomplete evidence as a missing local tool. Do not include
+credentials, source URLs or raw subprocess output in this diagnostic file.
 An unavailable source is a real limitation; never invent evidence to avoid a block.
 
 

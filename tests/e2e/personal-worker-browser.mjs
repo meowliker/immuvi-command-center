@@ -22,7 +22,10 @@ const server=createServer(async(req,res)=>{
       const id=req.headers['x-clickup-key']==='owner-a'?a:b;
       return res.end(JSON.stringify({devices:revoked.has(id)?[]:[{id,
         name:req.headers['x-clickup-key']==='owner-a'?'Owner A private Mac':'Owner B private Mac',paired:true,
-        lastSeen:new Date(Date.now()-(offline?600000:0)).toISOString(),attention:reviewPending?[{id:a,insId:'TEST-INS-REVIEW',state:'review',code:'BRIEF_READBACK_MISMATCH'}]:[]}]}));
+        lastSeen:new Date(Date.now()-(offline?600000:0)).toISOString(),
+        runtime:{version:'personal-runtime-v1',ready:false,codes:['FFMPEG_UNAVAILABLE']},
+        attention:[...(reviewPending?[{id:a,insId:'TEST-INS-REVIEW',state:'review',code:'BRIEF_READBACK_MISMATCH'}]:[]),
+          {id:b,insId:'TEST-INS-LOCAL',state:'blocked',code:'LOCAL_TOOL_UNAVAILABLE',diagnostic:'FFPROBE_UNAVAILABLE'}]}]}));
     }
     if(body.op==='create')return res.end(JSON.stringify({pairingCode:a+'.'+'x'.repeat(43)}));
     if(body.op==='revoke')revoked.add(body.deviceId);
@@ -56,13 +59,21 @@ try{
   await page.getByRole('button',{name:'Verify existing brief',exact:true}).click();
   await page.waitForFunction(()=>!document.querySelector('dialog')?.textContent.includes('TEST-INS-REVIEW'));
   assert.equal(requests.filter(request=>request.op==='verify').length,1);
+  assert.match(await page.locator('dialog').textContent(),/Needs repair/);
+  assert.match(await page.locator('dialog').textContent(),/FFPROBE_UNAVAILABLE/);
+  const beforeRepair=requests.length;
+  await page.getByRole('button',{name:'Repair Mac',exact:true}).first().click();
+  await page.getByRole('textbox',{name:'Codex setup prompt',exact:true}).waitFor({state:'visible'});
+  assert.equal(requests.length,beforeRepair);
+  await page.getByText('Mac setup',{exact:true}).click();
   await page.getByRole('button',{name:'Create pairing code'}).click();assert.match(await page.getByRole('textbox',{name:'One-time pairing code'}).inputValue(),/^11111111/);
   await page.getByText('Mac setup',{exact:true}).click();
   const prompt=page.getByRole('textbox',{name:'Codex setup prompt',exact:true});
   const promptText=await prompt.inputValue();
-  assert.match(promptText,/^Set up this Mac as my private Immuvi classification-only worker\./);
+  assert.match(promptText,/^Set up or repair this Mac as my private Immuvi classification-only worker\./);
   assert.match(promptText,/https:\/\/immuvi-command-center\.vercel\.app\/personal-worker\/install\.sh/);
   assert.match(promptText,/--resume-pairing/);assert.match(promptText,/Never ask me to paste keys or pairing codes into this chat/);
+  assert.match(promptText,/--repair/);assert.match(promptText,/pending-result\.json/);
   assert.doesNotMatch(promptText,/owner-a|app-session|11111111-1111-4111-8111-111111111111|^curl --fail/m);
   assert.equal(await page.getByRole('link',{name:/Download installer/i}).count(),0);
   assert.equal(await page.getByRole('textbox',{name:'Terminal command',exact:true}).count(),0);

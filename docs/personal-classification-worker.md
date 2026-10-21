@@ -130,9 +130,52 @@ failure after credentials were saved. If credentials are genuinely missing or
 the pairing was revoked, resume stops with guidance instead of storing secrets
 in a file or weakening Keychain security.
 
-The installer currently refuses to replace an already installed worker while
-it might be processing. Updates should be supervised and drained first; there
-is deliberately no unattended code replacement during an active job.
+An installed personal service can be updated with the official installer's
+explicit `--repair` mode, available through the Codex prompt in My Mac. It stages
+and checks assets, validates the exact personal LaunchAgent, sends SIGTERM and
+waits for graceful exit before replacing files. It never force-kills analysis,
+revokes pairing, deletes retained results or changes the shared/team worker.
+Pending results are uploaded before any new claim after restart. On a repair
+failure the previous worker assets and same service are restored. Dependency
+changes are restricted to this private environment; working Homebrew tools are
+reused. This is a supervised update, not unattended executable replacement.
+
+## Personal Runtime Health
+
+The `personal-runtime-v1` client probes its actual private Python environment
+before claiming work, then caches that check for five minutes. Explicit private
+Python/tool paths are provided to the isolated classification agent in
+`runtime.json`; it must not use a system interpreter by accident. Standard
+Homebrew executable directories are included in the child-only PATH. Optional
+audio imports are diagnosed without making them a new prerequisite for text,
+image or No Brief classification. No source, credential or raw error text is
+included in runtime telemetry.
+
+A missing core tool pauses claims without consuming content attempts or
+changing queued inspirations. The existing minute heartbeat carries only the
+version, readiness and allowlisted codes. Private runtime metadata updates only
+when changed. My Mac displays Needs repair and concrete failed checks only to
+the device's existing app/ClickUp owner. Legacy clients remain compatible but
+must be updated once to receive the new runtime checks.
+
+An agent-reported local-tool failure gets at most one clean invocation retry
+using the same exact source/product/brief mode, within the original analysis
+deadline. It cannot install software, switch to remote analyzers, publish a
+brief or call services. Source, provider, evidence and publishing failures do
+not enter this recovery path. Persistent failure reports a sanitized diagnostic
+and opens a local circuit breaker, preventing later inspirations from repeatedly
+failing on that Mac. Supervised repair checks the full dependencies/models, then
+runs `diagnose --resume` to clear only that circuit breaker. The normal
+blocked/retry safeguards remain. No automatic bulk requeue or
+fallback to another person's worker is performed.
+
+`worker.py diagnose` runs without reading Keychain or contacting app/ClickUp
+services. It outputs only the readiness contract and allowlisted check codes.
+The runtime migration adds nullable metadata only in `personal_workers`, and
+delegates existing ownership, fenced leases, publication and commits to the
+preserved dispatcher. `scripts/apply-personal-runtime-migration.mjs` defaults to
+a rollback-only, twice-applied migration test with business/private-row digest
+checks; `--apply` commits it. No existing job is retried by this migration.
 
 Local state is under `~/Library/Application Support/Immuvi Personal Worker`.
 `review-*.json` contains retained analysis after a rejected upload. It is private

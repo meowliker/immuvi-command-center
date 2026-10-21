@@ -6,12 +6,14 @@ const {default:postgres}=await import(process.env.IMMUVI_TEST_POSTGRES_MODULE||'
 const sql=postgres(targetEnv().STRATEGIST_DATABASE_URL,{prepare:false,max:1,ssl:'require',connect_timeout:15});
 const migration=await readFile(new URL('../../supabase/migrations/20261021000100_personal_classification_workers.sql',import.meta.url),'utf8');
 const publishingMigration=await readFile(new URL('../../supabase/migrations/20261021000200_personal_worker_publishing.sql',import.meta.url),'utf8');
+const runtimeMigration=await readFile(new URL('../../supabase/migrations/20261021000300_personal_worker_runtime.sql',import.meta.url),'utf8');
 const prefix='personal-worker-probe-'+Date.now(),rollback=new Error('ROLLBACK_SUCCESS');
 try{
   try{await sql.begin(async tx=>{
     await tx`set local lock_timeout='5s'`;await tx`set local statement_timeout='30s'`;
     await tx.unsafe(migration);await tx.unsafe(migration);
     await tx.unsafe(publishingMigration);await tx.unsafe(publishingMigration);
+    await tx.unsafe(runtimeMigration);await tx.unsafe(runtimeMigration);
     const [owner]=await tx`select id from profiles where role='admin' and is_active limit 1`;assert.ok(owner);
     await tx`select set_config('request.jwt.claim.role','service_role',true)`;
     const rpc=async(op,args)=>{
@@ -53,6 +55,20 @@ try{
     await tx`reset role`;await tx`select set_config('request.jwt.claim.role','service_role',true)`;
     const device={token_hash:'token-a',contract:'personal-artifact-v1'};
     assert.equal(await rpc('claim',{token_hash:'token-b',contract:'personal-artifact-v1'}),null);
+    const unhealthy={version:'personal-runtime-v1',ready:false,codes:['FFMPEG_UNAVAILABLE']};
+    assert.equal(await rpc('claim',{...device,runtime:unhealthy}),null);
+    assert.equal(await rpc('claim',device),null);
+    const [pendingBeforeRepair]=await tx`select state,attempts from personal_workers.jobs where ins_id=${ins}`;
+    assert.deepEqual(pendingBeforeRepair,{state:'pending',attempts:0});
+    assert.deepEqual((await rpc('list',own)).devices[0].runtime,unhealthy);
+    assert.equal((await rpc('list',other)).devices[0].runtime,null);
+    await bad('heartbeat',{...device,token_hash:'wrong',runtime:unhealthy},'42501');
+    await bad('heartbeat',{...device,runtime:{...unhealthy,codes:['secret']}},'22023');
+    await rpc('heartbeat',{...device,runtime:{version:'personal-runtime-v1',ready:true,codes:[]}});
+    const [runtimeBeforeRepeat]=await tx`select ctid::text as position from personal_workers.devices where id=${a.id}`;
+    await rpc('heartbeat',{...device,runtime:{version:'personal-runtime-v1',ready:true,codes:[]}});
+    const [runtimeAfterRepeat]=await tx`select ctid::text as position from personal_workers.devices where id=${a.id}`;
+    assert.deepEqual(runtimeAfterRepeat,runtimeBeforeRepeat);
     const job=await rpc('claim',device);assert.equal(job.ins_id,ins);assert.equal(job.no_brief,true);
     const [heartbeatBefore]=await tx`select ctid::text as position from personal_workers.devices where id=${a.id}`;
     assert.equal(await rpc('claim',device),null);
@@ -102,9 +118,14 @@ try{
     assert.equal((await rpc('commit',{...resumed,artifact_hash:'full-hash'})).done,true);
     await rpc('enqueue',{...own,device_id:a.id,product_id:prefix,items:[{id:second,url:url+'-2',no_brief:true}]});
     const expired=await rpc('claim',device);
-    await tx`update personal_workers.jobs set lease_until=now()-interval '1 second' where id=${expired.id}`;
-    const recovered=await rpc('claim',device);assert.equal(recovered.id,expired.id);assert.notEqual(recovered.lease,expired.lease);
-    await bad('prepare',{...device,job_id:expired.id,lease:expired.lease,artifact,artifact_hash:'wrong'},'PT409');
+    await rpc('fail',{...device,job_id:expired.id,lease:expired.lease,code:'LOCAL_TOOL_UNAVAILABLE',detail:'FFPROBE_UNAVAILABLE'});
+    const issue=(await rpc('list',own)).devices[0].attention.find(issue=>issue.id===expired.id);
+    assert.equal(issue.diagnostic,'FFPROBE_UNAVAILABLE');
+    await rpc('retry',{...own,device_id:a.id,job_id:expired.id});
+    const replacement=await rpc('claim',device);
+    await tx`update personal_workers.jobs set lease_until=now()-interval '1 second' where id=${replacement.id}`;
+    const recovered=await rpc('claim',device);assert.equal(recovered.id,replacement.id);assert.notEqual(recovered.lease,replacement.lease);
+    await bad('prepare',{...device,job_id:replacement.id,lease:replacement.lease,artifact,artifact_hash:'wrong'},'PT409');
     await rpc('revoke',{...own,device_id:a.id});await bad('claim',device,'42501');
     const [cancelled]=await tx`select status from inspiration_queue where ins_id=${second}`;assert.equal(cancelled.status,'blocked');
     const [global]=await tx`select count(*)::int as n from worker_registry where worker_id in (${a.id},${b.id})`;assert.equal(global.n,0);

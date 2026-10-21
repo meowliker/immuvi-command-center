@@ -70,6 +70,23 @@ test('device tokens are hashed and cannot invoke browser management operations',
   assert.equal(JSON.stringify(seen).includes(token),false);
   assert.equal((await invoke({op:'list'},async()=>{throw Error('must not fetch');},{authorization:'Device '+token})).code,401);
 });
+test('runtime diagnostics accept only bounded safe codes and legacy clients remain compatible',async()=>{
+  const headers={authorization:'Device '+'x'.repeat(43)},seen=[];
+  const mock=async(url,opts)=>{seen.push(JSON.parse(opts.body));return response({ok:true});};
+  const health={version:'personal-runtime-v1',ready:false,codes:['FFMPEG_UNAVAILABLE']};
+  assert.equal((await invoke({op:'heartbeat',runtime:health},mock,headers)).code,200);
+  assert.deepEqual(seen[0].p_args.runtime,health);
+  for(const runtime of [{...health,codes:['raw secret']},{...health,ready:'false'},{...health,version:'untrusted'},null]){
+    assert.equal((await invoke({op:'heartbeat',runtime},mock,headers)).code,400);
+  }
+  assert.equal(seen.length,1);
+  assert.equal((await invoke({op:'heartbeat'},mock,headers)).code,200);
+  assert.equal(seen[1].p_args.runtime,undefined);
+  assert.equal((await invoke({op:'fail',jobId:id,lease:id,code:'LOCAL_TOOL_UNAVAILABLE',detail:'TORCH_UNAVAILABLE'},mock,headers)).code,200);
+  assert.equal(seen[2].p_args.detail,'TORCH_UNAVAILABLE');
+  assert.equal((await invoke({op:'fail',jobId:id,lease:id,code:'LOCAL_TOOL_UNAVAILABLE',detail:'https://private.test'},mock,headers)).code,400);
+  assert.equal((await invoke({op:'fail',jobId:id,lease:id,code:'SOURCE_UNAVAILABLE',detail:'TORCH_UNAVAILABLE'},mock,headers)).code,400);
+});
 test('completed result replay does not recreate documents or revalidate a changed record',async()=>{
   let calls=0;const out=await invoke({op:'complete',jobId:id,lease:id,result:{}},async()=>{calls++;return response({done:true});},{authorization:'Device '+'x'.repeat(43)});
   assert.equal(out.code,200);assert.deepEqual(out.body,{done:true});assert.equal(calls,1);

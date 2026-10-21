@@ -92,7 +92,7 @@ function setupPrompt(dialog,status){
   const label=document.createElement('label');label.htmlFor='personalWorkerSetupPrompt';label.textContent='Codex setup prompt';label.style.flex='1';
   const prompt=document.createElement('textarea');prompt.id=label.htmlFor;prompt.readOnly=true;prompt.rows=12;prompt.spellcheck=false;
   Object.assign(prompt.style,{boxSizing:'border-box',width:'100%',resize:'vertical',padding:'10px',fontFamily:'ui-monospace, monospace',fontSize:'12px',lineHeight:'1.5',color:'#182131',background:'#f8fafc',border:'1px solid #d1d5db',borderRadius:'6px',margin:'0'});
-  prompt.value=`Set up this Mac as my private Immuvi classification-only worker.
+  prompt.value=`Set up or repair this Mac as my private Immuvi classification-only worker.
 
 Official installer:
 https://immuvi-command-center.vercel.app/personal-worker/install.sh
@@ -104,7 +104,7 @@ Complete setup on this Mac, using the official installer and its manifest checks
 
 If setup previously failed, diagnose the actual local error. For incomplete Torch or Playwright downloads, inspect the download path and pip configuration without exposing credentials. Do not assume Wi-Fi is faulty or repeatedly rerun the same failing command. Use bounded retries; report the exact sanitized blocker if it cannot be resolved safely.
 
-Reuse working dependencies and preserve existing login/model state. Do not interrupt an already-running worker. If initial pairing already succeeded but the service did not start, use the installer's --resume-pairing option to verify saved pairing rather than consuming a new code unnecessarily.
+Reuse working dependencies and preserve existing login/model state. If the personal service is installed, use the official installer's --repair mode: it verifies staged assets, requests graceful shutdown, waits for the current analysis without force-killing it, updates only the private installation and restarts the same service. It preserves pairing and pending-result.json. Never revoke the device or delete retained work to update it. If initial pairing already succeeded but the service did not start, use --resume-pairing instead of consuming another code. Run the private worker's diagnose command and report only its sanitized diagnostic codes; never print stored credentials or source material.
 
 Do not disable HTTPS verification, use untrusted mirrors, force Homebrew overwrites, skip audio/evidence verification, or change app code. Do not manually modify Supabase records, ClickUp tasks, or other services. Use only the official setup, pairing and heartbeat paths for this device. Request approval before changes outside this personal worker's setup scope.
 
@@ -147,7 +147,11 @@ window._openPersonalWorkerDialog=async function(){
       if(!rows.some(device=>device.paired))setup.open=true;
       for(const device of rows){
         const row=document.createElement('div');Object.assign(row.style,{display:'flex',alignItems:'center',gap:'12px',padding:'12px 0',borderBottom:'1px solid #e5e7eb',flexWrap:'wrap'});
-        const text=document.createElement('span');text.textContent=device.name+' · '+(!device.paired?'Awaiting pairing':device.lastSeen&&Date.now()-Date.parse(device.lastSeen)<150000?'Online':'Offline');text.style.flex='1';row.appendChild(text);
+        const text=document.createElement('span');text.textContent=device.name+' · '+(!device.paired?'Awaiting pairing':device.lastSeen&&Date.now()-Date.parse(device.lastSeen)<150000?device.runtime?.ready===false?'Needs repair':'Online':'Offline');text.style.flex='1';row.appendChild(text);
+        if(device.runtime?.ready===false){
+          const diagnosis=document.createElement('span');diagnosis.textContent=(device.runtime.codes||[]).join(', ');row.appendChild(diagnosis);
+          row.appendChild(button('Repair Mac',()=>{setup.open=true;setup.querySelector('textarea')?.focus();}));
+        }
         if(device.paired){const using=selected==='personal:'+device.id;
           const use=button(using?'Using this Mac':'Use this Mac',async()=>{
             try{assertIdentity();if(!await remember('personal:'+device.id,dialogIdentity))throw new Error('Account changed. Reopen My Mac.');
@@ -165,8 +169,9 @@ window._openPersonalWorkerDialog=async function(){
         });revoke.title='Revoke personal worker';revoke.setAttribute('aria-label','Revoke '+device.name);row.appendChild(revoke);list.appendChild(row);
         for(const job of device.attention||[]){
           const issue=document.createElement('div');issue.style.padding='8px 0';
-          const description=document.createElement('span');description.textContent=job.insId+' · '+(job.state==='review'?'Brief publishing needs review':job.code||'Blocked')+' ';
+          const description=document.createElement('span');description.textContent=job.insId+' · '+(job.state==='review'?'Brief publishing needs review':job.diagnostic||job.code||'Blocked')+' ';
           issue.appendChild(description);
+          if(job.code==='LOCAL_TOOL_UNAVAILABLE')issue.appendChild(button('Repair Mac',()=>{setup.open=true;setup.querySelector('textarea')?.focus();}));
           if(job.state==='review')issue.appendChild(button('Verify existing brief',async()=>{
             try{assertIdentity();status.textContent='Verifying the saved brief. No new page will be created...';
               await personalWorkerRequest('verify',{deviceId:device.id,jobId:job.id});status.textContent='Existing brief verified and classification saved.';await load(true);}

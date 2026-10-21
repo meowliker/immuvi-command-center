@@ -2,11 +2,23 @@
 set -euo pipefail
 umask 077
 STEP='checking prerequisites'
-trap 'STATUS=$?; printf "\nInstaller stopped during: %s (exit %s).\nExisting Immuvi records were not reset. Pairing codes are entered only when prompted.\n" "$STEP" "$STATUS" >&2; exit "$STATUS"' ERR
+RESTORE_SERVICE=0
+restore_on_error() {
+  STATUS=$?
+  if [[ "$RESTORE_SERVICE" == 1 ]]; then
+    for FILE in worker.py GUIDE.md fb_ad_classifier.py requirements.txt manifest.json; do
+      [[ ! -f "$STAGE/previous/$FILE" ]] || cp "$STAGE/previous/$FILE" "$ROOT/$FILE"
+    done
+    launchctl bootstrap "gui/$(id -u)" "$PLIST" >/dev/null 2>&1 || true
+  fi
+  printf '\nInstaller stopped during: %s (exit %s).\nExisting Immuvi records were not reset. Pairing codes are entered only when prompted.\n' "$STEP" "$STATUS" >&2
+  exit "$STATUS"
+}
+trap restore_on_error ERR
 if [[ "$(uname -s)" != Darwin ]]; then echo 'macOS is required.'; exit 1; fi
 MODE="${1:-}"
-if [[ $# -gt 1 || ( -n "$MODE" && "$MODE" != '--resume-pairing' ) ]]; then
-  echo 'Usage: bash install.sh [--resume-pairing]'
+if [[ $# -gt 1 || ( -n "$MODE" && "$MODE" != '--resume-pairing' && "$MODE" != '--repair' ) ]]; then
+  echo 'Usage: bash install.sh [--resume-pairing|--repair]'
   exit 1
 fi
 if [[ "$MODE" != '--resume-pairing' ]] && ! command -v brew >/dev/null; then
@@ -14,11 +26,16 @@ if [[ "$MODE" != '--resume-pairing' ]] && ! command -v brew >/dev/null; then
   exit 1
 fi
 ROOT="$HOME/Library/Application Support/Immuvi Personal Worker"
+PLIST="$HOME/Library/LaunchAgents/com.immuvi.personal-classifier.plist"
 BASE='https://immuvi-command-center.vercel.app/personal-worker'
 mkdir -p "$ROOT"
 chmod 700 "$ROOT"
-if [[ -f "$HOME/Library/LaunchAgents/com.immuvi.personal-classifier.plist" ]]; then
-  echo 'A personal worker is already installed. Stop it from My Mac before updating; retained results must not be interrupted.'
+if [[ -f "$PLIST" && "$MODE" != '--repair' ]]; then
+  echo 'A personal worker is already installed. Use --repair to drain it safely and preserve pairing and retained results.'
+  exit 1
+fi
+if [[ "$MODE" == '--repair' && ! -f "$PLIST" ]]; then
+  echo 'No installed personal worker service was found. Use first-time setup or --resume-pairing.'
   exit 1
 fi
 if [[ "$MODE" == '--resume-pairing' ]]; then
@@ -71,6 +88,37 @@ for name, checksum in manifest['files'].items():
         raise SystemExit('Asset verification failed; no worker was started')
     (stage/name).write_bytes(data)
 PY
+if [[ "$MODE" == '--repair' ]]; then
+  STEP='validating the existing personal service'
+  "$PYTHON" - "$PLIST" "$ROOT" <<'PY'
+import pathlib,plistlib,sys
+payload=plistlib.loads(pathlib.Path(sys.argv[1]).read_bytes())
+root=pathlib.Path(sys.argv[2])
+if payload.get('Label')!='com.immuvi.personal-classifier' or payload.get('ProgramArguments')!=[str(root/'venv/bin/python'),str(root/'worker.py'),'run']:
+    raise SystemExit('Unexpected service configuration; no process was stopped')
+PY
+  STEP='waiting for graceful personal-worker shutdown'
+  TARGET="gui/$(id -u)/com.immuvi.personal-classifier"
+  worker_pid() { launchctl print "$TARGET" 2>/dev/null | awk '/^[[:space:]]*pid = [0-9]+/ {print $3}' || true; }
+  if [[ -n "$(worker_pid)" ]]; then
+    echo 'Finishing current analysis before updating. Retained results and pairing will be preserved.'
+    launchctl kill SIGTERM "$TARGET"
+    for (( WAITED=0; WAITED<1900; WAITED+=2 )); do
+      [[ -n "$(worker_pid)" ]] || break
+      sleep 2
+    done
+    if [[ -n "$(worker_pid)" ]]; then
+      echo 'The worker is still finishing. No forced termination or update was performed.'
+      exit 1
+    fi
+  fi
+  mkdir -p "$STAGE/previous"
+  for FILE in worker.py GUIDE.md fb_ad_classifier.py requirements.txt manifest.json; do
+    [[ ! -f "$ROOT/$FILE" ]] || cp "$ROOT/$FILE" "$STAGE/previous/$FILE"
+  done
+  launchctl bootout "$TARGET" >/dev/null 2>&1 || true
+  RESTORE_SERVICE=1
+fi
 for FILE in worker.py GUIDE.md fb_ad_classifier.py requirements.txt manifest.json; do
   cp "$STAGE/$FILE" "$ROOT/$FILE"
 done
@@ -81,7 +129,7 @@ if [[ "$MODE" == '--resume-pairing' ]]; then
 fi
 STEP='creating the private Python environment'
 echo 'Creating the private worker environment...'
-"$PYTHON" -m venv "$ROOT/venv"
+if [[ "$MODE" != '--repair' ]]; then "$PYTHON" -m venv "$ROOT/venv"; fi
 STEP='installing private Python dependencies'
 "$ROOT/venv/bin/python" -m pip install --disable-pip-version-check -r "$ROOT/requirements.txt"
 STEP='installing the private browser runtime'
@@ -89,6 +137,15 @@ STEP='installing the private browser runtime'
 STEP='checking local models and AI login'
 echo 'Checking local models and AI login. First-time model downloads can take several minutes...'
 "$ROOT/venv/bin/python" "$ROOT/worker.py" check
+if [[ "$MODE" == '--repair' ]]; then
+  STEP='checking the repaired private runtime'
+  "$ROOT/venv/bin/python" "$ROOT/worker.py" diagnose --resume
+  STEP='restarting the existing personal service'
+  launchctl bootstrap "gui/$(id -u)" "$PLIST"
+  RESTORE_SERVICE=0
+  echo 'Personal worker updated. Saved pairing and retained results were preserved. Refresh My Mac before retrying the selected blocked inspiration.'
+  exit 0
+fi
 STEP='pairing this Mac'
 echo 'Ready to pair. Generate a fresh code in Immuvi > Inspiration > My Mac now.'
 "$ROOT/venv/bin/python" "$ROOT/worker.py" setup </dev/tty

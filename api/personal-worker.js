@@ -4,6 +4,9 @@ const digest=value=>createHash('sha256').update(value).digest('hex');
 const secret=()=>randomBytes(32).toString('base64url');
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const browserOps=new Set(['create','list','revoke','enqueue','retry','verify']);
+const runtimeCodes=new Set(['FFMPEG_UNAVAILABLE','FFPROBE_UNAVAILABLE','PYTHON_UNAVAILABLE',
+  'REQUESTS_UNAVAILABLE','YTDLP_UNAVAILABLE','PLAYWRIGHT_UNAVAILABLE','WHISPER_UNAVAILABLE',
+  'TRANSFORMERS_UNAVAILABLE','TORCH_UNAVAILABLE','SOUNDFILE_UNAVAILABLE','AGENT_UNAVAILABLE','LOCAL_TOOL_UNIDENTIFIED']);
 export function createPersonalWorkerHandler({fetchImpl=fetch,env=process.env}={}) {
   return async function handler(req,res) {
     res.setHeader('Cache-Control','no-store');
@@ -102,13 +105,23 @@ export function createPersonalWorkerHandler({fetchImpl=fetch,env=process.env}={}
       const deviceAuth=req.headers.authorization||'';
       if(!/^Device [A-Za-z0-9_-]{43}$/.test(deviceAuth)) throw new PersonalWorkerError('Pair this Mac first',401);
       const args={token_hash:digest(deviceAuth.slice(7)),contract:'personal-artifact-v1'};
-      if(op==='heartbeat'||op==='claim') return res.status(200).json(await rpc(op,args));
+      if(op==='heartbeat'||op==='claim') {
+        if(body.runtime!==undefined){
+          const health=body.runtime;
+          if(!health||health.version!=='personal-runtime-v1'||typeof health.ready!=='boolean'||
+            !Array.isArray(health.codes)||health.codes.length>runtimeCodes.size||
+            health.codes.some(code=>!runtimeCodes.has(code)))throw new PersonalWorkerError('Invalid worker diagnostic');
+          args.runtime={version:health.version,ready:health.ready,codes:[...new Set(health.codes)].sort()};
+        }
+        return res.status(200).json(await rpc(op,args));
+      }
       if(!uuid.test(body.jobId)||!uuid.test(body.lease)) throw new PersonalWorkerError('Invalid job lease');
       Object.assign(args,{job_id:body.jobId,lease:body.lease});
       if(op==='fail') {
         const codes=['SOURCE_UNAVAILABLE','EVIDENCE_UNVERIFIED','LOCAL_TOOL_UNAVAILABLE','PROVIDER_UNAVAILABLE','AGENT_FAILED','TIMEOUT'];
         if(!codes.includes(body.code)) throw new PersonalWorkerError('Invalid failure code');
-        return res.status(200).json(await rpc('fail',{...args,code:body.code}));
+        if(body.detail!==undefined&&(body.code!=='LOCAL_TOOL_UNAVAILABLE'||!runtimeCodes.has(body.detail)))throw new PersonalWorkerError('Invalid worker diagnostic');
+        return res.status(200).json(await rpc('fail',{...args,code:body.code,...(body.detail?{detail:body.detail}:{})}));
       }
       const context=await rpc('inspect',args);
       if(context.done) return res.status(200).json({done:true});

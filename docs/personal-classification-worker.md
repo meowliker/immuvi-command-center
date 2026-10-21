@@ -4,9 +4,13 @@
 
 1. Install Homebrew from https://brew.sh and install/sign in to an eligible Codex
    or Claude Code account. No Immuvi repository checkout is needed.
-2. In Immuvi, enter your own ClickUp personal key. Open Inspiration > My Mac and
-   download the Mac installer. Run the downloaded file with Bash in Terminal.
-   Alternatively download the same installer explicitly:
+2. In Immuvi, enter your own ClickUp personal key. Open Inspiration > My Mac >
+   Mac setup, copy the Codex setup prompt, and paste it into Codex running locally
+   on the target Mac. The prompt directs Codex to inspect an existing setup,
+   diagnose errors, and use the official personal-worker installer without a
+   repository checkout. The app no longer exposes a Terminal command box or an
+   installer-download button. For manual troubleshooting, the installer remains
+   available directly:
 
    ```bash
    curl --fail --proto '=https' --tlsv1.2 https://immuvi-command-center.vercel.app/personal-worker/install.sh -o /tmp/immuvi-personal-worker-install.sh
@@ -31,10 +35,13 @@
    result and, unless No Brief is selected, open its complete brief. Repeat the
    same installation and pairing process on another colleague's Mac.
 
-My Mac > Mac setup includes copyable first-time setup and interrupted-pairing
-recovery commands, plus the installer download. The web app cannot silently run
-a shell command or install a background service; the user runs the command once
-on the target Mac. No full application checkout is needed.
+My Mac > Mac setup includes one copyable Codex setup prompt covering first-time
+setup and interrupted-pairing recovery. It never includes the user's API key,
+pairing code, device token, or live product data. Codex must request user input
+through hidden Terminal prompts and preserve existing worker state. The web app
+cannot silently run a shell command or install a background service. Codex still
+needs local permissions, dependency downloads and user-completed sign-in; the
+prompt is guided setup, not a bypass for download or operating-system failures.
 
 The selected personal Mac is remembered in this browser across reloads and new
 tabs. The preference stores only a device ID under a SHA-256-scoped key derived

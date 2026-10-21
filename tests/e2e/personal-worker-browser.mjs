@@ -54,15 +54,22 @@ try{
   assert.equal(await page.getByText('Owner B private Mac',{exact:false}).count(),0);
   await page.getByRole('button',{name:'Create pairing code'}).click();assert.match(await page.getByRole('textbox',{name:'One-time pairing code'}).inputValue(),/^11111111/);
   await page.getByText('Mac setup',{exact:true}).click();
-  const command=page.getByRole('textbox',{name:'Terminal command',exact:true});
-  assert.match(await command.inputValue(),/^curl --fail/);assert.doesNotMatch(await command.inputValue(),/--resume-pairing|owner-a|app-session/);
-  await page.getByRole('combobox',{name:'Mac setup command'}).selectOption('resume');assert.match(await command.inputValue(),/--resume-pairing$/);
-  await page.getByRole('button',{name:'Copy Terminal command',exact:true}).click();
-  assert.equal(await page.evaluate(()=>navigator.clipboard.readText()),await command.inputValue());
+  const prompt=page.getByRole('textbox',{name:'Codex setup prompt',exact:true});
+  const promptText=await prompt.inputValue();
+  assert.match(promptText,/^Set up this Mac as my private Immuvi classification-only worker\./);
+  assert.match(promptText,/https:\/\/immuvi-command-center\.vercel\.app\/personal-worker\/install\.sh/);
+  assert.match(promptText,/--resume-pairing/);assert.match(promptText,/Never ask me to paste keys or pairing codes into this chat/);
+  assert.doesNotMatch(promptText,/owner-a|app-session|11111111-1111-4111-8111-111111111111|^curl --fail/m);
+  assert.equal(await page.getByRole('link',{name:/Download installer/i}).count(),0);
+  assert.equal(await page.getByRole('textbox',{name:'Terminal command',exact:true}).count(),0);
+  assert.equal(await page.getByRole('combobox',{name:'Mac setup command'}).count(),0);
+  await page.getByRole('button',{name:'Copy Codex setup prompt',exact:true}).click();
+  assert.equal(await page.evaluate(()=>navigator.clipboard.readText()),promptText);
+  assert.equal(await page.getByRole('status').textContent(),'Codex setup prompt copied.');
   await page.screenshot({path:'/private/tmp/immuvi-personal-worker-desktop.png'});
   await page.setViewportSize({width:390,height:844});
   const bounds=await page.locator('dialog').boundingBox();assert.ok(bounds.x>=0&&bounds.x+bounds.width<=390);
-  const commandBounds=await command.boundingBox();assert.ok(commandBounds.x>=bounds.x&&commandBounds.x+commandBounds.width<=bounds.x+bounds.width);
+  const promptBounds=await prompt.boundingBox();assert.ok(promptBounds.x>=bounds.x&&promptBounds.x+promptBounds.width<=bounds.x+bounds.width);
   assert.equal(await page.locator('dialog').evaluate(el=>el.scrollWidth<=el.clientWidth),true);
   await page.screenshot({path:'/private/tmp/immuvi-personal-worker-mobile.png'});
   await page.getByRole('button',{name:'Use this Mac'}).click();await page.waitForFunction(()=>document.getElementById('insRunOnSelect').value.startsWith('personal:'));
@@ -112,5 +119,5 @@ try{
   await page.waitForFunction(()=>Object.keys(localStorage).length===0);await ready(page,'auto');
   await page.getByRole('button',{name:'Close',exact:true}).click();await page.waitForSelector('dialog',{state:'detached'});
   assert.deepEqual(errors,[]);
-  console.log('Passed desktop/mobile setup commands and copy, scoped reload/new-tab persistence, Auto/revocation clearing, offline/unavailable no-fallback, blocked early submission, private identity/race isolation and No Brief forwarding.');
+  console.log('Passed desktop/mobile Codex prompt and copy, removal of command/download UI, scoped reload/new-tab persistence, Auto/revocation clearing, offline/unavailable no-fallback, blocked early submission, private identity/race isolation and No Brief forwarding.');
 }finally{await browser.close();await new Promise(resolve=>server.close(resolve));}

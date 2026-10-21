@@ -118,3 +118,12 @@ test('both app entry points restore selection after credentials and guard early 
     assert.match(app,/if \(!AUTH\.user \|\| !CFG\.key\)/);
   }
 });
+test('My Mac exposes a safe Codex prompt instead of terminal commands or installer downloads',()=>{
+  const client=readFileSync(new URL('../public/personal-worker-client.mjs',import.meta.url),'utf8');
+  assert.match(client,/label\.textContent='Codex setup prompt'/);
+  assert.match(client,/Copy Codex setup prompt/);
+  assert.match(client,/https:\/\/immuvi-command-center\.vercel\.app\/personal-worker\/install\.sh/);
+  assert.match(client,/Never ask me to paste keys or pairing codes into this chat/);
+  assert.match(client,/Do not queue or reclassify inspirations without my explicit instruction/);
+  assert.doesNotMatch(client,/Download installer|download\.download|Terminal command|Mac setup command|curl --fail/);
+});

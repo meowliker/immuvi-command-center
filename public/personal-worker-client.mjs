@@ -84,24 +84,38 @@ window._appendPersonalWorkerOptions=async function(select){
   });}
 };
 function button(text,action){const b=document.createElement('button');b.type='button';b.className='btn-ghost';b.textContent=text;b.addEventListener('click',action);return b;}
-function setupCommands(dialog,status){
+function setupPrompt(dialog,status){
   const section=document.createElement('details'),summary=document.createElement('summary');summary.textContent='Mac setup';
   Object.assign(section.style,{margin:'16px 0',padding:'12px 0',borderTop:'1px solid #e5e7eb',borderBottom:'1px solid #e5e7eb'});
   summary.style.cursor='pointer';section.appendChild(summary);
   const toolbar=document.createElement('div');Object.assign(toolbar.style,{display:'flex',alignItems:'center',gap:'10px',flexWrap:'wrap',margin:'12px 0 8px'});
-  const mode=document.createElement('select');mode.setAttribute('aria-label','Mac setup command');
-  for(const [value,text] of [['install','First-time setup'],['resume','Resume interrupted pairing']]){const option=document.createElement('option');option.value=value;option.textContent=text;mode.appendChild(option);}
-  Object.assign(mode.style,{maxWidth:'100%',padding:'6px',border:'1px solid #d1d5db',borderRadius:'6px',fontSize:'14px'});
-  const command=document.createElement('textarea');command.readOnly=true;command.rows=8;command.spellcheck=false;command.setAttribute('aria-label','Terminal command');
-  Object.assign(command.style,{boxSizing:'border-box',width:'100%',resize:'vertical',padding:'10px',fontFamily:'ui-monospace, monospace',fontSize:'12px',lineHeight:'1.5',color:'#182131',background:'#f8fafc',border:'1px solid #d1d5db',borderRadius:'6px',margin:'0'});
-  const update=()=>{command.value="curl --fail --proto '=https' --tlsv1.2 https://immuvi-command-center.vercel.app/personal-worker/install.sh -o /tmp/immuvi-personal-worker-install.sh\nbash /tmp/immuvi-personal-worker-install.sh"+(mode.value==='resume'?' --resume-pairing':'');};
-  mode.addEventListener('change',update);update();
+  const label=document.createElement('label');label.htmlFor='personalWorkerSetupPrompt';label.textContent='Codex setup prompt';label.style.flex='1';
+  const prompt=document.createElement('textarea');prompt.id=label.htmlFor;prompt.readOnly=true;prompt.rows=12;prompt.spellcheck=false;
+  Object.assign(prompt.style,{boxSizing:'border-box',width:'100%',resize:'vertical',padding:'10px',fontFamily:'ui-monospace, monospace',fontSize:'12px',lineHeight:'1.5',color:'#182131',background:'#f8fafc',border:'1px solid #d1d5db',borderRadius:'6px',margin:'0'});
+  prompt.value=`Set up this Mac as my private Immuvi classification-only worker.
+
+Official installer:
+https://immuvi-command-center.vercel.app/personal-worker/install.sh
+
+First inspect any existing installation under:
+$HOME/Library/Application Support/Immuvi Personal Worker
+
+Complete setup on this Mac, using the official installer and its manifest checks. Do not clone the Immuvi repository or install the shared/team worker.
+
+If setup previously failed, diagnose the actual local error. For incomplete Torch or Playwright downloads, inspect the download path and pip configuration without exposing credentials. Do not assume Wi-Fi is faulty or repeatedly rerun the same failing command. Use bounded retries; report the exact sanitized blocker if it cannot be resolved safely.
+
+Reuse working dependencies and preserve existing login/model state. Do not interrupt an already-running worker. If initial pairing already succeeded but the service did not start, use the installer's --resume-pairing option to verify saved pairing rather than consuming a new code unnecessarily.
+
+Do not disable HTTPS verification, use untrusted mirrors, force Homebrew overwrites, skip audio/evidence verification, or change app code. Do not manually modify Supabase records, ClickUp tasks, or other services. Use only the official setup, pairing and heartbeat paths for this device. Request approval before changes outside this personal worker's setup scope.
+
+Do not read or print stored credentials, dump Keychain, copy AI credential files, or put secrets in plaintext files or logs. Let the official worker manage its credentials in macOS Keychain. Never ask me to paste keys or pairing codes into this chat. At pairing, pause and let me enter a fresh pairing code and my personal ClickUp key directly into hidden prompts in my own Terminal. Let me complete any required AI sign-in or macOS approvals myself.
+
+After setup, verify the personal worker service com.immuvi.personal-classifier is running and guide me to confirm its live heartbeat in Immuvi > Inspiration > My Mac. Do not claim success before verifying. Do not queue or reclassify inspirations without my explicit instruction. If blocked, report the exact sanitized error and what remains.`;
   const copy=button('⧉',async()=>{
-    try{await navigator.clipboard.writeText(command.value);status.textContent='Terminal command copied.';}
-    catch{command.focus();command.select();status.textContent='Copy unavailable. The Terminal command is selected.';}
-  });copy.title='Copy Terminal command';copy.setAttribute('aria-label','Copy Terminal command');
-  const download=document.createElement('a');download.href='/personal-worker/install.sh';download.download='immuvi-personal-worker-install.sh';download.textContent='Download installer';
-  toolbar.append(mode,copy,download);section.append(toolbar,command);dialog.appendChild(section);return section;
+    try{await navigator.clipboard.writeText(prompt.value);status.textContent='Codex setup prompt copied.';}
+    catch{prompt.focus();prompt.select();status.textContent='Copy unavailable. The Codex setup prompt is selected.';}
+  });copy.title='Copy Codex setup prompt';copy.setAttribute('aria-label','Copy Codex setup prompt');
+  toolbar.append(label,copy);section.append(toolbar,prompt);dialog.appendChild(section);return section;
 }
 window._openPersonalWorkerDialog=async function(){
   if(document.getElementById('personalWorkerDialog'))return;
@@ -116,7 +130,7 @@ window._openPersonalWorkerDialog=async function(){
   const dialogIdentity=currentIdentity();
   function assertIdentity(){if(currentIdentity()!==dialogIdentity){list.replaceChildren();code.value='';code.hidden=true;throw new Error('Account or ClickUp key changed. Close and reopen My Mac.');}}
   const retry=button('Refresh',()=>load(true));dialog.appendChild(retry);
-  const setup=setupCommands(dialog,status);
+  const setup=setupPrompt(dialog,status);
   const label=document.createElement('label');label.textContent='Mac name';
   const name=document.createElement('input');name.maxLength=80;name.value='My Mac';name.style.width='100%';name.style.boxSizing='border-box';label.appendChild(name);dialog.appendChild(label);
   const code=document.createElement('textarea');code.readOnly=true;code.rows=3;code.hidden=true;code.style.width='100%';code.style.boxSizing='border-box';code.setAttribute('aria-label','One-time pairing code');dialog.appendChild(code);

@@ -205,7 +205,13 @@ def run():
             if journal.exists() and error.status in (400, 409):
                 # Preserve the artifact for review, but do not hammer a rejected
                 # result or let it block later assigned jobs forever.
+                retained=json.loads(journal.read_text())
                 journal.replace(ROOT / ("review-" + str(int(time.time())) + ".json"))
+                try:
+                    request('fail', {'token':credentials['token']},jobId=retained['job']['id'],
+                            lease=retained['job']['lease'],code='EVIDENCE_UNVERIFIED')
+                except Exception:
+                    pass  # A superseded/review lease must not be changed.
             backoff = min(max(backoff * 2, 60), 300)
         except Exception:
             print("Local worker unavailable; retained work will be retried.", flush=True)

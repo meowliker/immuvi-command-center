@@ -61,6 +61,32 @@ class PersonalWorkerTests(unittest.TestCase):
         with patch.object(worker.subprocess, 'run', side_effect=run):
             worker.keychain(False, saved)
 
+    def test_rejected_artifact_is_retained_and_does_not_strand_classifying(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp)
+            worker.atomic_json(root/'pending-result.json',{'job':{'id':'fixture-job','lease':'fixture-lease','no_brief':True},'result':{}})
+            operations=[]
+            def request(op,credentials,**payload):
+                operations.append(op)
+                if op=='complete':
+                    raise worker.ServiceError(400)
+                self.assertEqual(op,'fail')
+                self.assertEqual(payload['code'],'EVIDENCE_UNVERIFIED')
+                worker.STOP.set()
+                return {'ok':True}
+            class Thread:
+                def __init__(self,**kwargs): pass
+                def start(self): pass
+            worker.STOP.clear()
+            try:
+                with patch.object(worker,'ROOT',root),patch.object(worker,'keychain',return_value={'token':'fixture-token'}),patch.object(worker,'request',side_effect=request),patch.object(worker.threading,'Thread',Thread):
+                    worker.run()
+                self.assertEqual(operations,['complete','fail'])
+                self.assertFalse((root/'pending-result.json').exists())
+                self.assertEqual(len(list(root.glob('review-*.json'))),1)
+            finally:
+                worker.STOP.clear()
+
 
 if __name__ == '__main__':
     unittest.main()

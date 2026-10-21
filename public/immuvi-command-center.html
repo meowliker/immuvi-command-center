@@ -46762,8 +46762,7 @@ function addInspoToCell(insId, angleName, personaName) {
   var ins = INSPIRATIONS.find(function(i) { return i.id === insId; });
   if (!ins) { toast('Inspiration not found', 'error'); return; }
 
-  // Placement explicitly adopts these categories into the product. Previously
-  // a custom label could create an AD and cell with no corresponding matrix row.
+  // New product categories require a separate confirmation before placement.
   var cell = _prepareInspirationCell(ins, angleName, personaName);
   if (!cell) return;
   angleName = cell.angle;
@@ -46871,6 +46870,7 @@ function addInspoToCell(insId, angleName, personaName) {
 function _prepareInspirationCell(ins, angleName, personaName) {
   var names = {angle: _normalizeTaxonomyName(angleName), persona: _normalizeTaxonomyName(personaName)};
   var kinds = ['angle', 'persona'];
+  var additions = [];
   // Validate both before creating either; never silently restore an archive.
   for (var i = 0; i < kinds.length; i++) {
     var kind = kinds[i], name = names[kind];
@@ -46882,6 +46882,12 @@ function _prepareInspirationCell(ins, angleName, personaName) {
       toast('Choose an active ' + kind + ' before placing this inspiration.', 'warn');
       return null;
     }
+    if (!existing) additions.push((kind === 'angle' ? 'Angle: ' : 'Persona: ') + name);
+  }
+  if (additions.length) {
+    var product = typeof getActiveProduct === 'function' ? getActiveProduct() : null;
+    if (!confirm('Add new categories to ' + ((product && product.name) || activeProductId) + '?\n\n' +
+        additions.join('\n') + '\n\nThese will become active product-wide categories.')) return null;
   }
   kinds.forEach(function(kind) {
     names[kind] = _ensureTaxonomyItem(kind, names[kind], 'Added by placing inspiration ' + ins.id + ' into the matrix');

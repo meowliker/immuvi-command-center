@@ -6,10 +6,12 @@ import vm from 'node:vm';
 for (const file of ['immuvi-command-center.html', 'public/immuvi-command-center.html']) {
   const html = readFileSync(new URL('../' + file, import.meta.url), 'utf8');
   function setup() {
+    const confirmations=[];
     const context = vm.createContext({
       ANGLES: [{id:'a',name:'Existing'}, {id:'old',name:'Archived angle',archivedAt:1}],
       PERSONAS: [{id:'p',name:'Baby cloth Quilters'}, {id:'old-p',name:'Archived persona',archivedAt:1}],
       activeProductId:'quilting',
+      confirmations,confirm(message) {confirmations.push(message);return true;},
       _isBoundaryQuarantinedTaxonomy:(_, name) => name === 'Foreign',
       _isTaxonomyTombstoned:(_, __, name) => name === 'Deleted',
       _forgetTaxonomyDeletion() {},
@@ -35,6 +37,48 @@ for (const file of ['immuvi-command-center.html', 'public/immuvi-command-center.
     c._prepareInspirationCell(ins, ins.angle.toUpperCase(), ins.persona);
     assert.equal(c.ANGLES.length, 3);
     assert.equal(c.PERSONAS.length, 2);
+    assert.equal(c.confirmations.length,1);
+    assert.match(c.confirmations[0],/Angle: Preserve baby-clothes memories/);
+  });
+
+  test(file + ': declining new categories leaves both taxonomy and inspiration untouched in every product', () => {
+    for (const product of ['astro-rekha','quilting','other-product']) {
+      const c = setup();c.activeProductId=product;
+      let prompt;c.confirm=message=>{prompt=message;return false;};
+      const ins={id:'TEST-INS-1',angle:'New angle',persona:'New persona',_angleScope:'inspiration',_personaScope:'inspiration'};
+      const before=JSON.stringify([c.ANGLES,c.PERSONAS,ins]);
+      assert.equal(c._prepareInspirationCell(ins,ins.angle,ins.persona),null);
+      assert.equal(JSON.stringify([c.ANGLES,c.PERSONAS,ins]),before);
+      assert.ok(prompt.includes(product));assert.match(prompt,/Angle: New angle\nPersona: New persona/);
+    }
+  });
+
+  test(file + ': existing category placement needs no new-category confirmation', () => {
+    const c=setup();c.confirm=()=>{throw Error('Existing categories must not prompt');};
+    const ins={id:'TEST-INS-1',angle:'Existing',persona:'Baby cloth Quilters'};
+    assert.ok(c._prepareInspirationCell(ins,ins.angle,ins.persona));
+    assert.equal(c.ANGLES.length,2);assert.equal(c.PERSONAS.length,2);
+  });
+
+  test(file + ': cancelled category approval stops creative placement before any save or assignment', () => {
+    const c=setup();c.confirm=()=>false;
+    c.INSPIRATIONS=[{id:'TEST-INS-1',angle:'New angle',persona:'New persona',status:'Classified'}];
+    c.ADS=[{id:'kept',persona:'Baby cloth Quilters'}];c.CELL_CREATIVE_ASSIGNMENTS={kept:['kept']};
+    c.saveState=()=>{throw Error('Cancelled placement must not save');};
+    const start=html.indexOf('function addInspoToCell(');
+    vm.runInContext(html.slice(start,html.indexOf('\n}',start)+2),c);
+    const before=JSON.stringify([c.ANGLES,c.PERSONAS,c.INSPIRATIONS,c.ADS,c.CELL_CREATIVE_ASSIGNMENTS]);
+    c.addInspoToCell('TEST-INS-1','New angle','New persona');
+    assert.equal(JSON.stringify([c.ANGLES,c.PERSONAS,c.INSPIRATIONS,c.ADS,c.CELL_CREATIVE_ASSIGNMENTS]),before);
+  });
+
+  test(file + ': approving two new categories prompts once before adopting either', () => {
+    const c=setup();let prompts=0;
+    c.confirm=()=>{prompts++;assert.equal(c.ANGLES.length,2);assert.equal(c.PERSONAS.length,2);return true;};
+    const ins={id:'TEST-INS-1',angle:'New angle',persona:'New persona'};
+    assert.ok(c._prepareInspirationCell(ins,ins.angle,ins.persona));
+    assert.equal(prompts,1);assert.equal(c.ANGLES.length,3);assert.equal(c.PERSONAS.length,3);
+    assert.equal(ins._angleScope,'product');assert.equal(ins._personaScope,'product');
   });
 
   test(file + ': invalid or archived placement cannot partially create categories', () => {

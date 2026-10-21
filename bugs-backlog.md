@@ -7,6 +7,18 @@ Status legend: 🆕 just-flagged · 📐 plan-locked · 🛠 in-progress · ✅ 
 
 ---
 
+## Matrix placement silently expands product personas (2026-10-21)
+
+The sync/archive guards were intact, but placing an inspiration implicitly
+created missing active master categories. Require a separate confirmation naming
+every new angle/persona and the destination product before any placement mutation.
+Cancel must preserve taxonomy, inspiration scope, creatives and assignments.
+Existing-category placement stays unchanged; archived categories are not revived.
+The user approved archiving only seven placement-added Astro Rekha personas while
+preserving the nine earlier active personas and all creative evidence. Do not
+merge or remap labels to make counts smaller. See
+`docs/repairs/2026-10-21-matrix-persona-approval.md`.
+
 ## Personal classification worker isolation (2026-10-21)
 
 The personal Mac path is separate from the shared registry and job dispatcher.

@@ -29,6 +29,7 @@ try{
     join products p on p.id=j.product_id where j.id=${values.job}`;
   assert.ok(initial);assert.equal(initial.no_brief,false);assert.equal(initial.configured_doc,values.doc);
   assert.equal(initial.state,'review');assert.ok(initial.artifact?.markdown);
+  if(initial.publishing_doc_id)assert.equal(initial.publishing_doc_id,values.doc,'Recovery must use the reserved product library');
   const page=await read('/pages/'+values.page+'?content_format=text%2Fmd');
   assert.equal(page.id,values.page);assert.equal(briefContentMatches(page.content,initial.artifact.markdown),true,'Existing brief content does not match retained analysis');
   const pagesBefore=matchingPages(await read('/page_listing?max_page_depth=-1'),initial.ins_id);
@@ -50,6 +51,7 @@ try{
     const before=await inventory();
     const [job]=await tx`select * from personal_workers.jobs where id=${values.job} for update`;
     assert.equal(job.state,'review');assert.equal(job.artifact_hash,initial.artifact_hash);assert.deepEqual(job.artifact,initial.artifact);
+    assert.equal(job.publishing_doc_id,initial.publishing_doc_id);
     if(job.created_page)assert.deepEqual(job.created_page,receipt);
     const [inspiration]=await tx`select * from inspirations where id=${job.ins_id} and product_id=${job.product_id} for update`;
     const [queue]=await tx`select * from inspiration_queue where ins_id=${job.ins_id} and product_id=${job.product_id} for update`;

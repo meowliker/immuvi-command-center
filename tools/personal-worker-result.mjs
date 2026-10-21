@@ -25,7 +25,26 @@ export function briefContentMatches(actual,expected){
   };
   try{
     const parse=value=>canonical(fromMarkdown(value,{extensions:[gfm()],mdastExtensions:[gfmFromMarkdown()]}));
-    return JSON.stringify(parse(actual))===JSON.stringify(parse(expected));
+    const same=(actualNode,expectedNode)=>{
+      const {children:actualChildren=[],...actualFields}=actualNode;
+      const {children:expectedChildren=[],...expectedFields}=expectedNode;
+      if(JSON.stringify(actualFields)!==JSON.stringify(expectedFields))return false;
+      let a=0,e=0;
+      while(a<actualChildren.length&&e<expectedChildren.length){
+        if(same(actualChildren[a],expectedChildren[e])){a++;e++;continue;}
+        // ClickUp can import a paragraph followed by a divider as a level-two
+        // heading. Accept only that exact conversion, retaining every child.
+        const imported=actualChildren[a],paragraph=expectedChildren[e];
+        if(imported.type==='heading'&&imported.depth===2&&paragraph.type==='paragraph'&&
+          expectedChildren[e+1]?.type==='thematicBreak'&&
+          same({...imported,type:'paragraph',depth:undefined},paragraph)){
+          a++;e+=2;continue;
+        }
+        return false;
+      }
+      return a===actualChildren.length&&e===expectedChildren.length;
+    };
+    return same(parse(actual),parse(expected));
   }catch{return false;}
 }
 export function validatePersonalResult(raw, context, now=new Date().toISOString()) {

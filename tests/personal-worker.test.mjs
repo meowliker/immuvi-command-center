@@ -125,9 +125,23 @@ function fullResult(){
     ('\n\n| Time | Label | Caption / Voice Over |\n|---|---|---|\n|0:00|Hook|Complete script.|').repeat(4);
   r.brief={next_ad_scripts:Array.from({length:3},()=>({name:'Script',voice_over_script:'Complete script',source_format_match:'Source skeleton',script_breakdown:[{}]}))};return r;
 }
+test('ClickUp paragraph-divider import completes without a formatting-only review',()=>{
+  const expected='## 1. SNAPSHOT\n\nKeep **every word** and [source](https://example.test/ad).\n\n---\n\n## 2. CREATIVE BREAKDOWN\n\n| Time | Script |\n|---|---|\n|0:01|Keep all words.|\n\nFinal paragraph\n\n---\n\n## 3. WHY IT WORKS';
+  const actual=expected.replace('Keep **every word** and [source](https://example.test/ad).\n\n---','## Keep **every word** and [source](https://example.test/ad).')
+    .replace('Final paragraph\n\n---','## Final paragraph');
+  assert.equal(briefContentMatches(actual,expected),true);
+  for(const changed of [actual.replace('every word','some words'),actual.replace('/ad)', '/other)'),
+    actual.replace('0:01','0:02'),actual.replace('## Final paragraph','### Final paragraph'),
+    actual.replace('## 3. WHY IT WORKS','### 3. WHY IT WORKS'),actual.replace('Keep all words.','')]){
+    assert.equal(briefContentMatches(changed,expected),false);
+  }
+  assert.equal(briefContentMatches('## Ordinary paragraph','Ordinary paragraph'),false);
+  assert.equal(briefContentMatches('Ordinary paragraph','## Ordinary paragraph'),false);
+});
 const receipt={id:'fixture-page',docId:'fixture-doc',url:'https://app.clickup.com/9016762494/docs/fixture-doc/fixture-page'};
 test('publishing records an unverified page receipt before readback and commits only after verification',async()=>{
   const r=fullResult(),events=[];
+  r.markdown+='\n\nSource summary\n\n---';
   const out=await invoke({op:'complete',jobId:id,lease:id,result:r},async(url,opts)=>{
     if(url.endsWith('/api/v2/user'))return response({user:{id:123}});
     if(url.includes('/rpc/')){const body=JSON.parse(opts.body);events.push(body.p_op);
@@ -137,7 +151,7 @@ test('publishing records an unverified page receipt before readback and commits 
       return response(body.p_op==='commit'?{done:true}:{ok:true});
     }
     events.push(opts.method==='POST'?'create':'read');
-    return response(opts.method==='POST'?{id:receipt.id}:{id:receipt.id,content:r.markdown.replace(/^- /gm,'* ')});
+    return response(opts.method==='POST'?{id:receipt.id}:{id:receipt.id,content:r.markdown.replace(/^- /gm,'* ').replace('Source summary\n\n---','## Source summary')});
   },{authorization:'Device '+'x'.repeat(43),'x-clickup-key':'pk_'+'x'.repeat(25)});
   assert.equal(out.code,200);assert.deepEqual(events,['inspect','prepare','inspect','create','receipt','read','page','commit']);
 });
@@ -182,7 +196,8 @@ test('cancellation after reservation prevents a new brief create',async()=>{
   assert.equal(out.code,200);assert.equal(out.body.cancelled,true);assert.deepEqual(events,['inspect','prepare','inspect']);
 });
 test('browser verification uses only its scoped stored receipt and never creates a ClickUp page',async()=>{
-  const r=fullResult(),artifact=validatePersonalResult(r,{...context,no_brief:false}),events=[];
+  const r=fullResult();r.markdown+='\n\nSource summary\n\n---';
+  const artifact=validatePersonalResult(r,{...context,no_brief:false}),events=[];
   const out=await invoke({op:'verify',deviceId:id,jobId:id},async(url,opts)=>{
     if(url.includes('/auth/v1/user'))return response({id});if(url.endsWith('/api/v2/user'))return response({user:{id:123}});
     if(url.includes('/rpc/')){const body=JSON.parse(opts.body);events.push(body.p_op);
@@ -190,7 +205,7 @@ test('browser verification uses only its scoped stored receipt and never creates
       if(body.p_op==='resume_review')return response({token_hash:'server-only-hash',job_id:id,lease:id,contract:'personal-artifact-v1'});
       return response(body.p_op==='commit'?{done:true}:{ok:true});
     }
-    assert.notEqual(opts.method,'POST');events.push('read');return response({id:receipt.id,content:r.markdown});
+    assert.notEqual(opts.method,'POST');events.push('read');return response({id:receipt.id,content:r.markdown.replace('Source summary\n\n---','## Source summary')});
   },{authorization:'Bearer app-session','x-clickup-key':'pk_'+'x'.repeat(25)});
   assert.equal(out.code,200);assert.deepEqual(out.body,{done:true});assert.deepEqual(events,['review_context','read','resume_review','page','commit']);
 });

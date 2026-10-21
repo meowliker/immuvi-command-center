@@ -37,6 +37,13 @@ Macs have two/three isolated slots with a server cap of three; preserve separate
 slot journals, the minute heartbeat and local audio resource lock. Never apply
 these concurrency changes to the shared registry or consume another owner's jobs.
 
+Publishing-format follow-up: ClickUp can import a paragraph and its following
+divider as a level-two heading. Accept only this content-identical conversion
+so a finished brief does not enter a formatting-only review. Keep changed text,
+links, table cells, scripts and other heading changes protected. Recovery must
+reuse the single recorded page in the reserved product library, never create a
+second brief or run classification again. No shared-worker or schema changes.
+
 ---
 
 ## Audio verification selected a credit-based external analyzer (2026-10-20)

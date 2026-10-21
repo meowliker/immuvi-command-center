@@ -73,6 +73,13 @@ stored separately from verified-page state before readback. A receipt alone
 cannot authorize a commit, and a concurrent completion cannot create a second
 page or cancel an in-flight publisher.
 
+ClickUp's import can also convert a paragraph plus its following horizontal
+divider into a level-two heading. That exact transformation is accepted when
+all inline content is unchanged; it does not require a separate user review.
+Other heading changes, missing words, altered links, tables and scripts still
+fail verification. Existing saved results can finish through their recorded
+brief without analysis or page creation being repeated.
+
 `20261021000200_personal_worker_publishing.sql` adds only private publishing
 state and a service-only dispatcher wrapper. Its application helper defaults to
 rollback, checks existing public/private row digests, and is idempotent. The

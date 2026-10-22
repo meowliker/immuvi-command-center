@@ -33233,14 +33233,20 @@ function _apParseInspoLinksFromDesc(desc) {
 function _apResolveCellIdentity(act, ad) {
   act = act || {};
   ad = ad || null;
+  var actionTaskId = String(act._clickupId || act.clickupTaskId || '');
+  var adTaskId = String((ad && (ad._clickupId || ad.clickupTaskId)) || '');
+  // A same-task snapshot must not override a later creative retag. Parent
+  // references and unverified links keep their existing action-owned identity.
+  var sameTask = !!(ad && actionTaskId && actionTaskId === adTaskId &&
+    (act.sourceAdId || act.adId) === ad.id);
   var cfDisplay = (ad && ad._customFields) || act._customFields || {};
   var desc = (act && act.description) || (ad && ad.description) || '';
-  var angle = act.sourceAngle || act.angle || (ad && ad.angle) ||
+  var angle = (sameTask && ad.angle) || act.sourceAngle || act.angle || (ad && ad.angle) ||
               cfDisplay['angle tag'] || cfDisplay['angle'] || cfDisplay['ad angle'] ||
               ((typeof _extractDescriptionFieldValue === 'function')
                 ? _extractDescriptionFieldValue(desc, ['Angle', 'Angle Tag', 'Ad Angle'])
                 : '');
-  var persona = act.sourcePersona || act.persona || (ad && ad.persona) ||
+  var persona = (sameTask && ad.persona) || act.sourcePersona || act.persona || (ad && ad.persona) ||
                 cfDisplay['persona tag'] || cfDisplay['persona'] || cfDisplay['target persona'] || cfDisplay['audience'] ||
                 ((typeof _extractDescriptionFieldValue === 'function')
                   ? _extractDescriptionFieldValue(desc, ['Persona', 'Persona Tag', 'Target Persona', 'Audience'])

@@ -2916,3 +2916,13 @@ ClickUp task, creative, inspiration or matrix state through this option.
 The user asked to leave the real entry untouched; installation and preview do so.
 Broader ID-generation/ownership changes remain outside this approved scope.
 See `docs/repairs/2026-10-16-confirmed-orphan-cleanup.md` for evidence and tests.
+
+## Used categories hidden and stale Action Plan labels (2026-10-22)
+
+Archiving a category can hide active creatives without deleting their data.
+Audit visible task identities, including photos and virtual Action Plan rows,
+before cleanup. Restore only explicitly approved existing categories. For an
+action whose source creative and ClickUp identities both match exactly, use
+the creative's current taxonomy instead of a stale action snapshot. Preserve
+parent-task and uncertain-link behavior. See
+`docs/repairs/2026-10-22-used-persona-visibility.md` for scope and verification.

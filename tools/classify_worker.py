@@ -592,7 +592,7 @@ def probe_capabilities() -> dict:
         "facebook_evidence": "exact-ad-v1",
         "classification_lease": "agent-timeout-v1",
         "asr_cache_recovery": "isolated-checksum-v2-turbo",
-        "agent_launcher_revision": "codex-bundle-v2",
+        "agent_launcher_revision": "codex-model-fallback-v1",
         "classification_workspace": "isolated-cwd-v1",
         "drive_media_selection": "exact-file-v1",
         "taxonomy_review": "semantic-taxonomy-v1" if (
@@ -694,10 +694,53 @@ def run_classification_agent(cmd: list, timeout: int):
         env = dict(os.environ)
         env["PWD"] = workspace
         env.pop("OLDPWD", None)
-        return subprocess.run(
+        started = time.monotonic()
+        result = subprocess.run(
             cmd, cwd=workspace, env=env, capture_output=True, text=True,
             timeout=timeout,
         )
+        # This rejection happens before any agent/tool execution. Only this
+        # startup error is safe to retry without risking duplicate publishing.
+        if (result.returncode and len(cmd) > 1 and cmd[1] == "exec"
+                and _codex_model_unavailable(result.stderr or "")):
+            fallback = _codex_fallback_model(result.stderr or "")
+            remaining = timeout - (time.monotonic() - started)
+            if fallback and remaining > 1:
+                model, effort = fallback
+                log("[agent] configured Codex model unavailable; trying current catalog default")
+                result = subprocess.run(
+                    cmd[:2] + ["--model", model, "-c", f'model_reasoning_effort="{effort}"'] + cmd[2:],
+                    cwd=workspace, env=env, capture_output=True, text=True,
+                    timeout=remaining,
+                )
+        return result
+
+
+def _codex_model_unavailable(output: str) -> bool:
+    text = (output or "").lower()
+    return ("invalid_request_error" in text
+            and "model is not supported when using codex with a chatgpt account" in text)
+
+
+def _codex_fallback_model(output: str):
+    """Use only a fresh local CLI catalog; never edit the user's configuration."""
+    try:
+        home = Path(os.environ.get("CODEX_HOME") or (Path.home() / ".codex"))
+        cache = json.loads((home / "models_cache.json").read_text())
+        fetched = datetime.fromisoformat(cache["fetched_at"].replace("Z", "+00:00"))
+        age = time.time() - fetched.timestamp()
+        if not 0 <= age <= 86400:
+            return None
+        models = sorted(cache.get("models", []), key=lambda model: model.get("priority", 999))
+        for model in models:
+            slug = model.get("slug", "")
+            effort = model.get("default_reasoning_level", "medium")
+            if (model.get("visibility") == "list" and re.fullmatch(r"[a-zA-Z0-9_.-]+", slug)
+                    and slug not in output and effort in {"low", "medium", "high", "xhigh", "max"}):
+                return slug, effort
+    except (OSError, ValueError, TypeError, KeyError):
+        pass
+    return None
 
 
 def _agent_auth_failed(output: str) -> bool:
@@ -717,7 +760,8 @@ def _agent_infra_failed(output: str) -> bool:
     """True when the worker could not launch/use the local agent process."""
     text = (output or "").lower()
     return (
-        "operation not permitted" in text
+        _codex_model_unavailable(output)
+        or "operation not permitted" in text
         or "os error 1" in text
         or "permission denied" in text
         or "eperm" in text
@@ -1070,7 +1114,7 @@ class Worker:
         self._caps.update({
             "claude": _has_claude(),
             "codex": _has_codex(),
-            "agent_launcher_revision": "codex-bundle-v2",
+            "agent_launcher_revision": "codex-model-fallback-v1",
             "classification_workspace": "isolated-cwd-v1",
             "drive_media_selection": "exact-file-v1",
             "local_audio_verification": "local-only-v1",

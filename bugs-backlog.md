@@ -7,6 +7,24 @@ Status legend: 🆕 just-flagged · 📐 plan-locked · 🛠 in-progress · ✅ 
 
 ---
 
+## Shared worker rejects inherited Codex model (2026-10-22)
+
+An unsupported-model startup error consumed content retries before media
+analysis began. The launcher now tries at most one visible alternative from a
+fresh local Codex catalog, with a shared timeout and unchanged job workspace,
+prompt and integrations. It does not edit global Codex configuration. Missing
+or rejected alternatives are infrastructure failures, not content failures.
+Never retry ordinary analysis, media or publishing errors through this path.
+Recovery requires a fresh worker heartbeat advertising codex-model-fallback-v1
+before retrying an exact, backed-up failed job. Deployment alone is not proof
+that the running Mac has loaded the fix.
+
+The reported static inspirations have saved classification results and briefs;
+taxonomy review is separate from production-task creation. Verify exact saved
+task identity and live Action Plan visibility before creating or restoring any
+row. Do not manufacture personas from generic offer copy, regenerate completed
+briefs, or bypass the explicit master-category creation guard.
+
 ## Matrix placement silently expands product personas (2026-10-21)
 
 The sync/archive guards were intact, but placing an inspiration implicitly

@@ -87,7 +87,7 @@ class AgentDiscoveryTests(unittest.TestCase):
         self.assertTrue(worker._caps['codex'])
         self.assertTrue(worker._caps['ffmpeg'])
         self.assertTrue(worker._caps['classification_only'])
-        self.assertEqual(worker._caps['agent_launcher_revision'], 'codex-bundle-v2')
+        self.assertEqual(worker._caps['agent_launcher_revision'], 'codex-model-fallback-v1')
         worker.sb.update.assert_not_called()
 
     def test_infrastructure_failure_blocks_only_job_without_content_retry_charge(self):

@@ -28,6 +28,14 @@ assigned tasks outside active columns without unarchiving taxonomy, mutating
 task status, or clearing global date/status filters. See
 `docs/repairs/2026-10-22-placement-catalog-and-search.md`.
 
+Normal-placement follow-up: a search fallback is not a restoration of the normal
+grid. When explicitly requested, restore only the exact existing category needed
+by the saved task, preserving its original labels, status and assignments rather
+than inventing or remapping categories. One existing persona was restored; no
+task or other product records changed. Regression checks cover ordinary grid
+search after restoration and stale UPSERT preservation. See
+`docs/repairs/2026-10-22-normal-cell-restoration.md`.
+
 ## Personal classification worker isolation (2026-10-21)
 
 The personal Mac path is separate from the shared registry and job dispatcher.

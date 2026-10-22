@@ -55,6 +55,47 @@ async function setup(file) {
 }
 
 for (const file of files) {
+  test(`${file}: restoring an existing category returns its task to ordinary grid search`, async () => {
+    const {context:c,cells,count,results,html}=await setup(file);
+    c.ANGLES=[{name:'Existing angle'}];
+    c.PERSONAS=[{name:'Existing persona',archivedAt:1},{name:'Unrelated archived persona',archivedAt:2}];
+    c.ANGLE_PERSONAS={};
+    c._isBoundaryQuarantinedTaxonomy=()=>false;
+    c._isTaxonomyTombstoned=()=>false;
+    for(const name of ['_normalizeTaxonomyName','_taxonomyLookupKey','_taxonomyNameExists','_taxonomyArchivedByName','_matrixTaxonomyAllowed','deriveMasterPersonas','isPersonaActive','_apResolveCellIdentity']) {
+      const start=html.indexOf('function '+name+'(');
+      assert.ok(start>=0,name);
+      vm.runInContext(html.slice(start,html.indexOf('\n}',start)+2),c);
+    }
+    const ad={id:'restore-winner',formatName:'TEST-RESTORED',status:'Winner',angle:'Existing angle',persona:'Existing persona',product_id:'quilting'};
+    const action={angle:ad.angle,persona:ad.persona,sourceAngle:ad.angle,sourcePersona:ad.persona};
+    c.ADS.push(ad);
+    const key=ad.angle+'||'+ad.persona;
+    c.CELL_CREATIVE_ASSIGNMENTS[key]=[ad.id];
+    const before=JSON.stringify({ad,action,assignments:c.CELL_CREATIVE_ASSIGNMENTS});
+    c._mxv4BuildSearchIndex();c.setMxv4CreativeSearch(ad.formatName);
+    assert.equal(count.textContent,'1 task outside visible matrix');
+    assert.equal(c.isPersonaActive(ad.persona),false);
+    assert.deepEqual(Array.from(c.deriveMasterPersonas()),[]);
+
+    // An explicit restore reuses the original master row and assignment.
+    c.PERSONAS[0].archivedAt=null;
+    c.PERSONAS[0].creationApproved=true;
+    assert.equal(c.isPersonaActive(ad.persona),true);
+    assert.deepEqual(Array.from(c.deriveMasterPersonas()),[ad.persona]);
+    const restoredCell=cell(key);cells.push(restoredCell);
+    c._mxv4BuildSearchIndex();c._mxv4ApplyCreativeSearch();
+    assert.equal(count.textContent,'1 matching cell');
+    assert.equal(results.hidden,true);
+    assert.equal(results.children.length,0);
+    assert.equal(restoredCell.classes.has('mx-search-match'),true);
+    const identity=c._apResolveCellIdentity(action,null);
+    assert.equal(identity.angle,ad.angle);assert.equal(identity.persona,ad.persona);
+    assert.equal(c.PERSONAS[1].archivedAt,2);
+    assert.equal(c.PERSONAS.length,2);
+    assert.equal(JSON.stringify({ad,action,assignments:c.CELL_CREATIVE_ASSIGNMENTS}),before);
+  });
+
   test(`${file}: hidden-category tasks are searchable without restoring taxonomy`, async () => {
     const {context:c,count,results}=await setup(file);
     c.ADS.push({id:'AD-hidden',formatName:'TEST-354-INS-220',status:'Winner',persona:'Archived persona'});

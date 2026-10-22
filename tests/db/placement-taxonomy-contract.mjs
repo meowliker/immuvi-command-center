@@ -22,6 +22,9 @@ export async function testPlacementTaxonomyGuard(tx) {
       row=await get(manual);assert.equal(row.creation_approved,true);assert.equal(row.archived_at,null);
       await tx.unsafe(`update public.${table} set archived_at=null,creation_approved=true where id=$1`,[id]);
       row=await get(id);assert.equal(row.creation_approved,true);assert.equal(row.archived_at,null);
+      await tx.unsafe(`insert into public.${table}(id,product_id,name,status,creation_approved,archived_at)
+        values($1,$2,$1,'Untested',false,$3) on conflict(id) do update set creation_approved=excluded.creation_approved,archived_at=excluded.archived_at`,[id,product,archived]);
+      row=await get(id);assert.equal(row.creation_approved,true);assert.equal(row.archived_at,null);
       await assert.rejects(tx.savepoint(inner=>inner.unsafe(`update public.${table} set product_id=$2 where id=$1`,[id,other])),{code:'PT409'});
     }
   } finally {

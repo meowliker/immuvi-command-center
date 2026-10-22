@@ -24,6 +24,7 @@ async function setup(file) {
   const cells = [cell('Angle A||Beginner'), cell('Angle B||Beginner'), cell('Angle C||Seller')];
   const count = { textContent: '' };
   const jump = { disabled: true };
+  const results = {hidden:true,children:[],replaceChildren(){this.children=[];},appendChild(child){this.children.push(child);}};
   const root = { querySelectorAll: () => cells };
   const context = vm.createContext({
     activeProductId: 'quilting',
@@ -41,16 +42,52 @@ async function setup(file) {
     },
     MATRIX_CELL_META: { 'AD-1||Angle B||Beginner': { uniqueName: '14021-2' } },
     _adPassesProductBoundaryForTaxonomy: ad => !ad.quarantined,
-    document: { getElementById: id => ({ matrixGrid: root, mxCreativeSearchCount: count, mxCreativeSearchJump: jump })[id] },
+    document: {
+      getElementById: id => ({ matrixGrid: root, mxCreativeSearchCount: count, mxCreativeSearchJump: jump, mxCreativeSearchResults:results })[id],
+      createElement:()=>({children:[],setAttribute(){},appendChild(child){this.children.push(child);},addEventListener(type,fn){this[type]=fn;}})
+    },
     renderMatrix() { throw new Error('Typing must not redraw the matrix'); },
     saveState() { throw new Error('Search must not save data'); }
   });
   vm.runInContext(html.slice(start, end), context);
   context._mxv4BuildSearchIndex();
-  return { context, cells, count, jump, html };
+  return { context, cells, count, jump, html, results };
 }
 
 for (const file of files) {
+  test(`${file}: hidden-category tasks are searchable without restoring taxonomy`, async () => {
+    const {context:c,count,results}=await setup(file);
+    c.ADS.push({id:'AD-hidden',formatName:'TEST-354-INS-220',status:'Winner',persona:'Archived persona'});
+    c.CELL_CREATIVE_ASSIGNMENTS['Existing angle||Archived persona']=['AD-hidden'];
+    c._mxv4BuildSearchIndex();c.setMxv4CreativeSearch('TEST-354-INS-220');
+    assert.equal(count.textContent,'1 task outside visible matrix');assert.equal(results.hidden,false);
+    assert.equal(results.children[0].textContent,'TEST-354-INS-220');
+    const filters={};let opened;
+    c._mxv4={cell:null};c._productSwitchPending=false;
+    c.openMxv4Modal=(a,p,options)=>{opened={a,p,options};c._mxv4.cell=a+'||'+p;};
+    c._mxv4GetCellFilters=()=>filters;c.renderMxv4Modal=()=>{};
+    results.children[0].click();
+    assert.equal(opened.p,'Archived persona');assert.equal(opened.options.searchResult,true);
+    assert.equal(c._mxv4.selectedAdId,'AD-hidden');assert.equal(filters.search,'AD-hidden');assert.equal(filters.dateRange,'all');
+    assert.equal(c.ADS.at(-1).status,'Winner');assert.equal(c.ADS.at(-1).persona,'Archived persona');
+    c.setMxv4CreativeSearch('');assert.equal(results.hidden,true);assert.equal(results.children.length,0);
+  });
+
+  test(`${file}: stale search callbacks cannot cross products or open removed assignments`, async () => {
+    const {context:c,results}=await setup(file);
+    c.ADS.push({id:'hidden',formatName:'Hidden winner'});c.CELL_CREATIVE_ASSIGNMENTS['A||Archived']=['hidden'];
+    c._mxv4BuildSearchIndex();c.setMxv4CreativeSearch('hidden winner');const click=results.children[0].click;
+    c._productSwitchPending=false;c.openMxv4Modal=()=>{throw Error('Stale result must not open');};
+    c.activeProductId='therapy';click();c.activeProductId='quilting';
+    c.CELL_CREATIVE_ASSIGNMENTS['A||Archived']=[];click();
+  });
+
+  test(`${file}: a task already found in a visible cell is not duplicated in hidden results`, async () => {
+    const {context:c,count,results}=await setup(file);
+    c.CELL_CREATIVE_ASSIGNMENTS['Hidden||Archived']=['AD-1'];c._mxv4BuildSearchIndex();c.setMxv4CreativeSearch('fabric choice');
+    assert.equal(count.textContent,'2 matching cells');assert.equal(results.hidden,true);
+  });
+
   test(`${file}: name and ID search highlights every assigned cell without rebuilding`, async () => {
     const { context: c, cells, count, jump } = await setup(file);
     c.setMxv4CreativeSearch('  FABRIC\t choice  ');
@@ -112,5 +149,7 @@ for (const file of files) {
     assert.match(html, /data-mx-search-key=/);
     assert.match(html, /el\.innerHTML = html;\s*_mxv4BuildSearchIndex\(\);\s*_mxv4ApplyCreativeSearch\(\);/);
     assert.match(html, /oninput="setMxv4CreativeSearch\(this\.value\)"/);
+    assert.match(html,/!\(options && options\.searchResult\) && typeof _mxv4LazyBackfillStatusHistory/);
+    assert.match(html,/_mxv4\.searchResultCell !== _mxv4\.cell && typeof _mxv4MaybeMigrateLocalSavedViews/);
   });
 }

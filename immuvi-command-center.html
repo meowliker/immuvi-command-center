@@ -8266,6 +8266,10 @@ button.mx-dt-action-sent .open { color:#0a84ff; font-weight:700; margin-left:4px
 .mxv4-creative-search input { box-sizing:border-box; width:240px; max-width:100%; min-width:0; height:32px; padding:6px 10px; border:1px solid var(--b); border-radius:6px; background:var(--card); color:var(--t1); font:inherit; font-size:12px; letter-spacing:0; }
 .mxv4-creative-search input:focus { outline:2px solid #0284c7; outline-offset:1px; }
 .mxv4-search-count { font-size:11px; color:var(--t2); }
+.mxv4-search-results { flex-basis:100%; max-height:220px; overflow:auto; min-width:0; }
+.mxv4-search-result { display:block; width:100%; padding:8px 4px; border:0; border-bottom:1px solid var(--b); background:transparent; color:var(--t1); text-align:left; cursor:pointer; overflow-wrap:anywhere; font:inherit; }
+.mxv4-search-result:hover, .mxv4-search-result:focus-visible { background:var(--bg); }
+.mxv4-search-result small { display:block; margin-top:3px; color:var(--t2); }
 .mxv4-search-jump { width:30px; height:30px; border:1px solid var(--b); border-radius:6px; background:var(--card); color:var(--t1); cursor:pointer; }
 .mxv4-search-jump:disabled { opacity:0.4; cursor:default; }
 #matrixGrid .mx-tg-cell.mx-search-match { background:#fff2a8; z-index:2; }
@@ -14771,7 +14775,7 @@ function _newTaxonomyId(kind, items) {
   return prefix + '-manual-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2);
 }
 
-function _ensureTaxonomyItem(kind, name, notes) {
+function _ensureTaxonomyItem(kind, name, notes, explicitAdd) {
   var list = kind === 'persona' ? PERSONAS : ANGLES;
   var clean = _canonicalTaxonomyName(name, list);
   if (!clean) return '';
@@ -14779,6 +14783,7 @@ function _ensureTaxonomyItem(kind, name, notes) {
     return item && _taxonomyLookupKey(item.name) === _taxonomyLookupKey(clean);
   });
   if (!exists) {
+    if (explicitAdd !== true) return '';
     _forgetTaxonomyDeletion(kind, activeProductId, clean);
     list.push({
       id: _newTaxonomyId(kind, list),
@@ -41492,7 +41497,7 @@ function renderMxv4Strip() {
 // ══════════════════════════════════════════════════════════════════
 
 // Search indexes actual cell membership once per render; input only updates highlights.
-var _mxv4CreativeSearch = { productId: null, query: '', index: Object.create(null), matches: [], next: 0 };
+var _mxv4CreativeSearch = { productId: null, query: '', index: Object.create(null), records: [], matches: [], next: 0 };
 
 function _mxv4SearchNormalize(value) {
   return String(value || '').toLowerCase().replace(/\s+/g, ' ').trim();
@@ -41501,7 +41506,7 @@ function _mxv4SearchNormalize(value) {
 function _mxv4SearchState() {
   var pid = activeProductId || '';
   if (_mxv4CreativeSearch.productId !== pid) {
-    _mxv4CreativeSearch = { productId: pid, query: '', index: Object.create(null), matches: [], next: 0 };
+    _mxv4CreativeSearch = { productId: pid, query: '', index: Object.create(null), records: [], matches: [], next: 0 };
   }
   return _mxv4CreativeSearch;
 }
@@ -41517,13 +41522,16 @@ function _mxv4BuildSearchIndex() {
     adsById[ad.id] = ad;
   });
   state.index = Object.create(null);
+  state.records = [];
   Object.keys(CELL_CREATIVE_ASSIGNMENTS || {}).forEach(function(key) {
     state.index[key] = (CELL_CREATIVE_ASSIGNMENTS[key] || []).map(function(id) {
       var ad = adsById[id];
       if (!ad) return '';
       var meta = MATRIX_CELL_META[id + '||' + key] || {};
-      return _mxv4SearchNormalize([id, ad.taskName, ad.formatName, ad.title,
+      var text = _mxv4SearchNormalize([id, ad.taskName, ad.formatName, ad.title,
         ad._clickupId, ad.clickupTaskId, meta.uniqueName].filter(Boolean).join(' '));
+      state.records.push({ id: id, key: key, text: text, title: ad.taskName || ad.formatName || id });
+      return text;
     }).filter(Boolean);
   });
 }
@@ -41545,9 +41553,35 @@ function _mxv4ApplyCreativeSearch() {
     if (match) state.matches.push(cell);
   });
   var count = document.getElementById('mxCreativeSearchCount');
+  var visibleKeys = state.matches.map(function(cell) { return cell.getAttribute('data-mx-search-key'); });
+  var visibleIds = Object.create(null);
+  state.records.forEach(function(record) { if (visibleKeys.indexOf(record.key) !== -1 && terms.every(function(term) { return record.text.indexOf(term) !== -1; })) visibleIds[record.id] = true; });
+  var seen = Object.create(null);
+  var outside = terms.length ? state.records.filter(function(record) {
+    if (seen[record.id] || visibleIds[record.id] ||
+        !terms.every(function(term) { return record.text.indexOf(term) !== -1; })) return false;
+    seen[record.id] = true;
+    return true;
+  }) : [];
   if (count) count.textContent = query
-    ? (state.matches.length ? state.matches.length + ' matching cell' + (state.matches.length === 1 ? '' : 's') : 'No matching cells')
+    ? ([state.matches.length ? state.matches.length + ' matching cell' + (state.matches.length === 1 ? '' : 's') : '',
+        outside.length ? outside.length + ' task' + (outside.length === 1 ? '' : 's') + ' outside visible matrix' : ''].filter(Boolean).join(' · ') || 'No matching cells')
     : '';
+  var results = document.getElementById('mxCreativeSearchResults');
+  if (results) {
+    results.replaceChildren();
+    results.hidden = outside.length === 0;
+    outside.forEach(function(record) {
+      var button = document.createElement('button');
+      button.type = 'button'; button.className = 'mxv4-search-result';
+      button.textContent = record.title;
+      button.setAttribute('aria-label', 'Open existing cell for ' + record.title);
+      var detail = document.createElement('small'); detail.textContent = record.key.split('||').join(' / ');
+      button.appendChild(detail);
+      button.addEventListener('click', function() { _mxv4OpenSearchResult(record.id, record.key, state.productId); });
+      results.appendChild(button);
+    });
+  }
   var jump = document.getElementById('mxCreativeSearchJump');
   if (jump) jump.disabled = state.matches.length === 0;
   var clear = document.getElementById('mxCreativeSearchClear');
@@ -41557,6 +41591,22 @@ function _mxv4ApplyCreativeSearch() {
 function setMxv4CreativeSearch(value) {
   _mxv4SearchState().query = String(value || '');
   _mxv4ApplyCreativeSearch();
+}
+
+function _mxv4OpenSearchResult(id, key, productId) {
+  if (activeProductId !== productId || _productSwitchPending) return;
+  var ad = (ADS || []).find(function(item) { return item && item.id === id; });
+  if (!ad || ad.deletedAt || ad.deleted_at || !_adPassesProductBoundaryForTaxonomy(ad, productId) ||
+      ((ad.product_id || ad.productId || ad._syncProductId) && (ad.product_id || ad.productId || ad._syncProductId) !== productId) ||
+      (CELL_CREATIVE_ASSIGNMENTS[key] || []).indexOf(id) === -1) return;
+  var parts = key.split('||');
+  if (parts.length !== 2) return;
+  _mxv4.searchResultCell = key;
+  if (_mxv4.cell !== key) openMxv4Modal(parts[0], parts[1], { searchResult: true });
+  var filters = _mxv4GetCellFilters();
+  Object.assign(filters, { search: id, statuses: [], funnels: [], types: [], sources: [], dateRange: 'all', dateFrom: null, dateTo: null });
+  _mxv4.selectedAdId = id;
+  renderMxv4Modal();
 }
 
 function _mxv4ClearCreativeSearch() {
@@ -41586,6 +41636,7 @@ function renderMxv4Filters() {
   html += '<button id="mxCreativeSearchJump" class="mxv4-search-jump" type="button" title="Go to next matching cell" aria-label="Go to next matching cell" onclick="_mxv4NextSearchMatch()" disabled>&darr;</button>';
   html += '<button id="mxCreativeSearchClear" class="mxv4-search-jump" type="button" title="Clear creative search" aria-label="Clear creative search" onclick="_mxv4ClearCreativeSearch()" disabled>&times;</button>';
   html += '<span id="mxCreativeSearchCount" class="mxv4-search-count" role="status" aria-live="polite"></span>';
+  html += '<div id="mxCreativeSearchResults" class="mxv4-search-results" hidden></div>';
   html += '</div>';
 
   // ═════ GROUP 1 — FILTER (source / funnel / type) ═════
@@ -42547,16 +42598,17 @@ function refreshAllStatusTimestamps() {
   step();
 }
 
-function openMxv4Modal(angleName, personaName) {
+function openMxv4Modal(angleName, personaName, options) {
   _mxv4EnsureModal();
   // Hide hover card if open (avoid duplicate UI)
   if (typeof _mxv4HideHoverCard === 'function') { _mxv4CancelHoverShow(); _mxv4HideHoverCard(); }
   var cellKey = angleName + '||' + personaName;
   if (_mxv4.cell === cellKey) { closeMxv4Modal(); return; }
   _mxv4.cell = cellKey;
+  _mxv4.searchResultCell = options && options.searchResult ? cellKey : null;
   _mxv4.tab = 'creatives';
   // Pick first creative as default selection in master-detail
-  var st = _mxv4ClassifyCell(angleName, personaName);
+  var st = _mxv4ClassifyCell(angleName, personaName, { lifetime: _mxv4.searchResultCell === cellKey });
   _mxv4.selectedAdId = st.ads.length > 0 ? st.ads[0].id : null;
   _mxv4.replicateOpen = false;
   _mxv4.addSelected = {};
@@ -42590,7 +42642,7 @@ function openMxv4Modal(angleName, personaName) {
   // (only the migration-baseline updated_at), fetch their ClickUp
   // status_history once and stamp the exact transition timestamp.
   // Throttled, fire-and-forget — never blocks the modal open.
-  if (typeof _mxv4LazyBackfillStatusHistory === 'function') {
+  if (!(options && options.searchResult) && typeof _mxv4LazyBackfillStatusHistory === 'function') {
     setTimeout(function () { _mxv4LazyBackfillStatusHistory(st.ads); }, 250);
   }
 }
@@ -42601,6 +42653,7 @@ function closeMxv4Modal() {
   if (bd) bd.classList.remove('open');
   if (m)  m.classList.remove('open');
   _mxv4.cell = null;
+  _mxv4.searchResultCell = null;
   _mxv4.selectedAdId = null;
   matrixExpandedCell = null;
   document.body.style.overflow = '';
@@ -42621,7 +42674,7 @@ function renderMxv4Modal() {
   // (e.g. fresh boot, or just-switched product).
   try {
     if (typeof _mxv4HydrateSavedViewsFromProduct === 'function') _mxv4HydrateSavedViewsFromProduct();
-    if (typeof _mxv4MaybeMigrateLocalSavedViews === 'function') _mxv4MaybeMigrateLocalSavedViews();
+    if (_mxv4.searchResultCell !== _mxv4.cell && typeof _mxv4MaybeMigrateLocalSavedViews === 'function') _mxv4MaybeMigrateLocalSavedViews();
   } catch (e) {}
   var parts = _mxv4.cell.split('||');
   var angleName = parts[0], personaName = parts[1];
@@ -42629,7 +42682,7 @@ function renderMxv4Modal() {
   // so a local-push + peer-broadcast race can never show the same creative
   // twice in the modal table.
   if (typeof _dedupCellAssignment === 'function') _dedupCellAssignment(_mxv4.cell);
-  var st = _mxv4ClassifyCell(angleName, personaName);
+  var st = _mxv4ClassifyCell(angleName, personaName, { lifetime: _mxv4.searchResultCell === _mxv4.cell });
 
   var html = '';
 
@@ -43277,6 +43330,11 @@ function saveMxv4CreativeTaxonomy(adId, fromAngle, fromPersona) {
   var ad = (ADS || []).find(function(x) { return x && x.id === adId; });
   if (!ad) { toast('Creative not found', 'err'); return; }
   var draft = (_mxv4.taxonomyDrafts && _mxv4.taxonomyDrafts[adId]) || {};
+  if (!_taxonomyItemIsActive('angle', draft.angle || ad.angle || fromAngle, false) ||
+      !_taxonomyItemIsActive('persona', draft.persona || ad.persona || fromPersona, false)) {
+    toast('Choose existing active categories. New categories must be added separately.', 'warn');
+    return;
+  }
   var nextAngle = _ensureTaxonomyItem('angle', draft.angle || ad.angle || fromAngle || '', 'Added from matrix cell retag');
   var nextPersona = _ensureTaxonomyItem('persona', draft.persona || ad.persona || fromPersona || '', 'Added from matrix cell retag');
   if (!nextAngle || !nextPersona) { toast('Choose both angle and persona', 'warn'); return; }
@@ -46762,7 +46820,7 @@ function addInspoToCell(insId, angleName, personaName) {
   var ins = INSPIRATIONS.find(function(i) { return i.id === insId; });
   if (!ins) { toast('Inspiration not found', 'error'); return; }
 
-  // New product categories require a separate confirmation before placement.
+  // Placement never creates or restores product categories.
   var cell = _prepareInspirationCell(ins, angleName, personaName);
   if (!cell) return;
   angleName = cell.angle;
@@ -46870,27 +46928,20 @@ function addInspoToCell(insId, angleName, personaName) {
 function _prepareInspirationCell(ins, angleName, personaName) {
   var names = {angle: _normalizeTaxonomyName(angleName), persona: _normalizeTaxonomyName(personaName)};
   var kinds = ['angle', 'persona'];
-  var additions = [];
   // Validate both before creating either; never silently restore an archive.
   for (var i = 0; i < kinds.length; i++) {
     var kind = kinds[i], name = names[kind];
     var list = kind === 'angle' ? ANGLES : PERSONAS;
     var existing = list.find(function(item) { return _taxonomyLookupKey(item.name) === _taxonomyLookupKey(name); });
-    if (!name || _isBoundaryQuarantinedTaxonomy(kind, name) ||
+    if (!name || !existing || _isBoundaryQuarantinedTaxonomy(kind, name) ||
         _isTaxonomyTombstoned(kind, activeProductId, name) ||
         (existing && !_taxonomyItemIsActive(kind, name, false))) {
-      toast('Choose an active ' + kind + ' before placing this inspiration.', 'warn');
+      toast('Choose an existing active ' + kind + '. New categories must be added separately.', 'warn');
       return null;
     }
-    if (!existing) additions.push((kind === 'angle' ? 'Angle: ' : 'Persona: ') + name);
-  }
-  if (additions.length) {
-    var product = typeof getActiveProduct === 'function' ? getActiveProduct() : null;
-    if (!confirm('Add new categories to ' + ((product && product.name) || activeProductId) + '?\n\n' +
-        additions.join('\n') + '\n\nThese will become active product-wide categories.')) return null;
   }
   kinds.forEach(function(kind) {
-    names[kind] = _ensureTaxonomyItem(kind, names[kind], 'Added by placing inspiration ' + ins.id + ' into the matrix');
+    names[kind] = _canonicalTaxonomyName(names[kind], kind === 'angle' ? ANGLES : PERSONAS);
     if (_taxonomyLookupKey(ins[kind]) === _taxonomyLookupKey(names[kind])) {
       ins[kind] = names[kind];
       ins['_' + kind + 'Scope'] = 'product';
@@ -48158,12 +48209,13 @@ function updateInsField(id, field, value) {
   if (!ins) return;
   var touchedTaxonomy = false;
   if (field === 'angle' || field === 'persona') {
+    var explicitCategoryAdd = value === '__custom__';
     if (value === '__custom__') {
       var entered = prompt('Add ' + field + ' name:', ins[field] && ins[field] !== '__custom__' ? ins[field] : '');
       if (entered === null) { renderInspirations(); return; }
       value = entered.trim();
     }
-    value = _ensureTaxonomyItem(field, value, 'Manually added from inspiration');
+    value = _ensureTaxonomyItem(field, value, 'Manually added from inspiration', explicitCategoryAdd);
     if (!value) { renderInspirations(); return; }
     ins['_' + field + 'Scope'] = 'product';
     ins['_' + field + 'Locked'] = true;

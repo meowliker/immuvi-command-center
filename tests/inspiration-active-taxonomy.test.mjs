@@ -26,9 +26,12 @@ for (const file of ['immuvi-command-center.html', 'public/immuvi-command-center.
     return context;
   }
 
-  test(file + ': explicit placement registers missing angle once and adopts inspiration scope', () => {
+  test(file + ': only separate explicit category creation permits later placement', () => {
     const c = setup();
     const ins = {id:'Q-INS-064',angle:'Preserve baby-clothes memories',persona:'Baby cloth Quilters',_angleScope:'inspiration'};
+    assert.equal(c._prepareInspirationCell(ins, ins.angle, ins.persona),null);
+    assert.equal(c._ensureTaxonomyItem('angle',ins.angle,'Implicit'), '');
+    assert.equal(c._ensureTaxonomyItem('angle',ins.angle,'Explicit add',true),ins.angle);
     const cell = c._prepareInspirationCell(ins, ins.angle, ins.persona);
     assert.equal(cell.angle, ins.angle);
     assert.equal(ins._angleScope, 'product');
@@ -37,20 +40,35 @@ for (const file of ['immuvi-command-center.html', 'public/immuvi-command-center.
     c._prepareInspirationCell(ins, ins.angle.toUpperCase(), ins.persona);
     assert.equal(c.ANGLES.length, 3);
     assert.equal(c.PERSONAS.length, 2);
-    assert.equal(c.confirmations.length,1);
-    assert.match(c.confirmations[0],/Angle: Preserve baby-clothes memories/);
+    assert.equal(c.confirmations.length,0);
   });
 
-  test(file + ': declining new categories leaves both taxonomy and inspiration untouched in every product', () => {
+  test(file + ': placement cannot create new categories in any product', () => {
     for (const product of ['astro-rekha','quilting','other-product']) {
       const c = setup();c.activeProductId=product;
-      let prompt;c.confirm=message=>{prompt=message;return false;};
+      c.confirm=()=>{throw Error('Placement must not offer category creation');};
       const ins={id:'TEST-INS-1',angle:'New angle',persona:'New persona',_angleScope:'inspiration',_personaScope:'inspiration'};
       const before=JSON.stringify([c.ANGLES,c.PERSONAS,ins]);
       assert.equal(c._prepareInspirationCell(ins,ins.angle,ins.persona),null);
       assert.equal(JSON.stringify([c.ANGLES,c.PERSONAS,ins]),before);
-      assert.ok(prompt.includes(product));assert.match(prompt,/Angle: New angle\nPersona: New persona/);
     }
+  });
+
+  test(file + ': inline custom Add remains explicit while unknown selection cannot promote taxonomy', () => {
+    const c=setup();c.INSPIRATIONS=[{id:'i',persona:'Baby cloth Quilters'}];c._insSaveTs=0;
+    let saves=0;c.saveState=()=>saves++;c.saveInspirations=()=>{};c.renderInspirations=()=>{};c.prompt=()=> 'Explicit new persona';
+    const start=html.indexOf('function updateInsField(');vm.runInContext(html.slice(start,html.indexOf('\n}',start)+2),c);
+    c.updateInsField('i','persona','Implicit unknown');assert.equal(c.PERSONAS.length,2);assert.equal(saves,0);
+    c.updateInsField('i','persona','__custom__');assert.equal(c.PERSONAS.length,3);assert.equal(saves,1);
+    assert.equal(c.PERSONAS.at(-1).name,'Explicit new persona');assert.equal(c.PERSONAS.at(-1)._localNew,true);
+  });
+
+  test(file + ': retag cannot create a missing category or partially alter the creative', () => {
+    const c=setup();c.ADS=[{id:'winner',angle:'Existing',persona:'Baby cloth Quilters',status:'Winner'}];
+    c._mxv4={taxonomyDrafts:{winner:{angle:'Existing',persona:'Unknown persona'}}};
+    const start=html.indexOf('function saveMxv4CreativeTaxonomy(');vm.runInContext(html.slice(start,html.indexOf('\n}',start)+2),c);
+    const before=JSON.stringify([c.ADS,c.ANGLES,c.PERSONAS]);c.saveMxv4CreativeTaxonomy('winner','Existing','Baby cloth Quilters');
+    assert.equal(JSON.stringify([c.ADS,c.ANGLES,c.PERSONAS]),before);
   });
 
   test(file + ': existing category placement needs no new-category confirmation', () => {
@@ -72,13 +90,12 @@ for (const file of ['immuvi-command-center.html', 'public/immuvi-command-center.
     assert.equal(JSON.stringify([c.ANGLES,c.PERSONAS,c.INSPIRATIONS,c.ADS,c.CELL_CREATIVE_ASSIGNMENTS]),before);
   });
 
-  test(file + ': approving two new categories prompts once before adopting either', () => {
-    const c=setup();let prompts=0;
-    c.confirm=()=>{prompts++;assert.equal(c.ANGLES.length,2);assert.equal(c.PERSONAS.length,2);return true;};
+  test(file + ': a blanket confirmation cannot approve missing placement categories', () => {
+    const c=setup();c.confirm=()=>true;
     const ins={id:'TEST-INS-1',angle:'New angle',persona:'New persona'};
-    assert.ok(c._prepareInspirationCell(ins,ins.angle,ins.persona));
-    assert.equal(prompts,1);assert.equal(c.ANGLES.length,3);assert.equal(c.PERSONAS.length,3);
-    assert.equal(ins._angleScope,'product');assert.equal(ins._personaScope,'product');
+    assert.equal(c._prepareInspirationCell(ins,ins.angle,ins.persona),null);
+    assert.equal(c.ANGLES.length,2);assert.equal(c.PERSONAS.length,2);
+    assert.equal(ins._angleScope,undefined);assert.equal(ins._personaScope,undefined);
   });
 
   test(file + ': invalid or archived placement cannot partially create categories', () => {

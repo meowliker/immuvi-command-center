@@ -57,3 +57,12 @@ test('database guard is additive, preserves stale-upsert archives and rejects pr
   assert.match(sql,/RAISE SQLSTATE 'PT409'/);
   assert.doesNotMatch(sql,/40001|DELETE FROM|TRUNCATE|DROP TABLE|UPDATE public\.(ads|inspirations|matrix_cells)/i);
 });
+
+test('database guard archives legacy placement inserts without rewriting existing categories or tasks',()=>{
+  const sql=readFileSync(new URL('../supabase/migrations/20261022000100_block_placement_taxonomy.sql',import.meta.url),'utf8');
+  assert.match(sql,/ELSIF NEW\.notes LIKE 'Added by placing inspiration % into the matrix' THEN\s*NEW\.creation_approved := false/);
+  assert.match(sql,/NEW\.creation_approved := existing\.creation_approved/);
+  assert.match(sql,/NEW\.archived_at := existing\.archived_at/);
+  assert.match(sql,/NEW\.archived_at := coalesce\(NEW\.archived_at, now\(\)\)/);
+  assert.doesNotMatch(sql,/DISABLE TRIGGER|DELETE FROM|TRUNCATE|ALTER TABLE|UPDATE public\./i);
+});

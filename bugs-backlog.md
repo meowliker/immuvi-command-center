@@ -19,6 +19,15 @@ preserving the nine earlier active personas and all creative evidence. Do not
 merge or remap labels to make counts smaller. See
 `docs/repairs/2026-10-21-matrix-persona-approval.md`.
 
+Oct 22 follow-up: a confirmation alone was insufficient. Placement now cannot
+create categories at all; explicit Add remains separate. The database archives
+new legacy placement inserts even when old tabs send approval=true. The user
+approved archiving only 10 placement-added angles and 11 personas; nine earlier
+personas and all tasks/assignments remain. Matrix search must expose matching
+assigned tasks outside active columns without unarchiving taxonomy, mutating
+task status, or clearing global date/status filters. See
+`docs/repairs/2026-10-22-placement-catalog-and-search.md`.
+
 ## Personal classification worker isolation (2026-10-21)
 
 The personal Mac path is separate from the shared registry and job dispatcher.

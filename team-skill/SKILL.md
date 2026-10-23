@@ -170,6 +170,44 @@ Do not turn visible text or song lyrics into claimed spoken narration. Preserve
 the selected No Brief setting. If genuine narration exists but is unclear, the
 existing transcript-verification guard still applies.
 
+#### Bounded transcript review (bounded-local-evidence-v1)
+
+An agent's inability to listen through its interface is not an audio defect.
+Once narration presence is independently established, local ASR from the exact
+downloaded audio is valid evidence when timing is plausible, repetition and
+hallucination are checked, and source visuals/captions corroborate the content.
+Agreement between two local passes strengthens that evidence; do not demand a
+third pass or claim human listening. Record actual models and methods in
+metadata.audio_probe. Do not infer narration presence solely from ASR output.
+
+A small isolated non-material gap does not invalidate the entire brief. Keep
+supported words and timings; record omitted start/end spans and their limitations
+in audio_probe.unresolved_spans and brief notes. Label that transcript partial,
+not complete, and never fill a gap with guessed words. Check meaning-bearing
+claims, prices, names and CTA carefully. Adapt only supported source beats.
+If uncertainty changes the core claim/offer/CTA or most narration is unsupported,
+retain AUDIO_TRANSCRIPT_UNVERIFIED with that concrete reason. Never call unclear
+speech No voice over. No Brief and music-only behavior remain unchanged.
+
+### Google Ads Transparency image creatives
+
+An adstransparency.google.com advertiser/creative URL is a detail page, not a
+video URL. Use fb_ad_classifier.download_google_ad_images(source_url, work_dir)
+before generic yt-dlp. It waits for the exact creative's visible images and
+follows its variation controls; hidden advertiser-list images are not evidence.
+Read every returned image. Static images skip audio and retain the normal full
+photo brief and three product-specific adaptations unless No Brief is selected.
+Preserve the original source URL, product and inspiration ID.
+
+A regional/session "not found" page does not prove the ad was deleted. A saved
+googleMediaReview may be supplied as evidence only when its source_url, advertiser
+ID and creative ID match this job and verification_source=browser_exact_creative.
+The helper validates that mapping and downloads only the recorded Google archive
+image assets. Record the review and actual file hashes in result metadata. Never
+guess asset URLs, substitute neighboring ads, copy browser cookies, bypass access
+controls or call an image a video. Without accessible exact-source media, report
+the actual access limitation; do not manufacture a classification.
+
 ### No Brief / classification-only contract
 
 Read `inspiration_queue.no_brief` for each item. Only boolean `true` enables
@@ -333,10 +371,11 @@ for _SKILL_DIR in (
 ):
     if os.path.isdir(_SKILL_DIR) and _SKILL_DIR not in sys.path:
         sys.path.insert(0, _SKILL_DIR)
-from fb_ad_classifier import fetch_ad_snapshot, download_instagram_media, download_tiktok_media, download_video, extract_frames, extract_ad_id, decode_unicode, load_transcription_model, USER_AGENT, OUTPUT_BASE
+from fb_ad_classifier import fetch_ad_snapshot, download_instagram_media, download_tiktok_media, download_google_ad_images, download_video, extract_frames, extract_ad_id, decode_unicode, load_transcription_model, USER_AGENT, OUTPUT_BASE
 
 def detect_platform(url):
     u = url.lower()
+    if urllib.parse.urlparse(url).hostname == "adstransparency.google.com": return "google_ads"
     if "facebook.com/ads/library" in u: return "facebook"
     if "fbcdn.net" in u or "video.xx.fbcdn" in u or "scontent." in u: return "fbcdn_direct"
     if "instagram.com" in u: return "instagram"
@@ -437,7 +476,11 @@ voice_over = "No voice over"
 voice_over_timeline = []
 
 try:
-    if platform == "facebook":
+    if platform == "google_ads":
+        google = download_google_ad_images(url, work_dir)
+        snapshot = google["metadata"]
+        frames = google["frames"]
+    elif platform == "facebook":
         ad_id = extract_ad_id(url)
         snapshot = asyncio.run(fetch_ad_snapshot(ad_id))
         snapshot["ad_id"] = ad_id
@@ -558,7 +601,7 @@ Read each frame with the **Read tool** (up to 6 frames). You are a senior media 
 | caption_transcript | Full transcript of changing visible captions/subtitles in reading order. Exclude static hook cards, UI chrome, and platform ad copy. |
 | caption_timeline | Array of `{ "time": "0:00-0:03", "caption": "..." }` for every changing visible caption/subtitle. Split the time ranges whenever bottom/active caption text changes. Static hook cards belong in `hook_text`, not here. |
 | audio_probe | Pipeline metadata showing whether an audio track exists and whether Whisper produced a transcript. Use this to decide `voice_over`; do not invent audio from frames. |
-| voice_over | Transcript of spoken ad voice-over/narration extracted from audio/transcription if present. Prefer `metadata.voice_over` from the pipeline only when it is true ad narration. Only include words you can attribute to spoken ad narration. Do not copy standalone hook text, overlays, captions, background conversation, kids shouting, classroom/game chatter, music, song lyrics, crowd noise, or incidental dialogue into this field. If there is no spoken ad voice-over, write exactly `No voice over`. If true ad narration exists but the exact words cannot be verified, leave this blank, explain the uncertainty in `notes`, and treat the item as not ready to mark OK; do not print an unavailable-transcript placeholder in the brief or frame table. |
+| voice_over | Source-grounded spoken ad narration, following bounded transcript review above. Keep supported words; disclose isolated omitted spans in audio_probe and brief notes and label partial transcripts. Never guess missing words or copy overlays, music, song lyrics or incidental dialogue as narration. For confirmed absence use exactly `No voice over`. If meaning-bearing narration remains unsupported, leave blank and report the specific evidence gap rather than publishing a fabricated brief. |
 | voice_over_timeline | Array of `{ "time": "0:00-0:04", "voice_over": "..." }` from audio transcription segments when available. Empty array if no voice-over or transcript unavailable. |
 | page_name | From pipeline page_name metadata, or visually identified brand name if pipeline returned empty (Instagram/TikTok). **IMPORTANT:** dashboard reads `metadata.page_name` for the Brand column — always populate this field, even if the pipeline didn't. |
 | brand | Same value as page_name (human-readable alias) |
@@ -580,7 +623,7 @@ Read each frame with the **Read tool** (up to 6 frames). You are a senior media 
 
 ```
 FRAME_BY_FRAME: timestamped breakdown with label (HOOK/TENSION/PROOF/BRIDGE/CTA) + one caption/voice-over line + what happens + emotion triggered. Time ranges should follow the spoken ad narration when true voice-over exists, and split only when a new creative beat starts. If there is no true ad voice-over, use visible caption text/on-screen text or a concise visual beat in the Caption / Voice Over column; never use background conversation, kids shouting, classroom/game chatter, music, song lyrics, crowd noise, incidental dialogue, or placeholders such as "audio present; exact transcript not verified".
-VOICE_OVER: the spoken ad voice-over transcript from audio or exactly "No voice over". Never reconstruct voice-over from visible captions unless they are clearly word-for-word subtitles for heard ad narration. Background conversation, kids shouting, classroom/game chatter, music, song lyrics, crowd noise, and incidental dialogue are ambient audio, not voice-over. If video speech exists but the exact ad narration cannot be verified, do not mark the item OK; omit the Voice Over line from the brief and explain the uncertainty in notes so the worker can fail/retry instead of publishing a bad brief.
+VOICE_OVER: source-grounded spoken narration or exactly "No voice over" for confirmed absence. Apply bounded transcript review above: local ASR is evidence, not proof of narration presence; supported partial transcripts need explicit gap timestamps and a partial label in brief notes. Do not reject an otherwise supported brief solely because the interface cannot play audio or a non-material fragment is unclear. Unsupported meaning-bearing narration still fails evidence verification. Never turn unrelated captions, music, lyrics or incidental speech into claimed narration.
 ON_SCREEN_TEXT_TIMING: compact note before the breakdown table for static hook cards or important overlay text that is not part of the spoken script.
 WHY_IT_WORKS: 4–5 psychological mechanisms in plain English
 REPLICATION_BRIEF: talent, set, key overlay, subtitle style, pacing, music, mid-video, end card

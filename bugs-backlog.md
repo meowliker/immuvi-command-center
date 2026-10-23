@@ -7,6 +7,24 @@ Status legend: 🆕 just-flagged · 📐 plan-locked · 🛠 in-progress · ✅ 
 
 ---
 
+## Source access and overly strict transcript review (2026-10-23)
+
+Audio review must not require a text-only agent to claim independent human
+listening. Exact-source local ASR, established narration presence, timing and
+corroboration support transcription; isolated non-material gaps are disclosed
+with timestamps, never guessed. Meaning-bearing uncertainty, hallucinations,
+music-only handling, No Brief and local-only analysis safeguards remain.
+
+Google Ads Transparency image details are not yt-dlp video URLs. Read only
+visible images owned by the exact advertiser/creative and its variations.
+Session/regional not-found responses are access limitations, not proof of
+deletion. Saved browser evidence must match the exact product/inspiration/source;
+only validated Google archive image URLs may be downloaded, with actual hashes.
+Do not copy browser credentials, substitute neighboring ads, change original
+URLs, create taxonomy, or duplicate briefs. Recovery requires a fresh worker
+source_evidence_revision of bounded-local-google-images-v1, a private backup,
+exact-row retry and independent result/brief readback. Deployment is not recovery.
+
 ## Shared worker rejects inherited Codex model (2026-10-22)
 
 An unsupported-model startup error consumed content retries before media

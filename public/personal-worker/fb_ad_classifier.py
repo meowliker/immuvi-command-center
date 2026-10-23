@@ -24,6 +24,7 @@ Requirements:
 
 import asyncio
 import html as _html
+import hashlib
 import json
 import os
 import re
@@ -49,6 +50,99 @@ USER_AGENT = (
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
+def google_ad_identity(url):
+    source = urllib.parse.urlparse(url)
+    match = re.fullmatch(r"/advertiser/(AR\d+)/creative/(CR\d+)/?", source.path)
+    if (source.scheme != "https" or source.hostname != "adstransparency.google.com"
+            or source.username or source.password or source.port not in (None, 443) or not match):
+        raise ValueError("Expected an exact Google Ads Transparency creative URL")
+    return match[1], match[2]
+
+
+def validate_google_image_evidence(url, evidence):
+    advertiser, creative = google_ad_identity(url)
+    assets = evidence.get("image_urls") if isinstance(evidence, dict) else None
+    if (not isinstance(evidence, dict) or evidence.get("source_url") != url
+            or evidence.get("advertiser_id") != advertiser or evidence.get("creative_id") != creative
+            or evidence.get("verification_source") != "browser_exact_creative"
+            or not isinstance(assets, list) or not 1 <= len(assets) <= 10
+            or any(not isinstance(asset, str) or not re.fullmatch(
+                r"https://tpc\.googlesyndication\.com/archive/simgad/\d+", asset) for asset in assets)):
+        raise ValueError("Google image evidence must belong to the exact source creative")
+    return list(dict.fromkeys(assets))
+
+
+async def _google_image_evidence(url):
+    """Read only displayed creative images, never hidden advertiser thumbnails."""
+    from playwright.async_api import async_playwright
+    advertiser, creative = google_ad_identity(url)
+    async with async_playwright() as p:
+        browser = await p.chromium.launch(headless=True)
+        try:
+            page = await browser.new_page(locale="en-US")
+            await page.goto(url, wait_until="domcontentloaded", timeout=45000)
+            images = page.locator('creative html-renderer img[src*="/archive/simgad/"]:visible')
+            try:
+                await images.first.wait_for(state="visible", timeout=20000)
+            except Exception as error:
+                raise RuntimeError("GOOGLE_AD_ACCESS_UNAVAILABLE: exact creative images did not render in this browser session; this does not prove the ad was deleted") from error
+            if google_ad_identity(page.url) != (advertiser, creative):
+                raise RuntimeError("Google navigated away from the exact creative")
+            assets = []
+            for _ in range(10):
+                if google_ad_identity(page.url) != (advertiser, creative):
+                    raise RuntimeError("Google variation navigated away from the exact creative")
+                current = await images.evaluate_all("els => els.map(e => e.getAttribute('src'))")
+                if not current or any(asset in assets for asset in current):
+                    raise RuntimeError("Google variation did not resolve to new exact-source images")
+                assets.extend(current)
+                next_button = page.get_by_role("button", name="Next variation", exact=True)
+                if not await next_button.count() or not await next_button.is_enabled():
+                    break
+                await next_button.click()
+                await page.wait_for_function("old => Array.from(document.querySelectorAll('creative html-renderer img')).some(e => e.getBoundingClientRect().width > 0 && !old.includes(e.getAttribute('src')))", arg=assets, timeout=10000)
+            else:
+                raise RuntimeError("Google creative has more variations than the safe inspection limit")
+            return {"source_url": url, "advertiser_id": advertiser, "creative_id": creative,
+                    "verification_source": "browser_exact_creative", "image_urls": assets}
+        finally:
+            await browser.close()
+
+
+def download_google_ad_images(url, outdir, evidence=None):
+    """Download exact detail-page image variations, optionally from a saved review."""
+    google_ad_identity(url)
+    evidence = evidence if evidence is not None else asyncio.run(_google_image_evidence(url))
+    assets = validate_google_image_evidence(url, evidence)
+    os.makedirs(outdir, exist_ok=True)
+    frames, hashes = [], []
+    for index, asset in enumerate(assets, 1):
+        request = urllib.request.Request(asset, headers={"User-Agent": USER_AGENT})
+        # These archive assets are direct URLs. Do not follow redirects to an unvalidated host.
+        class NoRedirect(urllib.request.HTTPRedirectHandler):
+            def redirect_request(self, req, fp, code, msg, headers, newurl):
+                return None
+        with urllib.request.build_opener(NoRedirect).open(request, timeout=30) as response:
+            body = response.read(20 * 1024 * 1024 + 1)
+        if len(body) > 20 * 1024 * 1024:
+            raise ValueError("Google creative image exceeds the download limit")
+        if body.startswith(b"\xff\xd8\xff"):
+            extension = "jpg"
+        elif body.startswith(b"\x89PNG\r\n\x1a\n"):
+            extension = "png"
+        elif body[:4] == b"RIFF" and body[8:12] == b"WEBP":
+            extension = "webp"
+        else:
+            raise ValueError("Google creative asset is not a supported image")
+        path = os.path.join(outdir, f"frame_{index:03d}.{extension}")
+        Path(path).write_bytes(body)
+        frames.append(path)
+        hashes.append(hashlib.sha256(body).hexdigest())
+    return {"frames": frames, "duration": 0, "via": "google-exact-image",
+            "metadata": {"google_media_review": evidence, "source_url": url,
+                         "media_kind": "image", "source_asset_sha256": hashes}}
+
+
 def load_transcription_model(model_name: str):
     """Retry a damaged shared model cache once in an isolated download directory."""
     import whisper

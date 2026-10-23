@@ -46811,8 +46811,8 @@ function filterInspoModal() {
 // ================================================
 function toggleInspoInCell(checkbox, insId, angleName, personaName) {
   if (checkbox.checked) {
-    addInspoToCell(insId, angleName, personaName);
-    checkbox.style.accentColor = 'var(--win)';
+    checkbox.checked = !!addInspoToCell(insId, angleName, personaName);
+    checkbox.style.accentColor = checkbox.checked ? 'var(--win)' : '';
   } else {
     removeInspoFromCell(insId, angleName, personaName);
     checkbox.style.accentColor = '';
@@ -46823,17 +46823,21 @@ function toggleInspoInCell(checkbox, insId, angleName, personaName) {
 // addInspoToCell — create new AD from inspo + assign to cell
 // ================================================
 function addInspoToCell(insId, angleName, personaName) {
+  if (!activeProductId || _productSwitchPending || _inspirationsProductId !== activeProductId) {
+    toast('Wait for this product to finish loading before placing an inspiration.', 'warn');
+    return null;
+  }
   var ins = INSPIRATIONS.find(function(i) { return i.id === insId; });
   if (!ins) { toast('Inspiration not found', 'error'); return; }
 
-  // Placement never creates or restores product categories.
+  // New categories require explicit approval; imports and archives stay protected.
   var cell = _prepareInspirationCell(ins, angleName, personaName);
   if (!cell) return;
   angleName = cell.angle;
   personaName = cell.persona;
 
   // Check if already added in this cell
-  var alreadyExists = ADS.some(function(a) {
+  var alreadyExists = ADS.find(function(a) {
     return a._fromInspoId === insId && a.angle === angleName && a.persona === personaName;
   });
   if (alreadyExists) {
@@ -46841,7 +46845,7 @@ function addInspoToCell(insId, angleName, personaName) {
     saveInspirations();
     renderAll();
     toast('Already in this cell', 'warn');
-    return;
+    return alreadyExists.id;
   }
 
   // Generate unique task name: AR-044-INS-007
@@ -46926,6 +46930,7 @@ function addInspoToCell(insId, angleName, personaName) {
   if (typeof _broadcastAdAdded === 'function') _broadcastAdAdded(newAd, _addInspoCellKey);
 
   toast(newAd.id + ' added to ' + angleName + ' \u00D7 ' + personaName + ' from ' + insId, 'ok');
+  return newAd.id;
 }
 
 // ================================================
@@ -46934,17 +46939,31 @@ function addInspoToCell(insId, angleName, personaName) {
 function _prepareInspirationCell(ins, angleName, personaName) {
   var names = {angle: _normalizeTaxonomyName(angleName), persona: _normalizeTaxonomyName(personaName)};
   var kinds = ['angle', 'persona'];
+  var missing = [];
+  var productId = activeProductId;
   // Validate both before creating either; never silently restore an archive.
   for (var i = 0; i < kinds.length; i++) {
     var kind = kinds[i], name = names[kind];
     var list = kind === 'angle' ? ANGLES : PERSONAS;
+    name = names[kind] = _canonicalTaxonomyName(name, list);
     var existing = list.find(function(item) { return _taxonomyLookupKey(item.name) === _taxonomyLookupKey(name); });
-    if (!name || !existing || _isBoundaryQuarantinedTaxonomy(kind, name) ||
+    if (!name || name.indexOf('||') !== -1 || _isBoundaryQuarantinedTaxonomy(kind, name) ||
         _isTaxonomyTombstoned(kind, activeProductId, name) ||
         (existing && !_taxonomyItemIsActive(kind, name, false))) {
-      toast('Choose an existing active ' + kind + '. New categories must be added separately.', 'warn');
+      toast('Choose a valid active ' + kind + '. Archived or deleted categories must be restored separately.', 'warn');
       return null;
     }
+    if (!existing) missing.push(kind);
+  }
+  if (missing.length) {
+    var product = typeof getActiveProduct === 'function' ? getActiveProduct() : null;
+    var productName = product && product.name || productId;
+    var additions = missing.map(function(kind) { return kind + ': ' + names[kind]; }).join('\n');
+    if (!confirm('Create these categories in ' + productName + ' and place ' + ins.id + ' in this cell?\n\n' + additions)) return null;
+    if (activeProductId !== productId) return null;
+    missing.forEach(function(kind) {
+      names[kind] = _ensureTaxonomyItem(kind, names[kind], 'Manually approved from inspiration ' + ins.id + ' for cell placement', true);
+    });
   }
   kinds.forEach(function(kind) {
     names[kind] = _canonicalTaxonomyName(names[kind], kind === 'angle' ? ANGLES : PERSONAS);
@@ -52838,8 +52857,7 @@ window._clearPendingCu = _clearPendingCu;
       try { toast('Placement function not available', 'err'); } catch(_) {}
       return;
     }
-    addInspoToCell(insId, ins.angle, ins.persona);
-    try { toast('Placed ' + (ins.formatName || insId) + ' in ' + ins.angle + ' × ' + ins.persona, 'ok'); } catch(_) {}
+    if (!addInspoToCell(insId, ins.angle, ins.persona)) return;
     // Re-render drawer so the Usage section updates
     setTimeout(function(){ var i = _findIns(insId); if (i) _insRenderDrawer(i); }, 200);
   };
@@ -52852,8 +52870,7 @@ window._clearPendingCu = _clearPendingCu;
       return;
     }
     if (typeof addInspoToCell !== 'function') return;
-    addInspoToCell(insId, a, p);
-    try { toast('Placed in ' + a + ' × ' + p, 'ok'); } catch(_) {}
+    if (!addInspoToCell(insId, a, p)) return;
     setTimeout(function(){ var i = _findIns(insId); if (i) _insRenderDrawer(i); }, 200);
   };
 

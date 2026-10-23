@@ -18,7 +18,7 @@ export async function testPlacementTaxonomyGuard(tx) {
         values($1,$2,$1,'Untested',true,null) on conflict(id) do update set creation_approved=excluded.creation_approved,archived_at=excluded.archived_at`,[id,product]);
       row=await get(id);assert.equal(row.creation_approved,false);assert.equal(row.archived_at.toISOString(),archived);
       await tx.unsafe(`insert into public.${table}(id,product_id,name,status,notes,creation_approved)
-        values($1,$2,$1,'Untested','Manually added from inspiration',true)`,[manual,product]);
+        values($1,$2,$1,'Untested','Manually approved from inspiration TEST-INS-1 for cell placement',true)`,[manual,product]);
       row=await get(manual);assert.equal(row.creation_approved,true);assert.equal(row.archived_at,null);
       await tx.unsafe(`update public.${table} set archived_at=null,creation_approved=true where id=$1`,[id]);
       row=await get(id);assert.equal(row.creation_approved,true);assert.equal(row.archived_at,null);

@@ -27,6 +27,16 @@ briefs, or bypass the explicit master-category creation guard.
 
 ## Matrix placement silently expands product personas (2026-10-21)
 
+Oct 23 clarification: the user wants explicit suggested-cell placement to create
+its exact missing angle/persona, not background classification or sync to grow
+the catalog. Restore this path with one confirmation listing missing names and
+the destination product. Use the explicit manual-add provenance, leaving the
+legacy silent-placement database guard intact. Reuse canonical existing names;
+cancel, invalid pairs, archived/deleted categories and product switches must not
+partially create categories or tasks. Drawer/checkbox actions must honor placement
+failure instead of displaying a second, false success toast. No bulk restoration
+or changes to existing categories, labels, briefs or tasks are part of this fix.
+
 The sync/archive guards were intact, but placing an inspiration implicitly
 created missing active master categories. Require a separate confirmation naming
 every new angle/persona and the destination product before any placement mutation.

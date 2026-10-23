@@ -11,6 +11,7 @@ for (const file of ['immuvi-command-center.html', 'public/immuvi-command-center.
       ANGLES: [{id:'a',name:'Existing'}, {id:'old',name:'Archived angle',archivedAt:1}],
       PERSONAS: [{id:'p',name:'Baby cloth Quilters'}, {id:'old-p',name:'Archived persona',archivedAt:1}],
       activeProductId:'quilting',
+      _inspirationsProductId:'quilting',_productSwitchPending:false,
       confirmations,confirm(message) {confirmations.push(message);return true;},
       _isBoundaryQuarantinedTaxonomy:(_, name) => name === 'Foreign',
       _isTaxonomyTombstoned:(_, __, name) => name === 'Deleted',
@@ -26,12 +27,10 @@ for (const file of ['immuvi-command-center.html', 'public/immuvi-command-center.
     return context;
   }
 
-  test(file + ': only separate explicit category creation permits later placement', () => {
+  test(file + ': confirmed placement creates only the missing category and reuses its canonical name', () => {
     const c = setup();
     const ins = {id:'Q-INS-064',angle:'Preserve baby-clothes memories',persona:'Baby cloth Quilters',_angleScope:'inspiration'};
-    assert.equal(c._prepareInspirationCell(ins, ins.angle, ins.persona),null);
     assert.equal(c._ensureTaxonomyItem('angle',ins.angle,'Implicit'), '');
-    assert.equal(c._ensureTaxonomyItem('angle',ins.angle,'Explicit add',true),ins.angle);
     const cell = c._prepareInspirationCell(ins, ins.angle, ins.persona);
     assert.equal(cell.angle, ins.angle);
     assert.equal(ins._angleScope, 'product');
@@ -40,17 +39,23 @@ for (const file of ['immuvi-command-center.html', 'public/immuvi-command-center.
     c._prepareInspirationCell(ins, ins.angle.toUpperCase(), ins.persona);
     assert.equal(c.ANGLES.length, 3);
     assert.equal(c.PERSONAS.length, 2);
-    assert.equal(c.confirmations.length,0);
+    assert.equal(c.confirmations.length,1);
+    assert.match(c.confirmations[0],/quilting/);
+    assert.match(c.confirmations[0],/angle: Preserve baby-clothes memories/);
+    assert.doesNotMatch(c.confirmations[0],/persona:/);
+    assert.match(c.ANGLES.at(-1).notes,/^Manually approved from inspiration/);
   });
 
-  test(file + ': placement cannot create new categories in any product', () => {
+  test(file + ': explicit placement approves exactly the requested categories in each product', () => {
     for (const product of ['astro-rekha','quilting','other-product']) {
       const c = setup();c.activeProductId=product;
-      c.confirm=()=>{throw Error('Placement must not offer category creation');};
       const ins={id:'TEST-INS-1',angle:'New angle',persona:'New persona',_angleScope:'inspiration',_personaScope:'inspiration'};
-      const before=JSON.stringify([c.ANGLES,c.PERSONAS,ins]);
-      assert.equal(c._prepareInspirationCell(ins,ins.angle,ins.persona),null);
-      assert.equal(JSON.stringify([c.ANGLES,c.PERSONAS,ins]),before);
+      assert.ok(c._prepareInspirationCell(ins,ins.angle,ins.persona));
+      assert.equal(c.ANGLES.length,3);assert.equal(c.PERSONAS.length,3);
+      assert.equal(c.confirmations.length,1);assert.ok(c.confirmations[0].includes(product));
+      assert.match(c.confirmations[0],/angle: New angle\npersona: New persona/);
+      assert.equal(ins._angleScope,'product');assert.equal(ins._personaScope,'product');
+      assert.equal(c.ANGLES[1].archivedAt,1);assert.equal(c.PERSONAS[1].archivedAt,1);
     }
   });
 
@@ -90,8 +95,8 @@ for (const file of ['immuvi-command-center.html', 'public/immuvi-command-center.
     assert.equal(JSON.stringify([c.ANGLES,c.PERSONAS,c.INSPIRATIONS,c.ADS,c.CELL_CREATIVE_ASSIGNMENTS]),before);
   });
 
-  test(file + ': a blanket confirmation cannot approve missing placement categories', () => {
-    const c=setup();c.confirm=()=>true;
+  test(file + ': a product change during confirmation prevents all category mutations', () => {
+    const c=setup();c.confirm=()=>{c.activeProductId='another';return true;};
     const ins={id:'TEST-INS-1',angle:'New angle',persona:'New persona'};
     assert.equal(c._prepareInspirationCell(ins,ins.angle,ins.persona),null);
     assert.equal(c.ANGLES.length,2);assert.equal(c.PERSONAS.length,2);
@@ -99,13 +104,64 @@ for (const file of ['immuvi-command-center.html', 'public/immuvi-command-center.
   });
 
   test(file + ': invalid or archived placement cannot partially create categories', () => {
-    for (const persona of ['Archived persona', 'Deleted', 'Foreign', '']) {
+    for (const persona of ['Archived persona', 'Deleted', 'Foreign', '', 'Invalid||cell']) {
       const c = setup();
       const ins = {id:'i',angle:'New angle',persona};
       const before = JSON.stringify([c.ANGLES,c.PERSONAS,ins]);
       assert.equal(c._prepareInspirationCell(ins, ins.angle, persona), null);
       assert.equal(JSON.stringify([c.ANGLES,c.PERSONAS,ins]), before);
     }
+  });
+
+  test(file + ': placement refuses stale product arrays before any mutation', () => {
+    for(const pending of [false,true]) {
+      const c=setup();c._productSwitchPending=pending;c._inspirationsProductId=pending?'quilting':'another';
+      c.INSPIRATIONS=[{id:'i',angle:'Existing',persona:'Baby cloth Quilters'}];
+      const start=html.indexOf('function addInspoToCell(');
+      vm.runInContext(html.slice(start,html.indexOf('\n}',start)+2),c);
+      assert.equal(c.addInspoToCell('i','Existing','Baby cloth Quilters'),null);
+      assert.equal(c.confirmations.length,0);
+    }
+  });
+
+  test(file + ': drawer never reports success or refreshes usage after rejected placement', () => {
+    const calls=[];
+    const c=vm.createContext({window:{},_findIns:()=>({angle:'New angle',persona:'New persona'}),addInspoToCell:()=>null,
+      toast:(...args)=>calls.push(args),setTimeout:()=>{throw Error('Rejected placement cannot update usage');},
+      document:{getElementById:()=>({value:'Selected'})}});
+    for(const name of ['_insPlaceSuggested','_insPlaceCustom']) {
+      const start=html.indexOf('window.'+name+' = function');
+      vm.runInContext(html.slice(start,html.indexOf('\n  };',start)+5),c);
+      c.window[name]('i');
+    }
+    assert.deepEqual(calls,[]);
+  });
+
+  test(file + ': cancelled placement resets the picker checkbox without removing a task', () => {
+    const c=vm.createContext({addInspoToCell:()=>null,removeInspoFromCell:()=>{throw Error('Must not delete');}});
+    const start=html.indexOf('function toggleInspoInCell(');
+    vm.runInContext(html.slice(start,html.indexOf('\n}',start)+2),c);
+    const checkbox={checked:true,style:{}};
+    c.toggleInspoInCell(checkbox,'i','New angle','New persona');
+    assert.equal(checkbox.checked,false);assert.equal(checkbox.style.accentColor,'');
+  });
+
+  test(file + ': confirmed photo placement preserves brief and type and is idempotent in the same cell', () => {
+    const c=setup();const writes=[];
+    c.INSPIRATIONS=[{id:'i',angle:'New angle',persona:'New persona',adType:'Photo',status:'Classified',_clickupDocPageUrl:'https://example.test/existing-brief'}];
+    c.ADS=[];c.CELL_CREATIVE_ASSIGNMENTS={};c.P={};
+    c.generateTaskName=()=> 'PHOTO-TEST';c.nextSerialId=()=> 'new-ad';c._seedCuMirrorsFromTypedFields=()=>{};
+    c.process=()=>({});
+    for(const name of ['saveState','saveInspirations','deriveWinners','genActions','buildCreativeUsageIndex','populateFilterOptions','renderAll'])c[name]=()=>{};
+    c._writeAdRowDirect=ad=>writes.push(ad.id);c._writeMatrixCellDirect=key=>writes.push(key);
+    const start=html.indexOf('function addInspoToCell(');vm.runInContext(html.slice(start,html.indexOf('\n}',start)+2),c);
+    assert.equal(c.addInspoToCell('i','New angle','New persona'),'new-ad');
+    assert.equal(c.addInspoToCell('i','New angle','New persona'),'new-ad');
+    assert.equal(c.ADS.length,1);assert.equal(c.ADS[0].adType,'Photo');assert.equal(c.ADS[0].taskType,'production');
+    assert.equal(c.ADS[0]._sourceInspirationBriefUrl,'https://example.test/existing-brief');
+    assert.equal(c.CELL_CREATIVE_ASSIGNMENTS['New angle||New persona'].length,1);
+    assert.equal(c.ANGLES.length,3);assert.equal(c.PERSONAS.length,3);assert.equal(c.confirmations.length,1);
+    assert.deepEqual(writes,['new-ad','New angle||New persona']);
   });
 
   test(file + ': only active options are selectable, preserving archived current value as disabled', () => {
